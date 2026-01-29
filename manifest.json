@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "Voice Compass",
+  "version": "1.0.0",
+  "description": "A behavioral calibration tool that helps you learn appropriate speaking volume in shared spaces",
+  "permissions": [
+    "storage"
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  }
+}

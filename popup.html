@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Voice Compass</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div id="app" class="container">
+    <!-- Header with context selector -->
+    <header class="header">
+      <h1>Voice Compass</h1>
+      <select id="context-selector" class="context-selector">
+        <option value="focused-office">Focused Office</option>
+        <option value="open-office">Open Office</option>
+        <option value="home">Home</option>
+        <option value="on-call">On Call</option>
+      </select>
+    </header>
+
+    <!-- Main content area -->
+    <main class="main">
+      <!-- Initial State: Not calibrated -->
+      <section id="view-uncalibrated" class="view">
+        <div class="intro">
+          <p class="intro-text">Learn your ideal speaking volume for this space.</p>
+        </div>
+        <button id="btn-calibrate" class="btn-primary">Calibrate for This Space</button>
+      </section>
+
+      <!-- Calibration Flow -->
+      <section id="view-calibration" class="view hidden">
+        <div class="calibration-status">
+          <h2 id="calibration-title">Calibrating</h2>
+          <p id="calibration-instruction" class="instruction"></p>
+          <div class="progress-container">
+            <div id="calibration-progress" class="progress-bar"></div>
+          </div>
+        </div>
+        <div id="calibration-band" class="horizon-band-container"></div>
+        <div class="calibration-actions">
+          <button id="btn-cancel-calibration" class="btn-text">Cancel</button>
+        </div>
+      </section>
+
+      <!-- Calibration Confirm -->
+      <section id="view-confirm" class="view hidden">
+        <h2>Review Your Range</h2>
+        <p class="instruction">This is your Horizon Band. The dot shows where your voice is.</p>
+        <div id="confirm-band" class="horizon-band-container"></div>
+        <div class="confirm-info">
+          <p class="small">Stay within the band for comfortable conversation.</p>
+        </div>
+        <div class="confirm-actions">
+          <button id="btn-confirm-calibration" class="btn-primary">Looks Good</button>
+          <button id="btn-redo-calibration" class="btn-text">Redo Calibration</button>
+        </div>
+      </section>
+
+      <!-- Monitoring State -->
+      <section id="view-monitoring" class="view hidden">
+        <div id="monitor-band" class="horizon-band-container"></div>
+        <div class="monitoring-status">
+          <span id="monitoring-label" class="monitoring-label"></span>
+        </div>
+      </section>
+
+      <!-- Idle State (calibrated but not monitoring) -->
+      <section id="view-idle" class="view hidden">
+        <div class="idle-status">
+          <p class="idle-text">Ready to monitor your voice level.</p>
+          <div class="confidence-indicator">
+            <span class="confidence-label">Confidence:</span>
+            <span id="confidence-value" class="confidence-value">0</span>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer with controls -->
+    <footer class="footer">
+      <div class="controls">
+        <button id="btn-toggle-monitoring" class="btn-toggle" disabled>
+          <span class="toggle-icon"></span>
+          <span class="toggle-label">Start Monitoring</span>
+        </button>
+      </div>
+      <div class="secondary-actions">
+        <button id="btn-show-guidance" class="btn-link hidden">Show guidance again</button>
+        <button id="btn-recalibrate" class="btn-link hidden">Recalibrate for this space</button>
+      </div>
+      <p class="privacy-note">Nothing is recorded or stored.</p>
+    </footer>
+  </div>
+
+  <script src="popup.js" type="module"></script>
+</body>
+</html>
