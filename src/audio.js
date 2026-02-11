@@ -1,40 +1,80 @@
 /**
  * Audio Processing Module
  *
- * Handles microphone access, RMS calculation, dB conversion,
- * EMA smoothing, and noise floor tracking.
+ * TRUST-CRITICAL: Microphone lifecycle management
+ *
+ * Core invariant: Browser mic indicator must exactly match app's listening state.
+ * - Mic ON only during: calibration capture, active monitoring
+ * - Mic OFF during: landing, orientation, confirmation, idle, paused
+ *
+ * The microphone is acquired fresh for each listening session and fully released
+ * when listening ends. We never keep the mic "warm" or "suspended".
  */
+
+// =============================================================================
+// Constants
+// =============================================================================
 
 const EPSILON = 1e-10;
 const EMA_ALPHA = 0.2;
-const ANALYSIS_INTERVAL_MS = 50; // ~200ms window with smoothing
+const SAMPLE_INTERVAL_MS = 50;
+const FFT_SIZE = 2048;
+
+// =============================================================================
+// AudioProcessor Class
+// =============================================================================
 
 class AudioProcessor {
   constructor() {
+    // Web Audio API objects - all null when mic is released
     this.audioContext = null;
     this.analyser = null;
+    this.sourceNode = null;
     this.mediaStream = null;
-    this.source = null;
-    this.dataArray = null;
+    this.timeDomainData = null;
 
+    // State flags
+    this.isInitialized = false;  // True only while mic is actively acquired
+    this.isMonitoring = false;   // True while actively sampling
+
+    // Sampling interval
+    this.monitoringInterval = null;
+
+    // Smoothed output values
     this.smoothedRms = 0;
-    this.smoothedDb = -60;
+    this.smoothedDb = -100;
+
+    // Calibration reference
     this.noiseFloorDb = -60;
 
-    this.isInitialized = false;
-    this.isMonitoring = false;
-    this.analysisInterval = null;
-
+    // External callback
     this.onLevelChange = null;
+
+    // Bind methods
+    this.processAudioFrame = this.processAudioFrame.bind(this);
   }
 
+  // ===========================================================================
+  // Microphone Lifecycle - TRUST CRITICAL
+  // ===========================================================================
+
   /**
-   * Request microphone permission and initialize audio pipeline
+   * Acquire microphone access and set up audio pipeline.
+   *
+   * MUST be called in direct response to user action.
+   * After this returns, the browser mic indicator will be ON.
    */
-  async initialize() {
-    if (this.isInitialized) return;
+  async acquire() {
+    // Already acquired - no-op
+    if (this.isInitialized && this.mediaStream) {
+      console.log('[Audio] Microphone already acquired');
+      return;
+    }
+
+    console.log('[Audio] Acquiring microphone...');
 
     try {
+      // Request microphone - this shows browser permission prompt if needed
       this.mediaStream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: false,
@@ -43,160 +83,240 @@ class AudioProcessor {
         },
       });
 
+      // Create AudioContext
       this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      this.analyser = this.audioContext.createAnalyser();
 
-      // Configure for ~200ms analysis window
-      this.analyser.fftSize = 2048;
+      // Create analyser node
+      this.analyser = this.audioContext.createAnalyser();
+      this.analyser.fftSize = FFT_SIZE;
       this.analyser.smoothingTimeConstant = 0;
 
-      this.source = this.audioContext.createMediaStreamSource(this.mediaStream);
-      this.source.connect(this.analyser);
+      // Connect microphone to analyser
+      this.sourceNode = this.audioContext.createMediaStreamSource(this.mediaStream);
+      this.sourceNode.connect(this.analyser);
 
-      this.dataArray = new Float32Array(this.analyser.fftSize);
+      // Create sample buffer
+      this.timeDomainData = new Float32Array(this.analyser.fftSize);
+
       this.isInitialized = true;
+      console.log('[Audio] Microphone acquired - browser indicator should be ON');
+
     } catch (error) {
-      console.error('Failed to initialize audio:', error);
+      console.error('[Audio] Failed to acquire microphone:', error.message);
+      // Ensure clean state on failure
+      this.release();
       throw error;
     }
   }
 
   /**
-   * Calculate RMS from time-domain audio data
+   * Fully release microphone and all audio resources.
+   *
+   * After this returns, the browser mic indicator MUST be OFF.
+   * This is the ONLY way to turn off the mic indicator.
    */
-  calculateRms() {
-    this.analyser.getFloatTimeDomainData(this.dataArray);
+  release() {
+    console.log('[Audio] Releasing microphone...');
 
-    let sumSquares = 0;
-    for (let i = 0; i < this.dataArray.length; i++) {
-      sumSquares += this.dataArray[i] * this.dataArray[i];
+    // Stop monitoring interval if running
+    if (this.monitoringInterval) {
+      clearInterval(this.monitoringInterval);
+      this.monitoringInterval = null;
+    }
+    this.isMonitoring = false;
+
+    // Disconnect source node
+    if (this.sourceNode) {
+      try {
+        this.sourceNode.disconnect();
+      } catch (e) {
+        // Ignore disconnect errors
+      }
+      this.sourceNode = null;
     }
 
-    return Math.sqrt(sumSquares / this.dataArray.length);
+    // CRITICAL: Stop all tracks - this turns off the browser mic indicator
+    if (this.mediaStream) {
+      this.mediaStream.getTracks().forEach(track => {
+        track.stop();
+        console.log(`[Audio] Stopped track: ${track.kind}`);
+      });
+      this.mediaStream = null;
+    }
+
+    // Close audio context
+    if (this.audioContext) {
+      try {
+        this.audioContext.close();
+      } catch (e) {
+        // Ignore close errors
+      }
+      this.audioContext = null;
+    }
+
+    // Clear all references
+    this.analyser = null;
+    this.timeDomainData = null;
+    this.isInitialized = false;
+    this.onLevelChange = null;
+
+    // Reset smoothed values
+    this.smoothedRms = 0;
+    this.smoothedDb = -100;
+
+    console.log('[Audio] Microphone released - browser indicator should be OFF');
   }
 
   /**
-   * Convert RMS to relative dB
+   * Check if microphone is currently acquired (browser indicator ON).
    */
-  rmsToDb(rms) {
-    return 20 * Math.log10(rms + EPSILON);
+  get isMicrophoneActive() {
+    return this.isInitialized && this.mediaStream !== null;
+  }
+
+  // ===========================================================================
+  // Legacy API - initialize() and destroy() map to acquire() and release()
+  // ===========================================================================
+
+  /**
+   * @deprecated Use acquire() instead
+   */
+  async initialize() {
+    return this.acquire();
   }
 
   /**
-   * Apply EMA smoothing
+   * @deprecated Use release() instead
    */
-  applySmoothing(currentValue, smoothedValue) {
-    return EMA_ALPHA * currentValue + (1 - EMA_ALPHA) * smoothedValue;
+  destroy() {
+    return this.release();
+  }
+
+  // ===========================================================================
+  // Monitoring
+  // ===========================================================================
+
+  /**
+   * Start continuous audio level monitoring.
+   * Microphone must be acquired first.
+   */
+  startMonitoring() {
+    if (!this.isInitialized) {
+      console.error('[Audio] Cannot start monitoring: microphone not acquired');
+      return;
+    }
+
+    if (this.isMonitoring) {
+      console.log('[Audio] Already monitoring');
+      return;
+    }
+
+    console.log('[Audio] Starting monitoring...');
+    this.isMonitoring = true;
+
+    // Resume AudioContext if suspended
+    if (this.audioContext?.state === 'suspended') {
+      this.audioContext.resume();
+    }
+
+    // Start sampling interval
+    this.monitoringInterval = setInterval(() => {
+      this.processAudioFrame();
+    }, SAMPLE_INTERVAL_MS);
+
+    console.log('[Audio] Monitoring started');
   }
 
   /**
-   * Process a single audio frame
+   * Stop monitoring (but keep microphone acquired).
+   * Use release() to fully release the microphone.
    */
-  processFrame() {
-    if (!this.isInitialized || !this.isMonitoring) return;
+  stopMonitoring() {
+    if (!this.isMonitoring) {
+      return;
+    }
+
+    console.log('[Audio] Stopping monitoring...');
+
+    if (this.monitoringInterval) {
+      clearInterval(this.monitoringInterval);
+      this.monitoringInterval = null;
+    }
+
+    this.isMonitoring = false;
+    console.log('[Audio] Monitoring stopped');
+  }
+
+  // ===========================================================================
+  // Audio Processing
+  // ===========================================================================
+
+  processAudioFrame() {
+    if (!this.analyser || !this.timeDomainData) return;
 
     const rms = this.calculateRms();
-    const db = this.rmsToDb(rms);
+    const db = Math.max(-120, this.rmsToDb(rms));
 
-    this.smoothedRms = this.applySmoothing(rms, this.smoothedRms);
-    this.smoothedDb = this.applySmoothing(db, this.smoothedDb);
+    this.smoothedRms = this.applyEmaSmoothing(rms, this.smoothedRms);
+    this.smoothedDb = this.applyEmaSmoothing(db, this.smoothedDb);
 
     if (this.onLevelChange) {
       this.onLevelChange({
         rms: this.smoothedRms,
         db: this.smoothedDb,
+        rawRms: rms,
         rawDb: db,
-        isAboveNoiseFloor: this.smoothedDb > this.noiseFloorDb + 6,
       });
     }
   }
 
-  /**
-   * Start continuous monitoring
-   */
-  startMonitoring() {
-    if (!this.isInitialized) {
-      throw new Error('Audio not initialized. Call initialize() first.');
+  calculateRms() {
+    this.analyser.getFloatTimeDomainData(this.timeDomainData);
+
+    let sumOfSquares = 0;
+    for (let i = 0; i < this.timeDomainData.length; i++) {
+      const sample = this.timeDomainData[i];
+      sumOfSquares += sample * sample;
     }
 
-    if (this.isMonitoring) return;
-
-    this.isMonitoring = true;
-    this.analysisInterval = setInterval(() => {
-      this.processFrame();
-    }, ANALYSIS_INTERVAL_MS);
+    return Math.sqrt(sumOfSquares / this.timeDomainData.length);
   }
 
-  /**
-   * Stop monitoring
-   */
-  stopMonitoring() {
-    this.isMonitoring = false;
-    if (this.analysisInterval) {
-      clearInterval(this.analysisInterval);
-      this.analysisInterval = null;
-    }
+  rmsToDb(rms) {
+    return 20 * Math.log10(rms + EPSILON);
   }
 
-  /**
-   * Set the noise floor (typically during calibration)
-   */
+  applyEmaSmoothing(currentValue, previousSmoothedValue) {
+    return EMA_ALPHA * currentValue + (1 - EMA_ALPHA) * previousSmoothedValue;
+  }
+
+  // ===========================================================================
+  // Getters
+  // ===========================================================================
+
+  getCurrentLevel() {
+    return {
+      db: this.smoothedDb,
+      rms: this.smoothedRms,
+    };
+  }
+
   setNoiseFloor(db) {
     this.noiseFloorDb = db;
   }
 
-  /**
-   * Get current noise floor
-   */
   getNoiseFloor() {
     return this.noiseFloorDb;
   }
 
-  /**
-   * Get current smoothed dB level
-   */
-  getCurrentDb() {
-    return this.smoothedDb;
-  }
-
-  /**
-   * Check if audio is above noise floor (i.e., user is speaking)
-   */
   isSpeaking(delta = 6) {
     return this.smoothedDb > this.noiseFloorDb + delta;
   }
 
-  /**
-   * Collect samples for calibration
-   * Returns array of dB readings over specified duration
-   */
-  async collectSamples(durationMs) {
-    return new Promise((resolve) => {
-      const samples = [];
-      const startTime = Date.now();
+  // ===========================================================================
+  // Static Utilities
+  // ===========================================================================
 
-      const collectInterval = setInterval(() => {
-        if (!this.isInitialized) {
-          clearInterval(collectInterval);
-          resolve(samples);
-          return;
-        }
-
-        const rms = this.calculateRms();
-        const db = this.rmsToDb(rms);
-        samples.push(db);
-
-        if (Date.now() - startTime >= durationMs) {
-          clearInterval(collectInterval);
-          resolve(samples);
-        }
-      }, ANALYSIS_INTERVAL_MS);
-    });
-  }
-
-  /**
-   * Calculate median from array of values
-   */
   static median(arr) {
     if (arr.length === 0) return 0;
     const sorted = [...arr].sort((a, b) => a - b);
@@ -206,39 +326,11 @@ class AudioProcessor {
       : (sorted[mid - 1] + sorted[mid]) / 2;
   }
 
-  /**
-   * Calculate percentile from array of values
-   */
   static percentile(arr, p) {
     if (arr.length === 0) return 0;
     const sorted = [...arr].sort((a, b) => a - b);
     const index = Math.ceil((p / 100) * sorted.length) - 1;
     return sorted[Math.max(0, index)];
-  }
-
-  /**
-   * Clean up resources
-   */
-  destroy() {
-    this.stopMonitoring();
-
-    if (this.source) {
-      this.source.disconnect();
-      this.source = null;
-    }
-
-    if (this.mediaStream) {
-      this.mediaStream.getTracks().forEach(track => track.stop());
-      this.mediaStream = null;
-    }
-
-    if (this.audioContext) {
-      this.audioContext.close();
-      this.audioContext = null;
-    }
-
-    this.isInitialized = false;
-    this.onLevelChange = null;
   }
 }
 

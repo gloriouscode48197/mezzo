@@ -1,0 +1,321 @@
+/**
+ * Mezzo — Landing Page Styles
+ * Uses design token custom properties exclusively for colors, fonts, spacing.
+ */
+
+/* ── Reset ── */
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* ── Base ── */
+html {
+  scroll-behavior: smooth;
+  overflow-y: scroll;
+}
+
+body {
+  background: var(--surface);
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* ── Page container ── */
+.page {
+  opacity: 0;
+  transition: opacity 300ms ease;
+
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: clip;
+  isolation: isolate;
+}
+
+
+.page.is-visible {
+  opacity: 1;
+}
+
+.hero,
+.nav,
+.landing-section {
+  position: relative;
+  z-index: 2;
+}
+
+/* ═══════════════════════════════════════════
+   Navigation
+   ═══════════════════════════════════════════ */
+
+.nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 76px;
+  padding: 0 32px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  transition: background 0.3s ease, backdrop-filter 0.3s ease, -webkit-backdrop-filter 0.3s ease;
+}
+
+.nav-scrolled {
+  background: var(--surface-nav, rgba(240, 235, 226, 0.9));
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.type-nav-wordmark {
+  text-decoration: none;
+}
+
+.nav-links,
+.nav-right {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+}
+
+.nav-link {
+  text-decoration: none;
+  font-family: var(--font-body);
+  font-weight: var(--weight-regular);
+  font-size: 14px;
+  transition: opacity 0.2s ease;
+}
+
+.nav-link:hover {
+  opacity: 0.7;
+}
+
+.nav-link-quiet {
+  color: var(--text-subdued);
+}
+
+.nav-link-accent {
+  color: var(--hanko-fill);
+}
+
+.nav-link-active {
+  color: var(--text-default);
+  cursor: default;
+  padding-bottom: 3px;
+  border-bottom: 4px solid rgba(194, 92, 65, 0.5);
+}
+
+.nav-link-active:hover {
+  opacity: 1;
+}
+
+/* ═══════════════════════════════════════════
+   Background Ring Graphic
+   ═══════════════════════════════════════════ */
+
+.hero-ring {
+  position: absolute;
+  left: -8vw;
+  top: -5vh;
+  width: 55vw;
+  height: auto;
+  pointer-events: none;
+  user-select: none;
+  z-index: 1;
+}
+
+/* ═══════════════════════════════════════════
+   Section 1: Hero (centered)
+   ═══════════════════════════════════════════ */
+
+.hero {
+  position: relative;
+  padding: 96px 32px 0;
+}
+
+.hero-content {
+  position: relative;
+  z-index: 1;
+  max-width: 520px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.hero-content .type-hero-heading {
+  margin-bottom: var(--space-heading-to-content);
+}
+
+.hero-body {
+  margin-bottom: 48px;
+  max-width: 500px;
+  margin-inline: auto;
+}
+
+.hero-how-link {
+  color: var(--text-default);
+  text-decoration: underline;
+}
+
+/* ── Buttons with icon ── */
+.btn-with-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.btn-icon {
+  width: 14px;
+  height: 19px;
+  flex-shrink: 0;
+}
+
+.microcopy-cta {
+  margin-top: 24px;
+}
+
+/* Statement line — inside hero, spaced from microcopy */
+.statement-line {
+  margin-top: 48px;
+}
+
+/* ── CTA link styled as button ── */
+a.btn-primary {
+  text-decoration: none;
+}
+
+/* ═══════════════════════════════════════════
+   Shared Landing Sections (single-column centered)
+   ═══════════════════════════════════════════ */
+
+.landing-section {
+  padding: 168px 32px 0;
+  display: flex;
+  justify-content: center;
+}
+
+.landing-section-last {
+  padding-bottom: 72px;
+}
+
+.landing-col {
+  width: 100%;
+  max-width: 520px;
+  text-align: center;
+}
+
+.landing-section-heading {
+  margin-bottom: 48px;
+}
+
+/* ── Steps ── */
+.steps {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  text-align: left;
+}
+
+.step {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  padding: 24px 0;
+  border-top: 1px solid var(--border);
+}
+
+.step:last-child {
+  border-bottom: 1px solid var(--border);
+}
+
+.step .type-step-number {
+  flex-shrink: 0;
+  width: 40px;
+}
+
+.step .type-step-heading {
+  margin-bottom: 4px;
+}
+
+/* ── Good-for list ── */
+.good-for-list {
+  list-style: none;
+  display: inline-block;
+  text-align: left;
+}
+
+.good-for-list li {
+  margin-bottom: 8px;
+}
+
+.good-for-list li::before {
+  content: '—  ';
+  color: var(--text-body);
+}
+
+.good-for-note {
+  margin-top: 16px;
+}
+
+/* ═══════════════════════════════════════════
+   Scroll-triggered Reveal
+   ═══════════════════════════════════════════ */
+
+.reveal {
+  opacity: 0;
+  transform: translateY(var(--reveal-offset));
+  transition: opacity var(--transition-reveal), transform var(--transition-reveal);
+}
+
+.reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ═══════════════════════════════════════════
+   Responsive
+   ═══════════════════════════════════════════ */
+
+/* Desktop: 12-column grid (120px margins, 20px gutters) */
+@media (min-width: 900px) {
+  .nav {
+    padding-left: 120px;
+    padding-right: 120px;
+  }
+
+  .hero {
+    padding: 96px 120px 0;
+  }
+
+  /* 6 of 12 columns centered */
+  .hero-content,
+  .landing-col {
+    max-width: calc((100vw - 240px) / 2);
+  }
+
+  /* How It Works: 5 of 12 columns */
+  #section-how-it-works .landing-col {
+    max-width: calc((100vw - 240px) * 5 / 12);
+  }
+
+  .landing-section {
+    padding-left: 120px;
+    padding-right: 120px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page {
+    transition: none;
+  }
+}

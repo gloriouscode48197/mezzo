@@ -1,0 +1,108 @@
+/**
+ * Mezzo — Privacy Page Styles
+ * Base layout (.page, .nav, .page-footer) inherited from calibration.css.
+ */
+
+/* ═══════════════════════════════════════════
+   Content Layout
+   ═══════════════════════════════════════════ */
+
+.privacy-content {
+  flex: 1;
+  padding: var(--space-section) 32px;
+  max-width: 720px;
+  margin-left: auto;
+  margin-right: auto;
+  width: 100%;
+}
+
+.privacy-title {
+  margin-bottom: var(--space-section);
+}
+
+.privacy-section {
+  margin-bottom: var(--space-section);
+}
+
+.privacy-section .type-section-heading {
+  margin-bottom: var(--space-heading-to-content);
+}
+
+.privacy-section p {
+  margin-bottom: var(--space-heading-to-content);
+}
+
+.privacy-section p:last-child {
+  margin-bottom: 0;
+}
+
+/* ═══════════════════════════════════════════
+   H2 — Privacy Section Heading (28px)
+   ═══════════════════════════════════════════ */
+
+.type-privacy-h2 {
+  font-family: var(--font-display);
+  font-weight: var(--weight-light);
+  font-size: 28px;
+  line-height: 125%;
+  letter-spacing: -0.2px;
+  color: var(--text-primary);
+  margin-bottom: var(--space-heading-to-content);
+}
+
+.privacy-section p {
+  margin-bottom: var(--space-heading-to-content);
+}
+
+.privacy-section p:last-child {
+  margin-bottom: 0;
+}
+
+/* ═══════════════════════════════════════════
+   Em-dash Lists
+   ═══════════════════════════════════════════ */
+
+.privacy-list {
+  list-style: none;
+  margin-bottom: var(--space-heading-to-content);
+}
+
+.privacy-list li {
+  position: relative;
+  padding-left: 24px;
+  margin-bottom: 8px;
+}
+
+.privacy-list li::before {
+  content: '\2014';
+  position: absolute;
+  left: 0;
+  color: var(--text-body);
+}
+
+/* ═══════════════════════════════════════════
+   Scroll-triggered Reveal
+   ═══════════════════════════════════════════ */
+
+.reveal {
+  opacity: 0;
+  transform: translateY(var(--reveal-offset));
+  transition: opacity var(--transition-reveal), transform var(--transition-reveal);
+}
+
+.reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ═══════════════════════════════════════════
+   Responsive
+   ═══════════════════════════════════════════ */
+
+@media (min-width: 900px) {
+  .privacy-content {
+    max-width: calc((100vw - 240px) / 2 + 240px);
+    padding-left: 120px;
+    padding-right: 120px;
+  }
+}

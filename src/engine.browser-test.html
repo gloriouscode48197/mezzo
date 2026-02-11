@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Mezzo Engine Tests</title>
+  <style>
+    body { font-family: monospace; padding: 20px; background: #1a1a2e; color: #eaeaea; }
+    .pass { color: #4ecca3; }
+    .fail { color: #ff6b6b; }
+    .section { margin: 20px 0; padding: 10px; background: #25253d; border-radius: 8px; }
+    h2 { margin-top: 0; }
+  </style>
+</head>
+<body>
+  <h1>Mezzo Engine Tests</h1>
+  <div id="results"></div>
+
+  <script type="module">
+    import {
+      MezzoEngine,
+      LogicalState,
+      FRAME_MS,
+      SPIKE_IGNORE_MS,
+      OUT_OF_RANGE_ENTER_MS,
+      SUSTAINED_ENTER_MS,
+      RETURN_TO_RANGE_MS,
+      THRESHOLD_MULTIPLIER,
+      INITIAL_GRACE_MS_MIN,
+      INITIAL_GRACE_MS_MAX,
+    } from './engine.js';
+
+    const results = document.getElementById('results');
+    let passed = 0;
+    let failed = 0;
+
+    function log(msg, isPass) {
+      const div = document.createElement('div');
+      div.className = isPass ? 'pass' : 'fail';
+      div.textContent = (isPass ? '✓ ' : '✗ ') + msg;
+      results.appendChild(div);
+      if (isPass) passed++; else failed++;
+    }
+
+    function section(name) {
+      const div = document.createElement('div');
+      div.className = 'section';
+      div.innerHTML = `<h2>${name}</h2>`;
+      results.appendChild(div);
+      return div;
+    }
+
+    function assert(condition, msg) {
+      if (condition) {
+        log(msg, true);
+      } else {
+        log(msg, false);
+      }
+    }
+
+    function processForDuration(engine, rms, durationMs) {
+      const frames = Math.ceil(durationMs / FRAME_MS);
+      for (let i = 0; i < frames; i++) {
+        engine.processFrame(rms);
+      }
+    }
+
+    function skipGracePeriod(engine, quietRms = 0.01) {
+      const maxGraceFrames = Math.ceil(INITIAL_GRACE_MS_MAX / FRAME_MS) + 1;
+      for (let i = 0; i < maxGraceFrames; i++) {
+        engine.processFrame(quietRms);
+      }
+    }
+
+    function createCalibratedEngine(baseline = 0.1) {
+      const engine = new MezzoEngine();
+      const samples = Array(20).fill(baseline);
+      engine.calibrate(samples);
+      return engine;
+    }
+
+    // Calibration Tests
+    section('Calibration');
+    try {
+      const e1 = new MezzoEngine();
+      e1.calibrate([]);
+      log('Should fail with no samples', false);
+    } catch (err) {
+      assert(err.message.includes('no samples'), 'Fails with no samples');
+    }
+
+    try {
+      const e2 = new MezzoEngine();
+      e2.calibrate(Array(20).fill(0));
+      log('Should fail with silence-only', false);
+    } catch (err) {
+      assert(err.message.includes('silence'), 'Fails with silence-only input');
+    }
+
+    {
+      const e3 = new MezzoEngine();
+      e3.calibrate(Array(20).fill(0.1));
+      assert(e3.baselineRMS === 0.1, 'Sets correct baselineRMS');
+      assert(e3.upperThreshold === 0.1 * THRESHOLD_MULTIPLIER, 'Sets correct upperThreshold');
+      assert(e3.calibrationComplete === true, 'Marks calibration complete');
+    }
+
+    // Spike Rejection Tests
+    section('Spike Rejection');
+    {
+      const e = createCalibratedEngine(0.1);
+      e.startMonitoring();
+      skipGracePeriod(e, 0.05);
+      processForDuration(e, 0.2, 200); // Short spike
+      assert(e.getCurrentState() === LogicalState.IN_RANGE, 'Ignores <250ms spikes');
+    }
+
+    {
+      const e = createCalibratedEngine(0.1);
+      e.startMonitoring();
+      skipGracePeriod(e, 0.05);
+      processForDuration(e, 0.2, OUT_OF_RANGE_ENTER_MS);
+      assert(e.getCurrentState() === LogicalState.OUT_OF_RANGE_SHORT, 'Triggers at 750ms');
+    }
+
+    // Sustained Loudness Tests
+    section('Sustained Loudness');
+    {
+      const e = createCalibratedEngine(0.1);
+      e.startMonitoring();
+      skipGracePeriod(e, 0.05);
+      processForDuration(e, 0.2, SUSTAINED_ENTER_MS);
+      assert(e.getCurrentState() === LogicalState.OUT_OF_RANGE_SUSTAINED, 'Triggers SUSTAINED at 2800ms');
+    }
+
+    // Recovery Tests
+    section('Recovery');
+    {
+      const e = createCalibratedEngine(0.1);
+      e.startMonitoring();
+      skipGracePeriod(e, 0.05);
+      processForDuration(e, 0.2, OUT_OF_RANGE_ENTER_MS);
+      processForDuration(e, 0.05, RETURN_TO_RANGE_MS - 100);
+      assert(e.getCurrentState() === LogicalState.OUT_OF_RANGE_SHORT, 'Does not reset before 600ms quiet');
+    }
+
+    {
+      const e = createCalibratedEngine(0.1);
+      e.startMonitoring();
+      skipGracePeriod(e, 0.05);
+      processForDuration(e, 0.2, OUT_OF_RANGE_ENTER_MS);
+      processForDuration(e, 0.05, RETURN_TO_RANGE_MS);
+      assert(e.getCurrentState() === LogicalState.IN_RANGE, 'Resets after 600ms quiet');
+    }
+
+    // Lifecycle Tests
+    section('Lifecycle');
+    {
+      const e = new MezzoEngine();
+      try {
+        e.startMonitoring();
+        log('Should fail without calibration', false);
+      } catch (err) {
+        assert(err.message.includes('calibration'), 'Cannot start without calibration');
+      }
+    }
+
+    {
+      const e = createCalibratedEngine(0.1);
+      e.startMonitoring();
+      skipGracePeriod(e, 0.05);
+      processForDuration(e, 0.2, OUT_OF_RANGE_ENTER_MS);
+      e.stopMonitoring();
+      assert(e.getCurrentState() === LogicalState.IN_RANGE, 'Stop resets state');
+      assert(e.aboveDurationMs === 0, 'Stop resets counters');
+    }
+
+    {
+      const e = createCalibratedEngine(0.1);
+      e.startMonitoring();
+      skipGracePeriod(e, 0.05);
+      e.stopMonitoring();
+      e.startMonitoring();
+      assert(e.gracePeriodActive === true, 'Restart enters grace period');
+    }
+
+    // Grace Period Tests
+    section('Grace Period');
+    {
+      const e = createCalibratedEngine(0.1);
+      e.startMonitoring();
+      // Process loud during grace period
+      for (let i = 0; i < 100; i++) {
+        e.processFrame(0.5);
+      }
+      assert(e.getCurrentState() === LogicalState.IN_RANGE, 'No alerts during grace period');
+    }
+
+    // Success Criteria
+    section('Success Criteria');
+    {
+      const e = createCalibratedEngine(0.1);
+      e.startMonitoring();
+      skipGracePeriod(e, 0.05);
+      processForDuration(e, 0.25, 200);
+      assert(e.getCurrentState() === LogicalState.IN_RANGE, 'Short emphasis never escalates');
+    }
+
+    {
+      const e = createCalibratedEngine(0.1);
+      e.startMonitoring();
+      skipGracePeriod(e, 0.05);
+      processForDuration(e, 0.2, 1000);
+      assert(e.getCurrentState() === LogicalState.OUT_OF_RANGE_SHORT, 'One loud sentence escalates');
+    }
+
+    {
+      const e = createCalibratedEngine(0.1);
+      e.startMonitoring();
+      skipGracePeriod(e, 0.05);
+      processForDuration(e, 0, 5000);
+      assert(e.getCurrentState() === LogicalState.IN_RANGE, 'Silence equals IN_RANGE');
+    }
+
+    // Summary
+    const summary = section('Summary');
+    summary.innerHTML += `<div class="${failed === 0 ? 'pass' : 'fail'}">
+      ${passed} passed, ${failed} failed
+    </div>`;
+  </script>
+</body>
+</html>

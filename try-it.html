@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mezzo — Try It</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;400&family=Sora:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="design-tokens/mezzo-tokens.css">
+  <link rel="stylesheet" href="try-it.css">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/svg+xml" href="icons/M.svg">
+  <script type="text/javascript">
+    (function(e,c){if(!c.__SV){var l,h;window.mixpanel=c;c._i=[];c.init=function(q,r,f){function t(d,a){var g=a.split(".");2==g.length&&(d=d[g[0]],a=g[1]);d[a]=function(){d.push([a].concat(Array.prototype.slice.call(arguments,0)))}}var b=c;"undefined"!==typeof f?b=c[f]=[]:f="mixpanel";b.people=b.people||[];b.toString=function(d){var a="mixpanel";"mixpanel"!==f&&(a+="."+f);d||(a+=" (stub)");return a};b.people.toString=function(){return b.toString(1)+".people (stub)"};l="disable time_event track track_pageview track_links track_forms track_with_groups add_group set_group remove_group register register_once alias unregister identify name_tag set_config reset opt_in_tracking opt_out_tracking has_opted_in_tracking has_opted_out_tracking clear_opt_in_out_tracking start_batch_senders start_session_recording stop_session_recording people.set people.set_once people.unset people.increment people.append people.union people.track_charge people.clear_charges people.delete_user people.remove".split(" ");
+    for(h=0;h<l.length;h++)t(b,l[h]);var n="set set_once union unset remove delete".split(" ");b.get_group=function(){function d(p){a[p]=function(){b.push([g,[p].concat(Array.prototype.slice.call(arguments,0))])}}for(var a={},g=["get_group"].concat(Array.prototype.slice.call(arguments,0)),m=0;m<n.length;m++)d(n[m]);return a};c._i.push([q,r,f])};c.__SV=1.2;var k=e.createElement("script");k.type="text/javascript";k.async=!0;k.src="undefined"!==typeof MIXPANEL_CUSTOM_LIB_URL?MIXPANEL_CUSTOM_LIB_URL:"file:"===
+    e.location.protocol&&"//cdn.mxpnl.com/libs/mixpanel-2-latest.min.js".match(/^\/\//)?"https://cdn.mxpnl.com/libs/mixpanel-2-latest.min.js":"//cdn.mxpnl.com/libs/mixpanel-2-latest.min.js";e=e.getElementsByTagName("script")[0];e.parentNode.insertBefore(k,e)}})(document,window.mixpanel||[])
+
+    mixpanel.init('022d42ad74328cadce883a1071119dbc', {
+      autocapture: true,
+      record_sessions_percent: 100,
+    })
+  </script>
+</head>
+<body data-surface="light" style="opacity: 0">
+
+  <div class="page">
+    <nav class="nav">
+      <a href="landing.html" class="type-nav-wordmark">Mezzo</a>
+      <div class="nav-links">
+        <a href="landing.html" class="nav-link nav-link-quiet">Home</a>
+        <a href="privacy.html" class="nav-link nav-link-quiet">Privacy</a>
+        <span class="nav-link nav-link-active">Try Mezzo</span>
+      </div>
+    </nav>
+
+    <!-- ═══════════════════════════════════════════
+         State A: Mic permission not granted
+         ═══════════════════════════════════════════ -->
+    <main id="state-a" class="state-view page-content">
+      <div class="state-col">
+        <h1 class="type-section-heading state-heading">Mezzo needs your microphone to listen for volume</h1>
+        <p class="type-hero-body state-body">Mezzo listens only to volume, never to what you say. Nothing is recorded or saved.</p>
+        <button id="btn-enable-mic" class="btn-primary btn-with-icon">
+          <img src="assets/microphone-icon.svg" alt="" class="btn-icon">
+          <span>Enable microphone</span>
+        </button>
+        <p class="type-microcopy state-micro">You're always in control. You can stop monitoring at any time.</p>
+        <p id="denied-help" class="type-microcopy state-micro denied-help hidden">Your browser has blocked microphone access. Click the lock icon in your address bar and change the microphone setting to "Allow", then reload this page.</p>
+      </div>
+    </main>
+
+    <!-- ═══════════════════════════════════════════
+         State B: Mic granted, not calibrated
+         ═══════════════════════════════════════════ -->
+    <main id="state-b" class="state-view page-content hidden">
+      <div class="state-col">
+        <h1 class="type-section-heading state-heading">Set up your baseline volume</h1>
+        <p class="type-hero-body state-body">Talk for a few seconds so Mezzo can learn the speaking level you consider appropriate for the people around you.</p>
+        <button id="btn-start-calibration" class="btn-primary btn-wide">Measure my volume</button>
+      </div>
+    </main>
+
+    <!-- ═══════════════════════════════════════════
+         State: Calibrating (6s countdown)
+         ═══════════════════════════════════════════ -->
+    <main id="state-calibrating" class="state-view page-content hidden">
+      <div class="state-col">
+        <h1 class="type-section-heading state-heading">Speak at the volume you want to maintain</h1>
+        <p id="listening-heading" class="type-body listening-countdown">Listening...6s</p>
+        <div id="ring-container" class="ring-container">
+          <img src="assets/light-bg-circle-ring-0-0.svg" class="ring-variant active" alt="" aria-hidden="true">
+          <img src="assets/light-bg-circle-ring-0-1.svg" class="ring-variant" alt="" aria-hidden="true">
+          <img src="assets/light-bg-circle-ring-0-2.svg" class="ring-variant" alt="" aria-hidden="true">
+        </div>
+      </div>
+    </main>
+
+    <!-- ═══════════════════════════════════════════
+         State: Calibration Complete → Ready to monitor
+         ═══════════════════════════════════════════ -->
+    <main id="state-complete" class="state-view page-content state-ready hidden">
+      <div class="state-col">
+        <h1 class="type-section-heading state-heading">Ready to monitor</h1>
+        <p class="type-hero-body state-body">Start monitoring and Mezzo will stay quiet unless your volume is consistently louder than your calibrated range.</p>
+        <button id="btn-complete-start" class="btn-primary btn-wide">Start listening</button>
+        <button id="btn-recalibrate-complete" class="btn-recalibrate-link">Recalibrate volume</button>
+      </div>
+      <footer class="state-footer">
+        <p class="type-microcopy state-footer-text">Mezzo doesn't record audio or transcribe speech.</p>
+        <p class="type-microcopy state-footer-text">Your mic data stays in your browser and disappears when you close the tab.</p>
+      </footer>
+    </main>
+
+    <!-- ═══════════════════════════════════════════
+         State C: Mic granted + calibrated → Ready to monitor
+         ═══════════════════════════════════════════ -->
+    <main id="state-c" class="state-view page-content state-ready hidden">
+      <div class="state-col">
+        <h1 class="type-section-heading state-heading">Ready to monitor</h1>
+        <p class="type-hero-body state-body">Start monitoring and Mezzo will stay quiet unless your volume is consistently louder than your calibrated range.</p>
+        <button id="btn-start-monitoring" class="btn-primary btn-wide">Start listening</button>
+        <button id="btn-recalibrate-c" class="btn-recalibrate-link">Recalibrate volume</button>
+      </div>
+      <footer class="state-footer">
+        <p class="type-microcopy state-footer-text">Mezzo doesn't record audio or transcribe speech.</p>
+        <p class="type-microcopy state-footer-text">Your mic data stays in your browser and disappears when you close the tab.</p>
+      </footer>
+    </main> 
+
+  </div>
+
+  <script src="try-it.js" type="module"></script>
+</body>
+</html>
