@@ -6,7 +6,7 @@
 const CACHE_NAME = 'mezzo-v5';
 const ASSETS = [
   '/',
-  '/landing.html',
+  '/index.html',
   '/landing.css',
   '/landing.js',
   '/try-it.html',
