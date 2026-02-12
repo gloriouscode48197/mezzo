@@ -179,7 +179,7 @@ body {
   font-size: 16px;
   cursor: pointer;
   padding: 0;
-  margin: 24px auto 0;
+  margin: 48px auto 0;
   text-decoration: none;
   transition: var(--transition-hover);
 }

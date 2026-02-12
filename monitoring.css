@@ -28,13 +28,9 @@ body {
   transition: background-color 300ms ease;
 }
 
-/* Monitoring page bg: slightly darker than default surface */
-body[data-surface="light"] {
+/* Monitoring page bg: slightly darker than default surface — always stays light */
+body {
   background: #E6DFD4;
-}
-
-body[data-surface="dark"] {
-  background: #111111;
 }
 
 /* ═══════════════════════════════════════════
@@ -144,7 +140,7 @@ body[data-surface="dark"] {
   transition: background-color 300ms ease, box-shadow 300ms ease;
 }
 
-body[data-surface="dark"] .mon-card {
+.mon-card[data-surface="dark"] {
   background: #3A3A3A;
   box-shadow: 0 2px 24px rgba(0, 0, 0, 0.2);
 }

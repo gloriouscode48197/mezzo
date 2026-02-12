@@ -66,6 +66,7 @@ let isAlertMode = false;   // true once sustained threshold reached (500ms)
 let blinkDark = false;     // current blink phase (true = dark theme)
 let blinkInterval = null;  // setInterval ID for theme toggling
 let fastBlinkTimer = null; // setTimeout ID for 3s fast-blink escalation
+let demoInterval = null;   // setInterval ID for demo mode fake RMS
 
 const SUSTAINED_ALERT_MS = 500;   // 500ms → slow blink starts
 const SLOW_BLINK_MS = 1000;       // slow blink interval
@@ -172,17 +173,8 @@ function onAudioFrame({ rms }) {
 
   // ── Debug: per-frame volume and threshold info ──
   const ringLevel = activeCircle ? activeCircle.currentRingLevel : -1;
-  console.log(
-    '[Frame] baseline=%.4f  rms=%.4f  diff=%+.4f  ring1@%.4f(×1.5)  ring2@%.4f(×2)  ring3@%.4f(×3)  → ring-%d  %s',
-    baselineRMS,
-    rms,
-    rms - baselineRMS,
-    baselineRMS * RING_THRESHOLDS[0],
-    baselineRMS * RING_THRESHOLDS[1],
-    baselineRMS * RING_THRESHOLDS[2],
-    ringLevel,
-    ringLevel >= 1 ? 'OUTSIDE' : 'within'
-  );
+  const diff = rms - baselineRMS;
+  console.log(`[Frame] baseline=${baselineRMS.toFixed(4)}  rms=${rms.toFixed(4)}  diff=${diff >= 0 ? '+' : ''}${diff.toFixed(4)}  ring1@${(baselineRMS * RING_THRESHOLDS[0]).toFixed(4)}(×1.5)  ring2@${(baselineRMS * RING_THRESHOLDS[1]).toFixed(4)}(×2)  ring3@${(baselineRMS * RING_THRESHOLDS[2]).toFixed(4)}(×3)  → ring-${ringLevel}  ${ringLevel >= 1 ? 'OUTSIDE' : 'within'}`);
 }
 
 // =============================================================================
@@ -213,10 +205,11 @@ async function startMonitoring() {
     return;
   }
 
-  // Create voice circle — page body receives data-surface changes
+  // Create voice circle — card element receives data-surface changes (not body)
+  const monCard = document.querySelector('.mon-card');
   mainCircle = new MezzoVoiceCircle(circleContainer, {
     assetPath: 'assets',
-    surfaceElement: document.body,
+    surfaceElement: monCard,
   });
   activeCircle = mainCircle;
 
@@ -258,6 +251,7 @@ function stopMonitoring() {
   }
 
   engine.stopMonitoring();
+  if (demoInterval) { clearInterval(demoInterval); demoInterval = null; }
   audio.stopMonitoring();
   audio.release();
 
@@ -477,7 +471,6 @@ async function openPiP() {
   // ── Switch main page to "running in mini window" view ──
   sessionUsedPip = true;
   showView('pipRunning');
-  document.body.setAttribute('data-surface', 'light');
 
   // ── Handle PiP close (browser close button or programmatic) ──
   pipWindow.addEventListener('pagehide', handlePipClose);
@@ -507,13 +500,12 @@ function handlePipClose() {
 function resumeMainMonitoring() {
   showView('monitoring');
 
-  // Set surface theme
-  document.body.setAttribute('data-surface', blinkDark ? 'dark' : 'light');
-
-  // Recreate circle on main page
+  // Recreate circle on main page — card element receives data-surface changes
+  const monCard = document.querySelector('.mon-card');
+  monCard.setAttribute('data-surface', blinkDark ? 'dark' : 'light');
   mainCircle = new MezzoVoiceCircle(circleContainer, {
     assetPath: 'assets',
-    surfaceElement: document.body,
+    surfaceElement: monCard,
   });
   activeCircle = mainCircle;
 
@@ -554,8 +546,60 @@ window.addEventListener('beforeunload', () => {
 });
 
 // =============================================================================
+// Demo Mode
+// =============================================================================
+
+function startDemoMode() {
+  baselineRMS = 0.05;
+
+  // Calibrate engine with synthetic samples at the fake baseline
+  const samples = new Array(100).fill(baselineRMS);
+  engine.calibrate(samples);
+  engine.startMonitoring();
+  engine.graceRemainingMs = 0; // skip grace period so alerts trigger immediately
+
+  // Create voice circle on the card (same as real mode)
+  const monCard = document.querySelector('.mon-card');
+  mainCircle = new MezzoVoiceCircle(circleContainer, {
+    assetPath: 'assets',
+    surfaceElement: monCard,
+  });
+  activeCircle = mainCircle;
+
+  const CYCLE_MS = 12000;
+  const INTERVAL_MS = 50;
+  const baseline = baselineRMS;
+
+  demoInterval = setInterval(() => {
+    const t = Date.now() % CYCLE_MS;
+    let targetRMS;
+
+    if (t < 3000) {
+      // 0-3s: within range
+      targetRMS = baseline;
+    } else if (t < 5000) {
+      // 3-5s: ring-1
+      targetRMS = baseline * 1.6;
+    } else if (t < 7000) {
+      // 5-7s: ring-2
+      targetRMS = baseline * 2.2;
+    } else if (t < 10000) {
+      // 7-10s: ring-3 (sustained alert + dark card)
+      targetRMS = baseline * 3.5;
+    } else {
+      // 10-12s: return to range
+      targetRMS = baseline;
+    }
+
+    onAudioFrame({ rms: targetRMS });
+  }, INTERVAL_MS);
+}
+
+// =============================================================================
 // Init
 // =============================================================================
 
+const isDemo = new URLSearchParams(window.location.search).get('demo') === 'true';
+
 pageEnter();
-startMonitoring();
+isDemo ? startDemoMode() : startMonitoring();
