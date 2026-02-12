@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mezzo — Calibration Transition Prototype</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;400;500&family=Sora:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #F0EBE2;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    font-family: 'Sora', sans-serif;
+    font-weight: 300;
+  }
+
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.022;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 256px;
+  }
+
+  /* Nav */
+  nav {
+    height: 76px;
+    padding: 0 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .wordmark {
+    font-family: 'Noto Serif JP', serif;
+    font-weight: 400;
+    font-size: 19px;
+    color: #1A1A1A;
+    text-decoration: none;
+  }
+  .nav-links {
+    display: flex;
+    gap: 28px;
+  }
+  .nav-link {
+    font-size: 14px;
+    font-weight: 400;
+    color: #8A827A;
+    text-decoration: none;
+  }
+  .nav-link-active {
+    color: #2A2A2A;
+    padding-bottom: 3px;
+    border-bottom: 4px solid rgba(194, 92, 65, 0.5);
+  }
+
+  /* Main */
+  main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 0 32px 80px;
+    text-align: center;
+    position: relative;
+  }
+
+  /* Title — static, never moves */
+  .title {
+    font-family: 'Noto Serif JP', serif;
+    font-weight: 300;
+    font-size: clamp(38px, 5vw, 52px);
+    line-height: 115%;
+    letter-spacing: -0.2px;
+    color: #1A1A1A;
+    max-width: 600px;
+    margin-bottom: 40px;
+  }
+
+  /* Content area — fixed height to prevent layout shift */
+  .content-area {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 220px;
+    width: 100%;
+    max-width: 500px;
+  }
+
+  /* ── Pre-calibration content ── */
+  .pre-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: absolute;
+    top: 0;
+    width: 100%;
+    transition: opacity 0.5s ease, transform 0.5s ease;
+  }
+
+  .body-text {
+    font-size: 15px;
+    line-height: 175%;
+    color: #6B6560;
+    max-width: 420px;
+    margin-bottom: 40px;
+  }
+
+  .btn {
+    font-family: 'Sora', sans-serif;
+    font-weight: 400;
+    font-size: 15px;
+    color: #F0EBE2;
+    background: #C4593A;
+    border: none;
+    padding: 16px 64px;
+    border-radius: 100px;
+    cursor: pointer;
+    transition: background 0.3s, transform 0.3s, width 0.6s ease, height 0.6s ease,
+                padding 0.6s ease, border-radius 0.6s ease, font-size 0.4s ease;
+    min-width: 240px;
+    position: relative;
+    z-index: 2;
+  }
+  .btn:hover {
+    background: #AE4D31;
+    transform: translateY(-1px);
+  }
+
+  /* ── Listening content ── */
+  .listen-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: absolute;
+    top: 0;
+    width: 100%;
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 0.5s ease 0.3s, transform 0.5s ease 0.3s;
+    pointer-events: none;
+  }
+
+  .countdown {
+    font-family: 'Sora', sans-serif;
+    font-weight: 300;
+    font-size: 17px;
+    color: #C4593A;
+    margin-bottom: 24px;
+    letter-spacing: 0.2px;
+  }
+
+  /* Ink circle */
+  .circle-container {
+    width: 120px;
+    height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .ink-circle {
+    width: 90px;
+    height: 90px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 45% 42%,
+      #4a4540 0%,
+      #5a5550 40%,
+      #6b6560 70%,
+      #7a756e 100%
+    );
+    box-shadow:
+      inset 2px 2px 6px rgba(0,0,0,0.15),
+      0 0 0 1px rgba(0,0,0,0.03);
+    transition: transform 0.6s ease;
+  }
+
+  @keyframes gentle-pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.06); }
+  }
+
+  .pulsing .ink-circle {
+    animation: gentle-pulse 3s ease-in-out infinite;
+  }
+
+  /* ── States ── */
+
+  /* Active listening state */
+  .state-listening .pre-content {
+    opacity: 0;
+    transform: translateY(-8px);
+    pointer-events: none;
+  }
+
+  .state-listening .listen-content {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+
+  /* Privacy micro */
+  .micro {
+    position: absolute;
+    bottom: 0;
+    font-size: 13px;
+    color: #8A827A;
+    line-height: 160%;
+    transition: opacity 0.5s ease;
+  }
+
+  .state-listening .micro {
+    opacity: 0;
+  }
+
+  /* ── Demo controls ── */
+  .demo-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: #111;
+    padding: 14px;
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    z-index: 100;
+  }
+  .demo-bar button {
+    font-family: 'Sora', sans-serif;
+    font-size: 11px;
+    font-weight: 400;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    padding: 8px 20px;
+    border-radius: 100px;
+    border: 1px solid #5a5550;
+    background: transparent;
+    color: #8a827a;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .demo-bar button.active {
+    background: #C4593A;
+    border-color: #C4593A;
+    color: #F0EBE2;
+  }
+  .demo-note {
+    font-family: 'Sora', sans-serif;
+    font-size: 10px;
+    color: #5a5550;
+    padding: 4px 12px;
+    display: flex;
+    align-items: center;
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="#" class="wordmark">Mezzo</a>
+  <div class="nav-links">
+    <a href="#" class="nav-link">Home</a>
+    <a href="#" class="nav-link">Privacy</a>
+    <a href="#" class="nav-link nav-link-active">Try Mezzo</a>
+  </div>
+</nav>
+
+<main id="main">
+
+  <!-- Title — stays put throughout -->
+  <h1 class="title">Speak at the volume you'd like to maintain</h1>
+
+  <div class="content-area">
+
+    <!-- Pre-calibration -->
+    <div class="pre-content" id="preContent">
+      <p class="body-text">Talk for a few seconds so Mezzo can learn the speaking level you consider appropriate for the people around you.</p>
+      <button class="btn" id="startBtn" onclick="startListening()">Measure my volume</button>
+    </div>
+
+    <!-- Listening state -->
+    <div class="listen-content" id="listenContent">
+      <div class="countdown" id="countdown">Listening...5s</div>
+      <div class="circle-container pulsing">
+        <div class="ink-circle"></div>
+      </div>
+    </div>
+
+    <p class="micro" id="micro">No recording. No storage. Just real-time volume awareness.</p>
+
+  </div>
+
+</main>
+
+<!-- Demo controls -->
+<div class="demo-bar">
+  <button class="active" id="btnPre" onclick="showPre()">Pre-calibration</button>
+  <button id="btnListen" onclick="startListening()">Start listening</button>
+  <button id="btnReset" onclick="showPre()">Reset</button>
+  <div class="demo-note">Click "Start listening" or the button on the page</div>
+</div>
+
+<script>
+  let countdownInterval;
+  let seconds = 5;
+
+  function startListening() {
+    // Clear any existing interval
+    if (countdownInterval) clearInterval(countdownInterval);
+    seconds = 5;
+
+    // Switch state
+    document.getElementById('main').classList.add('state-listening');
+
+    // Update demo bar
+    document.getElementById('btnPre').classList.remove('active');
+    document.getElementById('btnListen').classList.add('active');
+
+    // Start countdown
+    const countdownEl = document.getElementById('countdown');
+    countdownEl.textContent = `Listening...${seconds}s`;
+
+    countdownInterval = setInterval(() => {
+      seconds--;
+      if (seconds > 0) {
+        countdownEl.textContent = `Listening...${seconds}s`;
+      } else {
+        countdownEl.textContent = 'Done!';
+        clearInterval(countdownInterval);
+        // After a beat, could transition to "You're all set"
+        setTimeout(() => {
+          countdownEl.style.transition = 'color 0.4s ease';
+          countdownEl.style.color = '#1A1A1A';
+        }, 500);
+      }
+    }, 1000);
+  }
+
+  function showPre() {
+    if (countdownInterval) clearInterval(countdownInterval);
+
+    document.getElementById('main').classList.remove('state-listening');
+
+    // Reset countdown
+    const countdownEl = document.getElementById('countdown');
+    countdownEl.textContent = 'Listening...5s';
+    countdownEl.style.color = '#C4593A';
+
+    // Update demo bar
+    document.getElementById('btnPre').classList.add('active');
+    document.getElementById('btnListen').classList.remove('active');
+  }
+</script>
+
+</body>
+</html>

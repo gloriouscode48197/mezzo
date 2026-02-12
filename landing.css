@@ -297,10 +297,25 @@ a.btn-primary {
     padding: 96px 120px 0;
   }
 
+  /* Hero heading uses character-based width; body content keeps its own max-width */
+  .hero-content {
+    max-width: none;
+  }
+
+  .hero-content .type-hero-heading {
+    max-width: 20ch;
+    margin-inline: auto;
+  }
+
   /* 6 of 12 columns centered */
-  .hero-content,
   .landing-col {
     max-width: calc((100vw - 240px) / 2);
+  }
+
+  /* Section headings use character-based width */
+  .landing-section-heading {
+    max-width: 18ch;
+    margin-inline: auto;
   }
 
   /* How It Works: 5 of 12 columns */

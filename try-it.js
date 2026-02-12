@@ -3,10 +3,11 @@
  *
  * States, one visible at a time:
  *   A: Mic permission not granted → show enable mic prompt
- *   B: Mic granted, not calibrated → show calibration landing
- *   Calibrating: 6s countdown with ring animation
- *   Complete: Calibration done → "Ready to monitor"
- *   C: Mic granted + calibrated (within same session) → "Ready to monitor"
+ *   B: Mic granted, not calibrated → calibration landing + listening
+ *      (clicking "I'm ready" crossfades pre-content → listen-content
+ *       within the same view; heading stays static)
+ *   Complete: Calibration done → "You're all set"
+ *   C: Mic granted + calibrated (returning user) → conditional heading
  *
  * Calibration data is stored in sessionStorage so it persists across
  * page navigations within the same tab but is cleared on tab close.
@@ -41,7 +42,6 @@ const engine = new MezzoEngine();
 
 const stateA = document.getElementById('state-a');
 const stateB = document.getElementById('state-b');
-const stateCalibrating = document.getElementById('state-calibrating');
 const stateComplete = document.getElementById('state-complete');
 const stateC = document.getElementById('state-c');
 
@@ -53,6 +53,7 @@ const btnRecalibrateComplete = document.getElementById('btn-recalibrate-complete
 const btnRecalibrateC = document.getElementById('btn-recalibrate-c');
 const deniedHelp = document.getElementById('denied-help');
 
+const stateCHeading = document.getElementById('state-c-heading');
 const listeningHeading = document.getElementById('listening-heading');
 const ringContainer = document.getElementById('ring-container');
 const ringVariants = document.querySelectorAll('.ring-variant');
@@ -60,7 +61,6 @@ const ringVariants = document.querySelectorAll('.ring-variant');
 const allStates = {
   a: stateA,
   b: stateB,
-  calibrating: stateCalibrating,
   complete: stateComplete,
   c: stateC,
 };
@@ -92,6 +92,28 @@ function isCalibrated() {
     // Corrupted storage — treat as not calibrated
   }
   return false;
+}
+
+// =============================================================================
+// State C Heading
+// =============================================================================
+
+const RETURN_SOURCE_KEY = 'mezzoReturnSource';
+
+const STATE_C_HEADINGS = {
+  calibration: "You\u2019re all set",
+  monitoring: 'Your mindfulness speaks volumes',
+};
+
+/**
+ * Show State C with a heading that reflects how the user got here.
+ * @param {'calibration'|'monitoring'} source
+ */
+function showStateC(source) {
+  if (stateCHeading) {
+    stateCHeading.textContent = STATE_C_HEADINGS[source] || STATE_C_HEADINGS.calibration;
+  }
+  transitionToState('c');
 }
 
 // =============================================================================
@@ -186,7 +208,7 @@ async function requestMicPermission() {
 
     // Transition to the correct next state
     if (isCalibrated()) {
-      transitionToState('c');
+      showStateC(returnSource);
     } else {
       transitionToState('b');
     }
@@ -202,20 +224,34 @@ async function requestMicPermission() {
 // Calibration
 // =============================================================================
 
-async function startCalibration() {
+/**
+ * Reset state-b's calibration view back to pre-content (ready for next use).
+ */
+function resetCalibrationView() {
+  stateB.classList.remove('state-listening');
+  listeningHeading.textContent = `Listening...${COUNTDOWN_SECONDS}s`;
+  if (countdownInterval) {
+    clearInterval(countdownInterval);
+    countdownInterval = null;
+  }
+  stopVariantCycle();
+}
+
+/**
+ * Acquire mic, start audio monitoring, and run the countdown.
+ * Assumes state-b is visible (or transitioning in) with .state-listening set.
+ */
+async function beginCalibrationCapture() {
   rmsBuffer = [];
 
   try {
     await audio.acquire();
   } catch (error) {
     console.error('[TryIt] Mic acquisition failed:', error.message);
-    // Mic was revoked — go back to state A
+    resetCalibrationView();
     transitionToState('a');
     return;
   }
-
-  // Switch to calibrating view
-  transitionToState('calibrating');
 
   // Start ring animation
   startVariantCycle();
@@ -243,6 +279,15 @@ async function startCalibration() {
   }, 1000);
 }
 
+/**
+ * Normal flow: user clicks "I'm ready" on state-b pre-content.
+ * Triggers the CSS crossfade and begins capture.
+ */
+async function startCalibration() {
+  stateB.classList.add('state-listening');
+  await beginCalibrationCapture();
+}
+
 function finishCalibration() {
   // Stop audio
   audio.stopMonitoring();
@@ -256,9 +301,7 @@ function finishCalibration() {
     engine.calibrate(rmsBuffer);
   } catch (error) {
     console.error('[TryIt] Calibration failed:', error.message);
-    // Reset heading and go back to B to retry
-    listeningHeading.textContent = `Listening...${COUNTDOWN_SECONDS}s`;
-    transitionToState('b');
+    resetCalibrationView();
     return;
   }
 
@@ -279,7 +322,8 @@ function finishCalibration() {
 
   trackCalibrationCompleted();
 
-  // Show complete view
+  // Reset state-b for next time, then show complete view
+  resetCalibrationView();
   transitionToState('complete');
 }
 
@@ -294,7 +338,7 @@ async function detectInitialState() {
     if (result.state === 'granted') {
       // Mic already granted — show B or C based on calibration
       if (isCalibrated()) {
-        transitionToState('c');
+        showStateC(returnSource);
       } else {
         transitionToState('b');
       }
@@ -326,11 +370,22 @@ btnStartMonitoring?.addEventListener('click', () => {
   navigateTo('monitoring.html');
 });
 
-function handleRecalibrate() {
-  try {
-    sessionStorage.removeItem(STATE_STORAGE_KEY);
-  } catch { /* ignore */ }
+/**
+ * Recalibrate: skip the landing, go straight to listening.
+ * Pre-sets state-b to listening mode so it fades in showing the countdown.
+ */
+async function handleRecalibrate() {
+  try { sessionStorage.removeItem(STATE_STORAGE_KEY); } catch { /* ignore */ }
+
+  // Reset and pre-set to listening mode before the view transition
+  resetCalibrationView();
+  stateB.classList.add('state-listening');
+
+  // Fade to state-b (will show listening content immediately)
   transitionToState('b');
+
+  // Begin mic capture + countdown
+  await beginCalibrationCapture();
 }
 
 btnRecalibrateComplete?.addEventListener('click', handleRecalibrate);
@@ -344,6 +399,16 @@ window.addEventListener('beforeunload', () => {
 // =============================================================================
 // Init
 // =============================================================================
+
+// Read and clear the return-source flag (set by monitoring.js before navigating here)
+let returnSource = 'calibration';
+try {
+  const stored = sessionStorage.getItem(RETURN_SOURCE_KEY);
+  if (stored) {
+    returnSource = stored;
+    sessionStorage.removeItem(RETURN_SOURCE_KEY);
+  }
+} catch { /* ignore */ }
 
 pageEnter();
 detectInitialState();

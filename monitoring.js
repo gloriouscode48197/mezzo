@@ -35,7 +35,6 @@ const views = {
   pipRunning: document.getElementById('view-pip-running'),
 };
 
-const heading = document.getElementById('mon-heading');
 const circleContainer = document.getElementById('circle-container');
 const btnStop = document.getElementById('btn-stop');
 const btnPip = document.getElementById('btn-pip');
@@ -56,9 +55,7 @@ let mainCircle = null;
 let pipCircle = null;
 let activeCircle = null;
 let pipWindow = null;
-let pipHeadingEl = null;
 let baselineRMS = 0;
-let currentHeadingState = 'within'; // 'within' | 'outside'
 let isPipClosingForReturn = false;
 let isPageUnloading = false;
 let isOutsideRange = false;
@@ -105,36 +102,6 @@ function loadCalibration() {
   } catch {
     return null;
   }
-}
-
-// =============================================================================
-// Heading Crossfade
-// =============================================================================
-
-const HEADING_FADE_MS = 200;
-let headingFadeTimer = null;
-let pipHeadingFadeTimer = null;
-
-/**
- * Crossfade a heading element: fade out → swap text → fade in.
- * Returns the new timer ID so callers can track it.
- */
-function crossfadeHeading(el, text, existingTimer) {
-  if (existingTimer) clearTimeout(existingTimer);
-  el.style.opacity = '0';
-  return setTimeout(() => {
-    el.textContent = text;
-    el.style.opacity = '';
-  }, HEADING_FADE_MS);
-}
-
-function updateHeading(isOutside) {
-  const newState = isOutside ? 'outside' : 'within';
-  if (newState === currentHeadingState) return;
-
-  currentHeadingState = newState;
-  const text = isOutside ? 'Outside Range' : 'Within Range';
-  headingFadeTimer = crossfadeHeading(heading, text, headingFadeTimer);
 }
 
 // =============================================================================
@@ -201,21 +168,6 @@ function onAudioFrame({ rms }) {
   // Update whichever circle is active
   if (activeCircle) {
     activeCircle.update(rms, baselineRMS, isAlertMode, blinkDark);
-  }
-
-  // ── Heading: synced to ring visibility (ring-1+ = "Outside Range") ──
-  if (activeCircle) {
-    const isOutsideByRing = activeCircle.currentRingLevel >= 1;
-    if (!pipWindow) {
-      updateHeading(isOutsideByRing);
-    } else if (pipHeadingEl) {
-      const pipState = isOutsideByRing ? 'outside' : 'within';
-      if (pipState !== currentHeadingState) {
-        currentHeadingState = pipState;
-        const text = isOutsideByRing ? 'Outside Range' : 'Within Range';
-        pipHeadingFadeTimer = crossfadeHeading(pipHeadingEl, text, pipHeadingFadeTimer);
-      }
-    }
   }
 
   // ── Debug: per-frame volume and threshold info ──
@@ -324,6 +276,7 @@ function stopMonitoring() {
   activeCircle = null;
 
   if (!isPageUnloading) {
+    try { sessionStorage.setItem('mezzoReturnSource', 'monitoring'); } catch { /* ignore */ }
     navigateTo('try-it.html');
   }
 }
@@ -401,7 +354,7 @@ async function openPiP() {
       text-align: center;
       margin: 0;
       padding: 32px 20px 0;
-      transition: color 300ms ease, opacity 200ms ease;
+      transition: color 300ms ease;
     }
     .pip-controls {
       display: none;
@@ -476,8 +429,7 @@ async function openPiP() {
 
   const pipH = pipDoc.createElement('h1');
   pipH.className = 'pip-heading';
-  pipH.textContent = currentHeadingState === 'outside' ? 'Outside Range' : 'Within Range';
-  pipHeadingEl = pipH;
+  pipH.textContent = 'Listening';
   layout.appendChild(pipH);
 
   const wrapper = pipDoc.createElement('div');
@@ -489,7 +441,7 @@ async function openPiP() {
 
   const pipStopBtn = pipDoc.createElement('button');
   pipStopBtn.className = 'btn-primary btn-wide';
-  pipStopBtn.textContent = 'Stop Monitoring';
+  pipStopBtn.textContent = 'Stop listening';
   pipStopBtn.addEventListener('click', () => {
     if (pipWindow) pipWindow.close();
   });
@@ -524,24 +476,18 @@ async function openPiP() {
   sessionUsedPip = true;
   showView('pipRunning');
   document.body.setAttribute('data-surface', 'light');
-  currentHeadingState = 'within';
 
   // ── Handle PiP close (browser close button or programmatic) ──
   pipWindow.addEventListener('pagehide', handlePipClose);
 }
 
 function handlePipClose() {
-  // Clean up PiP circle, heading ref, and fade timer
+  // Clean up PiP circle
   if (pipCircle) {
     pipCircle.destroy();
     pipCircle = null;
   }
-  if (pipHeadingFadeTimer) {
-    clearTimeout(pipHeadingFadeTimer);
-    pipHeadingFadeTimer = null;
-  }
   pipWindow = null;
-  pipHeadingEl = null;
 
   // Guard against running during tab close
   if (isPageUnloading) return;
@@ -572,11 +518,6 @@ function resumeMainMonitoring() {
   // Immediately sync circle to current state
   const currentRms = audio.getCurrentLevel().rms;
   mainCircle.update(currentRms, baselineRMS, isAlertMode, blinkDark);
-
-  // Sync heading to ring level (after circle update so currentRingLevel is set)
-  const isOutsideByRing = mainCircle.currentRingLevel >= 1;
-  currentHeadingState = isOutsideByRing ? 'outside' : 'within';
-  heading.textContent = isOutsideByRing ? 'Outside Range' : 'Within Range';
 }
 
 function returnFromPip() {

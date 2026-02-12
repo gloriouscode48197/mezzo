@@ -45,33 +45,34 @@
           <img src="assets/microphone-icon.svg" alt="" class="btn-icon">
           <span>Enable microphone</span>
         </button>
-        <p class="type-microcopy state-micro">You're always in control. You can stop monitoring at any time.</p>
+        <p class="type-microcopy state-micro">You can stop monitoring at any time.</p>
         <p id="denied-help" class="type-microcopy state-micro denied-help hidden">Your browser has blocked microphone access. Click the lock icon in your address bar and change the microphone setting to "Allow", then reload this page.</p>
       </div>
     </main>
 
     <!-- ═══════════════════════════════════════════
-         State B: Mic granted, not calibrated
+         State B: Calibration (landing + listening in one view)
+         Clicking "I'm ready" adds .state-listening — heading stays,
+         content area crossfades from pre → listen.
          ═══════════════════════════════════════════ -->
     <main id="state-b" class="state-view page-content hidden">
       <div class="state-col">
-        <h1 class="type-section-heading state-heading">Set up your baseline volume</h1>
-        <p class="type-hero-body state-body">Talk for a few seconds so Mezzo can learn the speaking level you consider appropriate for the people around you.</p>
-        <button id="btn-start-calibration" class="btn-primary btn-wide">Measure my volume</button>
-      </div>
-    </main>
-
-    <!-- ═══════════════════════════════════════════
-         State: Calibrating (6s countdown)
-         ═══════════════════════════════════════════ -->
-    <main id="state-calibrating" class="state-view page-content hidden">
-      <div class="state-col">
-        <h1 class="type-section-heading state-heading">Speak at the volume you want to maintain</h1>
-        <p id="listening-heading" class="type-body listening-countdown">Listening...6s</p>
-        <div id="ring-container" class="ring-container">
-          <img src="assets/light-bg-circle-ring-0-0.svg" class="ring-variant active" alt="" aria-hidden="true">
-          <img src="assets/light-bg-circle-ring-0-1.svg" class="ring-variant" alt="" aria-hidden="true">
-          <img src="assets/light-bg-circle-ring-0-2.svg" class="ring-variant" alt="" aria-hidden="true">
+        <h1 class="type-section-heading state-heading">Speak at the volume you'd like to&nbsp;keep</h1>
+        <div class="cal-content-area">
+          <!-- Pre-calibration: body text + button -->
+          <div class="cal-pre-content">
+            <p class="type-hero-body state-body">Talk for a few seconds so Mezzo can learn the speaking level you consider appropriate for the people around you.</p>
+            <button id="btn-start-calibration" class="btn-primary btn-wide">I'm ready</button>
+          </div>
+          <!-- Listening: countdown + ring visualization -->
+          <div class="cal-listen-content">
+            <p id="listening-heading" class="cal-countdown">Listening...6s</p>
+            <div id="ring-container" class="ring-container">
+              <img src="assets/light-bg-circle-ring-0-0.svg" class="ring-variant active" alt="" aria-hidden="true">
+              <img src="assets/light-bg-circle-ring-0-1.svg" class="ring-variant" alt="" aria-hidden="true">
+              <img src="assets/light-bg-circle-ring-0-2.svg" class="ring-variant" alt="" aria-hidden="true">
+            </div>
+          </div>
         </div>
       </div>
     </main>
@@ -81,10 +82,10 @@
          ═══════════════════════════════════════════ -->
     <main id="state-complete" class="state-view page-content state-ready hidden">
       <div class="state-col">
-        <h1 class="type-section-heading state-heading">Ready to monitor</h1>
+        <h1 class="type-section-heading state-heading">You're all set</h1>
         <p class="type-hero-body state-body">Start monitoring and Mezzo will stay quiet unless your volume is consistently louder than your calibrated range.</p>
         <button id="btn-complete-start" class="btn-primary btn-wide">Start listening</button>
-        <button id="btn-recalibrate-complete" class="btn-recalibrate-link">Recalibrate volume</button>
+        <button id="btn-recalibrate-complete" class="btn-recalibrate-link">Recalibrate</button>
       </div>
       <footer class="state-footer">
         <p class="type-microcopy state-footer-text">Mezzo doesn't record audio or transcribe speech.</p>
@@ -97,10 +98,10 @@
          ═══════════════════════════════════════════ -->
     <main id="state-c" class="state-view page-content state-ready hidden">
       <div class="state-col">
-        <h1 class="type-section-heading state-heading">Ready to monitor</h1>
+        <h1 id="state-c-heading" class="type-section-heading state-heading">You're all set</h1>
         <p class="type-hero-body state-body">Start monitoring and Mezzo will stay quiet unless your volume is consistently louder than your calibrated range.</p>
         <button id="btn-start-monitoring" class="btn-primary btn-wide">Start listening</button>
-        <button id="btn-recalibrate-c" class="btn-recalibrate-link">Recalibrate volume</button>
+        <button id="btn-recalibrate-c" class="btn-recalibrate-link">Recalibrate</button>
       </div>
       <footer class="state-footer">
         <p class="type-microcopy state-footer-text">Mezzo doesn't record audio or transcribe speech.</p>
