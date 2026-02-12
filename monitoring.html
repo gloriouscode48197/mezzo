@@ -22,21 +22,23 @@
     })
   </script>
 </head>
-<body data-surface="light" style="opacity: 0">
+<body data-surface="light">
+
+  <nav class="nav">
+    <a href="index.html" class="type-nav-wordmark">Mezzo</a>
+    <div class="nav-links">
+      <a href="index.html" class="nav-link nav-link-quiet">Home</a>
+      <a href="privacy.html" class="nav-link nav-link-quiet">Privacy</a>
+      <span class="nav-link nav-link-active">Try Mezzo</span>
+    </div>
+  </nav>
+
+  <div class="page-fade" style="opacity: 0">
 
   <!-- ═══════════════════════════════════════════
        View 1: Active Monitoring (card UI)
        ═══════════════════════════════════════════ -->
   <div id="view-monitoring" class="page">
-    <nav class="nav">
-      <a href="index.html" class="type-nav-wordmark">Mezzo</a>
-      <div class="nav-links">
-        <a href="index.html" class="nav-link nav-link-quiet">Home</a>
-        <a href="privacy.html" class="nav-link nav-link-quiet">Privacy</a>
-        <span class="nav-link nav-link-active">Try Mezzo</span>
-      </div>
-    </nav>
-
     <main class="mon-card-wrapper">
       <div class="mon-card">
         <button id="btn-pip" class="mon-pip-btn" aria-label="Pop out to Picture-in-Picture">
@@ -49,7 +51,7 @@
         <div class="mon-circle-area">
           <div id="circle-container" class="mon-circle-container"></div>
         </div>
-        <button id="btn-stop" class="btn-primary btn-wide">Stop listening</button>
+        <button id="btn-stop" class="btn-primary btn-wide">Stop Monitoring</button>
         <p class="type-microcopy mon-micro">Nothing is recorded or saved.</p>
         <p class="type-microcopy mon-micro">Monitoring stops when you close this tab.</p>
       </div>
@@ -60,15 +62,6 @@
        View 2: PiP Running (monitoring in mini window)
        ═══════════════════════════════════════════ -->
   <div id="view-pip-running" class="page hidden">
-    <nav class="nav">
-      <a href="index.html" class="type-nav-wordmark">Mezzo</a>
-      <div class="nav-links">
-        <a href="index.html" class="nav-link nav-link-quiet">Home</a>
-        <a href="privacy.html" class="nav-link nav-link-quiet">Privacy</a>
-        <span class="nav-link nav-link-active">Try Mezzo</span>
-      </div>
-    </nav>
-
     <main class="mon-content">
       <img src="assets/pip-icon.svg" class="pip-running-icon" alt="" aria-hidden="true">
       <h1 class="type-section-heading pip-heading">Running in a mini window.</h1>
@@ -77,6 +70,8 @@
       <p class="type-microcopy pip-micro">This will close the pop-out</p>
     </main>
   </div>
+
+  </div><!-- .page-fade -->
 
   <script src="monitoring.js" type="module"></script>
 </body>

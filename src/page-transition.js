@@ -7,8 +7,9 @@
  * Fade-only (no translateY) to avoid triggering scrollbar
  * appearance/disappearance which causes horizontal layout shifts.
  *
- * Setup: Add style="opacity: 0" to each <body> tag, then call pageEnter()
- * from each page's module script.
+ * Setup: Add class="page-fade" and style="opacity: 0" to the content wrapper
+ * (NOT the body) on each page, then call pageEnter() from each page's script.
+ * The nav sits outside .page-fade so it never fades during transitions.
  */
 
 const FADE_OUT_MS = 300;
@@ -17,21 +18,26 @@ const FADE_IN_MS = 350;
 let isNavigating = false;
 
 /**
- * Fade in the page on load.
- * Expects body to start with opacity: 0 (set via inline style in HTML).
+ * Fade in the page content on load.
+ * Targets .page-fade (falls back to body for backwards compat).
+ * Only animates if the target starts with inline opacity: 0.
  * Also sets up the nav scroll behavior (transparent at top, frosted on scroll).
  */
 export function pageEnter() {
-  requestAnimationFrame(() => {
-    document.body.style.transition = `opacity ${FADE_IN_MS}ms ease`;
-    requestAnimationFrame(() => {
-      document.body.style.opacity = '';
+  const fadeTarget = document.querySelector('.page-fade') || document.body;
 
-      setTimeout(() => {
-        document.body.style.transition = '';
-      }, FADE_IN_MS + 50);
+  if (fadeTarget.style.opacity === '0') {
+    requestAnimationFrame(() => {
+      fadeTarget.style.transition = `opacity ${FADE_IN_MS}ms ease`;
+      requestAnimationFrame(() => {
+        fadeTarget.style.opacity = '';
+
+        setTimeout(() => {
+          fadeTarget.style.transition = '';
+        }, FADE_IN_MS + 50);
+      });
     });
-  });
+  }
 
   // Nav: transparent at top, frosted background on scroll
   const nav = document.querySelector('.nav');
@@ -53,8 +59,9 @@ export function navigateTo(url) {
   if (isNavigating) return;
   isNavigating = true;
 
-  document.body.style.transition = `opacity ${FADE_OUT_MS}ms ease`;
-  document.body.style.opacity = '0';
+  const fadeTarget = document.querySelector('.page-fade') || document.body;
+  fadeTarget.style.transition = `opacity ${FADE_OUT_MS}ms ease`;
+  fadeTarget.style.opacity = '0';
 
   setTimeout(() => {
     window.location.href = url;

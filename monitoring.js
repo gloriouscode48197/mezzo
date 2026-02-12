@@ -23,8 +23,8 @@ import { pageEnter, navigateTo, transitionView } from './src/page-transition.js'
 // =============================================================================
 
 const STATE_STORAGE_KEY = 'mezzoState';
-const PIP_WIDTH = 120;
-const PIP_HEIGHT = 120;
+const PIP_WIDTH = 1;
+const PIP_HEIGHT = 1;
 
 // =============================================================================
 // DOM References
@@ -300,6 +300,8 @@ async function openPiP() {
     console.error('[Monitoring] Failed to open PiP window:', err.message);
     return;
   }
+
+  console.log('[PiP] Requested: %d×%d — Actual: %d×%d', PIP_WIDTH, PIP_HEIGHT, pipWindow.innerWidth, pipWindow.innerHeight);
 
   const pipDoc = pipWindow.document;
 

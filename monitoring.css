@@ -23,6 +23,8 @@ html {
 body {
   min-height: 100vh;
   min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
   transition: background-color 300ms ease;
 }
 
@@ -39,9 +41,14 @@ body[data-surface="dark"] {
    Page Layout
    ═══════════════════════════════════════════ */
 
+.page-fade {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
 .page {
-  min-height: 100vh;
-  min-height: 100dvh;
+  flex: 1;
   display: flex;
   flex-direction: column;
 }

@@ -22,17 +22,18 @@
     })
   </script>
 </head>
-<body data-surface="light" style="opacity: 0">
+<body data-surface="light">
 
-  <div class="page">
-    <nav class="nav">
-      <a href="index.html" class="type-nav-wordmark">Mezzo</a>
-      <div class="nav-links">
-        <a href="index.html" class="nav-link nav-link-quiet">Home</a>
-        <a href="privacy.html" class="nav-link nav-link-quiet">Privacy</a>
-        <span class="nav-link nav-link-active">Try Mezzo</span>
-      </div>
-    </nav>
+  <nav class="nav">
+    <a href="index.html" class="type-nav-wordmark">Mezzo</a>
+    <div class="nav-links">
+      <a href="index.html" class="nav-link nav-link-quiet">Home</a>
+      <a href="privacy.html" class="nav-link nav-link-quiet">Privacy</a>
+      <span class="nav-link nav-link-active">Try Mezzo</span>
+    </div>
+  </nav>
+
+  <div class="page page-fade" style="opacity: 0">
 
     <!-- ═══════════════════════════════════════════
          State A: Mic permission not granted
@@ -62,7 +63,7 @@
           <!-- Pre-calibration: body text + button -->
           <div class="cal-pre-content">
             <p class="type-hero-body state-body">Talk for a few seconds so Mezzo can learn the speaking level you consider appropriate for the people around you.</p>
-            <button id="btn-start-calibration" class="btn-primary btn-wide">I'm ready</button>
+            <button id="btn-start-calibration" class="btn-primary btn-wide">OK</button>
           </div>
           <!-- Listening: countdown + ring visualization -->
           <div class="cal-listen-content">
