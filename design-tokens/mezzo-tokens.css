@@ -401,3 +401,37 @@
   color: var(--hanko-text);
   border-color: var(--border-outline);
 }
+
+/* ── Theme Toggle (Light / Dark / Auto) ── */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+}
+
+.theme-toggle-btn {
+  font-family: var(--font-body);
+  font-weight: var(--weight-regular);
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-subdued);
+  background: none;
+  border: none;
+  padding: 5px 10px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: var(--transition-hover);
+}
+
+.theme-toggle-btn:hover {
+  color: var(--text-default);
+}
+
+.theme-toggle-btn.active {
+  color: var(--hanko-on-fill);
+  background: var(--hanko-fill);
+}

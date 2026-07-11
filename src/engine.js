@@ -1,7 +1,7 @@
 /**
  * Mezzo Audio Processing Engine
  *
- * Core logic for detecting when speaking volume exceeds calibrated range.
+ * Core logic for classifying speaking volume relative to a calibrated baseline.
  * No UI, animations, or browser APIs - just pure state machine logic.
  */
 
@@ -9,25 +9,24 @@
 // Constants (all configurable)
 // =============================================================================
 
-export const FRAME_MS = 25;
-export const SPIKE_IGNORE_MS = 250;
-export const OUT_OF_RANGE_ENTER_MS = 750;
-export const SUSTAINED_ENTER_MS = 500;
-export const RETURN_TO_RANGE_MS = 600;
-export const THRESHOLD_MULTIPLIER = 1.4;
+// Zone thresholds, expressed as multipliers on the calibrated baseline RMS.
+// Zone 0 (Listening) sits below ZONE_SILENCE_RATIO; each successive zone
+// runs up to its multiplier; zone 3 (Outside of Range) is open-ended above
+// ZONE_ACCEPTABLE_MULT — there's no volume tier beyond it. "Sustained/
+// consistent outside" is a duration flag owned by monitoring.js, not a
+// louder-volume zone.
+export const ZONE_SILENCE_RATIO = 0.3;    // < this × baseline -> zone 0 (Listening)
+export const ZONE_TARGET_MULT = 1.15;     // <= this × baseline -> zone 1 (Within Range, target)
+export const ZONE_ACCEPTABLE_MULT = 1.8;  // <= this × baseline -> zone 2 (Within Range, acceptable)
+                                           // above -> zone 3 (Outside of Range)
 
 export const INITIAL_GRACE_MS_MIN = 5000;
 export const INITIAL_GRACE_MS_MAX = 8000;
 
-// =============================================================================
-// Logical States
-// =============================================================================
-
-export const LogicalState = {
-  IN_RANGE: 'IN_RANGE',
-  OUT_OF_RANGE_SHORT: 'OUT_OF_RANGE_SHORT',
-  OUT_OF_RANGE_SUSTAINED: 'OUT_OF_RANGE_SUSTAINED',
-};
+// Assumed real interval between processFrame() calls. Must match the
+// caller's actual sampling cadence (audio.js's SAMPLE_INTERVAL_MS = 50) for
+// INITIAL_GRACE_MS_* to mean what its name says.
+export const FRAME_MS = 50;
 
 // =============================================================================
 // Engine Class
@@ -37,18 +36,13 @@ export class MezzoEngine {
   constructor() {
     // Calibration values
     this.baselineRMS = null;
-    this.upperThreshold = null;
 
-    // Current state
-    this.currentState = LogicalState.IN_RANGE;
+    // Current zone (0-3)
+    this.currentZone = 0;
 
     // Lifecycle flags
     this.monitoringActive = false;
     this.calibrationComplete = false;
-
-    // Duration counters (milliseconds)
-    this.aboveDurationMs = 0;
-    this.belowDurationMs = 0;
 
     // Grace period
     this.gracePeriodActive = false;
@@ -65,7 +59,7 @@ export class MezzoEngine {
    * - Sort samples
    * - Remove lowest 10% and highest 10%
    * - Compute mean of remaining values
-   * - Set baselineRMS and upperThreshold
+   * - Set baselineRMS
    *
    * @param {number[]} rmsSamples - Array of RMS values from calibration period
    * @throws {Error} If no valid samples exist after trimming
@@ -99,7 +93,6 @@ export class MezzoEngine {
 
     // Set calibration values
     this.baselineRMS = mean;
-    this.upperThreshold = mean * THRESHOLD_MULTIPLIER;
     this.calibrationComplete = true;
   }
 
@@ -111,7 +104,7 @@ export class MezzoEngine {
    * Start monitoring.
    *
    * - Must not start unless calibration is complete
-   * - Resets all counters
+   * - Resets zone state
    * - Enters grace period with random duration
    *
    * @throws {Error} If calibration is not complete
@@ -121,13 +114,11 @@ export class MezzoEngine {
       throw new Error('Cannot start monitoring: calibration not complete');
     }
 
-    // Reset all counters
-    this.aboveDurationMs = 0;
-    this.belowDurationMs = 0;
+    // Reset zone state
+    this.currentZone = 0;
 
     // Set monitoring state
     this.monitoringActive = true;
-    this.currentState = LogicalState.IN_RANGE;
 
     // Enter grace period with random duration
     this.gracePeriodActive = true;
@@ -144,15 +135,13 @@ export class MezzoEngine {
    * - Resets all counters and timers
    */
   stopMonitoring() {
-    // Reset all counters and timers
-    this.aboveDurationMs = 0;
-    this.belowDurationMs = 0;
+    // Reset zone state
+    this.currentZone = 0;
     this.gracePeriodActive = false;
     this.graceRemainingMs = 0;
 
     // Set monitoring state
     this.monitoringActive = false;
-    this.currentState = LogicalState.IN_RANGE;
   }
 
   // ===========================================================================
@@ -173,17 +162,13 @@ export class MezzoEngine {
 
     if (this.gracePeriodActive) {
       this.graceRemainingMs -= FRAME_MS;
-      this._updateCounters(rmsValue);
-
       if (this.graceRemainingMs <= 0) {
         this.gracePeriodActive = false;
       }
-
-      return; // No state updates during grace period
+      return; // No zone updates during grace period
     }
 
-    this._updateCounters(rmsValue);
-    this._updateState();
+    this.currentZone = this._computeZone(rmsValue);
   }
 
   // ===========================================================================
@@ -191,12 +176,13 @@ export class MezzoEngine {
   // ===========================================================================
 
   /**
-   * Get the current logical state.
+   * Get the current zone. Doubles as the ring level to render — they're the
+   * same number now that there's no volume tier beyond zone 3.
    *
-   * @returns {string} Current LogicalState value
+   * @returns {number} 0 (Listening) through 3 (Outside of Range)
    */
-  getCurrentState() {
-    return this.currentState;
+  getZone() {
+    return this.currentZone;
   }
 
   /**
@@ -220,12 +206,11 @@ export class MezzoEngine {
   /**
    * Get calibration values (for debugging/testing).
    *
-   * @returns {{ baselineRMS: number|null, upperThreshold: number|null }}
+   * @returns {{ baselineRMS: number|null }}
    */
   getCalibrationValues() {
     return {
       baselineRMS: this.baselineRMS,
-      upperThreshold: this.upperThreshold,
     };
   }
 
@@ -234,50 +219,23 @@ export class MezzoEngine {
   // ===========================================================================
 
   /**
-   * Update duration counters based on current RMS value.
+   * Classify an RMS value into a zone (0-3) relative to the calibrated baseline.
    *
-   * @param {number} rmsValue - Current RMS value
+   * @param {number} rmsValue
+   * @returns {number}
    * @private
    */
-  _updateCounters(rmsValue) {
-    if (rmsValue > this.upperThreshold) {
-      this.aboveDurationMs += FRAME_MS;
-      this.belowDurationMs = 0;
-    } else {
-      this.belowDurationMs += FRAME_MS;
-      this.aboveDurationMs = 0;
-    }
-  }
-
-  /**
-   * Update logical state based on duration counters.
-   *
-   * @private
-   */
-  _updateState() {
-    // Spike rejection: if we have some above-threshold time but it's less
-    // than the spike ignore threshold, don't change state yet
-    if (this.aboveDurationMs > 0 && this.aboveDurationMs < SPIKE_IGNORE_MS) {
-      return;
+  _computeZone(rmsValue) {
+    if (!this.baselineRMS || this.baselineRMS <= 0 || !rmsValue || rmsValue <= 0) {
+      return 0;
     }
 
-    // Check for sustained out of range (highest priority)
-    if (this.aboveDurationMs >= SUSTAINED_ENTER_MS) {
-      this.currentState = LogicalState.OUT_OF_RANGE_SUSTAINED;
-      return;
-    }
+    const ratio = rmsValue / this.baselineRMS;
 
-    // Check for short out of range
-    if (this.aboveDurationMs >= OUT_OF_RANGE_ENTER_MS) {
-      this.currentState = LogicalState.OUT_OF_RANGE_SHORT;
-      return;
-    }
-
-    // Check for return to range
-    if (this.belowDurationMs >= RETURN_TO_RANGE_MS) {
-      this.currentState = LogicalState.IN_RANGE;
-      return;
-    }
+    if (ratio < ZONE_SILENCE_RATIO) return 0;
+    if (ratio <= ZONE_TARGET_MULT) return 1;
+    if (ratio <= ZONE_ACCEPTABLE_MULT) return 2;
+    return 3;
   }
 
   /**

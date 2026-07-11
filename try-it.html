@@ -30,6 +30,7 @@
       <a href="index.html" class="nav-link nav-link-quiet">Home</a>
       <a href="privacy.html" class="nav-link nav-link-quiet">Privacy</a>
       <span class="nav-link nav-link-active">Try Mezzo</span>
+      <div id="theme-toggle"></div>
     </div>
   </nav>
 
@@ -79,14 +80,74 @@
     </main>
 
     <!-- ═══════════════════════════════════════════
-         State: Calibration Complete → Ready to monitor
+         State: Choose a Profile
          ═══════════════════════════════════════════ -->
-    <main id="state-complete" class="state-view page-content state-ready hidden">
+    <main id="state-profile-select" class="state-view page-content hidden">
       <div class="state-col">
-        <h1 class="type-section-heading state-heading">You're all set</h1>
-        <p class="type-hero-body state-body">Start monitoring and Mezzo will stay quiet unless your volume is consistently louder than your calibrated&nbsp;range.</p>
-        <button id="btn-complete-start" class="btn-primary btn-wide">Start Monitoring</button>
-        <button id="btn-recalibrate-complete" class="btn-recalibrate-link">Recalibrate</button>
+        <h1 class="type-section-heading state-heading">Choose a Profile</h1>
+        <div class="profile-list">
+          <button id="btn-choose-recommended" class="profile-row profile-row-recommended">
+            <span class="profile-check" aria-hidden="true">&#10003;</span>
+            <span class="profile-row-text">
+              <span class="profile-row-name">Recommended</span>
+              <span class="profile-row-desc">Uses Mezzo's recommended conversational speaking level.</span>
+            </span>
+          </button>
+
+          <hr class="profile-divider">
+
+          <button id="btn-create-custom" class="profile-row">
+            <span class="profile-row-text">
+              <span class="profile-row-name">Create Custom Profile</span>
+            </span>
+          </button>
+
+          <div id="saved-profiles-block" class="hidden">
+            <hr class="profile-divider">
+            <p class="type-tag profile-section-label">Saved Profiles</p>
+            <div id="saved-profiles-list" class="profile-list"></div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- ═══════════════════════════════════════════
+         State: Save this profile?
+         ═══════════════════════════════════════════ -->
+    <main id="state-save-prompt" class="state-view page-content hidden">
+      <div class="state-col">
+        <h1 class="type-section-heading state-heading">Save this profile?</h1>
+        <p class="type-hero-body state-body">Save it to reuse this baseline next time without recalibrating.</p>
+        <div class="prompt-actions">
+          <button id="btn-save-not-now" class="btn-outline">Not Now</button>
+          <button id="btn-save-profile" class="btn-primary btn-wide">Save Profile</button>
+        </div>
+      </div>
+    </main>
+
+    <!-- ═══════════════════════════════════════════
+         State: Name the profile
+         ═══════════════════════════════════════════ -->
+    <main id="state-name" class="state-view page-content hidden">
+      <div class="state-col">
+        <h1 class="type-section-heading state-heading">Profile Name</h1>
+        <form id="name-form">
+          <input id="profile-name-input" class="text-input" type="text" placeholder="e.g. Team Standups" maxlength="40" autocomplete="off">
+          <button id="btn-save-name" type="submit" class="btn-primary btn-wide">Save</button>
+        </form>
+      </div>
+    </main>
+
+    <!-- ═══════════════════════════════════════════
+         State: Ready to monitor
+         ═══════════════════════════════════════════ -->
+    <main id="state-ready" class="state-view page-content state-ready hidden">
+      <div class="state-col">
+        <h1 class="type-section-heading state-heading">You're All Set</h1>
+        <p class="type-tag profile-section-label">Current Profile</p>
+        <p id="current-profile-name" class="type-hero-body current-profile-name">Recommended</p>
+        <button id="btn-start-monitoring" class="btn-primary btn-wide">Start Monitoring</button>
+        <button id="btn-change-profile" class="btn-recalibrate-link">Change Profile</button>
       </div>
       <footer class="state-footer">
         <p class="type-microcopy state-footer-text">Mezzo doesn't record audio or transcribe speech.</p>
@@ -94,24 +155,12 @@
       </footer>
     </main>
 
-    <!-- ═══════════════════════════════════════════
-         State C: Mic granted + calibrated → Ready to monitor
-         ═══════════════════════════════════════════ -->
-    <main id="state-c" class="state-view page-content state-ready hidden">
-      <div class="state-col">
-        <h1 id="state-c-heading" class="type-section-heading state-heading">You're all set</h1>
-        <p class="type-hero-body state-body">Start monitoring and Mezzo will stay quiet unless your volume is consistently louder than your calibrated&nbsp;range.</p>
-        <button id="btn-start-monitoring" class="btn-primary btn-wide">Start Monitoring</button>
-        <button id="btn-recalibrate-c" class="btn-recalibrate-link">Recalibrate</button>
-      </div>
-      <footer class="state-footer">
-        <p class="type-microcopy state-footer-text">Mezzo doesn't record audio or transcribe speech.</p>
-        <p class="type-microcopy state-footer-text">Your mic data stays in your browser and disappears when you close the tab.</p>
-      </footer>
-    </main> 
-
   </div>
 
-  <script src="try-it.js" type="module"></script>
+  <script src="try-it.js?v=6" type="module"></script>
+  <script type="module">
+    import { mountThemeToggle } from './src/theme.js';
+    mountThemeToggle(document.getElementById('theme-toggle'));
+  </script>
 </body>
 </html>

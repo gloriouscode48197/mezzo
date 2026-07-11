@@ -28,9 +28,14 @@ body {
   transition: background-color 300ms ease;
 }
 
-/* Monitoring page bg: slightly darker than default surface — always stays light */
+/* Monitoring page bg: slightly off from the card's own surface, in both
+   themes — never changes due to volume/zone state, only the theme choice. */
 body {
   background: #E6DFD4;
+}
+
+body[data-surface="dark"] {
+  background: #0B0B0B;
 }
 
 /* ═══════════════════════════════════════════
@@ -137,12 +142,6 @@ body {
   border-radius: 16px;
   background: var(--surface);
   box-shadow: 0 2px 24px rgba(0, 0, 0, 0.06);
-  transition: background-color 300ms ease, box-shadow 300ms ease;
-}
-
-.mon-card[data-surface="dark"] {
-  background: #3A3A3A;
-  box-shadow: 0 2px 24px rgba(0, 0, 0, 0.2);
 }
 
 /* Make voice circle transparent so card bg shows through */

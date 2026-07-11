@@ -2,19 +2,30 @@
  * MezzoVoiceCircle — Self-contained voice visualization component
  *
  * Renders an organic, breathing circle that responds to voice volume.
- * Uses the pre-made SVG brush-stroke assets (4 ring levels × 3 variants × 2 themes).
+ * Uses the pre-made SVG brush-stroke assets (4 ring levels × 3 variants).
  *
  * RING STACKING: All 4 ring layers (ring-0 through ring-3) are rendered
  * simultaneously, absolutely positioned on top of each other. Ring-0 is
  * always visible. Higher rings fade in/out as volume crosses thresholds.
  * Each ring layer independently cycles through its 3 SVG variants.
  *
+ * Pure renderer: takes a pre-computed zone (0-3) and a sustained-outside
+ * flag from the caller (src/engine.js owns volume classification,
+ * monitoring.js owns the sustained-duration timer) — it does not read raw
+ * RMS or compute thresholds itself, so the rings and the status label can
+ * never disagree about what state the app is in.
+ *
+ * Outside-of-range feedback is communicated entirely through color (gray →
+ * Mezzo orange, via a CSS filter — no colored SVG variants exist or are
+ * needed) and organic ring drift that escalates once sustained. The
+ * background never changes and there is no blinking.
+ *
  * Works in both full webpage and PiP windows — scales to fill its container.
  *
  * Usage:
  *   const circle = new MezzoVoiceCircle(containerEl, { assetPath: 'assets' });
  *   // On each audio frame:
- *   circle.update(rms, baseline, isAlert);
+ *   circle.update(zone, isSustained);
  *   // Cleanup:
  *   circle.destroy();
  *
@@ -26,12 +37,7 @@
 // =============================================================================
 
 const VARIANT_COUNT = 3;
-const SILENCE_RATIO = 0.3; // Below this fraction of baseline → silence size
 const RING_COUNT = 4;
-
-// Ring threshold multipliers on the calibrated baseline RMS.
-// Each ring triggers when volume exceeds baseline × multiplier.
-export const RING_THRESHOLDS = [1.5, 2.0, 3.0]; // ring-1, ring-2, ring-3
 
 // Staggered cycle durations per ring so layers don't breathe in sync
 const VARIANT_CYCLE_MS = [2500, 2800, 2300, 3100];
@@ -59,26 +65,15 @@ const COMPONENT_CSS = `
   justify-content: center;
   container-type: size;
   background: var(--surface);
-  transition: background-color var(--transition-reveal);
   overflow: hidden;
 }
 
-/* ── Circle Stage (sized + pulsed) ── */
+/* ── Circle Stage (constant size, always pulsing) ── */
 .mezzo-circle-stage {
-  width: min(var(--mezzo-size, var(--circle-within)), 90cqmin);
-  height: min(var(--mezzo-size, var(--circle-within)), 90cqmin);
+  width: var(--circle-container);
+  height: var(--circle-container);
   position: relative;
-  transition: width var(--transition-reveal), height var(--transition-reveal);
-}
-
-/* ── Pulse: Gentle (default — meditative breathing) ── */
-.mezzo-circle-stage.pulse-gentle {
-  animation: mezzo-pulse-gentle 4s ease-in-out infinite;
-}
-
-/* ── Pulse: Alert (faster, more noticeable) ── */
-.mezzo-circle-stage.pulse-alert {
-  animation: mezzo-pulse-alert 1.8s ease-in-out infinite;
+  animation: mezzo-pulse 4s ease-in-out infinite;
 }
 
 /* ── Ring Layer (one per ring level, stacked) ── */
@@ -104,7 +99,7 @@ const COMPONENT_CSS = `
   width: 100%;
   height: 100%;
   opacity: 0;
-  transition: opacity 1.2s ease;
+  transition: opacity 1.2s ease, filter 450ms ease;
   object-fit: contain;
   pointer-events: none;
   user-select: none;
@@ -115,25 +110,46 @@ const COMPONENT_CSS = `
   opacity: 1;
 }
 
-/* ── Keyframes ── */
-@keyframes mezzo-pulse-gentle {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.04); }
+/* ── Outside-of-range tint: neutral gray -> Mezzo orange (#C4593A), no new
+   colored assets needed — the brush-stroke art is plain warm gray, so this
+   filter shifts hue/saturation while preserving its shading. ── */
+.mezzo-circle-stage.is-outside .mezzo-ring-img {
+  filter: grayscale(1) sepia(1) saturate(900%) hue-rotate(335deg) brightness(0.82);
 }
 
-@keyframes mezzo-pulse-alert {
+/* ── Keyframes ── */
+@keyframes mezzo-pulse {
   0%, 100% { transform: scale(1); }
   50% { transform: scale(1.08); }
 }
 
-/* ── Fast transitions during alert blink ── */
-.mezzo-circle.alert-blink {
-  transition: background-color 300ms ease;
+/* ── Organic ring drift (rings 1-3 only — the center circle stays fixed).
+   Amplitude is scaled by --drift-scale so "subtle" and "active" reuse the
+   same waypoint shapes; each ring has a different shape/phase so they never
+   move in lockstep. ── */
+@keyframes mezzo-drift-1 {
+  0%, 100% { transform: translate(calc(-50% + (2.5px * var(--drift-scale, 1))), calc(-50% - (1.5px * var(--drift-scale, 1)))); }
+  33% { transform: translate(calc(-50% - (2px * var(--drift-scale, 1))), calc(-50% + (2.5px * var(--drift-scale, 1)))); }
+  66% { transform: translate(calc(-50% + (1.5px * var(--drift-scale, 1))), calc(-50% + (2px * var(--drift-scale, 1)))); }
+}
+@keyframes mezzo-drift-2 {
+  0%, 100% { transform: translate(calc(-50% - (2.5px * var(--drift-scale, 1))), calc(-50% + (2px * var(--drift-scale, 1)))); }
+  40% { transform: translate(calc(-50% + (2px * var(--drift-scale, 1))), calc(-50% - (1.5px * var(--drift-scale, 1)))); }
+  75% { transform: translate(calc(-50% - (1px * var(--drift-scale, 1))), calc(-50% - (2.5px * var(--drift-scale, 1)))); }
+}
+@keyframes mezzo-drift-3 {
+  0%, 100% { transform: translate(calc(-50% + (1.8px * var(--drift-scale, 1))), calc(-50% + (2.5px * var(--drift-scale, 1)))); }
+  50% { transform: translate(calc(-50% - (2.5px * var(--drift-scale, 1))), calc(-50% - (1.8px * var(--drift-scale, 1)))); }
+  80% { transform: translate(calc(-50% + (1.2px * var(--drift-scale, 1))), calc(-50% - (2px * var(--drift-scale, 1)))); }
 }
 
-.mezzo-circle.alert-blink .mezzo-ring-img {
-  transition: opacity 300ms ease;
-}
+.mezzo-ring-layer:nth-child(2).drift-subtle { --drift-scale: 1; animation: mezzo-drift-1 3.6s ease-in-out infinite; }
+.mezzo-ring-layer:nth-child(3).drift-subtle { --drift-scale: 1; animation: mezzo-drift-2 4.1s ease-in-out infinite; }
+.mezzo-ring-layer:nth-child(4).drift-subtle { --drift-scale: 1; animation: mezzo-drift-3 3.3s ease-in-out infinite; }
+
+.mezzo-ring-layer:nth-child(2).drift-active { --drift-scale: 2.2; animation: mezzo-drift-1 1.8s ease-in-out infinite; }
+.mezzo-ring-layer:nth-child(3).drift-active { --drift-scale: 2.2; animation: mezzo-drift-2 2.1s ease-in-out infinite; }
+.mezzo-ring-layer:nth-child(4).drift-active { --drift-scale: 2.2; animation: mezzo-drift-3 1.6s ease-in-out infinite; }
 `;
 
 // =============================================================================
@@ -145,21 +161,13 @@ export class MezzoVoiceCircle {
    * @param {HTMLElement} container — Element to render into (fills 100% of it)
    * @param {Object} [options]
    * @param {string} [options.assetPath='assets'] — Path to the SVG circle assets
-   * @param {HTMLElement} [options.surfaceElement] — Element to receive data-surface attr
-   *   (defaults to container). Set this to a page-level wrapper if you want
-   *   the light/dark theme switch to cascade beyond the circle itself.
    */
   constructor(container, options = {}) {
     this.container = container;
     this.assetPath = options.assetPath ?? 'assets';
-    this.surfaceEl = options.surfaceElement || container;
 
     // ── Visual state ──
-    this.currentRingLevel = 0;
-    this.currentTheme = 'light';
-    this.currentSizeValue = '';
-    this.isAlert = false;
-    this.isDark = false;
+    this.currentZone = 0;
 
     // ── DOM references ──
     this.el = null;
@@ -188,55 +196,28 @@ export class MezzoVoiceCircle {
   // ===========================================================================
 
   /**
-   * Update the visualization with current audio state.
+   * Update the visualization with the current classification.
    * Call this on each audio frame (every 25-50 ms). The component
    * only touches the DOM when something actually changes.
    *
-   * @param {number} rms      — Current smoothed RMS from AudioProcessor
-   * @param {number} baseline — Calibrated baseline RMS (from localStorage / engine)
-   * @param {boolean} isAlert — Whether alert mode is active (controls ring stickiness, pulse, size)
-   * @param {boolean} isDark  — Whether the dark blink phase is active (controls theme/SVGs)
+   * @param {number} zone         — 0-3, pre-computed by src/engine.js
+   * @param {boolean} isSustained — Whether zone 3 has held continuously for
+   *   monitoring.js's sustained-duration window (escalates ring drift)
    */
-  update(rms, baseline, isAlert, isDark = false) {
-    const newRing = this._computeRingLevel(rms, baseline);
-    const newTheme = isDark ? 'dark' : 'light';
-
-    // During alert, ring level can only increase (sticky high).
-    // Natural voice fluctuation shouldn't drop rings while alerting.
-    const effectiveRing = isAlert
-      ? Math.max(newRing, this.currentRingLevel)
-      : newRing;
-
-    if (effectiveRing !== this.currentRingLevel) {
-      this.currentRingLevel = effectiveRing;
+  update(zone, isSustained = false) {
+    if (zone !== this.currentZone) {
+      this.currentZone = zone;
       this._updateRingVisibility();
     }
 
-    // ── Theme changed → crossfade ALL layers to new theme's assets ──
-    if (newTheme !== this.currentTheme) {
-      this.currentTheme = newTheme;
-      this._switchAllLayerThemes();
-    }
+    const isOutside = zone === 3;
+    this.stage.classList.toggle('is-outside', isOutside);
 
-    // ── Size update ──
-    const newSize = this._getSizeValue(effectiveRing, isAlert, rms, baseline);
-    if (newSize !== this.currentSizeValue) {
-      this.currentSizeValue = newSize;
-      this.stage.style.setProperty('--mezzo-size', newSize);
-    }
-
-    // ── Alert mode changed → pulse speed + blink transition class ──
-    if (isAlert !== this.isAlert) {
-      this.isAlert = isAlert;
-      this.stage.classList.toggle('pulse-gentle', !isAlert);
-      this.stage.classList.toggle('pulse-alert', isAlert);
-      this.el.classList.toggle('alert-blink', isAlert);
-    }
-
-    // ── Dark state changed → surface theme ──
-    if (isDark !== this.isDark) {
-      this.isDark = isDark;
-      this.surfaceEl.setAttribute('data-surface', isDark ? 'dark' : 'light');
+    // Drift only applies to rings 1-3; the center circle (ring-0) stays fixed.
+    for (let i = 1; i < RING_COUNT; i++) {
+      const layerEl = this.ringLayers[i].el;
+      layerEl.classList.toggle('drift-subtle', isOutside && !isSustained);
+      layerEl.classList.toggle('drift-active', isOutside && isSustained);
     }
   }
 
@@ -280,9 +261,9 @@ export class MezzoVoiceCircle {
     this.el = doc.createElement('div');
     this.el.className = 'mezzo-circle';
 
-    // Stage (sized by tokens, carries pulse animation)
+    // Stage (constant size, carries the pulse animation)
     this.stage = doc.createElement('div');
-    this.stage.className = 'mezzo-circle-stage pulse-gentle';
+    this.stage.className = 'mezzo-circle-stage';
 
     // Create 4 ring layers, each with a crossfade pair of images
     for (let ring = 0; ring < RING_COUNT; ring++) {
@@ -311,7 +292,7 @@ export class MezzoVoiceCircle {
       }
 
       // Load initial asset — first image visible, ready for crossfade
-      imgs[0].src = this._assetUrl('light', ring, 0);
+      imgs[0].src = this._assetUrl(ring, 0);
       imgs[0].classList.add('visible');
 
       this.ringLayers.push({
@@ -337,10 +318,12 @@ export class MezzoVoiceCircle {
 
   /**
    * Build the SVG asset URL.
-   * Pattern: {theme}-bg-circle-ring-{ring}-{variant}.svg
+   * Pattern: light-bg-circle-ring-{ring}-{variant}.svg — always the "light"
+   * asset variant. Outside-of-range feedback is a color filter (gray ->
+   * orange), not an asset swap, and the background no longer changes.
    */
-  _assetUrl(theme, ring, variant) {
-    return `${this.assetPath}/${theme}-bg-circle-ring-${ring}-${variant}.svg`;
+  _assetUrl(ring, variant) {
+    return `${this.assetPath}/light-bg-circle-ring-${ring}-${variant}.svg`;
   }
 
   // ===========================================================================
@@ -348,34 +331,17 @@ export class MezzoVoiceCircle {
   // ===========================================================================
 
   /**
-   * Show all ring layers up to and including currentRingLevel.
+   * Show all ring layers up to and including currentZone.
    * Ring-0 is always visible. Higher rings fade in/out via CSS transition.
    */
   _updateRingVisibility() {
     for (let i = 0; i < RING_COUNT; i++) {
       const layer = this.ringLayers[i];
-      const shouldBeVisible = i <= this.currentRingLevel;
+      const shouldBeVisible = i <= this.currentZone;
       if (shouldBeVisible !== layer.visible) {
         layer.visible = shouldBeVisible;
         layer.el.classList.toggle('ring-visible', shouldBeVisible);
       }
-    }
-  }
-
-  // ===========================================================================
-  // Theme Switching
-  // ===========================================================================
-
-  /**
-   * When the theme changes (light ↔ dark), crossfade every ring layer
-   * to the new theme's asset for its current variant.
-   */
-  _switchAllLayerThemes() {
-    for (const layer of this.ringLayers) {
-      this._crossfadeLayer(
-        layer,
-        this._assetUrl(this.currentTheme, layer.ring, layer.variant),
-      );
     }
   }
 
@@ -429,59 +395,8 @@ export class MezzoVoiceCircle {
       const layer = this.ringLayers[i];
       layer.interval = setInterval(() => {
         layer.variant = (layer.variant + 1) % VARIANT_COUNT;
-        this._crossfadeLayer(
-          layer,
-          this._assetUrl(this.currentTheme, layer.ring, layer.variant),
-        );
+        this._crossfadeLayer(layer, this._assetUrl(layer.ring, layer.variant));
       }, VARIANT_CYCLE_MS[i]);
     }
-  }
-
-  // ===========================================================================
-  // Ring Level Computation
-  // ===========================================================================
-
-  /**
-   * Map current RMS to a ring level (0–3).
-   *
-   * Uses multiplier thresholds on the calibrated baseline:
-   *   ring-1: baseline × 1.5  (50% louder)
-   *   ring-2: baseline × 2.0  (double)
-   *   ring-3: baseline × 3.0  (triple)
-   * Ring 0 = at or below baseline.
-   */
-  _computeRingLevel(rms, baseline) {
-    if (!baseline || baseline <= 0 || !rms || rms <= 0) return 0;
-    if (rms <= baseline) return 0;
-
-    if (rms >= baseline * RING_THRESHOLDS[2]) return 3;
-    if (rms >= baseline * RING_THRESHOLDS[1]) return 2;
-    if (rms >= baseline * RING_THRESHOLDS[0]) return 1;
-    return 0;
-  }
-
-  // ===========================================================================
-  // Size Computation
-  // ===========================================================================
-
-  /**
-   * Choose the CSS size value based on current state.
-   * Uses the design-token custom properties so sizing stays in sync
-   * with the rest of the system.
-   */
-  _getSizeValue(ringLevel, isAlert, rms, baseline) {
-    // During alert, stage stays full size — don't shrink on breath pauses
-    if (isAlert) {
-      return 'var(--circle-container)';
-    }
-
-    // Silence: very low volume relative to baseline
-    if (!baseline || !rms || rms < baseline * SILENCE_RATIO) {
-      return 'var(--circle-silence)';
-    }
-
-    // Stage is always full container size — individual ring layers
-    // handle their own proportional sizing via RING_SIZE_PCT.
-    return 'var(--circle-container)';
   }
 }

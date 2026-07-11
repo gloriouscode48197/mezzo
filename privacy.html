@@ -31,6 +31,7 @@
       <a href="index.html" class="nav-link nav-link-quiet">Home</a>
       <span class="nav-link nav-link-active">Privacy</span>
       <a href="try-it.html" class="nav-link nav-link-quiet">Try Mezzo</a>
+      <div id="theme-toggle"></div>
     </div>
   </nav>
 
@@ -115,6 +116,10 @@
         observer.observe(el);
       }
     });
+  </script>
+  <script type="module">
+    import { mountThemeToggle } from './src/theme.js';
+    mountThemeToggle(document.getElementById('theme-toggle'));
   </script>
 </body>
 </html>

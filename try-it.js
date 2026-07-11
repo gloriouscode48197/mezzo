@@ -2,20 +2,24 @@
  * Mezzo — Try It Page Controller
  *
  * States, one visible at a time:
- *   A: Mic permission not granted → show enable mic prompt
- *   B: Mic granted, not calibrated → calibration landing + listening
- *      (clicking "I'm ready" crossfades pre-content → listen-content
- *       within the same view; heading stays static)
- *   Complete: Calibration done → "You're all set"
- *   C: Mic granted + calibrated (returning user) → conditional heading
+ *   a:              Mic permission not granted → show enable mic prompt
+ *   profile-select: Choose a Profile — Recommended, Create Custom Profile, or a saved profile
+ *   b:              Calibration (creates a custom profile) — landing + listening
+ *   save-prompt:    "Save this profile?" — Not Now / Save Profile
+ *   name:           Name a profile before saving it
+ *   ready:          Profile chosen — "You're All Set", Start Monitoring / Change Profile
  *
- * Calibration data is stored in sessionStorage so it persists across
- * page navigations within the same tab but is cleared on tab close.
- * Users always recalibrate on a fresh visit.
+ * Two storage keys:
+ *   - mezzoProfiles (localStorage, persists across tabs) — saved custom profiles.
+ *     Only ever written when the user explicitly clicks "Save Profile".
+ *   - mezzoSelectedProfile (sessionStorage, cleared on tab close) — whichever profile is
+ *     active this session. A fresh tab always starts at Choose Profile ("remember last used"
+ *     is out of scope for this release); within a tab, this is what lets Start Monitoring →
+ *     Stop Monitoring loop back to Ready without re-choosing.
  */
 
 import { AudioProcessor } from './src/audio.js';
-import { MezzoEngine } from './src/engine.js';
+import { MezzoEngine } from './src/engine.js?v=5';
 import { pageEnter, navigateTo } from './src/page-transition.js';
 import { trackAppOpened, trackCalibrationCompleted } from './src/analytics.js';
 
@@ -23,11 +27,18 @@ import { trackAppOpened, trackCalibrationCompleted } from './src/analytics.js';
 // Constants
 // =============================================================================
 
-const STATE_STORAGE_KEY = 'mezzoState';
+const PROFILES_STORAGE_KEY = 'mezzoProfiles';
+const SELECTED_PROFILE_KEY = 'mezzoSelectedProfile';
 const FADE_OUT_MS = 300;
 const FADE_IN_MS = 350;
 const COUNTDOWN_SECONDS = 6;
 const VARIANT_CYCLE_MS = 2500;
+
+// Baseline for the built-in Recommended profile — no calibration exists to derive
+// this from, so it's a first-pass tunable default (roughly the midpoint of real
+// calibrated baselines observed during testing, -34dB to -19dB).
+const RECOMMENDED_SPEAKING_DB = -26;
+const RECOMMENDED_PROFILE = { name: 'Recommended', speakingDb: RECOMMENDED_SPEAKING_DB, savedProfileId: null };
 
 // =============================================================================
 // Instances
@@ -41,28 +52,38 @@ const engine = new MezzoEngine();
 // =============================================================================
 
 const stateA = document.getElementById('state-a');
+const stateProfileSelect = document.getElementById('state-profile-select');
 const stateB = document.getElementById('state-b');
-const stateComplete = document.getElementById('state-complete');
-const stateC = document.getElementById('state-c');
+const stateSavePrompt = document.getElementById('state-save-prompt');
+const stateName = document.getElementById('state-name');
+const stateReady = document.getElementById('state-ready');
 
 const btnEnableMic = document.getElementById('btn-enable-mic');
+const btnChooseRecommended = document.getElementById('btn-choose-recommended');
+const btnCreateCustom = document.getElementById('btn-create-custom');
+const savedProfilesBlock = document.getElementById('saved-profiles-block');
+const savedProfilesList = document.getElementById('saved-profiles-list');
 const btnStartCalibration = document.getElementById('btn-start-calibration');
-const btnCompleteStart = document.getElementById('btn-complete-start');
+const btnSaveNotNow = document.getElementById('btn-save-not-now');
+const btnSaveProfile = document.getElementById('btn-save-profile');
+const nameForm = document.getElementById('name-form');
+const profileNameInput = document.getElementById('profile-name-input');
+const currentProfileName = document.getElementById('current-profile-name');
 const btnStartMonitoring = document.getElementById('btn-start-monitoring');
-const btnRecalibrateComplete = document.getElementById('btn-recalibrate-complete');
-const btnRecalibrateC = document.getElementById('btn-recalibrate-c');
+const btnChangeProfile = document.getElementById('btn-change-profile');
 const deniedHelp = document.getElementById('denied-help');
 
-const stateCHeading = document.getElementById('state-c-heading');
 const listeningHeading = document.getElementById('listening-heading');
 const ringContainer = document.getElementById('ring-container');
 const ringVariants = document.querySelectorAll('.ring-variant');
 
 const allStates = {
   a: stateA,
+  profileSelect: stateProfileSelect,
   b: stateB,
-  complete: stateComplete,
-  c: stateC,
+  savePrompt: stateSavePrompt,
+  name: stateName,
+  ready: stateReady,
 };
 
 // =============================================================================
@@ -74,56 +95,54 @@ let countdownInterval = null;
 let variantCycleInterval = null;
 let currentVariant = 0;
 
+// The profile just calibrated this session, pending a save/discard decision.
+let pendingCalibratedProfile = null;
+
 // =============================================================================
-// State Helpers
+// Profile Storage
 // =============================================================================
 
-/**
- * Check if calibration baseline exists in sessionStorage.
- */
-function isCalibrated() {
+function getSavedProfiles() {
   try {
-    const stored = sessionStorage.getItem(STATE_STORAGE_KEY);
-    if (stored) {
-      const data = JSON.parse(stored);
-      return data.profile && data.profile.calibratedTs !== null;
-    }
+    const stored = localStorage.getItem(PROFILES_STORAGE_KEY);
+    const parsed = stored ? JSON.parse(stored) : [];
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
-    // Corrupted storage — treat as not calibrated
+    return [];
   }
-  return false;
 }
 
-// =============================================================================
-// State C Heading
-// =============================================================================
-
-const RETURN_SOURCE_KEY = 'mezzoReturnSource';
-
-const STATE_C_HEADINGS = {
-  calibration: "You\u2019re all set",
-  monitoring: 'Your mindfulness speaks volumes',
-};
-
-/**
- * Show State C with a heading that reflects how the user got here.
- * @param {'calibration'|'monitoring'} source
- */
-function showStateC(source) {
-  if (stateCHeading) {
-    stateCHeading.textContent = STATE_C_HEADINGS[source] || STATE_C_HEADINGS.calibration;
+function saveSavedProfiles(profiles) {
+  try {
+    localStorage.setItem(PROFILES_STORAGE_KEY, JSON.stringify(profiles));
+  } catch (e) {
+    console.error('[TryIt] Failed to persist saved profiles:', e);
   }
-  transitionToState('c');
+}
+
+function getSelectedProfile() {
+  try {
+    const stored = sessionStorage.getItem(SELECTED_PROFILE_KEY);
+    if (!stored) return null;
+    const parsed = JSON.parse(stored);
+    return parsed && typeof parsed.speakingDb === 'number' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function setSelectedProfile(profile) {
+  try {
+    sessionStorage.setItem(SELECTED_PROFILE_KEY, JSON.stringify(profile));
+  } catch (e) {
+    console.error('[TryIt] Failed to select profile:', e);
+  }
 }
 
 // =============================================================================
 // View Transitions (opacity-only fade, no translateY)
 // =============================================================================
 
-/**
- * Fade from the current visible state to a new one.
- * Only one state is visible at a time.
- */
 function transitionToState(name) {
   const entries = Object.entries(allStates);
   const currentEntry = entries.find(([, el]) => !el.classList.contains('hidden'));
@@ -163,6 +182,63 @@ function transitionToState(name) {
       });
     });
   }, FADE_OUT_MS);
+}
+
+// =============================================================================
+// Profile Selection Screen
+// =============================================================================
+
+function renderProfileSelect() {
+  const saved = getSavedProfiles();
+
+  savedProfilesList.innerHTML = '';
+  if (saved.length === 0) {
+    savedProfilesBlock.classList.add('hidden');
+  } else {
+    savedProfilesBlock.classList.remove('hidden');
+    for (const profile of saved) {
+      const row = document.createElement('button');
+      row.className = 'profile-row profile-row-saved';
+      row.innerHTML = `
+        <span class="profile-row-bullet" aria-hidden="true">&bull;</span>
+        <span class="profile-row-text"><span class="profile-row-name"></span></span>
+      `;
+      row.querySelector('.profile-row-name').textContent = profile.name;
+      row.addEventListener('click', () => chooseSavedProfile(profile));
+      savedProfilesList.appendChild(row);
+    }
+  }
+
+  transitionToState('profileSelect');
+}
+
+function chooseRecommended() {
+  setSelectedProfile(RECOMMENDED_PROFILE);
+  showReady();
+}
+
+/** "Create Custom Profile" — go to calibration's landing view (not straight into capture). */
+function goToCalibrationLanding() {
+  transitionToState('b');
+}
+
+function chooseSavedProfile(profile) {
+  setSelectedProfile({
+    name: profile.name,
+    speakingDb: profile.speakingDb,
+    savedProfileId: profile.id,
+  });
+  showReady();
+}
+
+// =============================================================================
+// Ready Screen
+// =============================================================================
+
+function showReady() {
+  const selected = getSelectedProfile();
+  currentProfileName.textContent = selected ? selected.name : RECOMMENDED_PROFILE.name;
+  transitionToState('ready');
 }
 
 // =============================================================================
@@ -206,12 +282,7 @@ async function requestMicPermission() {
     // Permission granted — stop the stream (we just needed the prompt)
     stream.getTracks().forEach(track => track.stop());
 
-    // Transition to the correct next state
-    if (isCalibrated()) {
-      showStateC(returnSource);
-    } else {
-      transitionToState('b');
-    }
+    goToInitialScreen();
   } catch (error) {
     console.warn('[TryIt] Microphone access denied:', error.message);
 
@@ -221,12 +292,9 @@ async function requestMicPermission() {
 }
 
 // =============================================================================
-// Calibration
+// Calibration (creates a custom profile)
 // =============================================================================
 
-/**
- * Reset state-b's calibration view back to pre-content (ready for next use).
- */
 function resetCalibrationView() {
   stateB.classList.remove('state-listening');
   listeningHeading.textContent = `Listening...${COUNTDOWN_SECONDS}s`;
@@ -237,10 +305,6 @@ function resetCalibrationView() {
   stopVariantCycle();
 }
 
-/**
- * Acquire mic, start audio monitoring, and run the countdown.
- * Assumes state-b is visible (or transitioning in) with .state-listening set.
- */
 async function beginCalibrationCapture() {
   rmsBuffer = [];
 
@@ -279,10 +343,6 @@ async function beginCalibrationCapture() {
   }, 1000);
 }
 
-/**
- * Normal flow: user clicks "I'm ready" on state-b pre-content.
- * Triggers the CSS crossfade and begins capture.
- */
 async function startCalibration() {
   stateB.classList.add('state-listening');
   await beginCalibrationCapture();
@@ -305,48 +365,87 @@ function finishCalibration() {
     return;
   }
 
-  // Save calibration to sessionStorage (cleared automatically on tab close)
-  const { baselineRMS, upperThreshold } = engine.getCalibrationValues();
-  const profile = {
-    speakingDb: 20 * Math.log10(baselineRMS + 1e-10),
-    upperBound: 20 * Math.log10(upperThreshold + 1e-10),
-    calibratedTs: Date.now(),
-    lastUsedTs: Date.now(),
-  };
+  const { baselineRMS } = engine.getCalibrationValues();
+  const speakingDb = 20 * Math.log10(baselineRMS + 1e-10);
 
-  try {
-    sessionStorage.setItem(STATE_STORAGE_KEY, JSON.stringify({ profile }));
-  } catch (e) {
-    console.error('[TryIt] Failed to save profile:', e);
-  }
+  // This profile is temporary until the user explicitly saves it — select it
+  // immediately so Ready/monitoring can use it either way.
+  pendingCalibratedProfile = { speakingDb, calibratedTs: Date.now() };
+  setSelectedProfile({ name: null, speakingDb, savedProfileId: null });
 
   trackCalibrationCompleted();
 
-  // Reset state-b for next time, then show complete view
   resetCalibrationView();
-  transitionToState('complete');
+  transitionToState('savePrompt');
 }
 
 // =============================================================================
-// State Detection (runs once on page load)
+// Save Prompt / Naming
 // =============================================================================
+
+function handleSaveNotNow() {
+  pendingCalibratedProfile = null;
+  showReady();
+}
+
+function handleSaveProfileClick() {
+  profileNameInput.value = '';
+  transitionToState('name');
+  requestAnimationFrame(() => profileNameInput.focus());
+}
+
+function handleNameFormSubmit(event) {
+  event.preventDefault();
+  const name = profileNameInput.value.trim();
+  if (!name || !pendingCalibratedProfile) return;
+
+  const saved = getSavedProfiles();
+  const id = crypto.randomUUID();
+  const newProfile = { id, name, speakingDb: pendingCalibratedProfile.speakingDb, calibratedTs: pendingCalibratedProfile.calibratedTs };
+  saved.push(newProfile);
+  saveSavedProfiles(saved);
+
+  setSelectedProfile({ name, speakingDb: newProfile.speakingDb, savedProfileId: id });
+  pendingCalibratedProfile = null;
+
+  showReady();
+}
+
+// =============================================================================
+// Change Profile
+// =============================================================================
+
+function handleChangeProfile() {
+  renderProfileSelect();
+}
+
+// =============================================================================
+// Initial Screen Routing
+// =============================================================================
+
+/**
+ * After mic permission is confirmed granted, decide where to land:
+ * resume Ready if a profile is already selected this session (e.g. returning
+ * from a stopped monitoring session), otherwise Choose a Profile.
+ */
+function goToInitialScreen() {
+  if (getSelectedProfile()) {
+    showReady();
+  } else {
+    renderProfileSelect();
+  }
+}
 
 async function detectInitialState() {
   try {
     const result = await navigator.permissions.query({ name: 'microphone' });
 
     if (result.state === 'granted') {
-      // Mic already granted — show B or C based on calibration
-      if (isCalibrated()) {
-        showStateC(returnSource);
-      } else {
-        transitionToState('b');
-      }
+      goToInitialScreen();
     } else {
       // 'prompt' or 'denied' — show State A
       transitionToState('a');
 
-      // If previously denied, show help text immediately
       if (result.state === 'denied' && deniedHelp) {
         deniedHelp.classList.remove('hidden');
       }
@@ -362,34 +461,16 @@ async function detectInitialState() {
 // =============================================================================
 
 btnEnableMic?.addEventListener('click', requestMicPermission);
+btnChooseRecommended?.addEventListener('click', chooseRecommended);
+btnCreateCustom?.addEventListener('click', goToCalibrationLanding);
 btnStartCalibration?.addEventListener('click', startCalibration);
-btnCompleteStart?.addEventListener('click', () => {
-  navigateTo('monitoring.html');
-});
+btnSaveNotNow?.addEventListener('click', handleSaveNotNow);
+btnSaveProfile?.addEventListener('click', handleSaveProfileClick);
+nameForm?.addEventListener('submit', handleNameFormSubmit);
 btnStartMonitoring?.addEventListener('click', () => {
   navigateTo('monitoring.html');
 });
-
-/**
- * Recalibrate: skip the landing, go straight to listening.
- * Pre-sets state-b to listening mode so it fades in showing the countdown.
- */
-async function handleRecalibrate() {
-  try { sessionStorage.removeItem(STATE_STORAGE_KEY); } catch { /* ignore */ }
-
-  // Reset and pre-set to listening mode before the view transition
-  resetCalibrationView();
-  stateB.classList.add('state-listening');
-
-  // Fade to state-b (will show listening content immediately)
-  transitionToState('b');
-
-  // Begin mic capture + countdown
-  await beginCalibrationCapture();
-}
-
-btnRecalibrateComplete?.addEventListener('click', handleRecalibrate);
-btnRecalibrateC?.addEventListener('click', handleRecalibrate);
+btnChangeProfile?.addEventListener('click', handleChangeProfile);
 
 // Clean up on page unload
 window.addEventListener('beforeunload', () => {
@@ -400,17 +481,7 @@ window.addEventListener('beforeunload', () => {
 // Init
 // =============================================================================
 
-// Read and clear the return-source flag (set by monitoring.js before navigating here)
-let returnSource = 'calibration';
-try {
-  const stored = sessionStorage.getItem(RETURN_SOURCE_KEY);
-  if (stored) {
-    returnSource = stored;
-    sessionStorage.removeItem(RETURN_SOURCE_KEY);
-  }
-} catch { /* ignore */ }
-
 pageEnter();
 detectInitialState();
 
-trackAppOpened(isCalibrated());
+trackAppOpened(getSelectedProfile() !== null);

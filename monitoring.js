@@ -2,8 +2,9 @@
  * Mezzo — Monitoring Controller
  *
  * Uses existing AudioProcessor for mic capture and RMS sampling,
- * MezzoEngine for state detection (in-range / out-of-range / sustained),
- * and MezzoVoiceCircle for the voice visualization.
+ * MezzoEngine for volume-zone classification (0-3), and MezzoVoiceCircle
+ * for the voice visualization (gray -> orange tint + organic ring drift,
+ * no background change, no blinking).
  *
  * Supports Picture-in-Picture via the Document PiP API:
  *   - Pop Out → circle moves to PiP window, main page shows "running in mini window"
@@ -13,18 +14,22 @@
  */
 
 import { AudioProcessor } from './src/audio.js';
-import { MezzoEngine, LogicalState } from './src/engine.js';
-import { MezzoVoiceCircle, RING_THRESHOLDS } from './src/voice-circle.js';
+import { MezzoEngine } from './src/engine.js?v=5';
+import { MezzoVoiceCircle } from './src/voice-circle.js?v=4';
 import { trackMonitoringStarted, trackMonitoringSession } from './src/analytics.js';
 import { pageEnter, navigateTo, transitionView } from './src/page-transition.js';
+import { getResolvedSurface, onThemeChange } from './src/theme.js';
 
 // =============================================================================
 // Constants
 // =============================================================================
 
-const STATE_STORAGE_KEY = 'mezzoState';
+const SELECTED_PROFILE_KEY = 'mezzoSelectedProfile';
 const PIP_WIDTH = 1;
 const PIP_HEIGHT = 1;
+
+// Zone 3 is "Outside of Range" — there's no higher volume tier.
+const OUTSIDE_ZONE = 3;
 
 // =============================================================================
 // DOM References
@@ -39,6 +44,7 @@ const circleContainer = document.getElementById('circle-container');
 const btnStop = document.getElementById('btn-stop');
 const btnPip = document.getElementById('btn-pip');
 const btnReturn = document.getElementById('btn-return');
+const monHeading = document.getElementById('mon-heading');
 
 // =============================================================================
 // Instances
@@ -58,20 +64,21 @@ let pipWindow = null;
 let baselineRMS = 0;
 let isPipClosingForReturn = false;
 let isPageUnloading = false;
-let isOutsideRange = false;
-let sustainedTimer = null;
-
-// ── Blink alert state ──
-let isAlertMode = false;   // true once sustained threshold reached (500ms)
-let blinkDark = false;     // current blink phase (true = dark theme)
-let blinkInterval = null;  // setInterval ID for theme toggling
-let fastBlinkTimer = null; // setTimeout ID for 3s fast-blink escalation
 let demoInterval = null;   // setInterval ID for demo mode fake RMS
+let pipHeading = null;     // <h1> in the PiP window, set while PiP is open
+let unsubscribePipTheme = null; // clears the PiP window's theme-sync listener on close
 
-const SUSTAINED_ALERT_MS = 500;   // 500ms → slow blink starts
-const SLOW_BLINK_MS = 1000;       // slow blink interval
-const FAST_BLINK_MS = 450;        // fast blink interval
-const FAST_BLINK_AFTER_MS = 2500; // 2.5s after alert (3s total out-of-range)
+// ── Volume classification, kept in sync every frame regardless of which
+//    circle (if any) is currently attached — this is what lets the PiP
+//    handoff and resume paths sync a freshly created circle instantly. ──
+let currentZone = 0;
+
+// ── Outside-range escalation state (drives ring drift, not color/background —
+//    color is derived straight from zone, drift escalates once sustained) ──
+let isSustained = false;
+let sustainedTimer = null; // setTimeout ID for the 1s subtle->active drift escalation
+
+const SUSTAINED_DRIFT_MS = 1000; // continuous time outside range before drift escalates
 
 // ── Session analytics state ──
 let monitoringStartTime = null;
@@ -90,38 +97,48 @@ function showView(name) {
 }
 
 // =============================================================================
-// Calibration Loader
+// Profile Loader
 // =============================================================================
 
-function loadCalibration() {
+/**
+ * Load whichever profile the user chose on try-it.html this session
+ * (Recommended, a saved profile, or a just-calibrated temp custom profile).
+ */
+function loadSelectedProfile() {
   try {
-    const stored = sessionStorage.getItem(STATE_STORAGE_KEY);
+    const stored = sessionStorage.getItem(SELECTED_PROFILE_KEY);
     if (!stored) return null;
-    const data = JSON.parse(stored);
-    if (!data.profile || data.profile.calibratedTs === null) return null;
-    return data.profile;
+    const profile = JSON.parse(stored);
+    return profile && typeof profile.speakingDb === 'number' ? profile : null;
   } catch {
     return null;
   }
 }
 
 // =============================================================================
-// Blink Management
+// Sustained-Outside Escalation
 // =============================================================================
 
-function startBlink(intervalMs) {
-  if (blinkInterval) clearInterval(blinkInterval);
-  blinkInterval = setInterval(() => {
-    blinkDark = !blinkDark;
-  }, intervalMs);
+/** Clear any pending escalation and drop back to unsustained immediately. */
+function clearSustained() {
+  if (sustainedTimer) { clearTimeout(sustainedTimer); sustainedTimer = null; }
+  isSustained = false;
 }
 
-function stopBlink() {
-  if (blinkInterval) { clearInterval(blinkInterval); blinkInterval = null; }
-  if (fastBlinkTimer) { clearTimeout(fastBlinkTimer); fastBlinkTimer = null; }
-  if (sustainedTimer) { clearTimeout(sustainedTimer); sustainedTimer = null; }
-  isAlertMode = false;
-  blinkDark = false;
+// =============================================================================
+// Heading Text (Listening / Within Range / Outside of Range)
+// =============================================================================
+
+function zoneLabel(zone) {
+  if (zone === 0) return 'Listening';
+  if (zone === OUTSIDE_ZONE) return 'Outside of Range';
+  return 'Within Range';
+}
+
+function updateHeading(zone) {
+  const text = zoneLabel(zone);
+  if (monHeading) monHeading.textContent = text;
+  if (pipHeading) pipHeading.textContent = text;
 }
 
 // =============================================================================
@@ -131,50 +148,38 @@ function stopBlink() {
 function onAudioFrame({ rms }) {
   engine.processFrame(rms);
 
-  const state = engine.getCurrentState();
-  const newIsOutside = state !== LogicalState.IN_RANGE;
+  const zone = engine.getZone();
 
-  // ── Sustained alert: blink system on outside-range transitions ──
-  if (newIsOutside !== isOutsideRange) {
-    isOutsideRange = newIsOutside;
+  if (zone !== currentZone) {
+    const wasOutside = currentZone === OUTSIDE_ZONE;
+    const nowOutside = zone === OUTSIDE_ZONE;
 
-    if (newIsOutside) {
-      // Entered outside range — start 500ms sustained timer
-      const timerStartedAt = Date.now();
-      console.log('[SUSTAINED] Timer started at %d — waiting %dms', timerStartedAt, SUSTAINED_ALERT_MS);
+    updateHeading(zone);
+    currentZone = zone;
+
+    if (nowOutside && !wasOutside) {
+      // Crossed into Outside of Range — subtle drift begins immediately;
+      // escalate to active drift after holding for SUSTAINED_DRIFT_MS.
       sustainedTimer = setTimeout(() => {
-        console.log('[SUSTAINED] Slow blink started at %d — elapsed %dms', Date.now(), Date.now() - timerStartedAt);
-        isAlertMode = true;
-        blinkDark = true;
-        sessionAlertTriggered = true;
         sustainedTimer = null;
-
-        // Start slow blink (1s interval)
-        startBlink(SLOW_BLINK_MS);
-
-        // After 2.5 more seconds (3s total), escalate to fast blink
-        fastBlinkTimer = setTimeout(() => {
-          console.log('[SUSTAINED] Fast blink started — 3s total out-of-range');
-          startBlink(FAST_BLINK_MS);
-          fastBlinkTimer = null;
-        }, FAST_BLINK_AFTER_MS);
-      }, SUSTAINED_ALERT_MS);
-    } else {
-      // Returned to range — stop everything, reset to light
-      console.log('[Monitoring] Returned to range — blink stopped');
-      stopBlink();
+        isSustained = true;
+        sessionAlertTriggered = true;
+      }, SUSTAINED_DRIFT_MS);
+    } else if (!nowOutside && wasOutside) {
+      // Returned to an acceptable volume — settle immediately (the CSS
+      // transitions on color/drift handle the smooth "return to center" feel).
+      clearSustained();
     }
   }
 
   // Update whichever circle is active
   if (activeCircle) {
-    activeCircle.update(rms, baselineRMS, isAlertMode, blinkDark);
+    activeCircle.update(currentZone, isSustained);
   }
 
-  // ── Debug: per-frame volume and threshold info ──
-  const ringLevel = activeCircle ? activeCircle.currentRingLevel : -1;
+  // ── Debug: per-frame volume/zone info ──
   const diff = rms - baselineRMS;
-  console.log(`[Frame] baseline=${baselineRMS.toFixed(4)}  rms=${rms.toFixed(4)}  diff=${diff >= 0 ? '+' : ''}${diff.toFixed(4)}  ring1@${(baselineRMS * RING_THRESHOLDS[0]).toFixed(4)}(×1.5)  ring2@${(baselineRMS * RING_THRESHOLDS[1]).toFixed(4)}(×2)  ring3@${(baselineRMS * RING_THRESHOLDS[2]).toFixed(4)}(×3)  → ring-${ringLevel}  ${ringLevel >= 1 ? 'OUTSIDE' : 'within'}`);
+  console.log(`[Frame] baseline=${baselineRMS.toFixed(4)}  rms=${rms.toFixed(4)}  diff=${diff >= 0 ? '+' : ''}${diff.toFixed(4)}  zone=${currentZone}  sustained=${isSustained}  ${zoneLabel(currentZone)}`);
 }
 
 // =============================================================================
@@ -182,7 +187,7 @@ function onAudioFrame({ rms }) {
 // =============================================================================
 
 async function startMonitoring() {
-  const profile = loadCalibration();
+  const profile = loadSelectedProfile();
   if (!profile) {
     navigateTo('try-it.html');
     return;
@@ -196,6 +201,11 @@ async function startMonitoring() {
   engine.calibrate(samples);
   engine.startMonitoring();
 
+  // Reset to "Listening" for the new session
+  currentZone = 0;
+  clearSustained();
+  updateHeading(0);
+
   // Acquire mic
   try {
     await audio.acquire();
@@ -205,12 +215,8 @@ async function startMonitoring() {
     return;
   }
 
-  // Create voice circle — card element receives data-surface changes (not body)
-  const monCard = document.querySelector('.mon-card');
-  mainCircle = new MezzoVoiceCircle(circleContainer, {
-    assetPath: 'assets',
-    surfaceElement: monCard,
-  });
+  // Create voice circle
+  mainCircle = new MezzoVoiceCircle(circleContainer, { assetPath: 'assets' });
   activeCircle = mainCircle;
 
   // Audio frame callback
@@ -222,16 +228,6 @@ async function startMonitoring() {
   sessionUsedPip = false;
   sessionAlertTriggered = false;
   trackMonitoringStarted();
-
-  // Update lastUsedTs
-  try {
-    const stored = sessionStorage.getItem(STATE_STORAGE_KEY);
-    if (stored) {
-      const data = JSON.parse(stored);
-      data.profile.lastUsedTs = Date.now();
-      sessionStorage.setItem(STATE_STORAGE_KEY, JSON.stringify(data));
-    }
-  } catch { /* ignore */ }
 }
 
 // =============================================================================
@@ -255,9 +251,9 @@ function stopMonitoring() {
   audio.stopMonitoring();
   audio.release();
 
-  // Clear all blink/alert timers
-  stopBlink();
-  isOutsideRange = false;
+  // Clear escalation state
+  clearSustained();
+  currentZone = 0;
 
   if (mainCircle) {
     mainCircle.destroy();
@@ -270,7 +266,6 @@ function stopMonitoring() {
   activeCircle = null;
 
   if (!isPageUnloading) {
-    try { sessionStorage.setItem('mezzoReturnSource', 'monitoring'); } catch { /* ignore */ }
     navigateTo('try-it.html');
   }
 }
@@ -325,7 +320,6 @@ async function openPiP() {
       height: 100vh;
       background: var(--surface);
       overflow: hidden;
-      transition: background-color 300ms ease;
     }
     .mezzo-circle { background: transparent !important; }
 
@@ -350,7 +344,6 @@ async function openPiP() {
       text-align: center;
       margin: 0;
       padding: 32px 20px 0;
-      transition: color 300ms ease;
     }
     .pip-controls {
       display: none;
@@ -405,8 +398,8 @@ async function openPiP() {
         height: 280px !important;
       }
       .mezzo-circle-stage {
-        width: min(var(--mezzo-size, var(--circle-within)), 90cqmin) !important;
-        height: min(var(--mezzo-size, var(--circle-within)), 90cqmin) !important;
+        width: min(var(--circle-container), 90cqmin) !important;
+        height: min(var(--circle-container), 90cqmin) !important;
       }
       .mezzo-ring-layer:nth-child(1) { width: 32.14% !important; height: 32.14% !important; }
       .mezzo-ring-layer:nth-child(2) { width: 57.14% !important; height: 57.14% !important; }
@@ -416,8 +409,13 @@ async function openPiP() {
   `;
   pipDoc.head.appendChild(style);
 
-  // ── Set surface theme to match current blink phase ──
-  pipDoc.body.setAttribute('data-surface', blinkDark ? 'dark' : 'light');
+  // ── Inherit the active theme, and stay in sync if it changes while PiP
+  //    is open — the PiP window is a separate `document`, so it doesn't
+  //    pick up the main page's data-surface automatically. ──
+  pipDoc.body.setAttribute('data-surface', getResolvedSurface());
+  unsubscribePipTheme = onThemeChange((surface) => {
+    pipDoc.body.setAttribute('data-surface', surface);
+  });
 
   // ── Build PiP layout: heading + circle + controls ──
   const layout = pipDoc.createElement('div');
@@ -425,8 +423,9 @@ async function openPiP() {
 
   const pipH = pipDoc.createElement('h1');
   pipH.className = 'pip-heading';
-  pipH.textContent = 'Listening';
+  pipH.textContent = zoneLabel(currentZone);
   layout.appendChild(pipH);
+  pipHeading = pipH;
 
   const wrapper = pipDoc.createElement('div');
   wrapper.className = 'pip-circle-wrapper';
@@ -458,15 +457,11 @@ async function openPiP() {
   }
 
   // ── Create PiP circle (absolute URLs for about:blank context) ──
-  pipCircle = new MezzoVoiceCircle(wrapper, {
-    assetPath: baseUrl + 'assets',
-    surfaceElement: pipDoc.body,
-  });
+  pipCircle = new MezzoVoiceCircle(wrapper, { assetPath: baseUrl + 'assets' });
   activeCircle = pipCircle;
 
   // Immediately sync PiP circle to current state
-  const currentRms = audio.getCurrentLevel().rms;
-  pipCircle.update(currentRms, baselineRMS, isAlertMode, blinkDark);
+  pipCircle.update(currentZone, isSustained);
 
   // ── Switch main page to "running in mini window" view ──
   sessionUsedPip = true;
@@ -483,6 +478,11 @@ function handlePipClose() {
     pipCircle = null;
   }
   pipWindow = null;
+  pipHeading = null;
+  if (unsubscribePipTheme) {
+    unsubscribePipTheme();
+    unsubscribePipTheme = null;
+  }
 
   // Guard against running during tab close
   if (isPageUnloading) return;
@@ -499,19 +499,14 @@ function handlePipClose() {
 
 function resumeMainMonitoring() {
   showView('monitoring');
+  updateHeading(currentZone);
 
-  // Recreate circle on main page — card element receives data-surface changes
-  const monCard = document.querySelector('.mon-card');
-  monCard.setAttribute('data-surface', blinkDark ? 'dark' : 'light');
-  mainCircle = new MezzoVoiceCircle(circleContainer, {
-    assetPath: 'assets',
-    surfaceElement: monCard,
-  });
+  // Recreate circle on main page
+  mainCircle = new MezzoVoiceCircle(circleContainer, { assetPath: 'assets' });
   activeCircle = mainCircle;
 
   // Immediately sync circle to current state
-  const currentRms = audio.getCurrentLevel().rms;
-  mainCircle.update(currentRms, baselineRMS, isAlertMode, blinkDark);
+  mainCircle.update(currentZone, isSustained);
 }
 
 function returnFromPip() {
@@ -537,7 +532,7 @@ if (!('documentPictureInPicture' in window)) {
 // Clean up on page unload
 window.addEventListener('beforeunload', () => {
   isPageUnloading = true;
-  stopBlink();
+  clearSustained();
   if (pipWindow) {
     try { pipWindow.close(); } catch { /* ignore */ }
   }
@@ -556,14 +551,10 @@ function startDemoMode() {
   const samples = new Array(100).fill(baselineRMS);
   engine.calibrate(samples);
   engine.startMonitoring();
-  engine.graceRemainingMs = 0; // skip grace period so alerts trigger immediately
+  engine.graceRemainingMs = 0; // skip grace period so zone changes trigger immediately
 
   // Create voice circle on the card (same as real mode)
-  const monCard = document.querySelector('.mon-card');
-  mainCircle = new MezzoVoiceCircle(circleContainer, {
-    assetPath: 'assets',
-    surfaceElement: monCard,
-  });
+  mainCircle = new MezzoVoiceCircle(circleContainer, { assetPath: 'assets' });
   activeCircle = mainCircle;
 
   const CYCLE_MS = 12000;
@@ -574,21 +565,22 @@ function startDemoMode() {
     const t = Date.now() % CYCLE_MS;
     let targetRMS;
 
-    if (t < 3000) {
-      // 0-3s: within range
-      targetRMS = baseline;
-    } else if (t < 5000) {
-      // 3-5s: ring-1
-      targetRMS = baseline * 1.6;
-    } else if (t < 7000) {
-      // 5-7s: ring-2
-      targetRMS = baseline * 2.2;
+    if (t < 2000) {
+      // 0-2s: silence — zone 0, Listening
+      targetRMS = baseline * 0.1;
+    } else if (t < 4000) {
+      // 2-4s: zone 1 — Within Range (target)
+      targetRMS = baseline * 1.0;
+    } else if (t < 6000) {
+      // 4-6s: zone 2 — Within Range (acceptable)
+      targetRMS = baseline * 1.5;
     } else if (t < 10000) {
-      // 7-10s: ring-3 (sustained alert + dark card)
-      targetRMS = baseline * 3.5;
+      // 6-10s: zone 3 — Outside of Range. Orange + subtle drift begin
+      // immediately; drift escalates to "active" once sustained past 7s.
+      targetRMS = baseline * 2.3;
     } else {
-      // 10-12s: return to range
-      targetRMS = baseline;
+      // 10-12s: back to silence — zone 0, Listening
+      targetRMS = baseline * 0.1;
     }
 
     onAudioFrame({ rms: targetRMS });

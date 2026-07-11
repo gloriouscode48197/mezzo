@@ -17,13 +17,10 @@
   <script type="module">
     import {
       MezzoEngine,
-      LogicalState,
       FRAME_MS,
-      SPIKE_IGNORE_MS,
-      OUT_OF_RANGE_ENTER_MS,
-      SUSTAINED_ENTER_MS,
-      RETURN_TO_RANGE_MS,
-      THRESHOLD_MULTIPLIER,
+      ZONE_SILENCE_RATIO,
+      ZONE_TARGET_MULT,
+      ZONE_ACCEPTABLE_MULT,
       INITIAL_GRACE_MS_MIN,
       INITIAL_GRACE_MS_MAX,
     } from './engine.js';
@@ -77,6 +74,13 @@
       return engine;
     }
 
+    function readyEngine(baseline = 0.1) {
+      const engine = createCalibratedEngine(baseline);
+      engine.startMonitoring();
+      skipGracePeriod(engine, baseline * 0.1);
+      return engine;
+    }
+
     // Calibration Tests
     section('Calibration');
     try {
@@ -98,57 +102,70 @@
     {
       const e3 = new MezzoEngine();
       e3.calibrate(Array(20).fill(0.1));
-      assert(e3.baselineRMS === 0.1, 'Sets correct baselineRMS');
-      assert(e3.upperThreshold === 0.1 * THRESHOLD_MULTIPLIER, 'Sets correct upperThreshold');
+      assert(Math.abs(e3.baselineRMS - 0.1) < 1e-9, 'Sets correct baselineRMS');
       assert(e3.calibrationComplete === true, 'Marks calibration complete');
     }
 
-    // Spike Rejection Tests
-    section('Spike Rejection');
+    // Zone Classification Tests — immediate, no debounce (real voice moves
+    // through intermediate zones faster than any dwell-time window would catch).
+    section('Zone Classification');
     {
-      const e = createCalibratedEngine(0.1);
-      e.startMonitoring();
-      skipGracePeriod(e, 0.05);
-      processForDuration(e, 0.2, 200); // Short spike
-      assert(e.getCurrentState() === LogicalState.IN_RANGE, 'Ignores <250ms spikes');
+      const baseline = 0.1;
+      const e = readyEngine(baseline);
+      e.processFrame(baseline * (ZONE_SILENCE_RATIO - 0.05));
+      assert(e.getZone() === 0, 'Below silence ratio -> zone 0 (Listening)');
     }
 
     {
-      const e = createCalibratedEngine(0.1);
-      e.startMonitoring();
-      skipGracePeriod(e, 0.05);
-      processForDuration(e, 0.2, OUT_OF_RANGE_ENTER_MS);
-      assert(e.getCurrentState() === LogicalState.OUT_OF_RANGE_SHORT, 'Triggers at 750ms');
+      const baseline = 0.1;
+      const e = readyEngine(baseline);
+      e.processFrame(baseline);
+      assert(e.getZone() === 1, 'At calibrated level -> zone 1 (Within Range, target)');
     }
 
-    // Sustained Loudness Tests
-    section('Sustained Loudness');
     {
-      const e = createCalibratedEngine(0.1);
-      e.startMonitoring();
-      skipGracePeriod(e, 0.05);
-      processForDuration(e, 0.2, SUSTAINED_ENTER_MS);
-      assert(e.getCurrentState() === LogicalState.OUT_OF_RANGE_SUSTAINED, 'Triggers SUSTAINED at 2800ms');
+      const baseline = 0.1;
+      const e = readyEngine(baseline);
+      e.processFrame(baseline * (ZONE_TARGET_MULT + 0.05));
+      assert(e.getZone() === 2, 'Just above target -> zone 2 (Within Range, acceptable)');
+    }
+
+    {
+      const baseline = 0.1;
+      const e = readyEngine(baseline);
+      e.processFrame(baseline * (ZONE_ACCEPTABLE_MULT + 0.05));
+      assert(e.getZone() === 3, 'Just above acceptable -> zone 3 (Outside of Range)');
+    }
+
+    {
+      const baseline = 0.1;
+      const e = readyEngine(baseline);
+      e.processFrame(baseline * (ZONE_ACCEPTABLE_MULT + 10));
+      assert(e.getZone() === 3, 'Zone 3 is open-ended — stays 3 arbitrarily far above the acceptable threshold');
+    }
+
+    {
+      const baseline = 0.1;
+      const e = readyEngine(baseline);
+      const b = e.baselineRMS;
+      const rampRatios = [0.5, 1.0, 1.5, 2.3];
+      const expectedZones = [1, 1, 2, 3];
+      let allMatched = true;
+      rampRatios.forEach((ratio, i) => {
+        e.processFrame(b * ratio);
+        if (e.getZone() !== expectedZones[i]) allMatched = false;
+      });
+      assert(allMatched, 'A fast rise passes through every intermediate zone, one frame each');
     }
 
     // Recovery Tests
     section('Recovery');
     {
-      const e = createCalibratedEngine(0.1);
-      e.startMonitoring();
-      skipGracePeriod(e, 0.05);
-      processForDuration(e, 0.2, OUT_OF_RANGE_ENTER_MS);
-      processForDuration(e, 0.05, RETURN_TO_RANGE_MS - 100);
-      assert(e.getCurrentState() === LogicalState.OUT_OF_RANGE_SHORT, 'Does not reset before 600ms quiet');
-    }
-
-    {
-      const e = createCalibratedEngine(0.1);
-      e.startMonitoring();
-      skipGracePeriod(e, 0.05);
-      processForDuration(e, 0.2, OUT_OF_RANGE_ENTER_MS);
-      processForDuration(e, 0.05, RETURN_TO_RANGE_MS);
-      assert(e.getCurrentState() === LogicalState.IN_RANGE, 'Resets after 600ms quiet');
+      const baseline = 0.1;
+      const e = readyEngine(baseline);
+      e.processFrame(0.2);
+      e.processFrame(0.1);
+      assert(e.getZone() === 1, 'Returns to a lower zone as soon as volume drops');
     }
 
     // Lifecycle Tests
@@ -164,13 +181,10 @@
     }
 
     {
-      const e = createCalibratedEngine(0.1);
-      e.startMonitoring();
-      skipGracePeriod(e, 0.05);
-      processForDuration(e, 0.2, OUT_OF_RANGE_ENTER_MS);
+      const e = readyEngine(0.1);
+      e.processFrame(0.2);
       e.stopMonitoring();
-      assert(e.getCurrentState() === LogicalState.IN_RANGE, 'Stop resets state');
-      assert(e.aboveDurationMs === 0, 'Stop resets counters');
+      assert(e.getZone() === 0, 'Stop resets zone');
     }
 
     {
@@ -187,37 +201,24 @@
     {
       const e = createCalibratedEngine(0.1);
       e.startMonitoring();
-      // Process loud during grace period
       for (let i = 0; i < 100; i++) {
         e.processFrame(0.5);
       }
-      assert(e.getCurrentState() === LogicalState.IN_RANGE, 'No alerts during grace period');
+      assert(e.getZone() === 0, 'No zone changes during grace period');
     }
 
     // Success Criteria
     section('Success Criteria');
     {
-      const e = createCalibratedEngine(0.1);
-      e.startMonitoring();
-      skipGracePeriod(e, 0.05);
-      processForDuration(e, 0.25, 200);
-      assert(e.getCurrentState() === LogicalState.IN_RANGE, 'Short emphasis never escalates');
+      const e = readyEngine(0.1);
+      e.processFrame(0.1 * ZONE_ACCEPTABLE_MULT + 0.001);
+      assert(e.getZone() === 3, 'Crossing the acceptable threshold escalates to Outside of Range immediately');
     }
 
     {
-      const e = createCalibratedEngine(0.1);
-      e.startMonitoring();
-      skipGracePeriod(e, 0.05);
-      processForDuration(e, 0.2, 1000);
-      assert(e.getCurrentState() === LogicalState.OUT_OF_RANGE_SHORT, 'One loud sentence escalates');
-    }
-
-    {
-      const e = createCalibratedEngine(0.1);
-      e.startMonitoring();
-      skipGracePeriod(e, 0.05);
+      const e = readyEngine(0.1);
       processForDuration(e, 0, 5000);
-      assert(e.getCurrentState() === LogicalState.IN_RANGE, 'Silence equals IN_RANGE');
+      assert(e.getZone() === 0, 'Silence equals zone 0 (Listening)');
     }
 
     // Summary

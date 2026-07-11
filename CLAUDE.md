@@ -30,8 +30,10 @@ Switch surfaces by changing the `data-surface` attribute on the container elemen
 Use these directly — don't create your own font styles:
 - `.type-hero-heading` — large page titles
 - `.type-section-heading` — section titles
-- `.type-monitoring-within` — "Within range" heading (24px)
-- `.type-monitoring-outside` — "Outside range" heading (41px, larger to grab attention)
+- `.type-monitoring-within` / `.type-monitoring-outside` — defined but currently unused. The
+  monitoring heading (`.mon-heading`) is fixed at 24px across all states (Listening / Within
+  Range / Outside of Range) per the monitoring-experience PRD's layout-stability requirement —
+  only the text content changes, never the size.
 - `.type-hero-body` — large body text
 - `.type-body` — default body text
 - `.type-microcopy` — small helper text
@@ -80,28 +82,40 @@ Each ring level has 3 SVG variants that are subtly different hand-drawn versions
 - Combine with a gentle CSS scale pulse
 
 ### Ring Level Selection
-Based on volume relative to calibrated baseline:
-- At or below baseline → ring-0 (base circle only)
-- Slightly above → ring-1
-- Moderately above → ring-2
-- Far above → ring-3
-- Divide the above-baseline range into 3 roughly equal zones
+`src/engine.js` classifies volume relative to the calibrated baseline into 4 zones (0-3), which
+`src/voice-circle.js` renders directly as the ring level (they're the same number — there is
+intentionally no ring beyond 3, and no volume tier beyond zone 3 either):
+- Zone 0, "Listening" (below ~30% of baseline) → ring-0 (base circle only)
+- Zone 1, "Within Range" target (at baseline) → ring-1
+- Zone 2, "Within Range" acceptable → ring-2
+- Zone 3, "Outside of Range" (open-ended above the acceptable threshold) → ring-3
 
-You can also use the circle sizing tokens to scale the SVG container:
-- Quiet → `--circle-silence` or `--circle-within`
-- Elevated → `--circle-elevated`
-- Sustained → `--circle-sustained`
+Exact multipliers live as named constants at the top of `src/engine.js` and are meant to be
+tuned there without touching the interaction model.
 
-### Alert State
-When outside range for 5+ seconds:
-- Switch from `light-bg` → `dark-bg` SVG assets
-- Switch surface theme from `data-surface="light"` → `data-surface="dark"`
-- Speed up pulsation
-- All colors update automatically via CSS custom properties
+The circle container is a **constant size** (`--circle-container`) in every state — it never
+scales with volume or zone. Only the rings themselves (opacity/visibility, color, drift) and the
+pulse animation move; the component's overall footprint must never change.
+
+### Coaching State (Outside of Range)
+Mezzo coaches rather than alerts — **the background never changes** while monitoring, and there
+is no blinking. The moment volume crosses into "Outside of Range" (zone 3):
+- The center circle and all rings recolor from neutral gray to Mezzo orange (`--hanko-fill:
+  #C4593A`) via a CSS `filter` on the existing gray brush-stroke art — no colored SVG assets
+  exist or are needed. The recolor fades smoothly (~450ms), not an instant snap.
+- Rings 1-3 begin a subtle organic drift (~2-4px, slow, independent per ring); the center circle
+  (ring-0) always stays fixed.
+- If volume stays at zone 3 continuously for **1 second**, drift escalates (larger radius,
+  faster, still independent per ring) — this is a pure duration flag owned by `monitoring.js`,
+  not a louder-volume zone from `engine.js`.
+- Returning to zone ≤2 fades back to gray and settles the drift immediately (the CSS
+  transitions provide the smooth "return to center" feel).
 
 ## Key Technical Notes
 - Volume "range" is based on calibration (user's baseline speaking volume)
-- Outside-range alerts only trigger after 5+ continuous seconds of loud volume
+- The orange color tint and subtle drift appear immediately on crossing into "Outside of Range"
+  (zone 3); drift only escalates after 1 continuous second there, to avoid reacting to brief
+  spikes. The background never changes and there is no blinking.
 - PiP and webpage monitoring are mutually exclusive — never both at once
 - Closing PiP stops monitoring entirely
 - Browser mic permissions must be handled gracefully
