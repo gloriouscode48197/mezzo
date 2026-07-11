@@ -1,0 +1,97 @@
+/**
+ * Mezzo extension popup — same palette as the web app's design tokens,
+ * hardcoded here rather than fetched (extension pages shouldn't depend on
+ * a remote stylesheet loading in time, and Google Fonts isn't declared in
+ * the manifest's CSP) — system serif/sans stand in for Noto Serif JP/Sora.
+ */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  width: 280px;
+  background: #F0EBE2;
+  color: #1A1A1A;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+
+.popup {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 24px 20px;
+}
+
+.wordmark {
+  font-family: Georgia, "Iowan Old Style", "Times New Roman", serif;
+  font-weight: 400;
+  font-size: 22px;
+  margin: 0 0 6px;
+  color: #1A1A1A;
+}
+
+.tagline {
+  font-size: 12px;
+  line-height: 150%;
+  color: #6B6560;
+  margin: 0 0 20px;
+}
+
+.btn-primary {
+  width: 100%;
+  font-size: 14px;
+  font-weight: 500;
+  color: #F0EBE2;
+  background: #C4593A;
+  padding: 11px 20px;
+  border: none;
+  border-radius: 100px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.btn-primary:hover {
+  background: #AE4D31;
+}
+
+.popup-links {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.popup-link {
+  font-size: 12px;
+  color: #C4593A;
+  text-decoration: none;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.popup-link:hover {
+  text-decoration: underline;
+}
+
+.settings-panel {
+  width: 100%;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #D8D0C3;
+}
+
+.settings-panel.hidden {
+  display: none;
+}
+
+.settings-note {
+  font-size: 12px;
+  color: #8A827A;
+  margin: 0;
+}
