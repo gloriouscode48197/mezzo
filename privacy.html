@@ -23,19 +23,18 @@
     })
   </script>
 </head>
-<body data-surface="light">
+<body data-surface="dark">
 
-  <nav class="nav">
+  <nav class="nav nav-scrolled">
     <a href="index.html" class="type-nav-wordmark">Mezzo</a>
     <div class="nav-links">
       <a href="index.html" class="nav-link nav-link-quiet">Home</a>
       <span class="nav-link nav-link-active">Privacy</span>
-      <a href="try-it.html" class="nav-link nav-link-quiet">Try Mezzo</a>
-      <div id="theme-toggle"></div>
+      <a href="try-it.html" class="btn-primary btn-nav">Try Mezzo</a>
     </div>
   </nav>
 
-  <div class="page page-fade" style="opacity: 0">
+  <div class="page page-fade" data-surface="light" style="opacity: 0">
     <main class="privacy-content">
       <h1 class="type-section-heading privacy-title reveal">Privacy & Data Use</h1>
 
@@ -116,10 +115,6 @@
         observer.observe(el);
       }
     });
-  </script>
-  <script type="module">
-    import { mountThemeToggle } from './src/theme.js';
-    mountThemeToggle(document.getElementById('theme-toggle'));
   </script>
 </body>
 </html>

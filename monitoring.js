@@ -1,43 +1,46 @@
 /**
- * Mezzo — Monitoring Controller
+ * Mezzo — Companion Window Controller
  *
  * Uses existing AudioProcessor for mic capture and RMS sampling,
  * MezzoEngine for volume-zone classification (0-3), and MezzoVoiceCircle
  * for the voice visualization (gray -> orange tint + organic ring drift,
  * no background change, no blinking).
  *
- * Companion window: this page is meant to run inside a dedicated browser
- * window opened by the extension (extension/lib/window-manager.js), not a
- * tab in the user's meeting window — but it works identically if opened
- * directly, since none of the logic below depends on how the tab/window
- * was created. Three page-level views:
- *   - view-monitoring: live status + circle, "Stop Monitoring" (also the
- *     fallback shown whenever PiP isn't open, including if it fails to
- *     open or closes unexpectedly while monitoring is active)
- *   - view-ready: profile selection before starting — shown for
- *     `?launch=choose` launches, or if PiP closes with no active session
- *   - view-pip-running ("control room"): shown once PiP is open —
- *     "Return to PiP" focuses the floating window, "End Monitoring" stops
- *     the session without closing PiP (transitions it to Ready mode)
+ * Every entry path — a tab navigation from try-it.html, a window.open()
+ * popup, or the extension's chrome.windows.create popup — loads this exact
+ * same page/script, so the experience is identical regardless of how the
+ * user got here. Three page-level views:
+ *   - view-ready: profile selection, "Start Monitoring" — the ALWAYS
+ *     default landing state. Monitoring never starts on page load; it only
+ *     starts from a real click on this view, because the Floating
+ *     Companion (Document PiP) requires a fresh user gesture on this exact
+ *     document — that gesture cannot survive a page navigation, so no
+ *     entry path may auto-start.
+ *   - view-pip-running ("control room"): shown once monitoring has
+ *     actually started on a Floating-Companion-capable browser. Never
+ *     shows the live circle — it's a management surface, not the
+ *     monitoring interface. Two copy states driven by pipWindow's own
+ *     truthiness (no separate tracked flag): "connected" (Floating
+ *     Companion open, Show/End) and "disconnected" (closed unexpectedly,
+ *     session still running, Reopen/End).
+ *   - view-monitoring: live status + circle, "Stop Monitoring" — reachable
+ *     ONLY when the browser has no Document PiP support at all. For that
+ *     one case the Companion Window becomes the actual monitoring
+ *     interface (not a fallback within a supported browser), keeping dark
+ *     styling to preserve continuity with what the Floating Companion
+ *     would have looked like.
  *
- * PiP-first (PRD-004): Picture-in-Picture is the primary surface, not an
- * optional pop-out. Once monitoring starts, PiP opens automatically and
- * stays open across Stop/Start cycles — it has two modes, toggled without
- * tearing down the PiP window:
+ * The Floating Companion (Document PiP) is the primary monitoring surface
+ * whenever the browser supports it — dark, ambient, minimal, built for
+ * peripheral awareness during a meeting. It has two internal modes,
+ * toggled without tearing down the window itself:
  *   - Monitoring mode: live status, circle, "Stop Monitoring"
  *   - Ready mode: "Ready", current profile + a switcher, "Start Monitoring"
- * Stopping monitoring while PiP is open never navigates the opener —
+ * Stopping monitoring while it's open never navigates the opener —
  * Document PiP does not survive its opener navigating away (verified), so
- * doing so would silently kill the PiP window. Creating a new profile from
- * PiP's "+ Create New Profile..." opens a genuinely new tab for the same
- * reason, syncing the result back via BroadcastChannel.
- *
- * Supports Picture-in-Picture via the Document PiP API:
- *   - Auto-opens after Start Monitoring succeeds (not in demo mode)
- *   - PiP closes unexpectedly (user clicks its own ✕) while monitoring is
- *     active → falls back to the plain view-monitoring circle in this
- *     window; the session itself is never interrupted by this
- *   - Monitoring runs in EITHER PiP OR this window's plain view, never both
+ * doing so would silently kill the window. Creating a new profile from
+ * "+ Create New Profile..." opens a genuinely new tab for the same reason,
+ * syncing the result back via BroadcastChannel.
  */
 
 import { AudioProcessor } from './src/audio.js?v=2';
@@ -45,7 +48,6 @@ import { MezzoEngine } from './src/engine.js?v=5';
 import { MezzoVoiceCircle } from './src/voice-circle.js?v=4';
 import { trackMonitoringStarted, trackMonitoringSession } from './src/analytics.js';
 import { pageEnter, navigateTo, transitionView } from './src/page-transition.js';
-import { getResolvedSurface, onThemeChange } from './src/theme.js';
 // TEMPORARY — background-tab throttling investigation, see
 // docs/monitoring-runtime-investigation.md. Delete this import and its two
 // call sites (in onAudioFrame) once the investigation concludes.
@@ -66,10 +68,16 @@ import {
 const PIP_WIDTH = 1;
 const PIP_HEIGHT = 1;
 
-// Zone 3 is "Outside of Range" — there's no higher volume tier.
+// Zone 3 is "Outside Range" — there's no higher volume tier.
 const OUTSIDE_ZONE = 3;
 
 const isDemo = new URLSearchParams(window.location.search).get('demo') === 'true';
+
+// Decided once, up front — never re-checked reactively per failed attempt.
+// A browser either supports the Floating Companion or it doesn't; if it
+// doesn't, the Companion Window becomes the actual monitoring interface for
+// that browser rather than trying and falling back.
+const pipSupported = 'documentPictureInPicture' in window;
 
 // =============================================================================
 // DOM References (main page)
@@ -83,19 +91,22 @@ const views = {
 
 const circleContainer = document.getElementById('circle-container');
 const btnStop = document.getElementById('btn-stop');
-const btnPip = document.getElementById('btn-pip');
 const monHeading = document.getElementById('mon-heading');
 
-// Ready view (main page) — shown for ?launch=choose launches, and as the
-// fallback when the floating PiP window closes with no active session.
+// Ready view (main page) — the universal default landing state.
 const readyProfileSelector = document.getElementById('ready-profile-selector');
 const readyProfileNameEl = document.getElementById('ready-profile-name');
 const readyProfileDropdown = document.getElementById('ready-profile-dropdown');
 const btnReadyStart = document.getElementById('btn-ready-start');
+const readyUnsupportedNote = document.getElementById('ready-unsupported-note');
+const readyRetry = document.getElementById('ready-retry');
+const btnReadyRetry = document.getElementById('btn-ready-retry');
 
-// Control room (main page, shown while PiP is running)
+// Control room (main page, shown once monitoring has actually started on a
+// Floating-Companion-capable browser)
 const pipRunningProfileNameEl = document.getElementById('pip-running-profile-name');
-const btnReturnToPip = document.getElementById('btn-return-to-pip');
+const pipRunningStatusText = document.getElementById('pip-running-status-text');
+const btnShowFloatingCompanion = document.getElementById('btn-return-to-pip');
 const btnEndMonitoring = document.getElementById('btn-end-monitoring');
 
 // =============================================================================
@@ -119,7 +130,6 @@ let activeProfile = null; // the profile object currently in use — needed for 
 let isMonitoringActive = false; // true from a successful mic acquisition until stopMonitoring()
 let isPageUnloading = false;
 let demoInterval = null;   // setInterval ID for demo mode fake RMS
-let unsubscribePipTheme = null; // clears the PiP window's theme-sync listener on close
 
 // 'monitoring' | 'ready' — only meaningful while pipWindow is open
 let pipMode = 'monitoring';
@@ -224,12 +234,12 @@ function clearSustained() {
 }
 
 // =============================================================================
-// Heading Text (Listening / Within Range / Outside of Range / Ready)
+// Heading Text (Quiet / Within Range / Outside Range / Ready)
 // =============================================================================
 
 function zoneLabel(zone) {
-  if (zone === 0) return 'Listening';
-  if (zone === OUTSIDE_ZONE) return 'Outside of Range';
+  if (zone === 0) return 'Quiet';
+  if (zone === OUTSIDE_ZONE) return 'Outside Range';
   return 'Within Range';
 }
 
@@ -257,7 +267,7 @@ function onAudioFrame({ rms }) {
     currentZone = zone;
 
     if (nowOutside && !wasOutside) {
-      // Crossed into Outside of Range — subtle drift begins immediately;
+      // Crossed into Outside Range — subtle drift begins immediately;
       // escalate to active drift after holding for SUSTAINED_DRIFT_MS.
       sustainedTimer = setTimeout(() => {
         sustainedTimer = null;
@@ -324,47 +334,62 @@ async function beginMonitoringSession(profile) {
 }
 
 // =============================================================================
-// Start Monitoring (fresh page load / demo mode)
+// Start Monitoring (from a real click on the Ready view)
 // =============================================================================
 
-async function startMonitoring(profileOverride) {
-  const profile = profileOverride || loadActiveProfile();
-  if (!profile) {
-    navigateTo('try-it.html');
-    return;
-  }
+/**
+ * The one place monitoring actually starts. Only ever called from a real,
+ * same-page click on view-ready's "Start Monitoring" button — never on page
+ * load — because the Floating Companion requires a fresh user gesture on
+ * this exact document, and that's the only way to guarantee one.
+ */
+async function handleStartMonitoringClick() {
+  const profile = activeProfile;
+  if (!profile) return;
 
-  // PiP is the primary surface (PRD-004) — open it automatically rather
-  // than requiring a manual "Pop Out" click. This has to happen BEFORE any
-  // other awaited work: requestWindow() requires a live user gesture, and
-  // Chrome's activation window is short enough that awaiting mic
-  // acquisition first (a few hundred ms, sometimes more) can let it expire
-  // — confirmed empirically, this is a real race, not a hypothetical.
-  // Opening PiP first uses the click's activation as directly as possible.
-  // If it still doesn't happen (unsupported browser, activation unavailable
-  // for any reason), everything below degrades gracefully to the plain
-  // page with a manual Pop Out button — this is not a hard requirement.
-  // Demo mode never auto-opens PiP — it's a debugging tool, and forcing a
-  // real popup during automated verification would break the existing
-  // demo-mode-based testing approach used throughout this project.
-  if (!isDemo) {
-    await openPiP();
-  }
+  if (pipSupported) {
+    const opened = await openPiP();
+    if (!opened) {
+      // Rare on a supported browser reached via a real click — stay on
+      // Ready and offer an explicit retry rather than silently degrading.
+      showReadyRetry();
+      return;
+    }
 
-  const ok = await beginMonitoringSession(profile);
-  if (!ok) {
-    navigateTo('try-it.html');
-    return;
-  }
+    const ok = await beginMonitoringSession(profile);
+    if (!ok) {
+      // Mic denied after the Floating Companion already opened — nothing
+      // to show in it, close it and stay on Ready.
+      closeOrphanedPip();
+      return;
+    }
 
-  if (pipWindow) {
     activeCircle = pipCircle;
     sessionUsedPip = true;
+    // openPiP() already switched to the control room and rendered its
+    // "connected" copy.
   } else {
+    const ok = await beginMonitoringSession(profile);
+    if (!ok) return; // stay on Ready
+
     mainCircle = new MezzoVoiceCircle(circleContainer, { assetPath: 'assets' });
     activeCircle = mainCircle;
     sessionUsedPip = false;
+    showView('monitoring');
   }
+}
+
+function showReadyRetry() {
+  if (readyRetry) readyRetry.classList.remove('hidden');
+}
+
+function hideReadyRetry() {
+  if (readyRetry) readyRetry.classList.add('hidden');
+}
+
+function closeOrphanedPip() {
+  if (!pipWindow) return;
+  try { pipWindow.close(); } catch { /* ignore */ }
 }
 
 // =============================================================================
@@ -422,7 +447,7 @@ function stopMonitoring() {
     // PiP-first (PRD-004): stopping never closes PiP or navigates the
     // opener — Document PiP does not survive its opener navigating away
     // (verified), so doing so would silently kill the PiP window. Keep the
-    // circle alive showing the idle "Listening" state and switch to Ready.
+    // circle alive showing the idle "Quiet" state and switch to Ready.
     activeCircle = pipCircle;
     if (pipCircle) pipCircle.update(0, false);
     enterPipReadyMode();
@@ -444,10 +469,11 @@ function stopMonitoring() {
 // Picture-in-Picture
 // =============================================================================
 
+/** @returns {Promise<boolean>} whether the Floating Companion actually opened */
 async function openPiP() {
   if (!('documentPictureInPicture' in window)) {
     console.warn('[Monitoring] Document PiP API not supported');
-    return;
+    return false;
   }
 
   try {
@@ -457,7 +483,7 @@ async function openPiP() {
     });
   } catch (err) {
     console.error('[Monitoring] Failed to open PiP window:', err.message);
-    return;
+    return false;
   }
 
   console.log('[PiP] Requested: %d×%d — Actual: %d×%d', PIP_WIDTH, PIP_HEIGHT, pipWindow.innerWidth, pipWindow.innerHeight);
@@ -656,13 +682,10 @@ async function openPiP() {
   `;
   pipDoc.head.appendChild(style);
 
-  // ── Inherit the active theme, and stay in sync if it changes while PiP
-  //    is open — the PiP window is a separate `document`, so it doesn't
-  //    pick up the main page's data-surface automatically. ──
-  pipDoc.body.setAttribute('data-surface', getResolvedSurface());
-  unsubscribePipTheme = onThemeChange((surface) => {
-    pipDoc.body.setAttribute('data-surface', surface);
-  });
+  // Dark is the fixed site-wide look (no theme toggle) — the PiP window is
+  // a separate `document`, so it doesn't pick up the main page's
+  // data-surface automatically and needs this set directly.
+  pipDoc.body.setAttribute('data-surface', 'dark');
 
   // ── Build PiP layout: heading + circle + monitoring controls + ready panel ──
   const layout = pipDoc.createElement('div');
@@ -798,10 +821,13 @@ async function openPiP() {
   // ── Switch companion window to the control-room state ──
   sessionUsedPip = true;
   updatePipRunningProfileDisplay();
+  updateControlRoomView();
   showView('pipRunning');
 
   // ── Handle PiP close (browser close button or programmatic) ──
   pipWindow.addEventListener('pagehide', handlePipClose);
+
+  return true;
 }
 
 // =============================================================================
@@ -934,6 +960,27 @@ function updatePipRunningProfileDisplay() {
   }
 }
 
+/**
+ * The control room has exactly one source of truth for which of its two
+ * copy states to show: whether pipWindow is currently set. No separate
+ * "connected" flag to keep in sync — this is called any time that could
+ * have changed (after opening, reopening, or the Floating Companion
+ * closing unexpectedly).
+ */
+function updateControlRoomView() {
+  const connected = !!pipWindow;
+  if (pipRunningStatusText) {
+    pipRunningStatusText.textContent = connected
+      ? 'The Floating Companion is open.'
+      : 'Floating Companion closed. Monitoring is still active.';
+  }
+  if (btnShowFloatingCompanion) {
+    btnShowFloatingCompanion.textContent = connected
+      ? 'Show Floating Companion'
+      : 'Reopen Floating Companion';
+  }
+}
+
 function handlePipProfilePick(profile) {
   closePipProfileDropdown();
   if (profilesMatch(activeProfile, profile)) return;
@@ -993,7 +1040,7 @@ function handleCreateNewProfileFromPip() {
 // =============================================================================
 
 function handlePipClose() {
-  const wasReadyMode = pipMode === 'ready';
+  const wasMonitoringMode = pipMode === 'monitoring';
 
   // Clean up PiP circle
   if (pipCircle) {
@@ -1010,37 +1057,24 @@ function handlePipClose() {
   pipProfileDropdown = null;
   pipSwitchConfirmEl = null;
   pipSwitchCurrentNameEl = null;
-  if (unsubscribePipTheme) {
-    unsubscribePipTheme();
-    unsubscribePipTheme = null;
-  }
 
   // Guard against running during window close
   if (isPageUnloading) return;
 
-  // Reaching here always means the floating PiP window was closed directly
-  // (its own ✕) — "Return to PiP" only focuses it (see btnReturnToPip
-  // below) and "End Monitoring" stops the session without closing PiP, so
-  // neither of those trigger this handler. Fall back to the companion
-  // window's own view rather than tearing anything down — it remains the
-  // runtime owner of the session either way.
-  if (wasReadyMode) {
-    enterReadyView(); // no active session to resume — show the equivalent state here
+  // Reaching here always means the floating window was closed directly (its
+  // own ✕) — "Show Floating Companion" only focuses it (see
+  // btnShowFloatingCompanion below) and "End Monitoring" stops the session
+  // without closing it, so neither of those trigger this handler.
+  if (wasMonitoringMode && isMonitoringActive) {
+    // Session is still running — the control room stays the control room,
+    // it never becomes a monitoring interface. Just re-render its copy for
+    // the now-disconnected state (pipWindow is already null above).
+    updateControlRoomView();
   } else {
-    resumeMainMonitoring(); // monitoring continues, now shown in this window's plain view
+    // No active session (includes the rare case where mic acquisition
+    // failed right after the Floating Companion opened).
+    enterReadyView();
   }
-}
-
-function resumeMainMonitoring() {
-  showView('monitoring');
-  updateHeading(currentZone);
-
-  // Recreate circle on main page
-  mainCircle = new MezzoVoiceCircle(circleContainer, { assetPath: 'assets' });
-  activeCircle = mainCircle;
-
-  // Immediately sync circle to current state
-  mainCircle.update(currentZone, isSustained);
 }
 
 // =============================================================================
@@ -1048,26 +1082,35 @@ function resumeMainMonitoring() {
 // =============================================================================
 
 btnStop?.addEventListener('click', stopMonitoring);
-btnPip?.addEventListener('click', openPiP);
-btnReadyStart?.addEventListener('click', () => startMonitoring(activeProfile));
+btnReadyStart?.addEventListener('click', handleStartMonitoringClick);
+btnReadyRetry?.addEventListener('click', () => {
+  hideReadyRetry();
+  handleStartMonitoringClick();
+});
 readyProfileSelector?.addEventListener('click', toggleReadyProfileDropdown);
-btnReturnToPip?.addEventListener('click', () => {
-  // Extensions can't focus a floating PiP window (chrome.tabs/windows only
-  // reach the underlying tab) — but this page holds a direct same-origin
-  // reference to it, and page-level window.focus() is not similarly
-  // restricted for a window this page itself opened.
-  if (!pipWindow) return;
-  try {
-    pipWindow.focus();
-  } catch (err) {
-    console.warn('[Monitoring] Could not focus PiP window:', err.message);
+btnShowFloatingCompanion?.addEventListener('click', () => {
+  if (pipWindow) {
+    // Extensions can't focus a floating PiP window (chrome.tabs/windows
+    // only reach the underlying tab) — but this page holds a direct
+    // same-origin reference to it, and page-level window.focus() is not
+    // similarly restricted for a window this page itself opened.
+    try {
+      pipWindow.focus();
+    } catch (err) {
+      console.warn('[Monitoring] Could not focus the Floating Companion:', err.message);
+    }
+  } else {
+    // Disconnected — this is a fresh click, so it should succeed. openPiP()
+    // reads currentZone/isSustained/activeProfile from existing state, so
+    // the reopened window syncs to live state automatically.
+    openPiP();
   }
 });
 btnEndMonitoring?.addEventListener('click', stopMonitoring);
 
-// Hide PiP button if API not supported
-if (!('documentPictureInPicture' in window)) {
-  if (btnPip) btnPip.style.display = 'none';
+// Shown once, before monitoring begins, so the user isn't surprised later.
+if (!pipSupported && readyUnsupportedNote) {
+  readyUnsupportedNote.classList.remove('hidden');
 }
 
 // The companion window is the runtime owner of the session — closing it
@@ -1120,7 +1163,7 @@ function startDemoMode() {
     let targetRMS;
 
     if (t < 2000) {
-      // 0-2s: silence — zone 0, Listening
+      // 0-2s: silence — zone 0, Quiet
       targetRMS = baseline * 0.1;
     } else if (t < 4000) {
       // 2-4s: zone 1 — Within Range (target)
@@ -1129,11 +1172,11 @@ function startDemoMode() {
       // 4-6s: zone 2 — Within Range (acceptable)
       targetRMS = baseline * 1.5;
     } else if (t < 10000) {
-      // 6-10s: zone 3 — Outside of Range. Orange + subtle drift begin
+      // 6-10s: zone 3 — Outside Range. Orange + subtle drift begin
       // immediately; drift escalates to "active" once sustained past 7s.
       targetRMS = baseline * 2.3;
     } else {
-      // 10-12s: back to silence — zone 0, Listening
+      // 10-12s: back to silence — zone 0, Quiet
       targetRMS = baseline * 0.1;
     }
 
@@ -1145,15 +1188,12 @@ function startDemoMode() {
 // Init
 // =============================================================================
 
-// ?launch=choose (meeting-prompt "Change...") shows profile selection
-// first instead of auto-starting — see extension/background.js.
-const launchMode = new URLSearchParams(window.location.search).get('launch');
-
 pageEnter();
 if (isDemo) {
   startDemoMode();
-} else if (launchMode === 'choose') {
-  enterReadyView();
 } else {
-  startMonitoring();
+  // Ready is the universal landing state for every entry path — monitoring
+  // never starts on page load, only from a real click on this view (see
+  // handleStartMonitoringClick()).
+  enterReadyView();
 }

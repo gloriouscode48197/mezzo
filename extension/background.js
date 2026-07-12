@@ -25,25 +25,20 @@
 import { MezzoWindowManager } from './lib/window-manager.js';
 
 const MEZZO_BASE_URL = 'https://mezzo-one.vercel.app';
+const MEZZO_ENTRY_URL = `${MEZZO_BASE_URL}/monitoring.html`;
 
 const BADGE_TEXT = '●'; // ● — an ambient "something's here" cue, not an alarm
 const BADGE_COLOR = '#C4593A'; // Mezzo's hanko accent
 
 /**
- * Open the Mezzo companion window, or refocus/restore the existing one.
- * `mode: 'start'` auto-starts monitoring with the last-used profile;
- * `mode: 'choose'` shows profile selection first. `focused: false` is
- * best-effort (see docs/monitoring-runtime-investigation.md-style caveat:
- * Chrome/OS do not guarantee unfocused window creation) — used for
- * meeting-prompt launches so the meeting stays undisturbed whenever
- * possible.
+ * Open the Companion Window, or refocus/restore the existing one. It always
+ * lands on Ready — monitoring never auto-starts, so there's no launch-mode
+ * distinction to make here. `focused: false` is best-effort (Chrome/OS do
+ * not guarantee unfocused window creation) — used for meeting-prompt
+ * launches so the meeting stays undisturbed whenever possible.
  */
-async function openMezzo({ mode = 'start', focused = true, senderTabId = null } = {}) {
-  const url =
-    mode === 'choose'
-      ? `${MEZZO_BASE_URL}/monitoring.html?launch=choose`
-      : `${MEZZO_BASE_URL}/monitoring.html`;
-  await MezzoWindowManager.openOrFocus({ url, focused, senderTabId });
+async function openMezzo({ focused = true, senderTabId = null } = {}) {
+  await MezzoWindowManager.openOrFocus({ url: MEZZO_ENTRY_URL, focused, senderTabId });
 }
 
 function setBadge(tabId, active) {
@@ -60,10 +55,9 @@ chrome.runtime.onMessage.addListener((message, sender) => {
   if (message?.type === 'MEETING_ACTIVE') {
     setBadge(sender?.tab?.id, message.active);
   } else if (message?.type === 'OPEN_MEZZO') {
-    // Used by the meeting banner's Start/Change... buttons and the
-    // popup's "Open Monitoring" button.
+    // Used by the meeting banner's "Open Mezzo" button and the popup's
+    // "Open Monitoring" button.
     openMezzo({
-      mode: message.mode,
       focused: message.focused,
       senderTabId: sender?.tab?.id ?? null,
     });

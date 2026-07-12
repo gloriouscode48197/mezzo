@@ -94,6 +94,18 @@
   --hanko-hover: #AE4D31;
   --hanko-on-fill: #F0EBE2;
 
+  /* Palette — named section-background tones for the marketing pages
+     (index/privacy/try-it). Used as literal backgrounds on data-surface-
+     scoped section wrappers, not as a second theming mechanism — the
+     existing [data-surface] text/border tokens still drive foreground
+     colors. Paper and Unbleached alias existing light-surface values;
+     Sumi and Washi are new. */
+  --sumi: #1A1A1A;
+  --washi: #E6DFD4;
+  --paper: #F0EBE2;
+  --unbleached: #D8D0C3;
+  --warm-grey: #B8A99A;
+
   /* Radius */
   --radius-cta: 100px;
   --radius-pill: 100px;

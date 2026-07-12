@@ -5,7 +5,17 @@
       "Bash(timeout 30 node verify-extension.js)",
       "Bash(node verify-extension.js)",
       "Bash(node -e ' *)",
-      "Bash(pkill -f \"http.server 8899\" 2>/dev/null; rm -rf /private/tmp/claude-502/-Users-gloriamaria-mezzo/c52a9c61-ebf3-4acd-9069-27f99ddfb42f/scratchpad/ext-profile*; echo done)"
+      "Bash(pkill -f \"http.server 8899\" 2>/dev/null; rm -rf /private/tmp/claude-502/-Users-gloriamaria-mezzo/c52a9c61-ebf3-4acd-9069-27f99ddfb42f/scratchpad/ext-profile*; echo done)",
+      "Bash(node --input-type=module --check)",
+      "Bash(pkill -f \"http.server 8899\" 2>/dev/null; rm -f /private/tmp/claude-502/-Users-gloriamaria-mezzo/c52a9c61-ebf3-4acd-9069-27f99ddfb42f/scratchpad/shot-*.png; echo done)",
+      "Bash(cd /Users/gloriamaria/mezzo && node --test src/engine.test.js 2>&1 | tail -8 *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:8899/try-it.html)",
+      "Bash(pkill -f \"http.server 8899\" 2>/dev/null *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:8899/index.html)",
+      "Bash(rm -f /private/tmp/claude-502/-Users-gloriamaria-mezzo/c52a9c61-ebf3-4acd-9069-27f99ddfb42f/scratchpad/bug-*.png /private/tmp/claude-502/-Users-gloriamaria-mezzo/c52a9c61-ebf3-4acd-9069-27f99ddfb42f/scratchpad/fix-verified.png)",
+      "Bash(node generate-icons.js)",
+      "Bash(node verify-hero.js)",
+      "Bash(node crop-cta.js)"
     ],
     "additionalDirectories": [
       "/private/tmp/claude-502/-Users-gloriamaria-mezzo/c52a9c61-ebf3-4acd-9069-27f99ddfb42f/scratchpad"

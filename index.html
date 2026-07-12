@@ -7,8 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;400&family=Sora:wght@300;400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="design-tokens/mezzo-tokens.css?v=2">
-  <link rel="stylesheet" href="landing.css?v=2">
+  <link rel="stylesheet" href="design-tokens/mezzo-tokens.css?v=5">
+  <link rel="stylesheet" href="landing.css?v=6">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="icons/M.svg">
   <script type="text/javascript">
@@ -22,43 +22,39 @@
     })
   </script>
 </head>
-<body data-surface="light">
+<body data-surface="dark">
 
-  <nav class="nav">
+  <nav class="nav" id="main-nav">
     <a href="index.html" class="type-nav-wordmark">Mezzo</a>
     <div class="nav-links">
       <span class="nav-link nav-link-active">Home</span>
       <a href="privacy.html" class="nav-link nav-link-quiet">Privacy</a>
       <a href="try-it.html" class="nav-link nav-link-quiet">Try Mezzo</a>
-      <div id="theme-toggle"></div>
     </div>
   </nav>
 
-  <!-- ═══════════════════════════════════════════
-       Landing View
-       ═══════════════════════════════════════════ -->
-
   <div id="view-landing" class="page page-fade">
-    <img src="assets/extra-large-ring-new.svg" class="hero-ring" alt="" aria-hidden="true">
 
-    <!-- ── Section 1: Hero (centered) ── -->
-    <section class="hero reveal">
-      <div class="hero-content">
-        <h1 class="type-hero-heading">Know when you're getting loud.</h1>
-        <p class="type-hero-body hero-body">Mezzo gives you quiet, visual feedback when your speaking volume rises — so you can adjust without anyone else noticing. <a href="#section-how-it-works" class="hero-how-link">How it works</a></p>
-        <a href="try-it.html" class="btn-primary">Try Mezzo</a>
-        <p class="type-microcopy microcopy-cta">You can stop anytime. Nothing is saved.</p>
-        <p class="type-statement statement-line">No recording. No transcription. Just volume.</p>
+    <!-- ── Hero ── -->
+    <section class="hero reveal" data-surface="light">
+      <div class="hero-columns">
+        <div class="hero-content">
+          <h1 class="type-hero-heading">Know when you're getting loud.</h1>
+          <p class="type-hero-body hero-body">Mezzo gives you quiet, visual feedback when your speaking volume rises — so you can adjust without anyone else noticing. <a href="#section-how-it-works" class="hero-how-link">How it works</a></p>
+          <a href="try-it.html" class="btn-primary">Try Mezzo</a>
+          <p class="type-microcopy microcopy-cta">You can stop anytime. Nothing is saved.</p>
+          <p class="type-microcopy hero-privacy-line">No recording. No transcription. Just volume.</p>
+        </div>
+        <div class="hero-visual">
+          <div id="hero-companion-preview" class="hero-companion-preview-wrap"></div>
+        </div>
       </div>
     </section>
 
-    <!-- ── Section 2: How it works ── -->
-    <section id="section-how-it-works" class="how-it-works reveal">
+    <!-- ── How it works ── -->
+    <section id="section-how-it-works" class="how-it-works reveal" data-surface="light">
       <div class="how-it-works-grid">
         <h2 class="type-section-heading how-it-works-heading">How it works</h2>
-        <div class="how-it-works-card">
-          <img src="assets/within-range-screenshot.png" alt="Mezzo monitoring screen" class="how-it-works-screenshot">
-        </div>
         <ol class="steps">
           <li class="step">
             <span class="type-step-number">1</span>
@@ -85,33 +81,62 @@
       </div>
     </section>
 
-    <!-- ── Section 3: What Mezzo is good for ── -->
-    <section id="section-good-for" class="landing-section reveal">
-      <div class="landing-col">
-        <h2 class="type-section-heading landing-section-heading">What Mezzo is good&nbsp;for</h2>
-        <ul class="type-body good-for-list">
-          <li>Open office huddles</li>
-          <li>Calls from a shared desk</li>
-          <li>Cafés, lobbies, and common areas</li>
-        </ul>
-        <p class="type-body good-for-note">Works in a browser tab or picture-in-picture.</p>
+    <!-- ── Philosophy ── -->
+    <section id="section-philosophy" class="philosophy reveal" data-surface="dark">
+      <div class="philosophy-grid">
+        <div class="philosophy-copy">
+          <h2 class="type-section-heading">Designed to stay out of your way.</h2>
+          <p class="type-body">Most meeting tools compete for your attention. Mezzo does the opposite. It stays quiet while you're speaking naturally and only becomes more noticeable as your voice drifts outside your preferred range.</p>
+        </div>
+        <div class="philosophy-visual" aria-hidden="true">
+          <canvas id="philosophy-ring-canvas" width="600" height="600"></canvas>
+        </div>
       </div>
     </section>
 
-    <!-- ── Section 4: What it doesn't do ── -->
-    <section id="section-doesnt-do" class="landing-section landing-section-last reveal">
-      <div class="landing-col">
-        <h2 class="type-section-heading landing-section-heading">What it doesn't do</h2>
-        <p class="type-body">Mezzo doesn't record audio, transcribe speech, or send anything anywhere. Your mic data stays in your browser and disappears when you close the tab.</p>
+    <!-- ── Good for / Doesn't do ── -->
+    <section id="section-good-for" class="use-cases reveal" data-surface="light">
+      <div class="use-cases-grid">
+        <div class="use-cases-col">
+          <h2 class="type-section-heading">What Mezzo is good&nbsp;for</h2>
+          <ul class="type-body good-for-list">
+            <li>Open office huddles</li>
+            <li>Calls from a shared desk</li>
+            <li>Cafés, lobbies, and common areas</li>
+          </ul>
+          <p class="type-body good-for-note">Works in a browser tab or picture-in-picture.</p>
+        </div>
+        <div class="use-cases-divider" aria-hidden="true"></div>
+        <div class="use-cases-col">
+          <h2 class="type-section-heading">What it doesn't do</h2>
+          <p class="type-body">Mezzo doesn't record audio, transcribe speech, or send anything anywhere. Your mic data stays in your browser and disappears when you close the tab.</p>
+        </div>
       </div>
+    </section>
+
+    <!-- ── Closing CTA / Footer ── -->
+    <section class="closing-cta reveal" data-surface="light">
+      <div class="closing-cta-content">
+        <h2 class="type-section-heading">Ready when you are.</h2>
+        <a href="try-it.html" class="btn-primary">Try Mezzo</a>
+        <p class="type-microcopy microcopy-cta">You can stop anytime. Nothing is saved.</p>
+      </div>
+      <footer class="site-footer">
+        <span class="type-footer-brand">Mezzo</span>
+        <nav class="footer-links" aria-label="Footer">
+          <a href="privacy.html" class="type-footer-link">Privacy</a>
+        </nav>
+      </footer>
     </section>
 
   </div>
 
   <script src="landing.js" type="module"></script>
   <script type="module">
-    import { mountThemeToggle } from './src/theme.js';
-    mountThemeToggle(document.getElementById('theme-toggle'));
+    import { initHeroCompanionPreview } from './src/hero-companion-preview.js';
+    import { initHeroRing } from './src/hero-ring.js?v=2';
+    initHeroCompanionPreview(document.getElementById('hero-companion-preview'));
+    initHeroRing(document.getElementById('philosophy-ring-canvas'));
   </script>
 </body>
 </html>

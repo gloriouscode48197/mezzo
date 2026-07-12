@@ -1,24 +1,14 @@
 /**
  * Mezzo — Try It Page Styles
- * Three-state page: mic permission → calibration landing → returning user.
- * Uses design token custom properties exclusively.
+ * Uses design token custom properties exclusively. Nav stays the fixed dark
+ * "always frosted" chrome used across the marketing pages, independent of
+ * this page's own (light, Paper) content tone.
  */
 
 /* ── Reset ── */
-*, *::before, *::after {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-.hidden {
-  display: none !important;
-}
-
-/* ── Base ── */
-html {
-  overflow-y: scroll;
-}
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+.hidden { display: none !important; }
+html { overflow-y: scroll; }
 
 body {
   background: var(--surface);
@@ -28,78 +18,57 @@ body {
   flex-direction: column;
 }
 
-/* ═══════════════════════════════════════════
-   Page Layout
-   ═══════════════════════════════════════════ */
+/* ── Page ── */
+.page { flex: 1; display: flex; flex-direction: column; background: var(--paper); }
 
-.page {
+.page-fade {
   flex: 1;
   display: flex;
   flex-direction: column;
+  transition: opacity 300ms ease;
 }
 
+/* ── Nav ── */
 .nav {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 76px;
+  height: 72px;
   padding: 0 32px;
   position: sticky;
   top: 0;
   z-index: 10;
-  background: transparent;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  transition: background 0.3s ease, backdrop-filter 0.3s ease, -webkit-backdrop-filter 0.3s ease;
-}
-
-.nav-scrolled {
-  background: var(--surface-nav, rgba(240, 235, 226, 0.9));
+  background: rgba(13, 11, 9, 0.92);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.042);
 }
 
-.type-nav-wordmark {
-  text-decoration: none;
-}
+.type-nav-wordmark { text-decoration: none; }
 
-.nav-links {
-  display: flex;
-  align-items: center;
-  gap: 28px;
-}
+.nav-links { display: flex; align-items: center; gap: 28px; }
 
 .nav-link {
   text-decoration: none;
   font-family: var(--font-body);
   font-weight: var(--weight-regular);
-  font-size: 14px;
+  font-size: 13px;
   transition: opacity 0.2s ease;
 }
 
-.nav-link:hover {
-  opacity: 0.7;
-}
-
-.nav-link-quiet {
-  color: var(--text-subdued);
-}
+.nav-link:hover { opacity: 0.7; }
+.nav-link-quiet { color: var(--text-subdued); }
 
 .nav-link-active {
   color: var(--text-default);
   cursor: default;
-  padding-bottom: 3px;
-  border-bottom: 4px solid rgba(194, 92, 65, 0.5);
+  padding-bottom: 2px;
+  border-bottom: 2px solid rgba(196, 89, 58, 0.50);
 }
 
-.nav-link-active:hover {
-  opacity: 1;
-}
+.nav-link-active:hover { opacity: 1; }
 
-/* ═══════════════════════════════════════════
-   State Views (centered content)
-   ═══════════════════════════════════════════ */
-
+/* ── State Views ── */
 .page-content {
   flex: 1;
   display: flex;
@@ -109,21 +78,11 @@ body {
   padding: 10vh 32px 32px;
 }
 
-/* Fade transitions between states (opacity only, no translateY) */
-.state-view {
-  transition: opacity 300ms ease;
-}
+.state-view { transition: opacity 300ms ease; }
 
-/* 6-column centered container within the content area */
-.state-col {
-  width: 100%;
-  max-width: 520px;
-}
+.state-col { width: 100%; max-width: 520px; }
 
-/* ═══════════════════════════════════════════
-   Content Spacing
-   ═══════════════════════════════════════════ */
-
+/* ── Content Spacing ── */
 .state-heading {
   max-width: 560px;
   margin-left: auto;
@@ -138,36 +97,24 @@ body {
   margin-bottom: var(--space-circle-to-button);
 }
 
-.state-micro {
-  margin-top: var(--space-button-to-micro);
-}
+.state-micro { margin-top: var(--space-button-to-micro); }
 
 .state-micro-revoke {
-  margin-top: 8px;
+  margin-top: 20px;
   color: var(--text-subdued);
-  font-family: var(--font-body);
-  font-weight: var(--weight-light);
-  font-size: 12px;
-  line-height: 150%;
 }
 
-/* ═══════════════════════════════════════════
-   Ready to Monitor (State C / Complete)
-   ═══════════════════════════════════════════ */
-
-.state-ready .state-col {
-  margin-bottom: 0;
-}
-
-.state-footer {
-  margin-top: 72px;
-  text-align: center;
-}
-
-.state-footer-text {
+.denied-help {
+  margin-top: var(--space-heading-to-content);
   color: var(--text-subdued);
-  margin-top: 2px;
+  max-width: 420px;
+  margin-left: auto;
+  margin-right: auto;
 }
+
+/* ── Ready State ── */
+.state-footer { margin-top: 72px; text-align: center; }
+.state-footer-text { color: var(--text-subdued); margin-top: 2px; }
 
 .btn-recalibrate-link {
   display: block;
@@ -180,20 +127,12 @@ body {
   cursor: pointer;
   padding: 0;
   margin: 48px auto 0;
-  text-decoration: none;
   transition: var(--transition-hover);
 }
 
-.btn-recalibrate-link:hover {
-  text-decoration: underline;
-}
+.btn-recalibrate-link:hover { text-decoration: underline; }
 
-/* ═══════════════════════════════════════════
-   Calibration Content Area (crossfade)
-   Heading stays static; pre-content and
-   listen-content swap via .state-listening.
-   ═══════════════════════════════════════════ */
-
+/* ── Calibration Crossfade ── */
 .cal-content-area {
   position: relative;
   display: flex;
@@ -213,10 +152,7 @@ body {
   transition: opacity 0.5s ease, transform 0.5s ease;
 }
 
-/* Reset state-body bottom margin inside cal-pre-content (spacing is handled by the content-area) */
-.cal-pre-content .state-body {
-  margin-bottom: 40px;
-}
+.cal-pre-content .state-body { margin-bottom: 40px; }
 
 .cal-listen-content {
   display: flex;
@@ -231,17 +167,12 @@ body {
   pointer-events: none;
 }
 
-/* Active listening state */
 #state-b.state-listening .cal-pre-content {
-  opacity: 0;
-  transform: translateY(-8px);
-  pointer-events: none;
+  opacity: 0; transform: translateY(-8px); pointer-events: none;
 }
 
 #state-b.state-listening .cal-listen-content {
-  opacity: 1;
-  transform: translateY(0);
-  pointer-events: auto;
+  opacity: 1; transform: translateY(0); pointer-events: auto;
 }
 
 .cal-countdown {
@@ -253,69 +184,17 @@ body {
   margin-bottom: 24px;
 }
 
-/* ═══════════════════════════════════════════
-   Buttons
-   ═══════════════════════════════════════════ */
+/* ── Buttons ── */
+.btn-with-icon { display: inline-flex; align-items: center; gap: 10px; }
+.btn-icon { width: 14px; height: 19px; flex-shrink: 0; }
+.btn-wide { padding: 16px 64px; min-width: 240px; }
 
-.btn-with-icon {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-}
+/* ── Calibration Ring Canvas ── */
+/* #cal-ring-canvas is sized inline (200×200px) by the visualization script */
 
-.btn-icon {
-  width: 14px;
-  height: 19px;
-  flex-shrink: 0;
-}
-
-.btn-wide {
-  padding: 16px 64px;
-  min-width: 240px;
-}
-
-/* ═══════════════════════════════════════════
-   Ring Circle (Calibrating View)
-   ═══════════════════════════════════════════ */
-
-.ring-container {
-  position: relative;
-  width: var(--circle-within);
-  height: var(--circle-within);
-  margin-inline: auto;
-  margin-bottom: var(--space-circle-to-button);
-}
-
-.ring-variant {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0;
-  transition: opacity 1.2s ease;
-}
-
-.ring-variant.active {
-  opacity: 1;
-}
-
-@keyframes gentle-pulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.08); }
-}
-
-.ring-container.pulsing {
-  animation: gentle-pulse 3s ease-in-out infinite;
-}
-
-/* ═══════════════════════════════════════════
-   Recalibrate Button
-   ═══════════════════════════════════════════ */
-
+/* ── Recalibrate ── */
 .btn-recalibrate {
-  background: none;
-  border: none;
+  background: none; border: none;
   color: var(--hanko-text);
   font-family: var(--font-body);
   font-weight: var(--weight-regular);
@@ -326,40 +205,10 @@ body {
   transition: var(--transition-hover);
 }
 
-.btn-recalibrate:hover {
-  opacity: 0.7;
-}
+.btn-recalibrate:hover { opacity: 0.7; }
 
-/* ═══════════════════════════════════════════
-   Long Microcopy (Calibration Complete)
-   ═══════════════════════════════════════════ */
-
-.state-micro-long {
-  margin-top: var(--space-page-gap);
-}
-
-/* ═══════════════════════════════════════════
-   Denied Help Text
-   ═══════════════════════════════════════════ */
-
-.denied-help {
-  margin-top: var(--space-heading-to-content);
-  color: var(--text-subdued);
-  max-width: 420px;
-  margin-left: auto;
-  margin-right: auto;
-}
-
-/* ═══════════════════════════════════════════
-   Profile List (Choose a Profile)
-   ═══════════════════════════════════════════ */
-
-.profile-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  text-align: left;
-}
+/* ── Profile List ── */
+.profile-list { display: flex; flex-direction: column; gap: 4px; text-align: left; }
 
 .profile-row {
   display: flex;
@@ -376,15 +225,9 @@ body {
   transition: var(--transition-hover);
 }
 
-.profile-row:hover {
-  background: var(--surface-card);
-}
+.profile-row:hover { background: var(--surface-card); }
 
-.profile-row-text {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
+.profile-row-text { display: flex; flex-direction: column; gap: 4px; }
 
 .profile-row-name {
   font-family: var(--font-body);
@@ -402,15 +245,10 @@ body {
 }
 
 .profile-check {
-  flex-shrink: 0;
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-shrink: 0; width: 20px; height: 20px;
+  display: flex; align-items: center; justify-content: center;
   color: var(--hanko-fill);
-  font-size: 13px;
-  margin-top: 2px;
+  font-size: 13px; margin-top: 2px;
 }
 
 .profile-row-bullet {
@@ -426,21 +264,10 @@ body {
   margin: 8px 4px;
 }
 
-.profile-section-label {
-  padding: 0 18px;
-  margin-bottom: 8px;
-}
+.profile-section-label { padding: 0 18px; margin-bottom: 8px; }
 
-/* ═══════════════════════════════════════════
-   Save Prompt / Ready Current-Profile
-   ═══════════════════════════════════════════ */
-
-.prompt-actions {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 20px;
-}
+/* ── Save Prompt / Ready ── */
+.prompt-actions { display: flex; flex-direction: column; align-items: center; gap: 20px; }
 
 .current-profile-name {
   font-family: var(--font-display);
@@ -450,20 +277,11 @@ body {
   margin-bottom: var(--space-circle-to-button);
 }
 
-/* ═══════════════════════════════════════════
-   Text Input (Name a Profile)
-   ═══════════════════════════════════════════ */
-
-#name-form {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 20px;
-}
+/* ── Text Input ── */
+#name-form { display: flex; flex-direction: column; align-items: center; gap: 20px; }
 
 .text-input {
-  width: 100%;
-  max-width: 360px;
+  width: 100%; max-width: 360px;
   font-family: var(--font-body);
   font-weight: var(--weight-regular);
   font-size: 16px;
@@ -476,26 +294,16 @@ body {
   transition: var(--transition-hover);
 }
 
+.text-input::placeholder { color: var(--text-ghost); }
+
 .text-input:focus {
   outline: none;
   border-color: var(--hanko-fill);
 }
 
-/* ═══════════════════════════════════════════
-   Responsive
-   ═══════════════════════════════════════════ */
-
+/* ── Responsive ── */
 @media (min-width: 900px) {
-  .nav {
-    padding-left: 120px;
-    padding-right: 120px;
-  }
-
-  .state-col {
-    max-width: calc((100vw - 240px) / 2);
-  }
-
-  .state-heading {
-    max-width: 700px;
-  }
+  .nav { padding-left: 120px; padding-right: 120px; }
+  .state-col { max-width: calc((100vw - 240px) / 2); }
+  .state-heading { max-width: 700px; }
 }

@@ -128,15 +128,6 @@
           cursor: pointer;
         }
         .btn-start:hover { background: #AE4D31; }
-        .btn-change {
-          font-size: 13px;
-          color: #6B6560;
-          background: none;
-          border: none;
-          padding: 0;
-          cursor: pointer;
-        }
-        .btn-change:hover { text-decoration: underline; }
         .btn-dismiss {
           font-size: 13px;
           color: #8A827A;
@@ -166,8 +157,7 @@
           <p class="title">Meeting Detected</p>
           <p class="subtitle">Monitor with Mezzo?</p>
           <div class="actions">
-            <button class="btn-start" type="button">Start</button>
-            <button class="btn-change" type="button">Change...</button>
+            <button class="btn-start" type="button">Open Mezzo</button>
             <button class="btn-dismiss" type="button">Not Now</button>
           </div>
         </div>
@@ -176,15 +166,11 @@
     `;
 
     shadow.querySelector('.btn-start').addEventListener('click', () => {
-      // Open/reuse the companion window, use the last selected profile, and
-      // begin monitoring — background.js clears the badge for us too.
-      sendMessageSafely({ type: 'OPEN_MEZZO', mode: 'start', focused: false });
-      removeBanner();
-    });
-    shadow.querySelector('.btn-change').addEventListener('click', () => {
-      // Open/reuse the companion window and show profile selection first —
-      // monitoring does not begin until the user confirms a profile there.
-      sendMessageSafely({ type: 'OPEN_MEZZO', mode: 'choose', focused: false });
+      // Open/reuse the Companion Window at its Ready state — it never
+      // auto-starts monitoring, so there's no meaningful distinction left
+      // between "start with last profile" and "let me pick a profile"
+      // (both land in the same place); background.js clears the badge too.
+      sendMessageSafely({ type: 'OPEN_MEZZO', focused: false });
       removeBanner();
     });
     const dismiss = () => {

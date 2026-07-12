@@ -22,7 +22,7 @@
     })
   </script>
 </head>
-<body data-surface="light">
+<body data-surface="dark">
 
   <nav class="nav">
     <a href="index.html" class="type-nav-wordmark">Mezzo</a>
@@ -30,15 +30,12 @@
       <a href="index.html" class="nav-link nav-link-quiet">Home</a>
       <a href="privacy.html" class="nav-link nav-link-quiet">Privacy</a>
       <span class="nav-link nav-link-active">Try Mezzo</span>
-      <div id="theme-toggle"></div>
     </div>
   </nav>
 
-  <div class="page page-fade" style="opacity: 0">
+  <div class="page page-fade" data-surface="light" style="opacity: 0">
 
-    <!-- ═══════════════════════════════════════════
-         State A: Mic permission not granted
-         ═══════════════════════════════════════════ -->
+    <!-- ── State A: Mic permission not granted ── -->
     <main id="state-a" class="state-view page-content">
       <div class="state-col">
         <h1 class="type-section-heading state-heading">Mezzo needs your microphone to listen for volume</h1>
@@ -52,11 +49,7 @@
       </div>
     </main>
 
-    <!-- ═══════════════════════════════════════════
-         State B: Calibration (landing + listening in one view)
-         Clicking "I'm ready" adds .state-listening — heading stays,
-         content area crossfades from pre → listen.
-         ═══════════════════════════════════════════ -->
+    <!-- ── State B: Calibration (landing + listening in one view) ── -->
     <main id="state-b" class="state-view page-content hidden">
       <div class="state-col">
         <h1 class="type-section-heading state-heading">Speak at the volume you'd like to&nbsp;keep</h1>
@@ -69,19 +62,13 @@
           <!-- Listening: countdown + ring visualization -->
           <div class="cal-listen-content">
             <p id="listening-heading" class="cal-countdown">Listening...6s</p>
-            <div id="ring-container" class="ring-container">
-              <img src="assets/light-bg-circle-ring-0-0.svg" class="ring-variant active" alt="" aria-hidden="true">
-              <img src="assets/light-bg-circle-ring-0-1.svg" class="ring-variant" alt="" aria-hidden="true">
-              <img src="assets/light-bg-circle-ring-0-2.svg" class="ring-variant" alt="" aria-hidden="true">
-            </div>
+            <canvas id="cal-ring-canvas" width="200" height="200" aria-hidden="true" style="display:block; width:200px; height:200px; margin:0 auto var(--space-circle-to-button);"></canvas>
           </div>
         </div>
       </div>
     </main>
 
-    <!-- ═══════════════════════════════════════════
-         State: Choose a Profile
-         ═══════════════════════════════════════════ -->
+    <!-- ── State: Choose a Profile ── -->
     <main id="state-profile-select" class="state-view page-content hidden">
       <div class="state-col">
         <h1 class="type-section-heading state-heading">Choose a Profile</h1>
@@ -111,23 +98,20 @@
       </div>
     </main>
 
-    <!-- ═══════════════════════════════════════════
-         State: Save this profile?
-         ═══════════════════════════════════════════ -->
+    <!-- ── State: Save this profile? ── -->
     <main id="state-save-prompt" class="state-view page-content hidden">
       <div class="state-col">
         <h1 class="type-section-heading state-heading">Save this profile?</h1>
         <p class="type-hero-body state-body">Save it to reuse this baseline next time without recalibrating.</p>
         <div class="prompt-actions">
-          <button id="btn-save-not-now" class="btn-outline">Not Now</button>
+          <button id="btn-save-not-now" class="btn-outline">Continue Without Saving</button>
           <button id="btn-save-profile" class="btn-primary btn-wide">Save Profile</button>
         </div>
+        <p class="type-microcopy state-micro-revoke">This calibration will be used for this session but won't be available next time.</p>
       </div>
     </main>
 
-    <!-- ═══════════════════════════════════════════
-         State: Name the profile
-         ═══════════════════════════════════════════ -->
+    <!-- ── State: Name the profile ── -->
     <main id="state-name" class="state-view page-content hidden">
       <div class="state-col">
         <h1 class="type-section-heading state-heading">Profile Name</h1>
@@ -138,15 +122,13 @@
       </div>
     </main>
 
-    <!-- ═══════════════════════════════════════════
-         State: Ready to monitor
-         ═══════════════════════════════════════════ -->
+    <!-- ── State: Ready to monitor ── -->
     <main id="state-ready" class="state-view page-content state-ready hidden">
       <div class="state-col">
         <h1 class="type-section-heading state-heading">You're All Set</h1>
         <p class="type-tag profile-section-label">Current Profile</p>
         <p id="current-profile-name" class="type-hero-body current-profile-name">Recommended</p>
-        <button id="btn-start-monitoring" class="btn-primary btn-wide">Start Monitoring</button>
+        <button id="btn-start-monitoring" class="btn-primary btn-wide">Open Mezzo</button>
         <button id="btn-change-profile" class="btn-recalibrate-link">Change Profile</button>
       </div>
       <footer class="state-footer">
@@ -155,13 +137,13 @@
       </footer>
     </main>
 
-    <!-- ═══════════════════════════════════════════
-         State: Return to PiP (only reached via ?entry=create-profile)
-         ═══════════════════════════════════════════ -->
+    <!-- ── State: Continue in Mezzo window — reached either after opening
+         the Companion from Ready, or after creating a profile via
+         ?entry=create-profile ── -->
     <main id="state-return-to-pip" class="state-view page-content state-ready hidden">
       <div class="state-col">
         <h1 class="type-section-heading state-heading">You're All Set</h1>
-        <p class="type-hero-body state-body">Head back to your Mezzo window to start monitoring with this profile.</p>
+        <p class="type-hero-body state-body">Continue in your Mezzo window to start monitoring with this profile.</p>
       </div>
       <footer class="state-footer">
         <p class="type-microcopy state-footer-text">You can close this tab now.</p>
@@ -170,10 +152,119 @@
 
   </div>
 
-  <script src="try-it.js?v=7" type="module"></script>
-  <script type="module">
-    import { mountThemeToggle } from './src/theme.js';
-    mountThemeToggle(document.getElementById('theme-toggle'));
+  <script src="try-it.js?v=9" type="module"></script>
+  <script>
+    /* Calibration ring — ambient PiP visualization (monitoring state) */
+    (function () {
+      const canvas = document.getElementById('cal-ring-canvas');
+      if (!canvas) return;
+      const dpr = window.devicePixelRatio || 1;
+      const SIZE = 200;
+      canvas.width  = SIZE * dpr;
+      canvas.height = SIZE * dpr;
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+
+      let breathPhase = 0, mp0 = 1.1, mp1 = 2.4, orbitPhase = 0, last = 0;
+      // Energy tracks from 0 (silence) to 0.22 (within range) over calibration
+      // try-it.js controls the #cal-ring-canvas-energy attribute to drive the level
+      let energy = 0, targetEnergy = 0;
+
+      function rgba(ct, a) {
+        // Idle-state base (ct=0) darkened from the original light tan —
+        // that read fine against the old dark background but is too close
+        // to the page's current light (Paper) background to stay legible.
+        // Still warms up to the same Hanko orange at ct=1.
+        var r = Math.round(120 + (196-120)*ct), g = Math.round(108 + (89-108)*ct), b = Math.round(94 + (58-94)*ct);
+        return 'rgba(' + r + ',' + g + ',' + b + ',' + a.toFixed(3) + ')';
+      }
+
+      function mapE(e, p0,v0, p1,v1, p2,v2, p3,v3, p4,v4) {
+        var pts = [p0,v0,p1,v1,p2,v2,p3,v3,p4,v4];
+        if (e <= pts[0]) return pts[1];
+        for (var i = 0; i < pts.length - 3; i += 2) {
+          if (e <= pts[i+2]) { var t=(e-pts[i])/(pts[i+2]-pts[i]); return pts[i+1]+(pts[i+3]-pts[i+1])*t; }
+        }
+        return pts[pts.length-1];
+      }
+
+      function contour(r, dpx, p0, p1) {
+        ctx.beginPath();
+        for (var j = 0; j <= 160; j++) {
+          var a = (j/160)*Math.PI*2;
+          var d = dpx*(0.48*Math.sin(2*a+p0)+0.30*Math.sin(3*a+p1)+0.14*Math.sin(4*a-p0*0.6+0.9)+0.08*Math.sin(5*a+p1*0.8+2.1));
+          var rr = Math.max(3, r+d);
+          var x = SIZE/2 + rr*Math.cos(a), y = SIZE/2 + rr*Math.sin(a);
+          j===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+        }
+        ctx.closePath();
+      }
+
+      function frame(now) {
+        requestAnimationFrame(frame);
+        var dt = Math.min((now - last)/1000, 0.05); last = now;
+
+        // Read energy from dataset if try-it.js sets it
+        var attr = parseFloat(canvas.dataset.energy);
+        if (!isNaN(attr)) targetEnergy = attr;
+        energy += (targetEnergy - energy) * (1 - Math.exp(-dt / 0.8));
+
+        breathPhase += dt * 1.70;
+        mp0 += dt * 0.32; mp1 += dt * 0.46;
+        orbitPhase += dt * mapE(energy, 0,0.18, 0.25,0.30, 0.55,0.55, 0.82,1.10, 1.0,1.40);
+
+        ctx.clearRect(0, 0, SIZE, SIZE);
+        var breath = Math.sin(breathPhase);
+        var bs = 1 + 0.048*breath;
+        var cx = SIZE/2, cy = SIZE/2;
+        var e = energy;
+
+        var ct0 = mapE(e, 0,0, 0.25,0, 0.72,0, 0.80,0.30, 1.0,1.0);
+        var ct1 = mapE(e, 0,0, 0.25,0, 0.60,0, 0.72,0.30, 1.0,1.0);
+        var ct2 = mapE(e, 0,0, 0.25,0, 0.54,0, 0.72,0.60, 1.0,1.0);
+        var ctDot = mapE(e, 0,0, 0.25,0, 0.68,0, 0.72,0.10, 1.0,1.0);
+
+        var r0 = 28*bs, r0dpx = r0*0.006;
+        var r1 = 46*bs, r1vis = mapE(e, 0,0, 0.38,0, 0.54,1.0, 1.0,1.0);
+        var r1dpx = r1*mapE(e, 0,0, 0.38,0, 0.54,0.10, 1.0,0.13)*r1vis;
+        var r2 = 66*bs, r2vis = mapE(e, 0,0, 0.62,0, 0.80,1.0, 1.0,1.0);
+        var r2dpx = r2*mapE(e, 0,0, 0.65,0, 0.82,0.095, 1.0,0.145)*r2vis;
+
+        // Active ring glow
+        var aR = r1vis>0.5&&r2vis>0.5 ? r2/bs*bs : r1vis>0.5 ? r1 : r0;
+        var gs = mapE(e, 0,0.018, 0.22,0.028, 0.54,0.050, 0.72,0.085, 1.0,0.110);
+        var aCT = r1vis>0.5&&r2vis>0.5 ? ct2 : r1vis>0.5 ? ct1 : ct0;
+        var gr = ctx.createRadialGradient(cx,cy,aR*0.7, cx,cy,aR*1.55);
+        gr.addColorStop(0,rgba(aCT,0)); gr.addColorStop(0.4,rgba(aCT,gs)); gr.addColorStop(1,rgba(aCT,0));
+        ctx.beginPath(); ctx.arc(cx,cy,aR*1.55,0,Math.PI*2); ctx.fillStyle=gr; ctx.fill();
+
+        if (r2vis>0.02) { contour(r2,r2dpx,mp0,mp1); ctx.strokeStyle=rgba(ct2,0.44*r2vis); ctx.lineWidth=2.0; ctx.stroke(); }
+        if (r1vis>0.02) { contour(r1,r1dpx,mp0+Math.PI*0.7,mp1+Math.PI*1.1); ctx.strokeStyle=rgba(ct1,0.48*r1vis); ctx.lineWidth=2.0; ctx.stroke(); }
+        contour(r0,r0dpx,mp0,mp1); ctx.strokeStyle=rgba(ct0,0.52); ctx.lineWidth=2.0; ctx.stroke();
+
+        // Orbital highlight
+        var hlV = mapE(e, 0.05,0.14, 0.22,0.70, 0.54,0.70, 0.82,0.85, 1.0,1.0);
+        if (hlV > 0.01) {
+          var aP0 = r1vis>0.5&&r2vis<0.5 ? mp0+Math.PI*0.7 : mp0;
+          var aP1 = r1vis>0.5&&r2vis<0.5 ? mp1+Math.PI*1.1 : mp1;
+          var aDpx = r1vis>0.5&&r2vis>0.5 ? r2dpx : r1vis>0.5 ? r1dpx : r0dpx;
+          var dHL = aDpx*(0.48*Math.sin(2*orbitPhase+aP0)+0.30*Math.sin(3*orbitPhase+aP1)+0.14*Math.sin(4*orbitPhase-aP0*0.6+0.9)+0.08*Math.sin(5*orbitPhase+aP1*0.8+2.1));
+          var rrHL = Math.max(3, aR+dHL);
+          var hx = cx+rrHL*Math.cos(orbitPhase), hy = cy+rrHL*Math.sin(orbitPhase);
+          var hlG = ctx.createRadialGradient(hx,hy,0,hx,hy,10);
+          hlG.addColorStop(0,rgba(aCT,0.22*hlV)); hlG.addColorStop(1,rgba(aCT,0));
+          ctx.beginPath(); ctx.arc(hx,hy,10,0,Math.PI*2); ctx.fillStyle=hlG; ctx.fill();
+          ctx.beginPath(); ctx.arc(hx,hy,2.4,0,Math.PI*2); ctx.fillStyle=rgba(aCT,0.85*hlV); ctx.fill();
+        }
+
+        // Center dot
+        ctx.shadowBlur=4+4*(0.5+0.5*breath); ctx.shadowColor=rgba(ctDot,0.30);
+        ctx.beginPath(); ctx.arc(cx,cy,2.6*bs,0,Math.PI*2);
+        ctx.fillStyle=rgba(ctDot,0.62+0.24*(0.5+0.5*breath)); ctx.fill();
+        ctx.shadowBlur=0;
+      }
+      requestAnimationFrame(frame);
+    })();
   </script>
 </body>
 </html>

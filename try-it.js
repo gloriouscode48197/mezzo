@@ -18,7 +18,7 @@
 
 import { AudioProcessor } from './src/audio.js?v=2';
 import { MezzoEngine } from './src/engine.js?v=5';
-import { pageEnter, navigateTo } from './src/page-transition.js';
+import { pageEnter } from './src/page-transition.js';
 import { trackAppOpened, trackCalibrationCompleted } from './src/analytics.js';
 import {
   RECOMMENDED_PROFILE,
@@ -36,7 +36,18 @@ import {
 const FADE_OUT_MS = 300;
 const FADE_IN_MS = 350;
 const COUNTDOWN_SECONDS = 6;
-const VARIANT_CYCLE_MS = 2500;
+
+// Maps live RMS to the calibration ring canvas's 0–1 "energy" scale (see the
+// inline visualization script in try-it.html). There's no baseline yet
+// during calibration, so this uses a fixed dB reference range rather than
+// engine.js's zone classification: silence sits near 0, a normal/moderate
+// speaking level lands around the middle, loud speech approaches 1.
+const ENERGY_DB_MIN = -50;
+const ENERGY_DB_MAX = -10;
+function rmsToEnergy(rms) {
+  const db = 20 * Math.log10(rms + 1e-10);
+  return Math.min(1, Math.max(0, (db - ENERGY_DB_MIN) / (ENERGY_DB_MAX - ENERGY_DB_MIN)));
+}
 
 // Set when opened from PiP's "+ Create New Profile..." — a genuinely new tab
 // (Document PiP doesn't survive its opener navigating, so this can never be
@@ -82,8 +93,7 @@ const btnChangeProfile = document.getElementById('btn-change-profile');
 const deniedHelp = document.getElementById('denied-help');
 
 const listeningHeading = document.getElementById('listening-heading');
-const ringContainer = document.getElementById('ring-container');
-const ringVariants = document.querySelectorAll('.ring-variant');
+const calRingCanvas = document.getElementById('cal-ring-canvas');
 
 const allStates = {
   a: stateA,
@@ -101,8 +111,6 @@ const allStates = {
 
 let rmsBuffer = [];
 let countdownInterval = null;
-let variantCycleInterval = null;
-let currentVariant = 0;
 
 // The profile just calibrated this session, pending a save/discard decision.
 let pendingCalibratedProfile = null;
@@ -210,27 +218,11 @@ function showReady() {
 }
 
 // =============================================================================
-// Ring Variant Crossfade
+// Calibration Ring Canvas
 // =============================================================================
 
-function startVariantCycle() {
-  currentVariant = 0;
-  ringVariants.forEach((v, i) => v.classList.toggle('active', i === 0));
-  ringContainer.classList.add('pulsing');
-
-  variantCycleInterval = setInterval(() => {
-    ringVariants[currentVariant].classList.remove('active');
-    currentVariant = (currentVariant + 1) % ringVariants.length;
-    ringVariants[currentVariant].classList.add('active');
-  }, VARIANT_CYCLE_MS);
-}
-
-function stopVariantCycle() {
-  if (variantCycleInterval) {
-    clearInterval(variantCycleInterval);
-    variantCycleInterval = null;
-  }
-  ringContainer.classList.remove('pulsing');
+function setCalRingEnergy(value) {
+  if (calRingCanvas) calRingCanvas.dataset.energy = String(value);
 }
 
 // =============================================================================
@@ -270,7 +262,7 @@ function resetCalibrationView() {
     clearInterval(countdownInterval);
     countdownInterval = null;
   }
-  stopVariantCycle();
+  setCalRingEnergy(0);
 }
 
 async function beginCalibrationCapture() {
@@ -286,11 +278,13 @@ async function beginCalibrationCapture() {
   }
 
   // Start ring animation
-  startVariantCycle();
+  setCalRingEnergy(0);
 
-  // Collect RMS samples
+  // Collect RMS samples, and drive the ring canvas from the live level so it
+  // reacts organically to the user's voice while they calibrate.
   audio.onLevelChange = ({ rms }) => {
     rmsBuffer.push(rms);
+    setCalRingEnergy(rmsToEnergy(rms));
   };
 
   audio.startMonitoring();
@@ -322,7 +316,7 @@ function finishCalibration() {
   audio.release();
 
   // Stop ring animation
-  stopVariantCycle();
+  setCalRingEnergy(0);
 
   // Calibrate engine with collected RMS samples
   try {
@@ -379,6 +373,26 @@ function handleNameFormSubmit(event) {
   pendingCalibratedProfile = null;
 
   isCreateProfileEntry ? returnToPip(selected) : showReady();
+}
+
+// =============================================================================
+// Open the Companion Window (from Ready)
+// =============================================================================
+
+/**
+ * A real, separate window — matching what the extension does via
+ * chrome.windows.create — not a same-tab navigation. Document PiP requires
+ * a fresh user gesture on monitoring.html itself, so the actual "Start
+ * Monitoring" click has to happen there, not here; this just opens/focuses
+ * that window and hands off. Reusing the same window name means a second
+ * click from this tab refocuses it rather than duplicating — though this
+ * can't detect a companion window the extension already opened via a
+ * different code path (no cross-context window enumeration without
+ * extension privileges).
+ */
+function handleOpenMezzoClick() {
+  window.open('monitoring.html', 'mezzo-companion', 'width=480,height=640,popup');
+  transitionToState('returnToPip');
 }
 
 // =============================================================================
@@ -458,9 +472,7 @@ btnStartCalibration?.addEventListener('click', startCalibration);
 btnSaveNotNow?.addEventListener('click', handleSaveNotNow);
 btnSaveProfile?.addEventListener('click', handleSaveProfileClick);
 nameForm?.addEventListener('submit', handleNameFormSubmit);
-btnStartMonitoring?.addEventListener('click', () => {
-  navigateTo('monitoring.html');
-});
+btnStartMonitoring?.addEventListener('click', handleOpenMezzoClick);
 btnChangeProfile?.addEventListener('click', handleChangeProfile);
 
 // Clean up on page unload

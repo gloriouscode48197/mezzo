@@ -1,11 +1,13 @@
 /**
  * Mezzo — Privacy Page Styles
- * Base layout (.page, .nav, .page-footer) inherited from calibration.css.
+ * Base layout (.page, .nav) inherited from calibration.css. Nav stays the
+ * fixed dark "always frosted" chrome used across the marketing pages,
+ * independent of this page's own (light, Unbleached) content tone.
  */
 
-/* ═══════════════════════════════════════════
-   Content Layout
-   ═══════════════════════════════════════════ */
+.page {
+  background: var(--unbleached);
+}
 
 .privacy-content {
   flex: 1;
@@ -16,52 +18,26 @@
   width: 100%;
 }
 
-.privacy-title {
-  margin-bottom: var(--space-section);
-}
+.privacy-title { margin-bottom: var(--space-section); }
 
-.privacy-section {
-  margin-bottom: var(--space-section);
-}
+.privacy-section { margin-bottom: var(--space-section); }
 
-.privacy-section .type-section-heading {
-  margin-bottom: var(--space-heading-to-content);
-}
+.privacy-section p { margin-bottom: var(--space-heading-to-content); }
 
-.privacy-section p {
-  margin-bottom: var(--space-heading-to-content);
-}
+.privacy-section p:last-child { margin-bottom: 0; }
 
-.privacy-section p:last-child {
-  margin-bottom: 0;
-}
-
-/* ═══════════════════════════════════════════
-   H2 — Privacy Section Heading (28px)
-   ═══════════════════════════════════════════ */
-
+/* ── Section headings ── */
 .type-privacy-h2 {
   font-family: var(--font-display);
   font-weight: var(--weight-light);
-  font-size: 28px;
+  font-size: 24px;
   line-height: 125%;
   letter-spacing: -0.2px;
   color: var(--text-primary);
   margin-bottom: var(--space-heading-to-content);
 }
 
-.privacy-section p {
-  margin-bottom: var(--space-heading-to-content);
-}
-
-.privacy-section p:last-child {
-  margin-bottom: 0;
-}
-
-/* ═══════════════════════════════════════════
-   Em-dash Lists
-   ═══════════════════════════════════════════ */
-
+/* ── Em-dash lists ── */
 .privacy-list {
   list-style: none;
   margin-bottom: var(--space-heading-to-content);
@@ -70,20 +46,17 @@
 .privacy-list li {
   position: relative;
   padding-left: 24px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .privacy-list li::before {
   content: '\2014';
   position: absolute;
   left: 0;
-  color: var(--text-body);
+  color: var(--text-subdued);
 }
 
-/* ═══════════════════════════════════════════
-   Scroll-triggered Reveal
-   ═══════════════════════════════════════════ */
-
+/* ── Scroll-triggered reveal ── */
 .reveal {
   opacity: 0;
   transform: translateY(var(--reveal-offset));
@@ -95,10 +68,20 @@
   transform: translateY(0);
 }
 
-/* ═══════════════════════════════════════════
-   Responsive
-   ═══════════════════════════════════════════ */
+/* ── Nav: always frosted on this page ── */
+.nav {
+  background: rgba(13, 11, 9, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.042);
+}
 
+.btn-nav {
+  font-size: 14px;
+  padding: 9px 22px;
+}
+
+/* ── Responsive ── */
 @media (min-width: 900px) {
   .privacy-content {
     max-width: calc((100vw - 240px) / 2 + 240px);

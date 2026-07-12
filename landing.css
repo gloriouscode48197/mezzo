@@ -1,5 +1,5 @@
 /**
- * Mezzo — Landing Page Styles
+ * Mezzo — Landing Page Styles (Dark Theme)
  * Uses design token custom properties exclusively for colors, fonts, spacing.
  */
 
@@ -10,11 +10,8 @@
   box-sizing: border-box;
 }
 
-.hidden {
-  display: none !important;
-}
+.hidden { display: none !important; }
 
-/* ── Base ── */
 html {
   scroll-behavior: smooth;
   overflow-y: scroll;
@@ -28,11 +25,9 @@ body {
   flex-direction: column;
 }
 
-/* ── Page container ── */
 .page {
   opacity: 0;
   transition: opacity 300ms ease;
-
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -43,17 +38,13 @@ body {
   padding-top: 76px;
 }
 
-
-.page.is-visible {
-  opacity: 1;
-}
+.page.is-visible { opacity: 1; }
 
 .hero,
-.landing-section,
-.how-it-works {
-  position: relative;
-  z-index: 2;
-}
+.use-cases,
+.how-it-works,
+.philosophy,
+.closing-cta { position: relative; z-index: 2; }
 
 /* ═══════════════════════════════════════════
    Navigation
@@ -68,28 +59,24 @@ body {
   position: sticky;
   top: 0;
   z-index: 10;
-  background: transparent;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  transition: background 0.3s ease, backdrop-filter 0.3s ease, -webkit-backdrop-filter 0.3s ease;
-}
-
-.nav-scrolled {
-  background: var(--surface-nav, rgba(240, 235, 226, 0.9));
+  background: rgba(13, 11, 9, 0.92);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border-bottom: 1px solid #D8D0C3;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.042);
 }
 
-.type-nav-wordmark {
-  text-decoration: none;
-}
+.type-nav-wordmark { text-decoration: none; }
 
 .nav-links,
 .nav-right {
   display: flex;
   align-items: center;
   gap: 28px;
+}
+
+.btn-nav {
+  font-size: 14px;
+  padding: 9px 22px;
 }
 
 .nav-link {
@@ -100,64 +87,41 @@ body {
   transition: opacity 0.2s ease;
 }
 
-.nav-link:hover {
-  opacity: 0.7;
-}
+.nav-link:hover { opacity: 0.7; }
 
-.nav-link-quiet {
-  color: var(--text-subdued);
-}
-
-.nav-link-accent {
-  color: var(--hanko-fill);
-}
+.nav-link-quiet { color: var(--text-subdued); }
 
 .nav-link-active {
   color: var(--text-default);
   cursor: default;
   padding-bottom: 3px;
-  border-bottom: 4px solid rgba(194, 92, 65, 0.5);
+  border-bottom: 3px solid rgba(196, 89, 58, 0.50);
 }
 
-.nav-link-active:hover {
-  opacity: 1;
-}
+.nav-link-active:hover { opacity: 1; }
 
 /* ═══════════════════════════════════════════
-   Background Ring Graphic
-   ═══════════════════════════════════════════ */
-
-.hero-ring {
-  position: absolute;
-  left: calc(-8vw + 10px);
-  top: -5vh;
-  width: 55vw;
-  height: auto;
-  pointer-events: none;
-  user-select: none;
-  z-index: 1;
-}
-
-/* ═══════════════════════════════════════════
-   Section 1: Hero (centered)
+   Hero
    ═══════════════════════════════════════════ */
 
 .hero {
-  position: relative;
+  background: var(--paper);
   padding: 96px 32px 72px;
 }
 
+.hero-columns {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
 .hero-content {
-  position: relative;
-  z-index: 1;
   max-width: 520px;
   margin: 0 auto;
   text-align: center;
 }
 
-.hero-content .type-hero-heading {
-  margin-bottom: var(--space-heading-to-content);
-}
+.hero-content .type-hero-heading { margin-bottom: var(--space-heading-to-content); }
 
 .hero-body {
   margin-bottom: 48px;
@@ -166,59 +130,67 @@ body {
 }
 
 .hero-how-link {
-  color: var(--text-default);
+  color: var(--text-subdued);
   text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
-/* ── Buttons with icon ── */
-.btn-with-icon {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-}
+.microcopy-cta { margin-top: 24px; }
+.hero-privacy-line { margin-top: 6px; }
 
-.btn-icon {
-  width: 14px;
-  height: 19px;
-  flex-shrink: 0;
-}
+a.btn-primary { text-decoration: none; }
 
-.microcopy-cta {
-  margin-top: 24px;
-}
-
-/* Statement line — inside hero, spaced from microcopy */
-.statement-line {
-  margin-top: 48px;
-}
-
-/* ── CTA link styled as button ── */
-a.btn-primary {
-  text-decoration: none;
-}
-
-/* ═══════════════════════════════════════════
-   Shared Landing Sections (single-column centered)
-   ═══════════════════════════════════════════ */
-
-.landing-section {
-  padding: 168px 32px 0;
+/* ── Hero visual (contained product preview, not decorative background) ── */
+.hero-visual {
+  margin-top: 64px;
   display: flex;
   justify-content: center;
 }
 
-.landing-section-last {
-  padding-bottom: 72px;
+.hero-companion-preview-wrap {
+  width: min(100%, 380px);
+  margin-inline: auto;
 }
 
-.landing-col {
+.hero-companion-card {
+  position: relative;
   width: 100%;
-  max-width: 520px;
-  text-align: center;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--radius-card);
+  border: 1px solid var(--border);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.16);
+  background: var(--surface);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px 20px 0;
 }
 
-.landing-section-heading {
-  margin-bottom: 48px;
+.hero-companion-chrome {
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  display: flex;
+  gap: 6px;
+}
+
+.hero-companion-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-ghost);
+  opacity: 0.6;
+}
+
+.hero-companion-label {
+  margin-top: 22px;
+}
+
+.hero-companion-circle-wrap {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
 }
 
 /* ── Steps ── */
@@ -235,76 +207,134 @@ a.btn-primary {
   align-items: flex-start;
   gap: 20px;
   padding: 48px 0;
-  border-top: 2px solid #F0EBE2;
+  border-top: 1px solid var(--border);
 }
 
-.step:last-child {
-  border-bottom: 2px solid #F0EBE2;
-}
+.step:last-child { border-bottom: 1px solid var(--border); }
 
-.step .type-step-number {
-  flex-shrink: 0;
-  width: 40px;
-}
-
-.step .type-step-heading {
-  margin-bottom: 4px;
-}
+.step .type-step-number { flex-shrink: 0; width: 44px; }
+.step .type-step-heading { margin-bottom: 6px; }
 
 /* ═══════════════════════════════════════════
-   Section 2: How It Works (full-bleed background + two columns)
+   How It Works
    ═══════════════════════════════════════════ */
 
 .how-it-works {
-  background: #E6DFD4;
-  padding: 96px 32px 72px;
+  background: var(--washi);
+  padding: 88px 32px 80px;
 }
 
-.how-it-works-grid {
-  display: grid;
-  grid-template-columns: 1fr;
+.how-it-works-grid { display: grid; grid-template-columns: 1fr; }
+
+.how-it-works-heading { margin-bottom: 48px; }
+
+/* ═══════════════════════════════════════════
+   Philosophy
+   ═══════════════════════════════════════════ */
+
+.philosophy {
+  background: var(--sumi);
+  padding: 96px 32px;
 }
 
-.how-it-works-card {
-  display: none;
-  width: 353px;
-  height: 404px;
-  border-radius: 16px;
-  box-shadow: 0 2px 24px rgba(0, 0, 0, 0.06);
-  overflow: hidden;
-  flex-shrink: 0;
+.philosophy-grid {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 40px;
+  max-width: 520px;
+  margin: 0 auto;
+  text-align: center;
 }
 
-.how-it-works-screenshot {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+.philosophy-copy .type-section-heading { margin-bottom: 16px; }
+
+.philosophy-visual {
+  width: min(100%, 220px);
+  aspect-ratio: 1 / 1;
+  pointer-events: none;
+  user-select: none;
+}
+
+#philosophy-ring-canvas {
   display: block;
+  width: 100% !important;
+  height: auto !important;
 }
 
-.how-it-works-heading {
-  margin-bottom: 48px;
+/* ═══════════════════════════════════════════
+   Use Cases (What Mezzo is good for / doesn't do)
+   ═══════════════════════════════════════════ */
+
+.use-cases {
+  background: var(--unbleached);
+  padding: 120px 32px 72px;
+}
+
+.use-cases-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 56px;
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+.use-cases-col {
+  text-align: left;
+}
+
+.use-cases-col .type-section-heading {
+  margin-bottom: 24px;
+}
+
+.use-cases-divider {
+  display: none;
 }
 
 /* ── Good-for list ── */
 .good-for-list {
   list-style: none;
-  display: inline-block;
-  text-align: left;
 }
 
-.good-for-list li {
-  margin-bottom: 8px;
-}
+.good-for-list li { margin-bottom: 8px; }
 
 .good-for-list li::before {
   content: '—  ';
-  color: var(--text-body);
+  color: var(--text-subdued);
 }
 
-.good-for-note {
-  margin-top: 16px;
+.good-for-note { margin-top: 16px; }
+
+/* ═══════════════════════════════════════════
+   Closing CTA / Footer
+   ═══════════════════════════════════════════ */
+
+.closing-cta {
+  background: var(--warm-grey);
+  padding: 120px 32px 0;
+  text-align: center;
 }
+
+.closing-cta-content { margin-bottom: 96px; }
+
+.closing-cta-content .type-section-heading { margin-bottom: 32px; }
+
+.closing-cta-content .microcopy-cta { margin-top: 16px; }
+
+/* --text-ghost is tuned for near-white backgrounds (Paper/Washi/Unbleached);
+   against the darker Warm Grey it drops to near-invisible, so the footer
+   wordmark uses the next tone up instead. */
+.closing-cta .type-footer-brand { color: var(--text-subdued); }
+
+.site-footer {
+  border-top: 1px solid var(--border);
+  padding: var(--space-footer);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.footer-links { display: flex; gap: 20px; }
 
 /* ═══════════════════════════════════════════
    Scroll-triggered Reveal
@@ -325,76 +355,53 @@ a.btn-primary {
    Responsive
    ═══════════════════════════════════════════ */
 
-/* Desktop: 12-column grid (120px margins, 20px gutters) */
 @media (min-width: 900px) {
-  .nav {
-    padding-left: 120px;
-    padding-right: 120px;
-  }
+  .nav { padding-left: 120px; padding-right: 120px; }
 
-  .hero {
-    padding: 96px 120px 72px;
-  }
-
-  /* Hero heading uses character-based width; body content keeps its own max-width */
-  .hero-content {
-    max-width: none;
-  }
-
-  .hero-content .type-hero-heading {
-    max-width: 20ch;
+  .hero { padding: 96px 120px 72px; }
+  .hero-columns {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 64px;
+    max-width: 1100px;
     margin-inline: auto;
   }
+  .hero-content { max-width: 480px; margin: 0; text-align: left; }
+  .hero-content .type-hero-heading { max-width: 20ch; }
+  .hero-body { margin-inline: 0; }
+  .hero-visual { margin-top: 0; flex-shrink: 0; justify-content: flex-end; }
 
-  /* 8 of 12 columns centered */
-  .landing-col {
-    max-width: calc((100vw - 240px) * 2 / 3);
-  }
-
-  /* Section headings use character-based width */
-  .landing-section-heading {
-    max-width: 40ch;
-    margin-inline: auto;
-  }
-
-  /* How It Works: two-column layout with screenshot */
-  .how-it-works {
-    padding: 96px 120px 72px;
-  }
-
+  .how-it-works { padding: 88px 120px 80px; }
   .how-it-works-grid {
-    grid-template-columns: 353px 1fr;
-    grid-template-rows: auto 1fr;
-    column-gap: 48px;
-    max-width: calc(353px + 48px + (100vw - 240px) * 5 / 12);
+    grid-template-columns: 1fr;
+    max-width: 640px;
     margin-inline: auto;
   }
 
-  .how-it-works-heading {
-    grid-column: 2;
-    grid-row: 1;
-  }
+  .philosophy { padding: 96px 120px; }
 
-  .how-it-works-card {
+  .use-cases { padding: 120px 120px 80px; }
+  .use-cases-grid {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 0;
+    max-width: 900px;
+  }
+  .use-cases-col { flex: 1; }
+  .use-cases-col:first-child { padding-right: 48px; }
+  .use-cases-col:last-child { padding-left: 48px; }
+  .use-cases-divider {
     display: block;
-    grid-column: 1;
-    grid-row: 2;
-    align-self: start;
+    width: 1px;
+    align-self: stretch;
+    background: var(--border);
   }
 
-  .how-it-works .steps {
-    grid-column: 2;
-    grid-row: 2;
-  }
-
-  .landing-section {
-    padding-left: 120px;
-    padding-right: 120px;
-  }
+  .closing-cta { padding-left: 120px; padding-right: 120px; }
+  .site-footer { padding-left: 120px; padding-right: 120px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .page {
-    transition: none;
-  }
+  .page { transition: none; }
 }
