@@ -155,9 +155,22 @@
       </footer>
     </main>
 
+    <!-- ═══════════════════════════════════════════
+         State: Return to PiP (only reached via ?entry=create-profile)
+         ═══════════════════════════════════════════ -->
+    <main id="state-return-to-pip" class="state-view page-content state-ready hidden">
+      <div class="state-col">
+        <h1 class="type-section-heading state-heading">You're All Set</h1>
+        <p class="type-hero-body state-body">Head back to your Mezzo window to start monitoring with this profile.</p>
+      </div>
+      <footer class="state-footer">
+        <p class="type-microcopy state-footer-text">You can close this tab now.</p>
+      </footer>
+    </main>
+
   </div>
 
-  <script src="try-it.js?v=6" type="module"></script>
+  <script src="try-it.js?v=7" type="module"></script>
   <script type="module">
     import { mountThemeToggle } from './src/theme.js';
     mountThemeToggle(document.getElementById('theme-toggle'));

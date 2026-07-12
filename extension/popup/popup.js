@@ -1,7 +1,9 @@
 const MEZZO_BASE_URL = 'https://mezzo-one.vercel.app';
 
 document.getElementById('btn-open-monitoring').addEventListener('click', () => {
-  chrome.runtime.sendMessage({ type: 'OPEN_MEZZO' });
+  // Explicit user click on the pinned icon's popup — always bring the
+  // companion window to the foreground.
+  chrome.runtime.sendMessage({ type: 'OPEN_MEZZO', mode: 'start', focused: true });
   window.close();
 });
 

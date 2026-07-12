@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node verify.js)",
+      "Bash(timeout 30 node verify-extension.js)",
+      "Bash(node verify-extension.js)",
+      "Bash(node -e ' *)",
+      "Bash(pkill -f \"http.server 8899\" 2>/dev/null; rm -rf /private/tmp/claude-502/-Users-gloriamaria-mezzo/c52a9c61-ebf3-4acd-9069-27f99ddfb42f/scratchpad/ext-profile*; echo done)"
+    ],
+    "additionalDirectories": [
+      "/private/tmp/claude-502/-Users-gloriamaria-mezzo/c52a9c61-ebf3-4acd-9069-27f99ddfb42f/scratchpad"
+    ]
+  }
+}

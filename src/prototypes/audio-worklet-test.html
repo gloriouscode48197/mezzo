@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Mezzo — AudioWorklet A/B Prototype (not part of the real app)</title>
+<style>
+  body { font-family: -apple-system, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 20px; background: #1a1a1a; color: #eee; }
+  h1 { font-size: 18px; }
+  .warn { background: #3a2a10; border: 1px solid #a06010; padding: 12px; border-radius: 6px; margin-bottom: 20px; }
+  .col { display: flex; gap: 24px; }
+  .panel { flex: 1; background: #252525; border-radius: 8px; padding: 16px; }
+  .panel h2 { font-size: 14px; margin: 0 0 10px; color: #ffb066; }
+  .stat { display: flex; justify-content: space-between; font-size: 13px; padding: 3px 0; font-variant-numeric: tabular-nums; }
+  .stat b { color: #fff; }
+  button { padding: 10px 20px; border-radius: 100px; border: none; background: #C4593A; color: #fff; cursor: pointer; font-size: 14px; }
+  #status { margin: 16px 0; font-size: 13px; color: #aaa; }
+  #hiddenBanner { display: none; background: #103a20; border: 1px solid #10a060; padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; font-size: 13px; }
+</style>
+</head>
+<body>
+  <h1>AudioWorklet vs. setInterval — background-throttling A/B prototype</h1>
+  <div class="warn">
+    Investigation prototype for docs/monitoring-runtime-investigation.md — standalone, not part of
+    the real Mezzo app, not linked from anywhere in the product. Runs both the current
+    <code>setInterval</code>-based sampling (mirrors src/audio.js) and the AudioWorklet-based
+    prototype at the same time, against the same mic input, so gaps caused by background-tab
+    throttling show up side by side in one real session.
+  </div>
+
+  <div id="hiddenBanner">This tab is currently hidden (backgrounded) — that's the condition being tested.</div>
+
+  <button id="start">Start</button>
+  <div id="status">Click Start, grant mic access, then switch to another tab/app for several minutes.</div>
+
+  <div class="col">
+    <div class="panel">
+      <h2>setInterval (current implementation)</h2>
+      <div class="stat"><span>Samples</span><b id="si-count">–</b></div>
+      <div class="stat"><span>Avg gap</span><b id="si-avg">–</b></div>
+      <div class="stat"><span>Max gap</span><b id="si-max">–</b></div>
+      <div class="stat"><span>Gaps &gt;200ms</span><b id="si-throttled">–</b></div>
+    </div>
+    <div class="panel">
+      <h2>AudioWorklet (prototype)</h2>
+      <div class="stat"><span>Samples</span><b id="aw-count">–</b></div>
+      <div class="stat"><span>Avg gap</span><b id="aw-avg">–</b></div>
+      <div class="stat"><span>Max gap</span><b id="aw-max">–</b></div>
+      <div class="stat"><span>Gaps &gt;200ms</span><b id="aw-throttled">–</b></div>
+    </div>
+  </div>
+
+  <p style="margin-top:20px; font-size:12px; color:#888;">
+    After your test session, open DevTools console and run:<br>
+    <code>copy(JSON.stringify(window.__abTest.export()))</code><br>
+    to get the full raw dataset (both tracks, with hidden-state per sample) on your clipboard.
+  </p>
+
+<script>
+const THROTTLE_FLAG_MS = 200;
+
+function makeTrack(label, elPrefix) {
+  const samples = [];
+  let lastT = null;
+  function mark() {
+    const t = performance.now();
+    const gap = lastT === null ? null : t - lastT;
+    lastT = t;
+    samples.push({ t, gap, hidden: document.hidden });
+    render();
+  }
+  function render() {
+    const withGap = samples.filter(s => s.gap !== null);
+    if (withGap.length === 0) return;
+    const gaps = withGap.map(s => s.gap);
+    document.getElementById(elPrefix + '-count').textContent = withGap.length;
+    document.getElementById(elPrefix + '-avg').textContent = Math.round(gaps.reduce((a,b)=>a+b,0)/gaps.length) + 'ms';
+    document.getElementById(elPrefix + '-max').textContent = Math.round(Math.max(...gaps)) + 'ms';
+    document.getElementById(elPrefix + '-throttled').textContent = gaps.filter(g => g > THROTTLE_FLAG_MS).length;
+  }
+  return { mark, samples, label };
+}
+
+const siTrack = makeTrack('setInterval', 'si');
+const awTrack = makeTrack('AudioWorklet', 'aw');
+
+window.__abTest = {
+  export() {
+    return { capturedAt: new Date().toISOString(), setInterval: siTrack.samples, audioWorklet: awTrack.samples };
+  }
+};
+
+document.addEventListener('visibilitychange', () => {
+  document.getElementById('hiddenBanner').style.display = document.hidden ? 'block' : 'none';
+});
+
+document.getElementById('start').addEventListener('click', async () => {
+  document.getElementById('status').textContent = 'Requesting microphone…';
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+  });
+
+  const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  const sourceNode = audioContext.createMediaStreamSource(stream);
+
+  // ── setInterval path (mirrors src/audio.js exactly) ──
+  const analyser = audioContext.createAnalyser();
+  analyser.fftSize = 2048;
+  analyser.smoothingTimeConstant = 0;
+  sourceNode.connect(analyser);
+  const timeDomainData = new Float32Array(analyser.fftSize);
+  setInterval(() => {
+    analyser.getFloatTimeDomainData(timeDomainData);
+    siTrack.mark();
+  }, 50);
+
+  // ── AudioWorklet path ──
+  await audioContext.audioWorklet.addModule('rms-processor.worklet.js');
+  const workletNode = new AudioWorkletNode(audioContext, 'rms-processor');
+  workletNode.port.onmessage = () => awTrack.mark();
+  sourceNode.connect(workletNode);
+
+  document.getElementById('status').textContent = 'Running — both paths sampling the same mic input. Switch tabs/apps now and leave this running for 15-20 minutes.';
+});
+</script>
+</body>
+</html>

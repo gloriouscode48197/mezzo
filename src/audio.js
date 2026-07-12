@@ -20,6 +20,11 @@ const EMA_ALPHA = 0.2;
 const SAMPLE_INTERVAL_MS = 50;
 const FFT_SIZE = 2048;
 
+// TEMPORARY — background-tab throttling investigation, see
+// docs/monitoring-runtime-investigation.md. Delete this import and its one
+// call site (in processAudioFrame) once the investigation concludes.
+import { markSample } from './_timing-debug.js';
+
 // =============================================================================
 // AudioProcessor Class
 // =============================================================================
@@ -253,6 +258,8 @@ class AudioProcessor {
 
   processAudioFrame() {
     if (!this.analyser || !this.timeDomainData) return;
+
+    markSample(); // TEMPORARY — see docs/monitoring-runtime-investigation.md
 
     const rms = this.calculateRms();
     const db = Math.max(-120, this.rmsToDb(rms));

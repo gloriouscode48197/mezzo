@@ -8,37 +8,44 @@
  *   save-prompt:    "Save this profile?" — Not Now / Save Profile
  *   name:           Name a profile before saving it
  *   ready:          Profile chosen — "You're All Set", Start Monitoring / Change Profile
+ *   return-to-pip:  Reached only via ?entry=create-profile (opened from PiP's "+ Create New
+ *                   Profile...") — hands the new profile back to the PiP-owning tab instead of
+ *                   offering to start monitoring from here.
  *
- * Two storage keys:
- *   - mezzoProfiles (localStorage, persists across tabs) — saved custom profiles.
- *     Only ever written when the user explicitly clicks "Save Profile".
- *   - mezzoSelectedProfile (sessionStorage, cleared on tab close) — whichever profile is
- *     active this session. A fresh tab always starts at Choose Profile ("remember last used"
- *     is out of scope for this release); within a tab, this is what lets Start Monitoring →
- *     Stop Monitoring loop back to Ready without re-choosing.
+ * Profile storage lives in src/profiles.js (shared with monitoring.js) — see that file for the
+ * three storage layers (saved-profile library, this-tab selection, cross-tab last-used).
  */
 
-import { AudioProcessor } from './src/audio.js';
+import { AudioProcessor } from './src/audio.js?v=2';
 import { MezzoEngine } from './src/engine.js?v=5';
 import { pageEnter, navigateTo } from './src/page-transition.js';
 import { trackAppOpened, trackCalibrationCompleted } from './src/analytics.js';
+import {
+  RECOMMENDED_PROFILE,
+  getSavedProfiles,
+  saveSavedProfiles,
+  getSelectedProfile,
+  setSelectedProfile,
+  setLastUsedProfile,
+} from './src/profiles.js';
 
 // =============================================================================
 // Constants
 // =============================================================================
 
-const PROFILES_STORAGE_KEY = 'mezzoProfiles';
-const SELECTED_PROFILE_KEY = 'mezzoSelectedProfile';
 const FADE_OUT_MS = 300;
 const FADE_IN_MS = 350;
 const COUNTDOWN_SECONDS = 6;
 const VARIANT_CYCLE_MS = 2500;
 
-// Baseline for the built-in Recommended profile — no calibration exists to derive
-// this from, so it's a first-pass tunable default (roughly the midpoint of real
-// calibrated baselines observed during testing, -34dB to -19dB).
-const RECOMMENDED_SPEAKING_DB = -26;
-const RECOMMENDED_PROFILE = { name: 'Recommended', speakingDb: RECOMMENDED_SPEAKING_DB, savedProfileId: null };
+// Set when opened from PiP's "+ Create New Profile..." — a genuinely new tab
+// (Document PiP doesn't survive its opener navigating, so this can never be
+// the same tab that owns an open PiP window). Skips straight to calibration
+// and, on completion, hands the profile back via BroadcastChannel instead of
+// showing the normal Ready screen — starting monitoring from *this* tab was
+// never the intent.
+const isCreateProfileEntry = new URLSearchParams(window.location.search).get('entry') === 'create-profile';
+const profileSyncChannel = new BroadcastChannel('mezzo-profile-sync');
 
 // =============================================================================
 // Instances
@@ -57,6 +64,7 @@ const stateB = document.getElementById('state-b');
 const stateSavePrompt = document.getElementById('state-save-prompt');
 const stateName = document.getElementById('state-name');
 const stateReady = document.getElementById('state-ready');
+const stateReturnToPip = document.getElementById('state-return-to-pip');
 
 const btnEnableMic = document.getElementById('btn-enable-mic');
 const btnChooseRecommended = document.getElementById('btn-choose-recommended');
@@ -84,6 +92,7 @@ const allStates = {
   savePrompt: stateSavePrompt,
   name: stateName,
   ready: stateReady,
+  returnToPip: stateReturnToPip,
 };
 
 // =============================================================================
@@ -97,47 +106,6 @@ let currentVariant = 0;
 
 // The profile just calibrated this session, pending a save/discard decision.
 let pendingCalibratedProfile = null;
-
-// =============================================================================
-// Profile Storage
-// =============================================================================
-
-function getSavedProfiles() {
-  try {
-    const stored = localStorage.getItem(PROFILES_STORAGE_KEY);
-    const parsed = stored ? JSON.parse(stored) : [];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveSavedProfiles(profiles) {
-  try {
-    localStorage.setItem(PROFILES_STORAGE_KEY, JSON.stringify(profiles));
-  } catch (e) {
-    console.error('[TryIt] Failed to persist saved profiles:', e);
-  }
-}
-
-function getSelectedProfile() {
-  try {
-    const stored = sessionStorage.getItem(SELECTED_PROFILE_KEY);
-    if (!stored) return null;
-    const parsed = JSON.parse(stored);
-    return parsed && typeof parsed.speakingDb === 'number' ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
-function setSelectedProfile(profile) {
-  try {
-    sessionStorage.setItem(SELECTED_PROFILE_KEY, JSON.stringify(profile));
-  } catch (e) {
-    console.error('[TryIt] Failed to select profile:', e);
-  }
-}
 
 // =============================================================================
 // View Transitions (opacity-only fade, no translateY)
@@ -384,8 +352,9 @@ function finishCalibration() {
 // =============================================================================
 
 function handleSaveNotNow() {
+  const profile = getSelectedProfile(); // set by finishCalibration() just before this prompt
   pendingCalibratedProfile = null;
-  showReady();
+  isCreateProfileEntry ? returnToPip(profile) : showReady();
 }
 
 function handleSaveProfileClick() {
@@ -405,10 +374,26 @@ function handleNameFormSubmit(event) {
   saved.push(newProfile);
   saveSavedProfiles(saved);
 
-  setSelectedProfile({ name, speakingDb: newProfile.speakingDb, savedProfileId: id });
+  const selected = { name, speakingDb: newProfile.speakingDb, savedProfileId: id };
+  setSelectedProfile(selected);
   pendingCalibratedProfile = null;
 
-  showReady();
+  isCreateProfileEntry ? returnToPip(selected) : showReady();
+}
+
+// =============================================================================
+// Return to PiP (only reached via ?entry=create-profile)
+// =============================================================================
+
+/**
+ * Hand the freshly-created profile back to whichever tab owns the open PiP
+ * window, via BroadcastChannel — this tab never navigates that one directly
+ * (Document PiP doesn't survive its opener navigating away), so cross-tab
+ * messaging is the only way to close the loop.
+ */
+function returnToPip(profile) {
+  profileSyncChannel.postMessage({ type: 'PROFILE_READY', profile });
+  transitionToState('returnToPip');
 }
 
 // =============================================================================
@@ -425,11 +410,17 @@ function handleChangeProfile() {
 
 /**
  * After mic permission is confirmed granted, decide where to land:
- * resume Ready if a profile is already selected this session (e.g. returning
- * from a stopped monitoring session), otherwise Choose a Profile.
+ *   - ?entry=create-profile (opened from PiP) → straight to calibration,
+ *     skipping Choose a Profile entirely — the user already made that choice
+ *     by clicking "+ Create New Profile..." in PiP.
+ *   - a profile already selected this session (e.g. returning from a stopped
+ *     monitoring session) → resume Ready.
+ *   - otherwise → Choose a Profile.
  */
 function goToInitialScreen() {
-  if (getSelectedProfile()) {
+  if (isCreateProfileEntry) {
+    goToCalibrationLanding();
+  } else if (getSelectedProfile()) {
     showReady();
   } else {
     renderProfileSelect();

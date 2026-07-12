@@ -60,21 +60,45 @@
   </div>
 
   <!-- ═══════════════════════════════════════════
-       View 2: PiP Running (monitoring in mini window)
+       View 2: Ready (profile selection before starting)
+       ═══════════════════════════════════════════ -->
+  <div id="view-ready" class="page hidden">
+    <main class="mon-card-wrapper">
+      <div class="mon-card">
+        <h1 class="mon-heading">Ready</h1>
+        <div class="pip-profile-selector-wrap">
+          <button id="ready-profile-selector" type="button" class="pip-profile-selector">
+            <span id="ready-profile-name">Recommended</span>
+            <span aria-hidden="true">▾</span>
+          </button>
+          <div id="ready-profile-dropdown" class="pip-profile-dropdown hidden"></div>
+        </div>
+        <button id="btn-ready-start" class="btn-primary btn-wide">Start Monitoring</button>
+        <p class="type-microcopy mon-micro">Nothing is recorded or saved.</p>
+      </div>
+    </main>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       View 3: Control Room (companion window while PiP is running)
        ═══════════════════════════════════════════ -->
   <div id="view-pip-running" class="page hidden">
     <main class="mon-content">
       <img src="assets/pip-icon.svg" class="pip-running-icon" alt="" aria-hidden="true">
-      <h1 class="type-section-heading pip-heading">Running in a mini window.</h1>
-      <p class="type-body pip-body"><span class="mon-status-dot"></span>Monitoring is active. You can close this tab or bring it back here.</p>
-      <button id="btn-return" class="btn-primary btn-wide">Return to this window</button>
-      <p class="type-microcopy pip-micro">This will close the pop-out</p>
+      <h1 class="type-section-heading pip-heading">Monitoring is active</h1>
+      <p class="type-body pip-profile-line">Profile: <span id="pip-running-profile-name">Recommended</span></p>
+      <p class="type-body pip-body"><span class="mon-status-dot"></span>Picture-in-Picture is open.</p>
+      <div class="pip-running-actions">
+        <button id="btn-return-to-pip" class="btn-primary btn-wide">Return to PiP</button>
+        <button id="btn-end-monitoring" class="btn-outline btn-wide">End Monitoring</button>
+      </div>
+      <p class="type-microcopy pip-micro">You can minimize this window. Keep it open while using Picture-in-Picture.</p>
     </main>
   </div>
 
   </div><!-- .page-fade -->
 
-  <script src="monitoring.js?v=7" type="module"></script>
+  <script src="monitoring.js?v=9" type="module"></script>
   <script type="module">
     import { mountThemeToggle } from './src/theme.js';
     mountThemeToggle(document.getElementById('theme-toggle'));
