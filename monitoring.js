@@ -2,9 +2,9 @@
  * Mezzo — Companion Window Controller
  *
  * Uses existing AudioProcessor for mic capture and RMS sampling,
- * MezzoEngine for volume-zone classification (0-3), and MezzoVoiceCircle
- * for the voice visualization (gray -> orange tint + organic ring drift,
- * no background change, no blinking).
+ * MezzoEngine for volume-zone classification (0-3), and MezzoWaveVisualizer
+ * for the voice visualization (canvas-drawn organic contour + propagating
+ * wave ripples, gray -> orange tint, no background change, no blinking).
  *
  * Every entry path — a tab navigation from try-it.html, a window.open()
  * popup, or the extension's chrome.windows.create popup — loads this exact
@@ -45,7 +45,7 @@
 
 import { AudioProcessor } from './src/audio.js?v=2';
 import { MezzoEngine } from './src/engine.js?v=5';
-import { MezzoVoiceCircle } from './src/voice-circle.js?v=4';
+import { MezzoWaveVisualizer } from './src/wave-visualizer.js';
 import { trackMonitoringStarted, trackMonitoringSession } from './src/analytics.js';
 import { pageEnter, navigateTo, transitionView } from './src/page-transition.js';
 // TEMPORARY — background-tab throttling investigation, see
@@ -65,8 +65,8 @@ import {
 // Constants
 // =============================================================================
 
-const PIP_WIDTH = 1;
-const PIP_HEIGHT = 1;
+const PIP_WIDTH = 345;
+const PIP_HEIGHT = 360;
 
 // Zone 3 is "Outside Range" — there's no higher volume tier.
 const OUTSIDE_ZONE = 3;
@@ -234,13 +234,14 @@ function clearSustained() {
 }
 
 // =============================================================================
-// Heading Text (Quiet / Within Range / Outside Range / Ready)
+// Heading Text (Quiet / Within Range / Approaching Range / Outside Range / Ready)
 // =============================================================================
 
 function zoneLabel(zone) {
   if (zone === 0) return 'Quiet';
-  if (zone === OUTSIDE_ZONE) return 'Outside Range';
-  return 'Within Range';
+  if (zone === 1) return 'Within Range';
+  if (zone === 2) return 'Approaching Range';
+  return 'Outside Range'; // zone === OUTSIDE_ZONE
 }
 
 function updateHeading(zone) {
@@ -372,7 +373,7 @@ async function handleStartMonitoringClick() {
     const ok = await beginMonitoringSession(profile);
     if (!ok) return; // stay on Ready
 
-    mainCircle = new MezzoVoiceCircle(circleContainer, { assetPath: 'assets' });
+    mainCircle = new MezzoWaveVisualizer(circleContainer);
     activeCircle = mainCircle;
     sessionUsedPip = false;
     showView('monitoring');
@@ -404,7 +405,7 @@ async function resumeMonitoringFromPipReady() {
   if (!ok) return; // stay in Ready mode; nothing else to clean up since nothing started
 
   if (!pipCircle && pipCircleWrapperEl) {
-    pipCircle = new MezzoVoiceCircle(pipCircleWrapperEl, { assetPath: baseUrl + 'assets' });
+    pipCircle = new MezzoWaveVisualizer(pipCircleWrapperEl);
   }
   activeCircle = pipCircle;
   sessionUsedPip = true;
@@ -520,8 +521,6 @@ async function openPiP() {
       background: var(--surface);
       overflow: hidden;
     }
-    .mezzo-circle { background: transparent !important; }
-
     /* ── Layout shell ── */
     .pip-layout {
       width: 100%;
@@ -531,18 +530,46 @@ async function openPiP() {
       align-items: center;
     }
 
-    /* ── Elements hidden in compact mode ── */
-    .pip-heading {
+    /* ── Header block (wordmark + status row) — hidden in compact mode ── */
+    .pip-header-block {
       display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      padding: 28px 20px 0;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .pip-wordmark {
       font-family: var(--font-display);
       font-weight: var(--weight-light);
-      font-size: 24px;
-      line-height: 115%;
-      letter-spacing: -0.2px;
+      font-size: 14px;
       color: var(--text-primary);
-      text-align: center;
-      margin: 0;
-      padding: 32px 20px 0;
+      letter-spacing: 0.04em;
+    }
+    .mon-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .mon-status-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--hanko-fill);
+      flex-shrink: 0;
+      animation: mezzo-pulse 3.3s ease-in-out infinite;
+    }
+    @keyframes mezzo-pulse {
+      0%, 100% { opacity: 0.26; transform: scale(1); }
+      50%       { opacity: 0.54; transform: scale(1.22); }
+    }
+    .mon-heading {
+      font-family: var(--font-display);
+      font-weight: var(--weight-light);
+      font-size: 15px;
+      color: var(--text-subdued);
+      letter-spacing: 0.04em;
     }
     .pip-controls, .pip-ready-panel {
       display: none;
@@ -637,26 +664,17 @@ async function openPiP() {
     }
     .pip-switch-actions { display: flex; gap: 12px; margin-top: 8px; }
 
-    /* ── Circle wrapper ── */
+    /* ── Circle wrapper — the new visualizer sizes itself to this via
+       ResizeObserver, so no ring-specific sizing rules are needed here. ── */
     .pip-circle-wrapper {
       flex: 1;
       width: 100%;
       overflow: hidden;
     }
 
-    /* ── Compact mode: circle fills the window ── */
-    .mezzo-circle-stage {
-      width: 100cqmin !important;
-      height: 100cqmin !important;
-    }
-    .mezzo-ring-layer:nth-child(1) { width: calc(100% - 20px) !important; height: calc(100% - 20px) !important; }
-    .mezzo-ring-layer:nth-child(2) { width: 140% !important; height: 140% !important; }
-    .mezzo-ring-layer:nth-child(3) { width: 175% !important; height: 175% !important; }
-    .mezzo-ring-layer:nth-child(4) { width: 210% !important; height: 210% !important; }
-
     /* ── Expanded mode: card-like layout ── */
     @media (min-width: 300px) and (min-height: 350px) {
-      .pip-heading { display: block; }
+      .pip-header-block { display: flex; }
       .pip-profile-selector { display: flex; }
       .pip-controls, .pip-ready-panel { display: flex; }
       .pip-circle-wrapper {
@@ -666,18 +684,6 @@ async function openPiP() {
         justify-content: center;
         overflow: visible;
       }
-      .mezzo-circle {
-        width: 280px !important;
-        height: 280px !important;
-      }
-      .mezzo-circle-stage {
-        width: min(var(--circle-container), 90cqmin) !important;
-        height: min(var(--circle-container), 90cqmin) !important;
-      }
-      .mezzo-ring-layer:nth-child(1) { width: 32.14% !important; height: 32.14% !important; }
-      .mezzo-ring-layer:nth-child(2) { width: 57.14% !important; height: 57.14% !important; }
-      .mezzo-ring-layer:nth-child(3) { width: 85.71% !important; height: 85.71% !important; }
-      .mezzo-ring-layer:nth-child(4) { width: 100% !important; height: 100% !important; }
     }
   `;
   pipDoc.head.appendChild(style);
@@ -687,16 +693,33 @@ async function openPiP() {
   // data-surface automatically and needs this set directly.
   pipDoc.body.setAttribute('data-surface', 'dark');
 
-  // ── Build PiP layout: heading + circle + monitoring controls + ready panel ──
+  // ── Build PiP layout: header block + circle + monitoring controls + ready panel ──
   const layout = pipDoc.createElement('div');
   layout.className = 'pip-layout';
   layout.style.position = 'relative'; // anchors the switch-confirm overlay
 
-  const pipH = pipDoc.createElement('h1');
-  pipH.className = 'pip-heading';
+  const headerBlock = pipDoc.createElement('div');
+  headerBlock.className = 'pip-header-block';
+
+  const wordmark = pipDoc.createElement('span');
+  wordmark.className = 'pip-wordmark';
+  wordmark.textContent = 'Mezzo';
+  headerBlock.appendChild(wordmark);
+
+  const statusRow = pipDoc.createElement('div');
+  statusRow.className = 'mon-status';
+  const statusDot = pipDoc.createElement('div');
+  statusDot.className = 'mon-status-dot';
+  statusRow.appendChild(statusDot);
+
+  const pipH = pipDoc.createElement('span');
+  pipH.className = 'mon-heading';
   pipH.textContent = zoneLabel(currentZone);
-  layout.appendChild(pipH);
+  statusRow.appendChild(pipH);
   pipHeading = pipH;
+
+  headerBlock.appendChild(statusRow);
+  layout.appendChild(headerBlock);
 
   // ── Profile selector — persistent across both modes (per PRD, switching
   //    profiles is reachable *while monitoring* too, just gated behind the
@@ -807,8 +830,8 @@ async function openPiP() {
     mainCircle = null;
   }
 
-  // ── Create PiP circle (absolute URLs for about:blank context) ──
-  pipCircle = new MezzoVoiceCircle(wrapper, { assetPath: baseUrl + 'assets' });
+  // ── Create PiP visualizer ──
+  pipCircle = new MezzoWaveVisualizer(wrapper);
   activeCircle = pipCircle;
 
   // Immediately sync PiP circle to current state
@@ -1150,8 +1173,8 @@ function startDemoMode() {
   engine.startMonitoring();
   engine.graceRemainingMs = 0; // skip grace period so zone changes trigger immediately
 
-  // Create voice circle on the card (same as real mode)
-  mainCircle = new MezzoVoiceCircle(circleContainer, { assetPath: 'assets' });
+  // Create visualizer on the card (same as real mode)
+  mainCircle = new MezzoWaveVisualizer(circleContainer);
   activeCircle = mainCircle;
 
   const CYCLE_MS = 12000;
@@ -1169,7 +1192,7 @@ function startDemoMode() {
       // 2-4s: zone 1 — Within Range (target)
       targetRMS = baseline * 1.0;
     } else if (t < 6000) {
-      // 4-6s: zone 2 — Within Range (acceptable)
+      // 4-6s: zone 2 — Approaching Range
       targetRMS = baseline * 1.5;
     } else if (t < 10000) {
       // 6-10s: zone 3 — Outside Range. Orange + subtle drift begin

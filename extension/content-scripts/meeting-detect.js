@@ -157,7 +157,7 @@
           <p class="title">Meeting Detected</p>
           <p class="subtitle">Monitor with Mezzo?</p>
           <div class="actions">
-            <button class="btn-start" type="button">Open Mezzo</button>
+            <button class="btn-start" type="button">Open Companion</button>
             <button class="btn-dismiss" type="button">Not Now</button>
           </div>
         </div>

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mezzo — Monitoring</title>
+  <title>Mezzo — Companion</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;400&family=Sora:wght@300;400;500&display=swap" rel="stylesheet">
@@ -54,7 +54,7 @@
       <div class="mon-controls">
         <button id="btn-ready-start" class="btn-primary btn-wide">Start Monitoring</button>
         <p class="type-microcopy mon-micro">Nothing is recorded or saved.</p>
-        <p id="ready-unsupported-note" class="type-microcopy mon-micro hidden">Your browser doesn't support the Floating Companion — monitoring will show in this window instead.</p>
+        <p id="ready-unsupported-note" class="type-microcopy mon-micro hidden">Your browser doesn't support the Floating Companion — monitoring will show in the Companion instead.</p>
         <div id="ready-retry" class="mon-pip-cta hidden">
           <p class="type-microcopy mon-pip-hint">Your browser needs one more click to open the Floating Companion.</p>
           <button id="btn-ready-retry" class="btn-primary btn-wide">Open Floating Companion</button>
@@ -78,7 +78,7 @@
         <button id="btn-return-to-pip" class="btn-primary btn-wide">Show Floating Companion</button>
         <button id="btn-end-monitoring" class="btn-outline btn-wide">End Monitoring</button>
       </div>
-      <p class="type-microcopy pip-micro">Keep this window open while using the Floating Companion. Closing it will end monitoring.</p>
+      <p class="type-microcopy pip-micro">Keep the Companion open while using the Floating Companion. Closing it will end monitoring.</p>
     </main>
   </div>
 
@@ -98,7 +98,7 @@
         <span id="mon-heading" class="mon-heading">Monitoring</span>
       </div>
 
-      <!-- Canvas visualization — voice-circle.js targets #circle-container -->
+      <!-- Canvas visualization — wave-visualizer.js targets #circle-container -->
       <div class="mon-canvas-wrap">
         <div id="circle-container" class="mon-circle-container"></div>
       </div>
@@ -107,7 +107,7 @@
       <div class="mon-controls">
         <button id="btn-stop" class="btn-primary btn-wide">Stop Monitoring</button>
         <p class="type-microcopy mon-micro">Nothing is recorded or saved.</p>
-        <p class="type-microcopy mon-micro">Monitoring stops when you close this window.</p>
+        <p class="type-microcopy mon-micro">Monitoring stops when you close the Companion.</p>
       </div>
 
     </main>

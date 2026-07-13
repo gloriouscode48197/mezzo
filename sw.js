@@ -3,7 +3,7 @@
  * Enables offline support and PWA installation
  */
 
-const CACHE_NAME = 'mezzo-v5';
+const CACHE_NAME = 'mezzo-v6';
 const ASSETS = [
   '/',
   '/index.html',
@@ -22,7 +22,7 @@ const ASSETS = [
   '/src/audio.js',
   '/src/engine.js',
   '/src/analytics.js',
-  '/src/voice-circle.js',
+  '/src/wave-visualizer.js',
   '/src/page-transition.js',
   '/manifest.webmanifest'
 ];

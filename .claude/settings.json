@@ -17,7 +17,11 @@
       "Bash(node verify-hero.js)",
       "Bash(node crop-cta.js)",
       "Bash(git commit -m ' *)",
-      "Bash(gh auth *)"
+      "Bash(gh auth *)",
+      "Bash(node verify-pip.js)",
+      "Bash(node verify-pip2.js)",
+      "Bash(node verify-pip3.js)",
+      "Bash(sed -i '' 's/width: 1000, height: 800/width: 600, height: 500/' verify-pip3.js)"
     ],
     "additionalDirectories": [
       "/private/tmp/claude-502/-Users-gloriamaria-mezzo/c52a9c61-ebf3-4acd-9069-27f99ddfb42f/scratchpad"

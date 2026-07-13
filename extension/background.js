@@ -55,8 +55,7 @@ chrome.runtime.onMessage.addListener((message, sender) => {
   if (message?.type === 'MEETING_ACTIVE') {
     setBadge(sender?.tab?.id, message.active);
   } else if (message?.type === 'OPEN_MEZZO') {
-    // Used by the meeting banner's "Open Mezzo" button and the popup's
-    // "Open Monitoring" button.
+    // Used by the meeting banner's and the popup's "Open Companion" button.
     openMezzo({
       focused: message.focused,
       senderTabId: sender?.tab?.id ?? null,

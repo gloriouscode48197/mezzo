@@ -1,18 +1,19 @@
 /**
  * Hero Companion Preview — a live, working instance of the Floating
- * Companion shown on the homepage hero. Reuses MezzoVoiceCircle exactly as
- * monitoring.js's real Floating Companion does; the only difference is that
- * zone numbers are hand-fed on a timer here instead of coming from real
+ * Companion shown on the homepage hero. Reuses MezzoWaveVisualizer exactly
+ * as monitoring.js's real Floating Companion does; the only difference is
+ * that zone numbers are hand-fed on a timer here instead of coming from real
  * audio, the same technique monitoring.js's own startDemoMode() already
- * uses for the same reason (MezzoVoiceCircle is a pure renderer and never
+ * uses for the same reason (MezzoWaveVisualizer is a pure renderer and never
  * reads raw audio itself).
  *
  * Cycles through the product's real states — Quiet / Within Range /
- * Outside Range, using the same strings monitoring.js's zoneLabel()
- * returns — so this never shows a state that doesn't exist in the product.
+ * Approaching Range / Outside Range, using the same strings monitoring.js's
+ * zoneLabel() returns — so this never shows a state that doesn't exist in
+ * the product.
  */
 
-import { MezzoVoiceCircle } from './voice-circle.js';
+import { MezzoWaveVisualizer } from './wave-visualizer.js';
 
 const CYCLE = [
   { zone: 1, holdMs: 3200 },
@@ -26,8 +27,9 @@ const SUSTAINED_DELAY_MS = 1000;
 
 function zoneLabel(zone) {
   if (zone === 0) return 'Quiet';
-  if (zone === 3) return 'Outside Range';
-  return 'Within Range';
+  if (zone === 1) return 'Within Range';
+  if (zone === 2) return 'Approaching Range';
+  return 'Outside Range';
 }
 
 export function initHeroCompanionPreview(container) {
@@ -56,7 +58,7 @@ export function initHeroCompanionPreview(container) {
   container.appendChild(heading);
   container.appendChild(circleWrap);
 
-  const circle = new MezzoVoiceCircle(circleWrap, { assetPath: 'assets' });
+  const circle = new MezzoWaveVisualizer(circleWrap);
 
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
