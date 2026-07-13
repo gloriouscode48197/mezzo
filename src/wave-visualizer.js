@@ -20,6 +20,18 @@
 
 const ZONE_TARGETS = [0, 0.22, 0.54, 0.82];
 
+// The canvas is deliberately position:absolute inside a position:relative
+// wrapper, not a normal-flow block sized by width:100%/height:100%. A
+// canvas's `width`/`height` HTML attributes (its raster resolution, set
+// below in _resizeCanvas) are its intrinsic size — left in normal flow,
+// that intrinsic size can leak into an ancestor's flex/aspect-ratio sizing
+// (confirmed: inside .hero-companion-card's aspect-ratio:1/1 + flex:1
+// chain). Since _resizeCanvas sets the attributes FROM the observed
+// container size, that leak becomes a real feedback loop — each
+// ResizeObserver firing feeds a new size back into the container, which
+// feeds back into the observer, growing without bound until it blows past
+// Chromium's internal layout size cap. Taking the canvas out of flow with
+// position:absolute removes the leak path entirely, independent of DPR.
 const COMPONENT_CSS = `
 .mezzo-wave {
   width: 100%;
@@ -28,9 +40,12 @@ const COMPONENT_CSS = `
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  position: relative;
 }
 .mezzo-wave-canvas {
   display: block;
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
 }
@@ -138,7 +153,14 @@ export class MezzoWaveVisualizer {
   }
 
   _resizeCanvas() {
-    const dpr = window.devicePixelRatio || 1;
+    // Capped at 1, not window.devicePixelRatio — a second, independent
+    // HiDPI issue from the one addressed by position:absolute above: Chrome
+    // has a confirmed compositor bug where a canvas with a large real
+    // retina backing store mis-paints/shifts unrelated content elsewhere on
+    // the page at 2x+ (same root cause already worked around in
+    // src/hero-ring.js). This animation is soft strokes and glow — it
+    // doesn't need retina sharpness, so this is a safe trade.
+    const dpr = Math.min(window.devicePixelRatio || 1, 1);
     const w = this.el.offsetWidth || 240;
     const h = this.el.offsetHeight || 220;
     this.canvas.width = w * dpr;

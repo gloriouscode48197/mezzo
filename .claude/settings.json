@@ -21,7 +21,15 @@
       "Bash(node verify-pip.js)",
       "Bash(node verify-pip2.js)",
       "Bash(node verify-pip3.js)",
-      "Bash(sed -i '' 's/width: 1000, height: 800/width: 600, height: 500/' verify-pip3.js)"
+      "Bash(sed -i '' 's/width: 1000, height: 800/width: 600, height: 500/' verify-pip3.js)",
+      "Bash(curl -s https://mezzo-one.vercel.app/index.html)",
+      "Bash(sed -i '' \"s|https://mezzo-one.vercel.app|https://mezzo-git-v2-glorias-projects-91bcc33b.vercel.app|\" repro-wide.js)",
+      "Bash(node repro-wide.js)",
+      "Bash(curl -s https://mezzo-git-v2-glorias-projects-91bcc33b.vercel.app/index.html)",
+      "Bash(curl -sI https://mezzo-git-v2-glorias-projects-91bcc33b.vercel.app/index.html)",
+      "Bash(sed -i '' \"s|https://mezzo-git-v2-glorias-projects-91bcc33b.vercel.app|http://localhost:8899|\" repro-wide.js)",
+      "Bash(node diag.js)",
+      "Bash(node verify-demo2.js)"
     ],
     "additionalDirectories": [
       "/private/tmp/claude-502/-Users-gloriamaria-mezzo/c52a9c61-ebf3-4acd-9069-27f99ddfb42f/scratchpad"
