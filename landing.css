@@ -224,7 +224,12 @@ a.btn-primary { text-decoration: none; }
 .good-for-note { margin-bottom: 0; }
 
 /* Footer is now shared, canonical CSS — see design-tokens/mezzo-tokens.css.
-   Do not redefine .site-footer here. */
+   Do not redefine .site-footer's structure here. Background is the one
+   intentional exception: the homepage's footer follows directly after the
+   Washi editorial section, so it keeps matching Washi here rather than the
+   shared rule's default (--surface, which privacy/try-it use since their
+   footer sits directly after Paper-background content). */
+.site-footer { background: var(--washi); }
 
 /* ═══════════════════════════════════════════
    Scroll-triggered Reveal

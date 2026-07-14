@@ -276,7 +276,7 @@
    ═══════════════════════════════════════════ */
 
 .site-footer {
-  background: var(--washi);
+  background: var(--surface);
   border-top: 1px solid var(--border);
   padding: var(--space-footer);
   display: flex;

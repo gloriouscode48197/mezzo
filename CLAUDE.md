@@ -24,6 +24,8 @@ Feature-specific requirements belong in PRDs.
 
 Technical discoveries belong in `discoveries/`.
 
+This document defines the durable product philosophy, terminology, architecture, and decision principles for Mezzo. It is intended to preserve the product's mental model across implementation, documentation, and future development. When implementation and this document disagree, first determine whether the product has intentionally evolved. If not, implementation should be brought back into alignment with this constitution.
+
 ---
 
 # Product Vision
@@ -339,10 +341,29 @@ The Mezzo Companion owns:
 * peripheral feedback
 * Start Monitoring / Stop Monitoring
 * its own window state — Close Companion closes only the Companion
+* its own layout mode — Expanded / Compact (see below)
 
 The Companion never contains an End Session action — ending the overall session is Mezzo's responsibility, not the Companion's.
 
-From the user's perspective there is only one Companion.
+### Ready and Monitoring
+
+The Companion has two states:
+
+* **Ready** — preparation. No visualization. Users review the selected profile, choose a different existing one, or start monitoring. Always uses the Expanded layout.
+* **Monitoring** — ambient awareness. Shows the live visualization, the current monitoring state, and the selected profile as read-only text. Profile selection is locked.
+
+Preparation and monitoring are intentionally different experiences — Ready and Monitoring should never be built as one screen with elements toggled.
+
+### Expanded and Compact
+
+While Monitoring, the Companion also has a layout mode:
+
+* **Expanded** (400×500) — the default; the only layout available while Ready.
+* **Compact** (220×220) — an intentional peripheral-awareness mode, not a responsive fallback for small windows. It shows only the visualization and an Expand control. It deliberately omits the wordmark, monitoring status text, profile information, and Stop Monitoring — closing the native window is the canonical way to stop monitoring from Compact.
+
+Session state, Companion state (open/closed), monitoring state (active/inactive), and layout mode (Expanded/Compact) are four separate concerns and must not be conflated or inferred from one another — see Single Source of Truth below.
+
+From the user's perspective there is only one Companion, with no visible distinction between these internal states beyond what it shows on screen.
 
 Do not introduce additional user-facing concepts such as:
 
@@ -350,8 +371,21 @@ Do not introduce additional user-facing concepts such as:
 * Floating Companion
 * Control Room
 * Control Page
+* Bring Companion to Front
+* Pop Out
 
 Those names create unnecessary mental models.
+
+---
+
+## Profiles
+
+Profile responsibilities are intentionally divided:
+
+* **Mezzo** creates profiles, runs calibration, and manages the saved-profile library.
+* **The Companion** selects an existing profile and monitors using it — it never creates or calibrates a profile itself.
+
+The Companion's profile menu ends with **Create New Profile…**, which returns the user to Mezzo's profile creation flow rather than duplicating it inside the Companion.
 
 ---
 
@@ -467,6 +501,7 @@ Avoid:
 * Alert
 * Incorrect
 * Fix Your Volume
+* Approaching Range (superseded by Approaching End of Range)
 
 ---
 
@@ -509,6 +544,8 @@ The Mezzo Companion exists to support the meeting—not compete with it.
 
 The best monitoring experience is one the user barely notices until they need it.
 
+The Companion is an ambient object, not a control panel. The visualization is the product's visual hero — every other element on screen exists only in service of it, and Compact carries this to its logical conclusion by showing almost nothing else.
+
 ---
 
 ## Prefer Simplicity
@@ -520,7 +557,7 @@ When multiple solutions satisfy the same product goal, prefer the one with:
 * clearer recovery
 * lower cognitive load
 
-Complexity should be earned.
+Complexity should be earned. Every interface element should justify its existence — prefer progressive disclosure over exposing every control at once.
 
 ---
 
@@ -549,6 +586,15 @@ It should not independently own monitoring state.
 Avoid duplicated state whenever possible.
 
 When state must be synchronized across windows, establish a clear source of truth.
+
+Four concerns are related but distinct, and must not be conflated or inferred from one another:
+
+* **Session state** — whether a monitoring session exists at all (owned by the Session Window).
+* **Companion state** — whether the Companion window is open or closed.
+* **Monitoring state** — whether monitoring is active or inactive.
+* **Layout mode** — Expanded or Compact, meaningful only while the Companion is open.
+
+For example, layout mode must never be inferred from window dimensions, and monitoring state must never be inferred from whether the Companion window merely exists.
 
 ---
 

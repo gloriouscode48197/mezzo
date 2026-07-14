@@ -86,6 +86,8 @@ Users should never encounter additional concepts such as:
 * Floating Companion
 * Control Room
 * Control Page
+* Bring Companion to Front
+* Pop Out
 
 Those distinctions exist only within the implementation.
 
@@ -440,7 +442,7 @@ Recovery should feel like a normal part of the experience rather than an error c
 
 # Session Window Experience
 
-The Mezzo window supports preparation, monitoring, recovery, and session management.
+The Mezzo window supports preparation, monitoring, recovery, and session management. Its own "Ready" and "Monitoring Active" statuses below mirror, but are distinct from, the Companion's own Ready and Monitoring states — see Companion States.
 
 During an active meeting, it is not intended to be the user's primary focus.
 
@@ -507,9 +509,98 @@ The Companion should:
 
 The Companion should feel like a quiet instrument—not a dashboard.
 
+The Companion has two states, Ready and Monitoring, and — while Monitoring — two layouts, Expanded and Compact. See below for each.
+
+---
+
+# Companion States
+
+The Companion has two distinct states. They should never feel like one screen with elements shown or hidden — Ready and Monitoring are different experiences with different purposes.
+
+## Ready
+
+Purpose: preparation.
+
+The Ready state allows users to:
+
+* review the selected profile
+* choose another existing profile
+* create a new profile (by returning to Mezzo)
+* start monitoring
+* close the Companion
+
+The visualization is intentionally hidden. Monitoring is inactive.
+
+Ready always uses the Expanded layout.
+
+---
+
+## Monitoring
+
+Purpose: ambient awareness.
+
+Monitoring displays:
+
+* current monitoring state
+* selected profile (read only)
+* live visualization
+
+Users cannot change profiles while monitoring.
+
+Stopping monitoring returns to Ready.
+
+---
+
+# Compact Companion
+
+Compact is an intentional product mode, not a responsive fallback for small windows.
+
+It exists only while monitoring. Its purpose is peripheral awareness.
+
+The Compact Companion intentionally removes interface chrome. It displays:
+
+* the visualization
+* an Expand control
+
+It does not display:
+
+* the MEZZO wordmark
+* monitoring status text
+* profile information
+* Stop Monitoring
+
+Closing the native Picture-in-Picture window is the canonical way to stop monitoring from Compact mode. This is an intentional product decision, not a missing feature: it stops monitoring, releases the microphone, and follows the same recovery path described under Mezzo Companion Closed below — the Companion closes, but Mezzo remains open and offers Re-open Companion.
+
+Expanding always returns to the Expanded layout without interrupting monitoring, the selected profile, or the current monitoring state.
+
+---
+
+# Profile Model
+
+Profile responsibilities are intentionally divided between Mezzo and the Companion.
+
+In Mezzo:
+
+* create profiles
+* calibrate
+* manage profiles
+
+In the Companion:
+
+* select an existing profile
+* monitor using that profile
+
+The Companion does not contain profile creation. Instead, its profile menu ends with:
+
+> Create New Profile…
+
+Selecting this returns the user to Mezzo's profile creation flow.
+
 ---
 
 # Monitoring States
+
+These are the four awareness states shown while the Companion is Monitoring — distinct from the Companion's own Ready/Monitoring states above, which describe what the Companion is doing rather than how loud the user is.
 
 Monitoring states describe what is happening.
 
@@ -564,7 +655,7 @@ Purpose:
 
 Provide gentle awareness before stronger visual emphasis becomes necessary.
 
-Approaching End of Range is descriptive, not corrective.
+Approaching End of Range is descriptive, not corrective. It supersedes the older "Approaching Range" label — use the full name consistently.
 
 ---
 
@@ -777,6 +868,8 @@ The interface should:
 * support rather than supervise
 
 The user should always feel in control of their own speaking behavior.
+
+The visualization is the product's visual hero. Every other interface element should justify its existence — prefer progressive disclosure over exposing every control at once. Preparation and monitoring are intentionally different experiences, and the Companion is an ambient object, not a control panel.
 
 ---
 
