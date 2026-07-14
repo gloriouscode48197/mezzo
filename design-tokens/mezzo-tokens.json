@@ -3,30 +3,35 @@
   "$description": "Mezzo Design Tokens — exported from typography stylesheets (dark, light, mid-dark surfaces)",
 
   "color": {
+    "ink": {
+      "base": { "$value": "#3C3B3F", "$type": "color", "$description": "Primary near-black neutral — headings, interactive labels, primary UI text/surfaces. Replaces the old #111111/#1A1A1A/#2A2A2A pure-black-leaning values." },
+      "soft": { "$value": "#4E4C51", "$type": "color", "$description": "Lighter tint of Ink, same hue — body copy only, to preserve hierarchy against headings/labels. 7.1:1 on #F0EBE2" }
+    },
+
     "surface": {
-      "dark":       { "$value": "#111111", "$type": "color" },
+      "dark":       { "$value": "{color.ink.base}", "$type": "color" },
       "light":      { "$value": "#F0EBE2", "$type": "color" },
       "mid":        { "$value": "#3A3A3A", "$type": "color" },
-      "nav-dark":   { "$value": "rgba(17, 17, 17, 0.88)", "$type": "color", "$description": "Scrolled nav on dark" },
+      "nav-dark":   { "$value": "rgba(60, 59, 63, 0.88)", "$type": "color", "$description": "Scrolled nav on dark" },
       "nav-light":  { "$value": "rgba(240, 235, 226, 0.9)", "$type": "color", "$description": "Scrolled nav on light" },
       "nav-mid":    { "$value": "rgba(58, 58, 58, 0.9)", "$type": "color", "$description": "Scrolled nav on mid" },
       "card-dark":  { "$value": "rgba(240, 235, 226, 0.04)", "$type": "color" },
-      "card-light": { "$value": "rgba(26, 26, 26, 0.03)", "$type": "color" },
+      "card-light": { "$value": "rgba(60, 59, 63, 0.03)", "$type": "color" },
       "card-mid":   { "$value": "#444444", "$type": "color" }
     },
 
     "text": {
       "dark": {
-        "primary":  { "$value": "#F0EBE2", "$type": "color", "$description": "Headings, hero. 13.3:1 on #111" },
-        "default":  { "$value": "#E8E3DA", "$type": "color", "$description": "Step headings, nav. 12.2:1 on #111" },
-        "body":     { "$value": "#B8A99A", "$type": "color", "$description": "Body copy, descriptions. 6.5:1 on #111" },
-        "subdued":  { "$value": "#8A827A", "$type": "color", "$description": "Notes, microcopy. 4.1:1 on #111" },
-        "ghost":    { "$value": "#5A5550", "$type": "color", "$description": "Step numbers, decorative. 2.3:1 on #111" }
+        "primary":  { "$value": "#F0EBE2", "$type": "color", "$description": "Headings, hero. 9.4:1 on Ink" },
+        "default":  { "$value": "#E8E3DA", "$type": "color", "$description": "Step headings, nav. 8.7:1 on Ink" },
+        "body":     { "$value": "#B8A99A", "$type": "color", "$description": "Body copy, descriptions. 4.9:1 on Ink" },
+        "subdued":  { "$value": "#B2ADA8", "$type": "color", "$description": "Notes, microcopy. 5.0:1 on Ink — lightened from #8A827A to restore contrast after the surface lightened from #111111 to Ink" },
+        "ghost":    { "$value": "#5A5550", "$type": "color", "$description": "Step numbers, decorative. 1.5:1 on Ink" }
       },
       "light": {
-        "primary":  { "$value": "#1A1A1A", "$type": "color", "$description": "Headings, hero. 12.5:1 on #F0EBE2" },
-        "default":  { "$value": "#2A2A2A", "$type": "color", "$description": "Step headings. 10.6:1 on #F0EBE2" },
-        "body":     { "$value": "#3A3A3A", "$type": "color", "$description": "Body copy (Dark Wash). 9.8:1 on #F0EBE2" },
+        "primary":  { "$value": "{color.ink.base}", "$type": "color", "$description": "Headings, hero. 9.4:1 on #F0EBE2" },
+        "default":  { "$value": "{color.ink.base}", "$type": "color", "$description": "Form labels, dropdown text. 9.4:1 on #F0EBE2" },
+        "body":     { "$value": "{color.ink.soft}", "$type": "color", "$description": "Body copy (Ink Soft). 7.1:1 on #F0EBE2" },
         "subdued":  { "$value": "#8A827A", "$type": "color", "$description": "Notes, microcopy. 3.2:1 on #F0EBE2" },
         "ghost":    { "$value": "#C8C0B5", "$type": "color", "$description": "Step numbers, decorative. 1.5:1 on #F0EBE2" }
       },
@@ -42,7 +47,7 @@
     "hanko": {
       "fill":         { "$value": "#C4593A", "$type": "color", "$description": "CTA button fill. Same on all surfaces" },
       "hover":        { "$value": "#AE4D31", "$type": "color", "$description": "CTA hover fill" },
-      "text-dark":    { "$value": "#C4593A", "$type": "color", "$description": "Tags, outline CTAs on dark. 3.4:1 on #111" },
+      "text-dark":    { "$value": "#C4593A", "$type": "color", "$description": "Tags, outline CTAs on dark. Was already sub-AA on #111111 (3.4:1); reads lower still on Ink since the accent color itself is intentionally unchanged — surface lightened, not the orange" },
       "text-light":   { "$value": "#C4593A", "$type": "color", "$description": "Tags, outline CTAs on light. 3.2:1 on #F0EBE2" },
       "text-mid":     { "$value": "#D4694A", "$type": "color", "$description": "Tags, outline CTAs on mid. Lighter variant for 3.3:1 on #3A3A3A" },
       "on-fill":      { "$value": "#F0EBE2", "$type": "color", "$description": "Text on hanko button. Same on all surfaces" },

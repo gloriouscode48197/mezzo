@@ -94,7 +94,7 @@
           border-radius: 14px;
           box-shadow: 0 8px 32px rgba(0, 0, 0, 0.28);
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-          color: #1A1A1A;
+          color: #3C3B3F;
         }
         .ring {
           flex-shrink: 0;
@@ -149,7 +149,7 @@
           cursor: pointer;
           padding: 0;
         }
-        .btn-close:hover { color: #1A1A1A; }
+        .btn-close:hover { color: #3C3B3F; }
       </style>
       <div class="card">
         <div class="ring"></div>

@@ -15,17 +15,28 @@
 }
 
 
-/* ── Surface: Dark (#111111) ── */
+/* ── Ink (shared, surface-independent)
+   The near-black neutral used for headings, interactive labels, and primary
+   UI text/surfaces, replacing the old pure-black-leaning values (#111111,
+   #1A1A1A, #2A2A2A). Ink Soft is a lighter tint of the same hue, used only
+   for body copy so headings and body text keep a visible hierarchy without
+   falling back to near-black. ── */
+:root {
+  --ink: #3C3B3F;
+  --ink-soft: #4E4C51;
+}
+
+/* ── Surface: Dark (Ink) ── */
 [data-surface="dark"],
 .surface-dark {
-  --surface: #111111;
-  --surface-nav: rgba(17, 17, 17, 0.88);
+  --surface: var(--ink);
+  --surface-nav: rgba(60, 59, 63, 0.88);
   --surface-card: rgba(240, 235, 226, 0.04);
 
   --text-primary: #F0EBE2;
   --text-default: #E8E3DA;
   --text-body: #B8A99A;
-  --text-subdued: #8A827A;
+  --text-subdued: #B2ADA8;
   --text-ghost: #5A5550;
 
   --hanko-text: #C4593A;
@@ -44,11 +55,11 @@
 .surface-light {
   --surface: #F0EBE2;
   --surface-nav: rgba(240, 235, 226, 0.9);
-  --surface-card: rgba(26, 26, 26, 0.03);
+  --surface-card: rgba(60, 59, 63, 0.03);
 
-  --text-primary: #1A1A1A;
-  --text-default: #2A2A2A;
-  --text-body: var(--dark-wash);
+  --text-primary: var(--ink);
+  --text-default: var(--ink);
+  --text-body: var(--ink-soft);
   --text-subdued: #8A827A;
   --text-ghost: #C8C0B5;
 
@@ -100,7 +111,7 @@
      existing [data-surface] text/border tokens still drive foreground
      colors. Paper and Unbleached alias existing light-surface values;
      Sumi and Washi are new. */
-  --sumi: #1A1A1A;
+  --sumi: var(--ink);
   --washi: #E6DFD4;
   --paper: #F0EBE2;
   --unbleached: #D8D0C3;
@@ -209,10 +220,9 @@
   line-height: 100%;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  /* Dark Wash, not Sumi — a medium-dark neutral rather than near-black.
-     ~9.6:1 against Paper, comfortably clears WCAG AA (4.5:1) for normal
-     text while reading softer than the near-black used for headings. */
-  color: var(--dark-wash);
+  /* Ink — the wordmark is a brand/interactive element, so it uses the same
+     near-black as headings rather than the softer body tint. */
+  color: var(--ink);
   text-decoration: none;
 }
 
@@ -418,25 +428,25 @@ button:focus-visible {
   color: var(--text-ghost);
 }
 
-/* Both footer tokens use Dark Wash — ~8.6:1 against Washi, ~9.6:1 against
-   Paper, comfortably clearing WCAG AA (4.5:1) for normal-size text. Neither
-   --text-ghost nor --text-subdued clear that threshold here (measured
-   ~1.9:1 and ~3.2:1 against Paper respectively), which is why the footer
-   read as too faint. Restraint comes from the smaller size, lighter
-   weight, and letter-spacing here — not from a low-contrast color. */
+/* Both footer tokens use Ink — ~9.3:1 against Paper, comfortably clearing
+   WCAG AA (4.5:1) for normal-size text. Neither --text-ghost nor
+   --text-subdued clear that threshold here (measured ~1.9:1 and ~3.2:1
+   against Paper respectively), which is why the footer read as too faint.
+   Restraint comes from the smaller size, lighter weight, and
+   letter-spacing here — not from a low-contrast color. */
 .type-footer-brand {
   font-family: var(--font-body);
   font-weight: var(--weight-light);
   font-size: 11px;
   letter-spacing: 1.3px;
-  color: var(--dark-wash);
+  color: var(--ink);
 }
 
 .type-footer-link {
   font-family: var(--font-body);
   font-weight: var(--weight-light);
   font-size: 12px;
-  color: var(--dark-wash);
+  color: var(--ink);
   text-decoration: none;
   transition: var(--transition-hover);
 }
@@ -487,13 +497,13 @@ button:focus-visible {
   color: var(--hanko-on-fill);
 }
 
-/* Secondary/ghost buttons on light surfaces are neutral (Stone border, Dark
-   Wash text) — Hanko stays accent-only, reserved for the hover fill above.
+/* Secondary/ghost buttons on light surfaces are neutral (Stone border, Ink
+   text) — Hanko stays accent-only, reserved for the hover fill above.
    Scoped to [data-surface="light"] specifically so it never reaches the
    Floating Companion, which forces data-surface="dark" on its own document
    and keeps the original Hanko-tinted .btn-outline look. */
 [data-surface="light"] .btn-outline {
-  color: var(--dark-wash);
+  color: var(--ink);
   border-color: rgba(138, 130, 122, 0.30);
 }
 
