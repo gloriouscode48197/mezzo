@@ -1,6 +1,8 @@
 /**
- * Mezzo — Landing Page Styles (Dark Theme)
+ * Mezzo — Landing Page Styles
  * Uses design token custom properties exclusively for colors, fonts, spacing.
+ * Nav is a solid light (Paper) bar across the whole site — sections below it
+ * still alternate their own surface (light/dark) independently.
  */
 
 /* ── Reset ── */
@@ -11,6 +13,8 @@
 }
 
 .hidden { display: none !important; }
+
+/* Focus-visible styling is shared — see design-tokens/mezzo-tokens.css. */
 
 html {
   scroll-behavior: smooth;
@@ -41,64 +45,10 @@ body {
 .page.is-visible { opacity: 1; }
 
 .hero,
-.use-cases,
-.how-it-works,
-.philosophy,
-.closing-cta { position: relative; z-index: 2; }
+.editorial { position: relative; z-index: 2; }
 
-/* ═══════════════════════════════════════════
-   Navigation
-   ═══════════════════════════════════════════ */
-
-.nav {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 76px;
-  padding: 0 32px;
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  background: rgba(13, 11, 9, 0.92);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.042);
-}
-
-.type-nav-wordmark { text-decoration: none; }
-
-.nav-links,
-.nav-right {
-  display: flex;
-  align-items: center;
-  gap: 28px;
-}
-
-.btn-nav {
-  font-size: 14px;
-  padding: 9px 22px;
-}
-
-.nav-link {
-  text-decoration: none;
-  font-family: var(--font-body);
-  font-weight: var(--weight-regular);
-  font-size: 14px;
-  transition: opacity 0.2s ease;
-}
-
-.nav-link:hover { opacity: 0.7; }
-
-.nav-link-quiet { color: var(--text-subdued); }
-
-.nav-link-active {
-  color: var(--text-default);
-  cursor: default;
-  padding-bottom: 3px;
-  border-bottom: 3px solid rgba(196, 89, 58, 0.50);
-}
-
-.nav-link-active:hover { opacity: 1; }
+/* Navigation is now shared, canonical CSS — see design-tokens/mezzo-tokens.css.
+   Do not redefine .nav/.nav-link* here. */
 
 /* ═══════════════════════════════════════════
    Hero
@@ -106,7 +56,7 @@ body {
 
 .hero {
   background: var(--paper);
-  padding: 96px 32px 72px;
+  padding: 112px 32px 96px;
 }
 
 .hero-columns {
@@ -129,62 +79,65 @@ body {
   margin-inline: auto;
 }
 
-.hero-how-link {
-  color: var(--text-subdued);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
 .microcopy-cta { margin-top: 24px; }
 .hero-privacy-line { margin-top: 6px; }
 
 a.btn-primary { text-decoration: none; }
 
-/* ── Hero visual (contained product preview, not decorative background) ── */
+/* ── Hero visual — the Mezzo Companion preview is the visual focal point of
+   the page, so it gets generous breathing room rather than sitting flush
+   against the copy column.
+   The wrap's size must never depend on its content (the state label's text
+   width changes as monitoring state cycles) — otherwise the flex row
+   re-centers and the hero copy visibly shifts. Every rule below sizes the
+   wrap from the *outside* (fixed px / min(100%, px) + aspect-ratio) and the
+   card simply fills it at 100%/100%. ── */
 .hero-visual {
-  margin-top: 64px;
+  margin-top: 72px;
   display: flex;
   justify-content: center;
+  width: 100%;
 }
 
 .hero-companion-preview-wrap {
-  width: min(100%, 380px);
+  width: min(100%, 400px);
+  aspect-ratio: 1 / 1;
   margin-inline: auto;
 }
 
 .hero-companion-card {
   position: relative;
   width: 100%;
-  aspect-ratio: 1 / 1;
+  height: 100%;
   border-radius: var(--radius-card);
   border: 1px solid var(--border);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.16);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.22), 0 6px 20px rgba(0, 0, 0, 0.12);
   background: var(--surface);
   overflow: hidden;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 20px 20px 0;
+  justify-content: center;
+  text-align: center;
+  padding: 24px;
+  box-sizing: border-box;
 }
 
-.hero-companion-chrome {
-  position: absolute;
-  top: 14px;
-  left: 16px;
-  display: flex;
-  gap: 6px;
-}
-
-.hero-companion-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--text-ghost);
-  opacity: 0.6;
+.hero-companion-wordmark {
+  font-family: var(--font-display);
+  font-weight: var(--weight-light);
+  font-size: 14px;
+  color: var(--text-primary);
+  letter-spacing: 0.04em;
 }
 
 .hero-companion-label {
-  margin-top: 22px;
+  font-family: var(--font-display);
+  font-weight: var(--weight-light);
+  font-size: 14px;
+  color: var(--text-subdued);
+  margin-top: 2px;
+  max-width: 100%;
 }
 
 .hero-companion-circle-wrap {
@@ -216,125 +169,62 @@ a.btn-primary { text-decoration: none; }
 .step .type-step-heading { margin-bottom: 6px; }
 
 /* ═══════════════════════════════════════════
-   How It Works
+   Editorial (How it works / Philosophy / Trust)
+   Three columns replacing the old stacked sections — the page moves from
+   the hero straight into this one calm, editorial band instead of a
+   dramatic dark full-width interruption.
    ═══════════════════════════════════════════ */
 
-.how-it-works {
+.editorial {
   background: var(--washi);
-  padding: 88px 32px 80px;
+  padding: 104px 32px 128px;
 }
 
-.how-it-works-grid { display: grid; grid-template-columns: 1fr; }
-
-.how-it-works-heading { margin-bottom: 48px; }
-
-/* ═══════════════════════════════════════════
-   Philosophy
-   ═══════════════════════════════════════════ */
-
-.philosophy {
-  background: var(--sumi);
-  padding: 96px 32px;
-}
-
-.philosophy-grid {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 40px;
-  max-width: 520px;
+.editorial-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 64px;
+  max-width: 1100px;
   margin: 0 auto;
-  text-align: center;
-}
-
-.philosophy-copy .type-section-heading { margin-bottom: 16px; }
-
-.philosophy-visual {
-  width: min(100%, 220px);
-  aspect-ratio: 1 / 1;
-  pointer-events: none;
-  user-select: none;
-}
-
-#philosophy-ring-canvas {
-  display: block;
-  width: 100% !important;
-  height: auto !important;
-}
-
-/* ═══════════════════════════════════════════
-   Use Cases (What Mezzo is good for / doesn't do)
-   ═══════════════════════════════════════════ */
-
-.use-cases {
-  background: var(--unbleached);
-  padding: 120px 32px 72px;
-}
-
-.use-cases-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 56px;
-  max-width: 520px;
-  margin: 0 auto;
-}
-
-.use-cases-col {
   text-align: left;
 }
 
-.use-cases-col .type-section-heading {
-  margin-bottom: 24px;
+/* Both variants keep .type-section-heading's serif family/light weight —
+   only size and spacing differ, per position, never semantic level. */
+.editorial-heading {
+  font-size: clamp(28px, 7vw, 32px);
+  margin-bottom: var(--space-heading-to-content);
 }
 
-.use-cases-divider {
-  display: none;
+.editorial-heading-sub {
+  font-size: 18px;
+  margin-bottom: 20px;
 }
 
-/* ── Good-for list ── */
+.editorial-col-statement .type-body { max-width: 42ch; }
+
+.editorial-subheading-spaced { margin-top: 48px; }
+
+/* ── Steps (reused inside the "How it works" column) ── */
+.editorial-col .steps { gap: 0; }
+
+/* ── Good-for list (reused inside the trust column) ── */
 .good-for-list {
   list-style: none;
+  margin-bottom: 16px;
 }
 
-.good-for-list li { margin-bottom: 8px; }
+.good-for-list li { margin-bottom: 10px; }
 
 .good-for-list li::before {
   content: '—  ';
   color: var(--text-subdued);
 }
 
-.good-for-note { margin-top: 16px; }
+.good-for-note { margin-bottom: 0; }
 
-/* ═══════════════════════════════════════════
-   Closing CTA / Footer
-   ═══════════════════════════════════════════ */
-
-.closing-cta {
-  background: var(--warm-grey);
-  padding: 120px 32px 0;
-  text-align: center;
-}
-
-.closing-cta-content { margin-bottom: 96px; }
-
-.closing-cta-content .type-section-heading { margin-bottom: 32px; }
-
-.closing-cta-content .microcopy-cta { margin-top: 16px; }
-
-/* --text-ghost is tuned for near-white backgrounds (Paper/Washi/Unbleached);
-   against the darker Warm Grey it drops to near-invisible, so the footer
-   wordmark uses the next tone up instead. */
-.closing-cta .type-footer-brand { color: var(--text-subdued); }
-
-.site-footer {
-  border-top: 1px solid var(--border);
-  padding: var(--space-footer);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.footer-links { display: flex; gap: 20px; }
+/* Footer is now shared, canonical CSS — see design-tokens/mezzo-tokens.css.
+   Do not redefine .site-footer here. */
 
 /* ═══════════════════════════════════════════
    Scroll-triggered Reveal
@@ -355,53 +245,68 @@ a.btn-primary { text-decoration: none; }
    Responsive
    ═══════════════════════════════════════════ */
 
-@media (min-width: 900px) {
-  .nav { padding-left: 120px; padding-right: 120px; }
-
-  .hero { padding: 96px 120px 72px; }
+/* ── Tablet: hero goes 2-column as soon as there's room; editorial becomes
+   a 2-column reflow (third column wraps to its own row). ── */
+@media (min-width: 700px) {
+  .hero { padding: 112px 48px 96px; }
   .hero-columns {
     flex-direction: row;
     align-items: center;
     justify-content: center;
-    gap: 64px;
+    gap: 48px;
     max-width: 1100px;
     margin-inline: auto;
   }
-  .hero-content { max-width: 480px; margin: 0; text-align: left; }
+  .hero-content { max-width: 420px; margin: 0; text-align: left; }
   .hero-content .type-hero-heading { max-width: 20ch; }
   .hero-body { margin-inline: 0; }
-  .hero-visual { margin-top: 0; flex-shrink: 0; justify-content: flex-end; }
-
-  .how-it-works { padding: 88px 120px 80px; }
-  .how-it-works-grid {
-    grid-template-columns: 1fr;
-    max-width: 640px;
-    margin-inline: auto;
+  .hero-visual {
+    margin-top: 0;
+    flex: 0 0 min(100%, 400px);
+    width: min(100%, 400px);
+    justify-content: flex-end;
   }
 
-  .philosophy { padding: 96px 120px; }
-
-  .use-cases { padding: 120px 120px 80px; }
-  .use-cases-grid {
-    flex-direction: row;
-    align-items: flex-start;
-    gap: 0;
-    max-width: 900px;
+  .editorial { padding: 104px 48px 112px; }
+  .editorial-heading { font-size: clamp(32px, 4vw, 36px); }
+  .editorial-grid { grid-template-columns: 1fr 1fr; }
+  .editorial-col:nth-child(2) {
+    padding-left: 32px;
+    border-left: 1px solid var(--border);
   }
-  .use-cases-col { flex: 1; }
-  .use-cases-col:first-child { padding-right: 48px; }
-  .use-cases-col:last-child { padding-left: 48px; }
-  .use-cases-divider {
-    display: block;
-    width: 1px;
-    align-self: stretch;
-    background: var(--border);
+  /* Third column ("trust") wraps to its own full-width row rather than
+     sitting alone beside an empty cell. */
+  .editorial-col:nth-child(3) {
+    grid-column: 1 / -1;
+    padding-top: 48px;
+    border-top: 1px solid var(--border);
   }
+}
 
-  .closing-cta { padding-left: 120px; padding-right: 120px; }
-  .site-footer { padding-left: 120px; padding-right: 120px; }
+/* ── Desktop: full 3-column editorial layout, wider breathing room. ── */
+@media (min-width: 1100px) {
+  .hero { padding: 128px 120px 104px; }
+  .hero-columns { gap: 96px; }
+  .hero-content { max-width: 480px; }
+  /* Fixed 400×400 at desktop, per spec — no min()/content sizing at all. */
+  .hero-visual { flex: 0 0 400px; width: 400px; }
+  .hero-companion-preview-wrap { width: 400px; }
+
+  .editorial { padding: 112px 120px 128px; }
+  .editorial-heading { font-size: clamp(36px, 3vw, 42px); }
+  .editorial-grid { grid-template-columns: repeat(3, 1fr); gap: 64px; }
+  .editorial-col:nth-child(3) {
+    grid-column: auto;
+    padding-top: 0;
+    border-top: none;
+  }
+  .editorial-col:not(:first-child) {
+    padding-left: 56px;
+    border-left: 1px solid var(--border);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .page { transition: none; }
+  .reveal { transition: none; }
 }

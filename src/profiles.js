@@ -1,9 +1,10 @@
 /**
  * Mezzo — Profile Storage
  *
- * Shared between try-it.js (creates/selects profiles) and monitoring.js
- * (resolves which profile to use, including for a freshly-opened tab that
- * never visited try-it.html — e.g. launched by the browser extension).
+ * Used by try-it.js (creates/selects profiles, and resolves which profile
+ * to use — including for a freshly-opened tab that never went through
+ * onboarding, e.g. launched by the browser extension) and
+ * src/mezzo-session.js (the session-ownership module try-it.js uses).
  *
  * Three storage layers, each with a different lifetime:
  *   - mezzoProfiles (localStorage, persists indefinitely) — the saved-profile
@@ -94,4 +95,28 @@ export function setLastUsedProfile(profile) {
   } catch (e) {
     console.error('[Profiles] Failed to persist last-used profile:', e);
   }
+}
+
+// =============================================================================
+// Resolution (this tab's selection, falling back to cross-tab last-used)
+// =============================================================================
+
+/**
+ * Resolve which profile this tab should use: this tab's own session choice
+ * first, then whichever profile was last used anywhere (what lets a fresh
+ * tab launched by the browser extension, or a fresh visit to try-it.html,
+ * skip straight to Ready instead of Choose a Profile), then null
+ * (genuinely first-time — caller should send them to Choose a Profile).
+ */
+export function resolveActiveProfile() {
+  let profile = getSelectedProfile();
+  if (profile) return profile;
+
+  profile = getLastUsedProfile();
+  if (profile) {
+    setSelectedProfile(profile); // keep this tab's session consistent going forward
+    return profile;
+  }
+
+  return null;
 }

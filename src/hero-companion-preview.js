@@ -1,16 +1,16 @@
 /**
- * Hero Companion Preview — a live, working instance of the Floating
- * Companion shown on the homepage hero. Reuses MezzoWaveVisualizer exactly
- * as monitoring.js's real Floating Companion does; the only difference is
- * that zone numbers are hand-fed on a timer here instead of coming from real
- * audio, the same technique monitoring.js's own startDemoMode() already
- * uses for the same reason (MezzoWaveVisualizer is a pure renderer and never
- * reads raw audio itself).
+ * Hero Companion Preview — a live, working instance of the Mezzo Companion
+ * shown on the homepage hero. Reuses MezzoWaveVisualizer exactly as the
+ * real Mezzo Companion does (src/mezzo-session.js); the only difference is
+ * that zone numbers are hand-fed on a timer here instead of coming from
+ * real audio, the same technique src/mezzo-session.js's own startDemo()
+ * already uses for the same reason (MezzoWaveVisualizer is a pure renderer
+ * and never reads raw audio itself).
  *
  * Cycles through the product's real states — Quiet / Within Range /
- * Approaching Range / Outside Range, using the same strings monitoring.js's
- * zoneLabel() returns — so this never shows a state that doesn't exist in
- * the product.
+ * Approaching Range / Outside Range, using the same strings
+ * src/mezzo-session.js's zoneLabel() returns — so this never shows a state
+ * that doesn't exist in the product.
  */
 
 import { MezzoWaveVisualizer } from './wave-visualizer.js';
@@ -39,22 +39,17 @@ export function initHeroCompanionPreview(container) {
   container.setAttribute('data-surface', 'dark');
   container.classList.add('hero-companion-card');
 
-  const chrome = document.createElement('div');
-  chrome.className = 'hero-companion-chrome';
-  chrome.setAttribute('aria-hidden', 'true');
-  for (let i = 0; i < 3; i++) {
-    const dot = document.createElement('span');
-    dot.className = 'hero-companion-dot';
-    chrome.appendChild(dot);
-  }
+  const wordmark = document.createElement('span');
+  wordmark.className = 'hero-companion-wordmark';
+  wordmark.textContent = 'Mezzo';
 
   const heading = document.createElement('span');
-  heading.className = 'type-state-label hero-companion-label';
+  heading.className = 'hero-companion-label';
 
   const circleWrap = document.createElement('div');
   circleWrap.className = 'hero-companion-circle-wrap';
 
-  container.appendChild(chrome);
+  container.appendChild(wordmark);
   container.appendChild(heading);
   container.appendChild(circleWrap);
 

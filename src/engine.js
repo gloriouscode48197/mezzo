@@ -13,7 +13,7 @@
 // Zone 0 (Listening) sits below ZONE_SILENCE_RATIO; each successive zone
 // runs up to its multiplier; zone 3 (Outside of Range) is open-ended above
 // ZONE_ACCEPTABLE_MULT — there's no volume tier beyond it. "Sustained/
-// consistent outside" is a duration flag owned by monitoring.js, not a
+// consistent outside" is a duration flag owned by src/mezzo-session.js, not a
 // louder-volume zone.
 export const ZONE_SILENCE_RATIO = 0.3;    // < this × baseline -> zone 0 (Listening)
 export const ZONE_TARGET_MULT = 1.15;     // <= this × baseline -> zone 1 (Within Range, target)

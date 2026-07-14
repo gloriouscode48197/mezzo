@@ -7,13 +7,13 @@
  * See docs/monitoring-runtime-investigation.md for the full writeup this
  * feeds into.
  *
- * DELETE THIS FILE (and its three call sites in audio.js, monitoring.js)
+ * DELETE THIS FILE (and its call sites in audio.js, src/mezzo-session.js)
  * once the investigation concludes — it is not meant to ship. Everything
  * here is additive logging; it does not change any real behavior.
  *
  * Opt-in only (?timing=true) so it doesn't affect normal use or any other
  * testing. Usage:
- *   http://localhost:8899/monitoring.html?timing=true
+ *   http://localhost:8899/try-it.html?timing=true
  * Then, after a real session (visibility changes and all), open DevTools
  * and run:
  *   copy(JSON.stringify(window.__mezzoTiming.export()))

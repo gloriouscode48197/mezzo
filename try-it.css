@@ -1,8 +1,7 @@
 /**
  * Mezzo — Try It Page Styles
- * Uses design token custom properties exclusively. Nav stays the fixed dark
- * "always frosted" chrome used across the marketing pages, independent of
- * this page's own (light, Paper) content tone.
+ * Uses design token custom properties exclusively. Nav is the shared solid
+ * light (Paper) chrome used across the marketing pages.
  */
 
 /* ── Reset ── */
@@ -28,45 +27,8 @@ body {
   transition: opacity 300ms ease;
 }
 
-/* ── Nav ── */
-.nav {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 72px;
-  padding: 0 32px;
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  background: rgba(13, 11, 9, 0.92);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.042);
-}
-
-.type-nav-wordmark { text-decoration: none; }
-
-.nav-links { display: flex; align-items: center; gap: 28px; }
-
-.nav-link {
-  text-decoration: none;
-  font-family: var(--font-body);
-  font-weight: var(--weight-regular);
-  font-size: 13px;
-  transition: opacity 0.2s ease;
-}
-
-.nav-link:hover { opacity: 0.7; }
-.nav-link-quiet { color: var(--text-subdued); }
-
-.nav-link-active {
-  color: var(--text-default);
-  cursor: default;
-  padding-bottom: 2px;
-  border-bottom: 2px solid rgba(196, 89, 58, 0.50);
-}
-
-.nav-link-active:hover { opacity: 1; }
+/* Navigation is now shared, canonical CSS — see design-tokens/mezzo-tokens.css.
+   Do not redefine .nav/.nav-link* here. */
 
 /* ── State Views ── */
 .page-content {
@@ -277,6 +239,95 @@ body {
   margin-bottom: var(--space-circle-to-button);
 }
 
+/* ── Session Status (companionReady / monitoringActive / companionClosed) ── */
+.session-status-icon {
+  width: 64px;
+  height: 64px;
+  margin-bottom: 32px;
+  opacity: 0.4;
+}
+
+.mon-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mon-status-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--hanko-fill);
+  flex-shrink: 0;
+  animation: mezzo-pulse 3.3s ease-in-out infinite;
+}
+
+@keyframes mezzo-pulse {
+  0%, 100% { opacity: 0.26; transform: scale(1); }
+  50%       { opacity: 0.54; transform: scale(1.22); }
+}
+
+.session-status-label {
+  margin-bottom: 12px;
+}
+
+.session-status-body {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 40px;
+}
+
+.session-status-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin-inline: auto;
+}
+
+/* ── No-Companion-support fallback monitoring view ── */
+#state-fallback-monitor {
+  justify-content: center;
+}
+
+#state-fallback-monitor .mon-status {
+  margin-bottom: 40px;
+}
+
+.mon-heading {
+  font-family: var(--font-display);
+  font-weight: var(--weight-light);
+  font-size: 15px;
+  color: var(--text-subdued);
+  letter-spacing: 0.04em;
+}
+
+.mon-canvas-wrap {
+  width: 280px;
+  height: 280px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mon-circle-container { width: 100%; height: 100%; }
+
+.mon-controls {
+  margin-top: 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  max-width: 320px;
+}
+
+.mon-micro { text-align: center; color: var(--text-ghost); }
+
 /* ── Text Input ── */
 #name-form { display: flex; flex-direction: column; align-items: center; gap: 20px; }
 
@@ -303,7 +354,6 @@ body {
 
 /* ── Responsive ── */
 @media (min-width: 900px) {
-  .nav { padding-left: 120px; padding-right: 120px; }
   .state-col { max-width: calc((100vw - 240px) / 2); }
   .state-heading { max-width: 700px; }
 }

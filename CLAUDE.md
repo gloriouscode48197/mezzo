@@ -1,14 +1,42 @@
-# Mezzo
+# CLAUDE.md
 
-## Product Vision
+# Mezzo Product Constitution
 
-Mezzo is a privacy-first meeting companion that helps people become more aware of their speaking volume during conversations.
+**Product:** Mezzo
+**Current Milestone:** V2
+**Purpose:** Canonical product constitution and collaboration guide
 
-Rather than measuring performance or interrupting meetings, Mezzo provides calm, real-time feedback that allows people to naturally self-regulate their speaking volume.
+---
 
-The product should always feel supportive rather than corrective.
+# Purpose
 
-**Product principle:**
+This document is the primary source of truth for Mezzo.
+
+It defines the product's vision, philosophy, terminology, architectural boundaries, decision-making principles, and documentation system.
+
+Every significant product, design, engineering, and documentation decision should align with this document.
+
+When implementation conflicts with this document, determine whether the implementation has drifted from the intended product experience before changing the product definition.
+
+Detailed user journeys, interaction flows, and monitoring states belong in `product-experience.md`.
+
+Feature-specific requirements belong in PRDs.
+
+Technical discoveries belong in `discoveries/`.
+
+---
+
+# Product Vision
+
+Mezzo is a privacy-first voice awareness tool that helps people become more aware of their speaking volume during meetings.
+
+Rather than evaluating performance or interrupting conversations, Mezzo provides gentle visual awareness that allows people to naturally self-regulate.
+
+Mezzo exists to support conversations without becoming part of them.
+
+It should feel calm, trustworthy, restrained, and quietly present.
+
+Product principle:
 
 > Always reassuring. Occasionally attention-grabbing. Never distracting.
 
@@ -18,309 +46,757 @@ The product should always feel supportive rather than corrective.
 
 Mezzo is not:
 
-- a decibel meter
-- a speech analyzer
-- a transcription service
-- a meeting assistant
+* a decibel meter
+* a speech analyzer
+* a transcription service
+* a meeting assistant
+* a productivity dashboard
+* a coaching platform
+* a behavioral scoring system
+* a tool that determines whether someone is objectively "too loud"
 
 Mezzo is:
 
-- an ambient companion
-- a private self-awareness tool
-- a lightweight product that quietly accompanies meetings
+* an ambient awareness tool
+* a private speaking-volume companion
+* a lightweight experience that quietly accompanies meetings
+* a way to understand speaking volume relative to a preferred range
 
-Every design and engineering decision should reinforce this philosophy.
+Every product decision should reinforce those boundaries.
 
----
-
-# Technology
-
-- HTML
-- CSS
-- Vanilla JavaScript
-- Web Audio API
-- Document Picture-in-Picture API
-- Chrome Extension APIs
-
-The existing audio engine is already implemented.
-
-Do **not** rewrite or replace the monitoring engine unless a task explicitly requires it.
-
-Always build on the existing implementation before introducing new architecture.
+When new ideas are proposed, first determine whether they strengthen Mezzo's core purpose or move it toward becoming a different product.
 
 ---
 
-# Design System
+# Product Values
 
-Use the existing design token system.
+Every experience should reinforce:
 
-Files:
+* Calm
+* Trust
+* Restraint
+* Privacy
+* Peripheral awareness
+* Clarity
+* User agency
 
-- `/design/mezzo-tokens.css`
-- `/design/mezzo-tokens.json`
+Mezzo should increase awareness without creating anxiety.
 
-Do not hardcode:
-
-- colors
-- spacing
-- typography
-- component styles
-
-Always prefer the existing design tokens.
-
----
-
-# Product Architecture
-
-Mezzo consists of three distinct experiences.
-
-Each has a different purpose and intentionally different visual language.
-
----
-
-## 1. Marketing Experience
-
-Purpose:
-
-Introduce Mezzo, explain how it works, establish trust, and encourage users to begin monitoring.
-
-Examples:
-
-- Home
-- Privacy
-- How It Works
-- Documentation
-- Future marketing pages
-
-Visual language:
-
-- Light
-- Editorial
-- Calm
-- Spacious
-- Uses the full Mezzo palette
-
-The product itself should remain the visual focal point.
-
----
-
-## 2. Companion Window
-
-The Companion Window owns the monitoring session.
-
-It exists both as:
-
-- the management interface
-- the runtime owner required by the browser
-
-Responsibilities:
-
-- Launch monitoring
-- Select profiles
-- Manage profiles
-- Display monitoring status
-- Recover the Floating Companion
-- End monitoring
-
-Users are not expected to monitor from this window.
-
-Visual language:
-
-- Light
-- Calm
-- Functional
-- Consistent with the marketing website
-
-The Companion should feel like managing Mezzo—not using Mezzo.
-
----
-
-## 3. Floating Companion
-
-The Floating Companion is the primary product experience.
-
-Internally it uses the Document Picture-in-Picture API.
-
-Purpose:
-
-Provide real-time ambient speaking awareness while remaining in the user's peripheral vision.
-
-Visual language:
-
-- Dark
-- Minimal
-- Focused
-- Ambient
-
-The Floating Companion should never feel like a dashboard.
-
-It should feel like a quiet instrument.
-
----
-
-# User Journey
-
-The intended experience is:
-
-Website
-
-↓
-
-Launch Monitoring
-
-↓
-
-Companion Window
-
-↓
-
-Floating Companion
-
-↓
-
-Meeting
-
-Monitoring occurs inside the Floating Companion.
-
-The Companion Window remains open to own the session and support recovery.
-
-Closing the Companion Window ends the monitoring session because the browser requires it.
-
-This dependency should always be communicated clearly to users.
-
----
-
-# Monitoring Visualization
-
-The visualization communicates speaking state through calm, additive changes rather than alarms.
-
-## Within Range
-
-- Center dot
-- One perfect circular ring
-- Gentle continuous motion
-- Optional subtle glow and propagation while speaking
-
-## Approaching Range
-
-- Add a second outer contour
-- Outer contour becomes subtly organic
-- Motion becomes slightly more noticeable
-- Remains warm white
-
-## Outside Range
-
-- Add a third contour
-- Transition to Mezzo orange
-- Increase glow and propagation
-- Improve peripheral visibility without blinking
-
----
-
-## Visualization Principles
-
-- The visualization container never changes size.
-- The background never flashes or inverts.
-- Motion should communicate state, never decorate.
-- Every visual element should have a clear purpose.
-- Changes should build progressively rather than replacing previous states.
+It should communicate information without demanding attention.
 
 ---
 
 # Privacy Principles
 
-Privacy is a product feature.
+Privacy is not a marketing feature.
 
-Audio handling must always follow these rules:
+It is a product principle.
 
-- Process audio locally.
-- Never record audio.
-- Never store audio.
-- Never transmit audio.
-- Never transcribe speech.
-- Never analyze conversation content.
-- Collect only minimal anonymous analytics required to improve the product.
+Mezzo:
 
-Whenever implementation decisions involve privacy, prefer the most privacy-preserving option.
+* processes audio locally
+* never records audio
+* never stores audio
+* never transmits audio as part of the core monitoring experience
+* never transcribes speech
+* never analyzes conversation content
+* never identifies speakers
 
----
+Whenever implementation decisions affect privacy, choose the option that most clearly preserves user trust.
 
-# Visual Language
-
-Mezzo's visual identity is inspired by natural systems rather than technical instrumentation.
-
-Keywords:
-
-- Calm
-- Ambient
-- Organic
-- Peripheral
-- Listening
-- Presence
-- Balance
-- Restraint
-
-Avoid:
-
-- Aggressive alerts
-- Flashing
-- Warning metaphors
-- Gamification
-- Dashboard aesthetics
+If product messaging cannot honestly describe implementation, implementation should change before messaging.
 
 ---
 
-# Terminology
+# Collaboration Philosophy
 
-## Internal
+This document guides both human collaborators and AI assistants.
 
-- Companion Window — parent browser window
-- Floating Companion — Document Picture-in-Picture window
+The goal is not simply to produce code.
 
-## User Facing
+The goal is to preserve the intended product experience while making thoughtful product decisions.
+
+When reviewing requests:
+
+* understand the problem before proposing solutions
+* challenge assumptions when appropriate
+* explain tradeoffs
+* identify emerging product principles
+* protect the current milestone from unnecessary expansion
+
+Collaboration should improve product thinking, not merely execute instructions.
+
+---
+
+# Thinking Style
+
+The primary designer often explores solutions before fully articulating the underlying problem.
+
+Do not assume the first proposed solution is the actual decision.
+
+Instead ask:
+
+"What problem is this trying to solve?"
+
+Help distinguish between:
+
+* observations
+* insights
+* explorations
+* product decisions
+* implementation tasks
+* documentation
+
+Not every idea should become a feature.
+
+Not every discussion should become implementation work.
+
+---
+
+# Working Modes
+
+Before responding to a request, determine which mode best describes the conversation.
+
+## Brainstorming
+
+Explore possibilities.
+
+Encourage discovery.
+
+Avoid turning every idea into implementation.
+
+Capture promising ideas without allowing them to expand the current milestone.
+
+---
+
+## Product Strategy
+
+Clarify:
+
+* product goals
+* priorities
+* tradeoffs
+* scope
+* audience
+* long-term direction
+
+Challenge additions that weaken Mezzo's focused purpose.
+
+---
+
+## UX Critique
+
+Evaluate:
+
+* comprehension
+* hierarchy
+* flow
+* recovery
+* trust
+* cognitive load
+
+Explain the underlying user problem rather than only suggesting interface changes.
+
+---
+
+## Design Review
+
+Evaluate whether the experience reinforces:
+
+* calm
+* restraint
+* peripheral awareness
+* natural systems
+* trust
+
+Do not evaluate only aesthetics.
+
+---
+
+## Product Architecture
+
+Clarify ownership, boundaries, responsibilities, and lifecycle.
+
+Separate user-facing concepts from implementation details.
+
+---
+
+## Implementation Planning
+
+Assume the product decision already exists.
+
+Focus on:
+
+* sequencing
+* dependencies
+* architecture
+* testing
+* maintainability
+
+Avoid reopening settled product questions unless implementation reveals genuine conflict.
+
+---
+
+## Documentation
+
+Capture durable knowledge.
+
+Prefer documenting:
+
+* principles
+* terminology
+* rationale
+* constraints
+
+Avoid documenting temporary implementation details that will quickly become outdated.
+
+---
+
+## Reflection
+
+Capture:
+
+* discoveries
+* recurring patterns
+* lessons learned
+* improvements to the design process
+
+Reflection strengthens future decision-making rather than changing current scope.
+
+---
+
+# Current Product Priority
+
+Current milestone:
+
+**Mezzo V2**
+
+Priorities:
+
+* polish
+* simplification
+* consistency
+* recovery
+* documentation
+* implementation quality
+* privacy
+* trust
+
+Avoid introducing significant new functionality unless the conversation explicitly shifts into exploration.
+
+When uncertain, prefer improving the existing experience rather than expanding it.
+
+---
+
+# Product Architecture
+
+From the user's perspective, Mezzo has two named experiences.
+
+## Mezzo
+
+Mezzo is the application used to:
+
+* prepare for monitoring
+* manage profiles
+* calibrate
+* start monitoring
+* recover monitoring
+* manage active sessions
+* end monitoring
+
+Users simply know this experience as **Mezzo**.
+
+Internally, Mezzo is supported by a Session Window implemented by `try-it.html`/`try-it.js` — the same page that handles onboarding, since there is only one user-facing Mezzo experience, not a separate window per step. Session ownership logic itself lives in `src/mezzo-session.js`, reused by that page.
+
+The Session Window owns:
+
+* microphone access
+* monitoring engine
+* audio processing
+* active profile
+* calibration state
+* session lifecycle
+* browser integration required by Document Picture-in-Picture
+
+Users should not need to learn the term "Session Window."
+
+It is an architectural concept, not a product concept.
+
+---
+
+## Mezzo Companion
+
+The Mezzo Companion is the small always-on-top monitoring experience beside the user's meeting.
+
+It is the primary product experience during monitoring.
+
+Internally it is implemented using the Document Picture-in-Picture API.
+
+The Mezzo Companion owns:
+
+* live visualization
+* monitoring awareness
+* peripheral feedback
+* Start Monitoring / Stop Monitoring
+* its own window state — Close Companion closes only the Companion
+
+The Companion never contains an End Session action — ending the overall session is Mezzo's responsibility, not the Companion's.
+
+From the user's perspective there is only one Companion.
+
+Do not introduce additional user-facing concepts such as:
+
+* Companion Window
+* Floating Companion
+* Control Room
+* Control Page
+
+Those names create unnecessary mental models.
+
+---
+
+# Supporting Experiences
+
+The product also includes supporting experiences that are not separate products.
+
+## Marketing
+
+Purpose:
+
+* explain Mezzo
+* establish trust
+* communicate privacy
+* encourage users to try the product
+
+Visual language:
+
+* warm
+* editorial
+* spacious
+
+---
+
+## Onboarding
+
+Purpose:
+
+* explain microphone access
+* introduce profiles
+* support calibration
+* prepare users to open Mezzo
+
+Onboarding is a preparation experience, not a monitoring experience.
+
+---
+
+# Canonical Terminology
+
+User-facing terminology:
+
+* Mezzo
+* Mezzo Companion
+* Try Mezzo
+* Open Mezzo
+* Open Companion
+* Re-open Companion
+* Close Companion
+* Start Monitoring
+* Stop Monitoring
+* End Session
+
+"Mezzo Companion" is for explanatory copy naming the product experience (e.g. "Start monitoring from the Mezzo Companion"). The controls themselves use the shorter action labels above — Open Companion, not Open Mezzo Companion.
+
+Internal terminology:
+
+* Marketing Site
+* Onboarding
+* Session Window
+* Mezzo Companion
+* Document Picture-in-Picture
+
+Avoid exposing implementation terminology unless it is necessary to explain browser behavior or technical limitations.
+
+The user should never need to understand browser architecture to understand Mezzo.
+
+---
+
+# Product Decision Principles
+
+Every significant decision should be evaluated using the following principles.
+
+## Protect the Mental Model
+
+Users should only need to understand two product concepts:
+
+* Mezzo
+* Mezzo Companion
+
+Avoid introducing additional names for implementation details.
+
+If a browser limitation requires explanation, describe the behavior rather than exposing the underlying architecture whenever possible.
+
+---
+
+## Awareness Before Instruction
+
+Mezzo coaches through awareness.
+
+It does not judge.
+
+It does not correct.
+
+It does not score.
+
+The interface should describe what is happening and trust the user to decide what to do.
+
+Prefer descriptive language over corrective language.
+
+For example:
 
 Prefer:
 
-- Companion
-- Floating Companion
+* Quiet
+* Within Range
+* Approaching End of Range
+* Outside Range
 
 Avoid:
 
-- Control Room
-- Control Page
-- Picture-in-Picture (except in technical documentation)
+* Too Loud
+* Warning
+* Alert
+* Incorrect
+* Fix Your Volume
+
+---
+
+## Preserve Calm
+
+The technically simplest solution is not always the correct product solution.
+
+Avoid introducing:
+
+* flashing
+* blinking
+* urgency without reason
+* aggressive notification patterns
+* punitive language
+* gamification
+* unnecessary visual complexity
+
+Attention should increase gradually and continuously rather than through abrupt interruption.
+
+---
+
+## Protect User Trust
+
+Every interaction should reinforce confidence that Mezzo behaves predictably.
+
+Users should understand:
+
+* why microphone access is needed
+* when monitoring begins
+* when monitoring ends
+* what happens to their audio
+
+Never imply privacy guarantees that the implementation cannot honestly support.
+
+---
+
+## Keep the Product Peripheral
+
+The Mezzo Companion exists to support the meeting—not compete with it.
+
+The best monitoring experience is one the user barely notices until they need it.
+
+---
+
+## Prefer Simplicity
+
+When multiple solutions satisfy the same product goal, prefer the one with:
+
+* fewer concepts
+* fewer decisions
+* clearer recovery
+* lower cognitive load
+
+Complexity should be earned.
+
+---
+
+# Architecture Principles
+
+The implementation should reinforce—not redefine—the intended product experience.
+
+## Single Source of Truth
+
+The Session Window owns the monitoring session.
+
+It owns:
+
+* microphone access
+* monitoring engine
+* active profile
+* calibration
+* monitoring lifecycle
+* session recovery
+* cleanup
+
+The Mezzo Companion presents monitoring information.
+
+It should not independently own monitoring state.
+
+Avoid duplicated state whenever possible.
+
+When state must be synchronized across windows, establish a clear source of truth.
+
+---
+
+## Separation of Concerns
+
+Separate:
+
+* product logic
+* monitoring engine
+* UI
+* visualization
+* browser integration
+
+Business logic should remain independent from rendering.
+
+The visualization should communicate state, not compute it.
+
+---
+
+## Reuse Before Reinvention
+
+Before introducing new architecture:
+
+* review the existing implementation
+* reuse existing components
+* extend current systems where practical
+
+Avoid rewriting stable systems without a compelling product reason.
+
+---
+
+## Maintainability
+
+Prefer:
+
+* modular components
+* reusable utilities
+* feature-based organization
+* explicit ownership
+* predictable lifecycle management
+
+Avoid:
+
+* duplicated business logic
+* duplicated state
+* tightly coupled UI and monitoring code
 
 ---
 
 # Engineering Principles
 
-Before implementing new features:
+Implementation decisions should support long-term maintainability.
 
-- Review the existing codebase.
-- Reuse existing components whenever possible.
-- Avoid duplicating business logic.
-- Keep monitoring logic independent from UI.
-- Prefer composition over duplication.
-- Preserve backward compatibility unless explicitly changing behavior.
+Always:
 
-When implementation and product intent appear to conflict:
+* inspect the existing codebase before making large changes
+* preserve established behavior unless intentionally changing the experience
+* document architectural decisions
+* favor explicitness over cleverness
 
-**Ask for clarification rather than making assumptions.**
+If implementation appears to conflict with product intent:
+
+Stop.
+
+Clarify the intended experience before changing architecture.
+
+---
+
+# Accessibility Principles
+
+Accessibility is part of the product experience.
+
+The monitoring visualization should remain understandable without relying solely on color.
+
+Communicate state through combinations of:
+
+* contour count
+* motion
+* propagation
+* geometry
+* glow
+* restrained color
+
+Support:
+
+* keyboard navigation
+* appropriate semantic labeling
+* reduced motion preferences
+* sufficient contrast
+
+Reduced motion should preserve awareness without removing meaningful state communication.
+
+Accessibility improvements should reinforce Mezzo's calm character rather than introducing conventional warning metaphors.
+
+---
+
+# Motion Principles
+
+Motion should feel natural.
+
+It should communicate changing energy rather than system notifications.
+
+Motion should be:
+
+* continuous
+* smooth
+* restrained
+* purposeful
+
+Never animate solely for decoration.
+
+Every animation should communicate meaningful state.
+
+---
+
+# Documentation System
+
+Documentation is the project's long-term memory.
+
+Each document has a distinct responsibility.
+
+## CLAUDE.md
+
+Defines:
+
+* product philosophy
+* terminology
+* architecture
+* collaboration model
+* engineering principles
+* documentation structure
+
+This document should remain durable.
+
+It should change only when the product itself evolves.
+
+---
+
+## product-experience.md
+
+Defines:
+
+* user journeys
+* interaction flows
+* monitoring lifecycle
+* recovery behavior
+* monitoring states
+* visualization behavior
+
+It answers:
+
+"What should users experience?"
+
+---
+
+## PRDs
+
+Define individual features.
+
+Each PRD should describe:
+
+* problem
+* goals
+* scope
+* constraints
+* acceptance criteria
+* open questions
+
+PRDs should not redefine the product.
+
+---
+
+## design-principles.md
+
+Documents reusable visual, interaction, motion, and copy principles that extend beyond a single feature.
+
+---
+
+## natural-systems.md
+
+Documents the philosophy behind:
+
+* breathing
+* propagation
+* contour behavior
+* organic motion
+* peripheral awareness
+
+---
+
+## discoveries/
+
+Capture:
+
+* browser limitations
+* implementation discoveries
+* research
+* experiments
+* unresolved questions
+
+These are historical records, not canonical product definitions.
+
+---
+
+## Implementation Notes
+
+Implementation notes may document:
+
+* temporary constraints
+* migration plans
+* technical debt
+* debugging observations
+
+They should not become the authoritative source for product decisions.
+
+---
+
+# Scope Discipline
+
+Current milestone:
+
+Mezzo V2
+
+Before implementing a new idea, determine whether it is:
+
+* required to complete the current experience
+* a usability improvement
+* a trust improvement
+* a documentation improvement
+* future exploration
+
+Future ideas should be captured without silently expanding the current milestone.
 
 ---
 
 # Decision Hierarchy
 
-When making implementation decisions, prioritize in this order:
+When tradeoffs are necessary, prioritize:
 
 1. User experience
 2. Product philosophy
 3. Privacy
 4. Accessibility
-5. Simplicity
-6. Technical elegance
+5. Reliability
+6. Simplicity
+7. Technical elegance
 
-A technically clever implementation that weakens the user experience is not the correct solution.
+A technically clever implementation that weakens the intended experience is not the correct solution.
 
 ---
 
@@ -328,11 +804,47 @@ A technically clever implementation that weakens the user experience is not the 
 
 A feature is complete only when it:
 
-- Matches the intended user experience.
-- Aligns with Mezzo's product philosophy.
-- Preserves privacy.
-- Integrates naturally with existing workflows.
-- Uses the existing design system.
-- Remains simple and maintainable.
+* aligns with the product vision
+* reinforces Mezzo's philosophy
+* preserves user trust
+* follows canonical terminology
+* matches the intended user experience
+* integrates naturally with existing workflows
+* uses the established design system
+* remains accessible
+* remains maintainable
+* includes appropriate documentation
 
 Passing tests alone does not mean the experience is complete.
+
+The implementation should also feel consistent with Mezzo's values.
+
+---
+
+# Success Criteria
+
+Mezzo succeeds when:
+
+* users immediately understand what the product does
+* the relationship between Mezzo and the Mezzo Companion feels obvious
+* users do not need to understand browser implementation details
+* monitoring feels ambient rather than intrusive
+* recovery is calm and understandable
+* privacy behavior matches privacy messaging
+* the interface remains visually restrained during meetings
+* terminology stays consistent across every surface
+* documentation preserves product intent as the implementation evolves
+
+The strongest implementation is not the one with the most features.
+
+It is the one that most clearly expresses Mezzo's purpose.
+
+---
+
+# Closing Principle
+
+Whenever uncertainty exists, return to the central question:
+
+**Does this make Mezzo feel calmer, clearer, and more trustworthy?**
+
+If the answer is no, reconsider the decision before implementing it.

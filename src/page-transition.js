@@ -21,7 +21,6 @@ let isNavigating = false;
  * Fade in the page content on load.
  * Targets .page-fade (falls back to body for backwards compat).
  * Only animates if the target starts with inline opacity: 0.
- * Also sets up the nav scroll behavior (transparent at top, frosted on scroll).
  */
 export function pageEnter() {
   const fadeTarget = document.querySelector('.page-fade') || document.body;
@@ -37,17 +36,6 @@ export function pageEnter() {
         }, FADE_IN_MS + 50);
       });
     });
-  }
-
-  // Nav: transparent at top, frosted background on scroll
-  const nav = document.querySelector('.nav');
-  if (nav) {
-    const SCROLL_THRESHOLD = 16;
-    const onScroll = () => {
-      nav.classList.toggle('nav-scrolled', window.scrollY > SCROLL_THRESHOLD);
-    };
-    window.addEventListener('scroll', onScroll, { passive: true });
-    onScroll();
   }
 }
 

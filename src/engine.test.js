@@ -126,11 +126,11 @@ describe('Calibration', () => {
 // zone commits must track the raw signal frame-by-frame, not require it
 // to hold steady. (Smoothing already happens upstream in audio.js's EMA,
 // and brief spikes are separately guarded against escalating drift in
-// monitoring.js, not by delaying classification here.)
+// src/mezzo-session.js, not by delaying classification here.)
 //
 // There are only 4 zones (0-3) — zone 3 ("Outside of Range") is open-ended
 // above ZONE_ACCEPTABLE_MULT. Sustained/consistent-outside is a duration
-// flag owned by monitoring.js, not an additional volume tier here.
+// flag owned by src/mezzo-session.js, not an additional volume tier here.
 // =============================================================================
 
 describe('Zone Classification', () => {

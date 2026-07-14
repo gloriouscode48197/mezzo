@@ -26,7 +26,7 @@
       "light": {
         "primary":  { "$value": "#1A1A1A", "$type": "color", "$description": "Headings, hero. 12.5:1 on #F0EBE2" },
         "default":  { "$value": "#2A2A2A", "$type": "color", "$description": "Step headings. 10.6:1 on #F0EBE2" },
-        "body":     { "$value": "#6B6560", "$type": "color", "$description": "Body copy. 5.0:1 on #F0EBE2" },
+        "body":     { "$value": "#3A3A3A", "$type": "color", "$description": "Body copy (Dark Wash). 9.8:1 on #F0EBE2" },
         "subdued":  { "$value": "#8A827A", "$type": "color", "$description": "Notes, microcopy. 3.2:1 on #F0EBE2" },
         "ghost":    { "$value": "#C8C0B5", "$type": "color", "$description": "Step numbers, decorative. 1.5:1 on #F0EBE2" }
       },
@@ -53,7 +53,7 @@
 
     "border": {
       "dark":       { "$value": "rgba(240, 235, 226, 0.08)", "$type": "color" },
-      "light":      { "$value": "#D8D0C3", "$type": "color" },
+      "light":      { "$value": "rgba(138, 130, 122, 0.18)", "$type": "color", "$description": "Stone-based translucent border/divider" },
       "mid":        { "$value": "rgba(240, 235, 226, 0.10)", "$type": "color" },
       "outline-dark":  { "$value": "rgba(196, 89, 58, 0.4)", "$type": "color", "$description": "Outline CTA border" },
       "outline-light": { "$value": "rgba(196, 89, 58, 0.4)", "$type": "color" },

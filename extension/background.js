@@ -14,28 +14,30 @@
  * easy to miss (a few-second auto-dismissing banner) for something meant
  * to help people remember to use Mezzo.
  *
- * Companion window: Mezzo opens in a dedicated browser window (via
- * lib/window-manager.js), not a tab in the user's meeting window — a tab
- * would steal focus from the meeting and can trigger the meeting app's own
- * PiP as it loses foreground status. All window creation/reuse/dedup logic
- * lives in MezzoWindowManager; this file only decides *which URL* and
- * *whether to steal focus* for a given launch.
+ * Mezzo opens in a dedicated browser window (via lib/window-manager.js),
+ * not a tab in the user's meeting window — a tab would steal focus from
+ * the meeting and can trigger the meeting app's own PiP as it loses
+ * foreground status. All window creation/reuse/dedup logic lives in
+ * MezzoWindowManager; this file only decides *which URL* and *whether to
+ * steal focus* for a given launch.
  */
 
 import { MezzoWindowManager } from './lib/window-manager.js';
 
 const MEZZO_BASE_URL = 'https://mezzo-one.vercel.app';
-const MEZZO_ENTRY_URL = `${MEZZO_BASE_URL}/monitoring.html`;
+const MEZZO_ENTRY_URL = `${MEZZO_BASE_URL}/try-it.html`;
 
 const BADGE_TEXT = '●'; // ● — an ambient "something's here" cue, not an alarm
 const BADGE_COLOR = '#C4593A'; // Mezzo's hanko accent
 
 /**
- * Open the Companion Window, or refocus/restore the existing one. It always
- * lands on Ready — monitoring never auto-starts, so there's no launch-mode
- * distinction to make here. `focused: false` is best-effort (Chrome/OS do
- * not guarantee unfocused window creation) — used for meeting-prompt
- * launches so the meeting stays undisturbed whenever possible.
+ * Open Mezzo, or refocus/restore the existing window. It always lands on
+ * the pre-session Ready screen (or the session-status view, if a session
+ * from an earlier launch is still running) — monitoring never auto-starts,
+ * so there's no launch-mode distinction to make here. `focused: false` is
+ * best-effort (Chrome/OS do not guarantee unfocused window creation) —
+ * used for meeting-prompt launches so the meeting stays undisturbed
+ * whenever possible.
  */
 async function openMezzo({ focused = true, senderTabId = null } = {}) {
   await MezzoWindowManager.openOrFocus({ url: MEZZO_ENTRY_URL, focused, senderTabId });

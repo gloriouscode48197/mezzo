@@ -1,12 +1,12 @@
 /**
  * Mezzo — Privacy Page Styles
- * Base layout (.page, .nav) inherited from calibration.css. Nav stays the
- * fixed dark "always frosted" chrome used across the marketing pages,
- * independent of this page's own (light, Unbleached) content tone.
+ * Base layout (.page) inherited from calibration.css. Navigation is shared,
+ * canonical CSS — see design-tokens/mezzo-tokens.css. Page background
+ * matches the nav's Paper tone — no visible seam between chrome and content.
  */
 
 .page {
-  background: var(--unbleached);
+  background: var(--paper);
 }
 
 .privacy-content {
@@ -66,19 +66,6 @@
 .reveal.visible {
   opacity: 1;
   transform: translateY(0);
-}
-
-/* ── Nav: always frosted on this page ── */
-.nav {
-  background: rgba(13, 11, 9, 0.92);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.042);
-}
-
-.btn-nav {
-  font-size: 14px;
-  padding: 9px 22px;
 }
 
 /* ── Responsive ── */

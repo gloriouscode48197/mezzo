@@ -48,14 +48,14 @@
 
   --text-primary: #1A1A1A;
   --text-default: #2A2A2A;
-  --text-body: #6B6560;
+  --text-body: var(--dark-wash);
   --text-subdued: #8A827A;
   --text-ghost: #C8C0B5;
 
   --hanko-text: #C4593A;
   --hanko-glow: rgba(196, 89, 58, 0.10);
 
-  --border: #D8D0C3;
+  --border: rgba(138, 130, 122, 0.18);
   --border-outline: rgba(196, 89, 58, 0.4);
   --border-pip: #D8D0C3;
 
@@ -105,6 +105,9 @@
   --paper: #F0EBE2;
   --unbleached: #D8D0C3;
   --warm-grey: #B8A99A;
+  --dark-wash: #3A3A3A;
+  --mid-wash: #6B6B6B;
+  --stone: #8A827A;
 
   /* Radius */
   --radius-cta: 100px;
@@ -172,7 +175,7 @@
   font-weight: var(--weight-regular);
   font-size: 18px;
   line-height: 130%;
-  color: var(--text-default);
+  color: var(--text-primary);
 }
 
 .type-step-number {
@@ -200,11 +203,103 @@
 }
 
 .type-nav-wordmark {
-  font-family: var(--font-display);
-  font-weight: var(--weight-regular);
-  font-size: 19px;
+  font-family: var(--font-body);
+  font-weight: var(--weight-medium);
+  font-size: 13px;
   line-height: 100%;
-  color: var(--text-default);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  /* Dark Wash, not Sumi — a medium-dark neutral rather than near-black.
+     ~9.6:1 against Paper, comfortably clears WCAG AA (4.5:1) for normal
+     text while reading softer than the near-black used for headings. */
+  color: var(--dark-wash);
+  text-decoration: none;
+}
+
+/* ═══════════════════════════════════════════
+   Global Navigation
+   One canonical header, shared by every page (index.html, privacy.html,
+   try-it.html, and any future page) — do not redefine .nav/.nav-link* in a
+   page-specific stylesheet. The only thing that should ever differ between
+   pages is which link carries .nav-link-active.
+   ═══════════════════════════════════════════ */
+
+.nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 76px;
+  padding: 0 32px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--paper);
+  border-bottom: 1px solid rgba(138, 130, 122, 0.15);
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+}
+
+.nav-link {
+  text-decoration: none;
+  font-family: var(--font-body);
+  font-weight: var(--weight-regular);
+  font-size: 14px;
+  border-bottom: 2px solid transparent;
+  padding-bottom: 3px;
+  transition: opacity 0.2s ease;
+}
+
+.nav-link:hover { opacity: 0.7; }
+
+.nav-link-quiet { color: var(--mid-wash); }
+
+.nav-link-active {
+  color: var(--text-primary);
+  cursor: default;
+  border-bottom: 2px solid var(--hanko-fill);
+}
+
+.nav-link-active:hover { opacity: 1; }
+
+@media (min-width: 1100px) {
+  .nav { padding-left: 120px; padding-right: 120px; }
+}
+
+/* ═══════════════════════════════════════════
+   Global Footer
+   One canonical footer, shared by every page — do not redefine .site-footer
+   in a page-specific stylesheet. Content is always "© Mezzo" + "Privacy".
+   ═══════════════════════════════════════════ */
+
+.site-footer {
+  background: var(--washi);
+  border-top: 1px solid var(--border);
+  padding: var(--space-footer);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+@media (min-width: 700px) {
+  .site-footer { padding-left: 48px; padding-right: 48px; }
+}
+
+@media (min-width: 1100px) {
+  .site-footer { padding-left: 120px; padding-right: 120px; }
+}
+
+/* ── Shared focus-visible treatment for interactive elements (nav links,
+   footer link, buttons) — moved here from a page-specific stylesheet so
+   every page gets a visible keyboard-focus ring, not just the homepage. ── */
+a:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--hanko-fill);
+  outline-offset: 3px;
+  border-radius: 4px;
 }
 
 .type-monitoring-within {
@@ -323,20 +418,30 @@
   color: var(--text-ghost);
 }
 
+/* Both footer tokens use Dark Wash — ~8.6:1 against Washi, ~9.6:1 against
+   Paper, comfortably clearing WCAG AA (4.5:1) for normal-size text. Neither
+   --text-ghost nor --text-subdued clear that threshold here (measured
+   ~1.9:1 and ~3.2:1 against Paper respectively), which is why the footer
+   read as too faint. Restraint comes from the smaller size, lighter
+   weight, and letter-spacing here — not from a low-contrast color. */
 .type-footer-brand {
   font-family: var(--font-body);
   font-weight: var(--weight-light);
   font-size: 11px;
   letter-spacing: 1.3px;
-  color: var(--text-ghost);
+  color: var(--dark-wash);
 }
 
 .type-footer-link {
   font-family: var(--font-body);
   font-weight: var(--weight-light);
   font-size: 12px;
-  color: var(--text-subdued);
+  color: var(--dark-wash);
+  text-decoration: none;
+  transition: var(--transition-hover);
 }
+
+.type-footer-link:hover { color: var(--hanko-text); }
 
 
 /* ═══════════════════════════════════════════
@@ -380,6 +485,16 @@
   background: var(--hanko-fill);
   border-color: var(--hanko-fill);
   color: var(--hanko-on-fill);
+}
+
+/* Secondary/ghost buttons on light surfaces are neutral (Stone border, Dark
+   Wash text) — Hanko stays accent-only, reserved for the hover fill above.
+   Scoped to [data-surface="light"] specifically so it never reaches the
+   Floating Companion, which forces data-surface="dark" on its own document
+   and keeps the original Hanko-tinted .btn-outline look. */
+[data-surface="light"] .btn-outline {
+  color: var(--dark-wash);
+  border-color: rgba(138, 130, 122, 0.30);
 }
 
 .btn-stop {
