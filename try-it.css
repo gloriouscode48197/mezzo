@@ -61,11 +61,6 @@ body {
 
 .state-micro { margin-top: var(--space-button-to-micro); }
 
-.state-micro-revoke {
-  margin-top: 20px;
-  color: var(--text-subdued);
-}
-
 .denied-help {
   margin-top: var(--space-heading-to-content);
   color: var(--text-subdued);
@@ -74,25 +69,9 @@ body {
   margin-right: auto;
 }
 
-/* ── Ready State ── */
+/* ── Footer (state-return-to-pip) ── */
 .state-footer { margin-top: 72px; text-align: center; }
 .state-footer-text { color: var(--text-subdued); margin-top: 2px; }
-
-.btn-recalibrate-link {
-  display: block;
-  background: none;
-  border: none;
-  color: var(--hanko-text);
-  font-family: var(--font-body);
-  font-weight: var(--weight-regular);
-  font-size: 16px;
-  cursor: pointer;
-  padding: 0;
-  margin: 48px auto 0;
-  transition: var(--transition-hover);
-}
-
-.btn-recalibrate-link:hover { text-decoration: underline; }
 
 /* ── Calibration Crossfade ── */
 .cal-content-area {
@@ -169,8 +148,14 @@ body {
 
 .btn-recalibrate:hover { opacity: 0.7; }
 
-/* ── Profile List ── */
-.profile-list { display: flex; flex-direction: column; gap: 4px; text-align: left; }
+/* ── Profile List ──
+   Selected/hover treatment is a consistent ink-tinted overlay system (not
+   token-based like the rest of the page) so every row — built-in or saved —
+   reads identically at each state: rgba(--ink-rgb, 0.06) + a matching 0.18
+   outline when selected, rgba(--ink-rgb, 0.04) with no outline on hover
+   (deliberately weaker than selected), transparent when idle. Values match
+   the approved mockup. ── */
+.profile-list { display: flex; flex-direction: column; gap: 4px; text-align: left; margin-bottom: 36px; width: 100%; }
 
 .profile-row {
   display: flex;
@@ -184,18 +169,48 @@ body {
   cursor: pointer;
   font: inherit;
   text-align: left;
-  transition: var(--transition-hover);
+  transition: background 0.15s ease;
 }
 
-.profile-row:hover { background: var(--surface-card); }
+.profile-row:hover { background: rgba(60, 59, 63, 0.04); }
+
+.profile-row:has(.radio-input:checked) {
+  background: rgba(60, 59, 63, 0.06);
+  outline: 1px solid rgba(60, 59, 63, 0.18);
+  outline-offset: -1px;
+}
 
 .profile-row-text { display: flex; flex-direction: column; gap: 4px; }
 
+.profile-row-name-line { display: flex; align-items: center; gap: 8px; }
+
 .profile-row-name {
   font-family: var(--font-body);
-  font-weight: var(--weight-regular);
+  font-weight: var(--weight-light);
   font-size: 16px;
   color: var(--text-default);
+  transition: font-weight 0.15s ease;
+}
+
+.profile-row:has(.radio-input:checked) .profile-row-name {
+  font-weight: var(--weight-regular);
+}
+
+.profile-row-name--sm { font-size: 16px; flex: 1; }
+
+/* Subdued pill — deliberately quieter than the profile name, never the accent color. */
+.profile-row-badge {
+  flex-shrink: 0;
+  font-family: var(--font-body);
+  font-size: 9px;
+  font-weight: var(--weight-medium);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--paper);
+  background: var(--text-subdued);
+  border-radius: var(--radius-pill);
+  padding: 2px 7px;
+  white-space: nowrap;
 }
 
 .profile-row-desc {
@@ -206,40 +221,253 @@ body {
   color: var(--text-subdued);
 }
 
-.profile-check {
-  flex-shrink: 0; width: 20px; height: 20px;
-  display: flex; align-items: center; justify-content: center;
-  color: var(--hanko-fill);
-  font-size: 13px; margin-top: 2px;
-}
-
-.profile-row-bullet {
-  flex-shrink: 0;
-  width: 20px;
-  text-align: center;
-  color: var(--hanko-text);
-}
-
 .profile-divider {
   border: none;
   border-top: 1px solid var(--border);
   margin: 8px 4px;
+  transition: border-color 0.15s ease;
 }
 
-.profile-section-label { padding: 0 18px; margin-bottom: 8px; }
+#profile-library:has(#profile-radio-recommended-lib:checked) .profile-divider {
+  border-color: transparent;
+}
 
-/* ── Save Prompt / Ready ── */
+/* ── Radio (custom visual over a real, semantic radio input) ── */
+.radio-input {
+  position: absolute;
+  top: 16px;
+  left: 18px;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.radio-visual {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(60, 59, 63, 0.25);
+  background: transparent;
+  transition: border-color 0.15s ease;
+}
+
+.radio-input:checked + .radio-visual {
+  border-color: var(--hanko-fill);
+  background: radial-gradient(circle, var(--hanko-fill) 42%, transparent 43%);
+}
+
+.radio-input:focus-visible + .radio-visual {
+  outline: 2px solid var(--hanko-fill);
+  outline-offset: 2px;
+}
+
+.profile-row-radio { position: relative; }
+.profile-row-radio .radio-visual { margin-top: 2px; }
+
+.profile-row-saved {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: 8px;
+  border-bottom: 1px solid rgba(60, 59, 63, 0.06);
+  transition: border-color 0.15s ease;
+}
+
+.profile-row-saved:has(.radio-input:checked) { border-bottom-color: transparent; }
+
+.profile-row-radio-label {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  padding: 16px 0 16px 18px;
+}
+
+/* Delete is visually secondary by default — invisible until the row is
+   hovered or focus reaches it, then it strengthens. Keyboard users tabbing
+   directly to the button still see it via its own :focus-visible. */
+.profile-row-saved .btn-delete { opacity: 0; }
+.profile-row-saved:hover .btn-delete,
+.profile-row-saved:focus-within .btn-delete { opacity: 1; }
+
+/* ── Custom Profiles section header (label + count) ── */
+.profile-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 18px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.profile-section-label {
+  font-family: var(--font-body);
+  font-size: 9px;
+  font-weight: var(--weight-medium);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-subdued);
+}
+
+.profile-section-count {
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: var(--weight-medium);
+  letter-spacing: 0.06em;
+  color: var(--hanko-text);
+}
+
+/* ── Delete control (saved custom profiles only) ── */
+.btn-delete {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: var(--radius-icon-btn);
+  color: var(--text-subdued);
+  line-height: 1;
+  transition: color 0.12s ease, opacity 0.15s ease;
+}
+
+.btn-delete:hover,
+.btn-delete:focus-visible { color: var(--text-default); }
+
+/* ── Create Speaking Profile (profile-library state only) ── */
+.profile-create-row { padding: 14px 18px; }
+
+.profile-create-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  font-family: var(--font-body);
+  font-weight: var(--weight-regular);
+  font-size: 13px;
+  color: var(--text-default);
+  letter-spacing: 0.01em;
+  transition: color 0.15s ease, transform 0.15s ease;
+}
+
+.profile-create-icon { flex-shrink: 0; }
+
+.profile-create-link:hover,
+.profile-create-link:focus-visible {
+  color: var(--hanko-fill);
+  transform: translateX(3px);
+}
+
+.profile-limit-message {
+  font-family: var(--font-body);
+  font-weight: var(--weight-light);
+  font-size: 13px;
+  color: var(--text-subdued);
+}
+
+/* ── Delete-profile confirmation dialog ── */
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(60, 59, 63, 0.35);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.dialog {
+  background: var(--paper);
+  border-radius: 20px;
+  padding: 32px 28px;
+  max-width: 360px;
+  width: 100%;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+  text-align: center;
+}
+
+.dialog-title {
+  font-size: 24px;
+  line-height: 130%;
+  margin-bottom: 12px;
+  color: var(--text-primary);
+}
+
+.dialog-body {
+  color: var(--text-subdued);
+  margin-bottom: 28px;
+}
+
+.dialog-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.btn-delete-confirm {
+  width: 100%;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--font-body);
+  font-weight: var(--weight-regular);
+  font-size: 15px;
+  padding: 14px 28px;
+  border: none;
+  border-radius: var(--radius-cta);
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.btn-delete-confirm:hover { opacity: 0.85; }
+
+/* This dialog's Cancel reads in normal case, unlike the app's other
+   (uppercase) .btn-outline usages — scoped narrowly so it doesn't affect
+   .btn-outline elsewhere. */
+.dialog-actions .btn-outline {
+  width: 100%;
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 15px;
+}
+
+/* ── Save Prompt ── */
 .prompt-actions { display: flex; flex-direction: column; align-items: center; gap: 20px; }
 
-.current-profile-name {
-  font-family: var(--font-display);
-  font-weight: var(--weight-light);
-  font-size: 22px;
-  color: var(--text-primary);
-  margin-bottom: var(--space-circle-to-button);
+/* ── Toast (transient confirmation, e.g. after saving a profile) ── */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 32px;
+  transform: translateX(-50%) translateY(8px);
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--font-body);
+  font-weight: var(--weight-regular);
+  font-size: 13px;
+  padding: 12px 22px;
+  border-radius: var(--radius-pill);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.18);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  z-index: 50;
 }
 
-/* ── Session Status (companionReady / monitoringActive / companionClosed) ── */
+.toast.toast-visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* ── Session Status (companionReady / monitoringActive only — companionClosed
+   renders no dedicated view here; it routes back to the profile library) ── */
 .session-status-icon {
   width: 64px;
   height: 64px;

@@ -23,11 +23,13 @@ const PROFILES_STORAGE_KEY = 'mezzoProfiles';
 const SELECTED_PROFILE_KEY = 'mezzoSelectedProfile';
 const LAST_USED_PROFILE_KEY = 'mezzoLastUsedProfile';
 
-// Baseline for the built-in Recommended profile — no calibration exists to derive
-// this from, so it's a first-pass tunable default (roughly the midpoint of real
+// Baseline for the built-in Everyday Conversation profile — no calibration exists to
+// derive this from, so it's a first-pass tunable default (roughly the midpoint of real
 // calibrated baselines observed during testing, -34dB to -19dB).
+// Identifiers keep the RECOMMENDED_* names — only the user-facing profile name changed
+// (Recommended → Everyday Conversation) — to avoid churn across every importer.
 export const RECOMMENDED_SPEAKING_DB = -26;
-export const RECOMMENDED_PROFILE = { name: 'Recommended', speakingDb: RECOMMENDED_SPEAKING_DB, savedProfileId: null };
+export const RECOMMENDED_PROFILE = { name: 'Everyday Conversation', speakingDb: RECOMMENDED_SPEAKING_DB, savedProfileId: null };
 
 // =============================================================================
 // Saved Profile Library (localStorage, indefinite)

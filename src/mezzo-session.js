@@ -31,10 +31,16 @@
  *     already treats any Companion close (native ✕ or programmatic) as
  *     "stop monitoring, keep Mezzo open, layout resets to Expanded for the
  *     next open" rather than a full endSession() teardown.
- * Profile selection only happens on the Ready screen — once monitoring
- * starts the profile is locked and shown as plain informational text
- * (Expanded only), so there is no mid-monitoring profile-switch flow to
- * reconcile.
+ * Profile selection happens in Mezzo (for the first session) or on the
+ * Companion's own Ready screen (for subsequent same-day sessions) — never
+ * both for the same session. startMonitoring(profile) opens the Companion
+ * and starts monitoring in one action, with no Ready confirmation step and
+ * no second "Start Monitoring" click — Mezzo already chose the profile.
+ * Once monitoring starts the profile is locked and shown as plain
+ * informational text (Expanded only), so there is no mid-monitoring
+ * profile-switch flow to reconcile. Stopping returns the (still-open)
+ * Companion to Ready, where the profile selector unlocks again for
+ * starting again, switching profiles, or creating a new one.
  *
  * Extracted out of what used to be monitoring.js's page controller so that
  * try-it.js (now the single Mezzo session-owning page) can drive its own
@@ -45,7 +51,7 @@
  * try-it.js never calls anything for Start/Stop Monitoring, or for
  * Expanded/Compact layout, directly — those controls live *inside* the
  * Companion's own document and are wired here. try-it.js only needs: init,
- * openCompanion, stopMonitoring (for its own "End Session" click),
+ * startMonitoring, stopMonitoring (for its own "End Session" click),
  * endSession, setActiveProfile, subscribe/getSessionState, and (fallback
  * path only) startFallbackMonitoring/startDemo. There is deliberately no
  * "bring to front"/"focus" export — the Companion is a Document PiP window
@@ -53,7 +59,8 @@
  * action would be misleading. There is also no "Close Companion" export
  * beyond what the Companion's own button calls internally — Mezzo never
  * closes the Companion on the user's behalf except via endSession() (a
- * full session teardown, not the same action). Layout mode is likewise
+ * full session teardown, not the same action) or when the Companion's own
+ * "+ Create New Profile..." action closes it. Layout mode is likewise
  * entirely internal — nothing outside the Companion needs to know or care
  * whether it's Expanded or Compact.
  */
@@ -94,13 +101,11 @@ function zoneLabel(zone) {
   return 'Outside Range'; // zone === OUTSIDE_ZONE
 }
 
-// The Monitoring screen's read-only profile line. Custom (saved) profiles
-// get a "(Custom)" qualifier; the Recommended profile doesn't, since its
-// name already says what it is — "Recommended (Recommended)" would be
-// redundant.
+// The Monitoring screen's read-only profile line, e.g. "Profile: Everyday
+// Conversation (Recommended)" or "Profile: Coffee Shop (Custom)".
 function profileMetaText(profile) {
   const name = profile?.name || RECOMMENDED_PROFILE.name;
-  return profile?.savedProfileId ? `Profile: ${name} (Custom)` : `Profile: ${name}`;
+  return profile?.savedProfileId ? `Profile: ${name} (Custom)` : `Profile: ${name} (Recommended)`;
 }
 
 export function createMezzoSession({
@@ -108,6 +113,7 @@ export function createMezzoSession({
   onSessionStateChange,       // (state) => void — drives the host's 3-state status view
   onFallbackHeadingChange,    // (text) => void — fallback/demo path's own zone-label heading
   onFallbackMonitoringStop,   // () => void — fallback path: host switches back to its own Ready view
+  onProfileSynced,            // () => void — a profile created via the Companion's "+ Create New Profile..." arrived back over BroadcastChannel; host should refresh its profile library view if it's currently showing
 } = {}) {
   const pipSupported = 'documentPictureInPicture' in window;
   const sessionState = createSessionState();
@@ -131,7 +137,7 @@ export function createMezzoSession({
   // Ready is unconditionally Expanded regardless of this value.
   let layoutMode = LAYOUT_MODES.EXPANDED;
 
-  // Ready-screen DOM refs, (re)assigned each time openCompanion() builds the document
+  // Ready-screen DOM refs, (re)assigned each time startMonitoring() builds the document
   let readyScreenEl = null;
   let readyProfileNameEl = null;
   let readyProfileDropdown = null;
@@ -315,13 +321,17 @@ export function createMezzoSession({
   }
 
   /**
-   * Opens the Mezzo Companion on its Ready screen — never starts monitoring
-   * itself. Call directly from a real click (this is what satisfies
-   * Document PiP's fresh-user-gesture requirement now that the caller is
-   * try-it.html's own page, not a separate window relaying the gesture).
+   * Opens the Mezzo Companion and starts monitoring immediately with the
+   * given profile — Mezzo (not the Companion) already chose the profile for
+   * this first session, so there is no Ready confirmation step here and no
+   * second "Start Monitoring" click. Falls back to the Ready screen only if
+   * mic acquisition fails, so the user isn't left with a broken window.
+   * Call directly from a real click (this is what satisfies Document PiP's
+   * fresh-user-gesture requirement now that the caller is try-it.html's own
+   * page, not a separate window relaying the gesture).
    * @returns {Promise<boolean>} whether the Companion actually opened
    */
-  async function openCompanion() {
+  async function startMonitoring(profile) {
     if (!pipSupported) {
       console.warn('[Session] Document PiP API not supported');
       return false;
@@ -911,13 +921,21 @@ export function createMezzoSession({
       mainCircle = null;
     }
 
-    // Every open lands on the Ready screen — never auto-starts monitoring.
-    // The visualizer itself isn't created until monitoring actually starts
-    // (see resumeMonitoringFromPipReady) — there is nothing to show yet.
-    enterPipReadyMode();
-    sessionState.set(SESSION_STATES.COMPANION_READY);
-
     pipWindow.addEventListener('pagehide', handlePipClose);
+
+    // Go straight to Monitoring — Mezzo already chose this profile, so there
+    // is no Ready confirmation step on first open. If mic acquisition fails,
+    // fall back to Ready so the user can retry Start Monitoring from inside
+    // the Companion instead of being left with a broken window. Subsequent
+    // same-day sessions reuse this same open window via enterPipReadyMode()
+    // (on Stop) and resumeMonitoringFromPipReady() (on its own Start
+    // Monitoring button) instead of this path.
+    activeProfile = profile;
+    const started = await resumeMonitoringFromPipReady();
+    if (!started) {
+      enterPipReadyMode();
+      sessionState.set(SESSION_STATES.COMPANION_READY);
+    }
 
     return true;
   }
@@ -968,12 +986,19 @@ export function createMezzoSession({
     updateHeading(currentZone);
   }
 
+  /**
+   * Starts monitoring in an already-open Companion window, using whichever
+   * profile is currently active. Shared by the Companion's own Ready-screen
+   * "Start Monitoring" button (subsequent same-day sessions) and
+   * startMonitoring()'s first-open path (see below).
+   * @returns {Promise<boolean>} whether monitoring actually started
+   */
   async function resumeMonitoringFromPipReady() {
     const profile = activeProfile;
-    if (!profile) return; // shouldn't happen — Ready mode always has an active profile
+    if (!profile) return false; // shouldn't happen — Ready mode always has an active profile
 
     const ok = await beginMonitoringSession(profile);
-    if (!ok) return; // stay in Ready mode; nothing else to clean up
+    if (!ok) return false; // stay in Ready mode; nothing else to clean up
 
     if (!pipCircle && pipCircleWrapperEl) {
       pipCircle = new MezzoWaveVisualizer(pipCircleWrapperEl);
@@ -987,6 +1012,7 @@ export function createMezzoSession({
     enterExpandedLayout();
     enterPipMonitoringMode();
     sessionState.set(SESSION_STATES.MONITORING_ACTIVE);
+    return true;
   }
 
   // Shared by the Companion's Ready-screen profile dropdown — same options,
@@ -996,8 +1022,8 @@ export function createMezzoSession({
   // Selected state reads as a quiet accent bar + dimmer text (not a
   // checkmark) — restrained, since it's already the active choice, not
   // something that needs to shout. Saved (custom) profiles get a small
-  // "Custom" tag, right-aligned, Title Case — the Recommended profile
-  // doesn't (its own name already says what it is).
+  // "Custom" tag, right-aligned, Title Case — the built-in Everyday
+  // Conversation profile doesn't (it isn't a saved custom profile).
   function renderProfileDropdown(doc, dropdownEl, { onPick, onCreateNew }) {
     if (!dropdownEl || !doc) return;
     dropdownEl.innerHTML = '';
@@ -1073,10 +1099,19 @@ export function createMezzoSession({
     updateReadyProfileDisplay();
   }
 
+  /**
+   * The Companion never contains calibration/profile-creation UI itself.
+   * Stops monitoring if it's somehow active (defensive — Create New Profile
+   * only ever appears on the Ready screen, so this shouldn't normally be
+   * reachable mid-session), closes the Companion, and hands off to Mezzo in
+   * a genuinely new tab — Document PiP does not survive this tab navigating
+   * away, so the calibration flow can never happen in the Companion-owning
+   * tab itself.
+   */
   function handleCreateNewProfile() {
     closeReadyProfileDropdown();
-    // A genuinely new tab — Document PiP does not survive this tab navigating
-    // away, so the calibration flow can never happen in the Companion-owning tab.
+    if (isMonitoringActive) teardownMonitoringEngine();
+    try { pipWindow.close(); } catch { /* ignore */ }
     window.open('try-it.html?entry=create-profile', '_blank');
   }
 
@@ -1112,7 +1147,9 @@ export function createMezzoSession({
     // never continue without the Companion open, so if it was still active
     // reaching here, tear it down now — not "silently keep running" — and
     // reflect the closed Companion (not a full endSession) in session
-    // state, so Mezzo (try-it.html) stays open and offers Reopen Companion.
+    // state, so Mezzo (try-it.html) returns to the profile library instead
+    // of a full endSession() teardown — see try-it.js's
+    // handleSessionStateChange().
     if (wasActive) {
       teardownMonitoringEngine();
       activeCircle = null;
@@ -1188,6 +1225,12 @@ export function createMezzoSession({
       // profile selection is Ready-only, same as picking one from the
       // Companion's own dropdown.
       if (!isMonitoringActive) activateProfile(profile);
+
+      // The Companion is closed by now (handleCreateNewProfile closes it
+      // before opening the create-profile tab), so this tab has already
+      // navigated back to the profile library — refresh it to show the
+      // newly saved profile instead of leaving it stale until next render.
+      onProfileSynced?.();
     });
 
     // This page is the runtime owner of the session — closing it stops
@@ -1225,7 +1268,7 @@ export function createMezzoSession({
     isPipSupported: () => pipSupported,
 
     init,
-    openCompanion,
+    startMonitoring,
     stopMonitoring,
     endSession,
 

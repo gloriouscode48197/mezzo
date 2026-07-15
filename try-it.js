@@ -3,32 +3,51 @@
  *
  * try-it.js is Mezzo: onboarding (mic permission, profile choice,
  * calibration) *and* the session-owning page once a profile is chosen —
- * there is no second window in between. "Open Companion" opens the
- * Document Picture-in-Picture Mezzo Companion directly from that click
- * (a real gesture on this document, which is what Document PiP requires),
- * and this page transitions into a status/recovery view driven by
- * src/mezzo-session.js's `sessionState` for as long as the Companion stays
- * open — through any number of Start/Stop Monitoring cycles inside it.
+ * there is no second window in between. The Speaking Profile screen's
+ * primary CTA ("Start Monitoring" / "Continue") is the sole trigger for
+ * opening the Mezzo Companion — there is no separate "You're All Set"
+ * confirmation screen, and no second profile-selection or Start Monitoring
+ * step inside the Companion for this first session. Mezzo chooses the
+ * profile and starts monitoring in one action; the Companion opens directly
+ * into Monitoring. startMonitoringForProfile() calls straight into
+ * src/mezzo-session.js's startMonitoring(), which requests the Document
+ * Picture-in-Picture Mezzo Companion from that same click (a real gesture on
+ * this document, which is what Document PiP requires). This page then
+ * transitions into a status/recovery view driven by `sessionState` for as
+ * long as the Companion stays open — through any number of Stop/Start-again
+ * cycles inside it — and returns to this same profile-select screen once
+ * the Companion closes (see handleSessionStateChange()).
  *
  * States, one visible at a time:
  *   a:                Mic permission not granted → show enable mic prompt
- *   profile-select:   Choose a Profile — Recommended, Create Custom Profile, or a saved profile
- *   b:                Calibration (creates a custom profile) — landing + listening
- *   save-prompt:      "Save this profile?" — Not Now / Save Profile
- *   name:             Name a profile before saving it
- *   ready:            Profile chosen — "You're All Set", pre-session screen. Its primary
- *                     button is "Open Companion" (Companion-capable browsers) or
- *                     "Start Monitoring" (the no-Companion-support fallback) — decided once,
- *                     never both.
- *   session-status:   Companion-capable browsers only — the 3-state status/recovery view
- *                     (companionReady / monitoringActive / companionClosed), reached after
- *                     "Open Companion" and shown for as long as a session exists.
+ *   profile-select:   Choose a Speaking Profile — Everyday Conversation, Custom Speaking
+ *                     Profile, or a saved profile (guided-choice vs profile-library layout).
+ *                     Its primary CTA is the only way to start monitoring (opening the
+ *                     Companion directly into Monitoring) or begin custom profile
+ *                     creation — see startMonitoringForProfile(). Also where Mezzo lands
+ *                     after the Companion closes, for any reason.
+ *   b:                Calibration (creates a custom profile) — landing + listening. On
+ *                     finishing, always goes to "save-prompt" — there is no session-only
+ *                     "use once without saving" path, and no profile is selected yet.
+ *   save-prompt:      "Save this profile?" — Save Profile goes to "name"; Cancel discards
+ *                     the calibration result (no temporary profile is ever created) and
+ *                     returns to "b" so the user can recalibrate.
+ *   name:             Name the just-calibrated profile before saving it. On submit, returns
+ *                     to profile-select (now showing the profile library, the new profile
+ *                     auto-selected) with a confirmation toast — does not open the
+ *                     Companion automatically.
+ *   session-status:   Companion-capable browsers only — the status/recovery view for the
+ *                     two sessionState values reachable while the Companion is open
+ *                     (companionReady / monitoringActive). Reached the moment Start
+ *                     Monitoring is clicked, and shown for as long as the Companion stays
+ *                     open. When the Companion closes (companionClosed), Mezzo navigates
+ *                     back to profile-select instead of showing status copy here.
  *   fallback-monitor: The no-Companion-support fallback's own live monitoring view (dark,
  *                     in-page circle) — the one case where monitoring itself is shown here.
  *   return-to-pip:    Reached only via ?entry=create-profile (opened from the Companion's
- *                     "+ Create New Profile...") — hands the new profile back to whichever
- *                     tab owns the open Companion via BroadcastChannel, instead of becoming
- *                     a session owner itself.
+ *                     "+ Create New Profile...", which closes the Companion first) — hands
+ *                     the new profile back to the original tab via BroadcastChannel, instead
+ *                     of becoming a session owner itself.
  *
  * Profile storage lives in src/profiles.js — see that file for the three storage layers
  * (saved-profile library, this-tab selection, cross-tab last-used).
@@ -88,9 +107,10 @@ const engine = new MezzoEngine();
 
 const session = createMezzoSession({
   baseUrl: new URL('.', window.location.href).href,
-  onSessionStateChange: renderSessionStatusView,
+  onSessionStateChange: handleSessionStateChange,
   onFallbackHeadingChange: (text) => { if (fallbackHeadingEl) fallbackHeadingEl.textContent = text; },
-  onFallbackMonitoringStop: () => transitionToState('ready'),
+  onFallbackMonitoringStop: () => renderProfileSelect(),
+  onProfileSynced: () => { if (!stateProfileSelect.classList.contains('hidden')) renderProfileSelect(); },
 });
 const pipSupported = session.isPipSupported();
 
@@ -107,35 +127,40 @@ const stateProfileSelect = document.getElementById('state-profile-select');
 const stateB = document.getElementById('state-b');
 const stateSavePrompt = document.getElementById('state-save-prompt');
 const stateName = document.getElementById('state-name');
-const stateReady = document.getElementById('state-ready');
 const stateSessionStatus = document.getElementById('state-session-status');
 const stateFallbackMonitor = document.getElementById('state-fallback-monitor');
 const stateReturnToPip = document.getElementById('state-return-to-pip');
 
 const btnEnableMic = document.getElementById('btn-enable-mic');
-const btnChooseRecommended = document.getElementById('btn-choose-recommended');
-const btnCreateCustom = document.getElementById('btn-create-custom');
-const savedProfilesBlock = document.getElementById('saved-profiles-block');
+const profileGuided = document.getElementById('profile-guided');
+const profileLibrary = document.getElementById('profile-library');
+const radioRecommendedGuided = document.getElementById('profile-radio-recommended');
+const radioCustomGuided = document.getElementById('profile-radio-custom');
+const radioRecommendedLibrary = document.getElementById('profile-radio-recommended-lib');
+const profileCount = document.getElementById('profile-count');
 const savedProfilesList = document.getElementById('saved-profiles-list');
+const btnCreateNewProfile = document.getElementById('btn-create-new-profile');
+const profileLimitMessage = document.getElementById('profile-limit-message');
+const btnProfilePrimary = document.getElementById('btn-profile-primary');
+const deleteDialogOverlay = document.getElementById('delete-dialog-overlay');
+const deleteDialogName = document.getElementById('delete-dialog-name');
+const btnDeleteConfirm = document.getElementById('btn-delete-confirm');
+const btnDeleteCancel = document.getElementById('btn-delete-cancel');
 const btnStartCalibration = document.getElementById('btn-start-calibration');
-const btnSaveNotNow = document.getElementById('btn-save-not-now');
 const btnSaveProfile = document.getElementById('btn-save-profile');
+const btnCancelCalibration = document.getElementById('btn-cancel-calibration');
 const nameForm = document.getElementById('name-form');
 const profileNameInput = document.getElementById('profile-name-input');
-const currentProfileName = document.getElementById('current-profile-name');
-const btnStartMonitoring = document.getElementById('btn-start-monitoring');
-const btnChangeProfile = document.getElementById('btn-change-profile');
 const deniedHelp = document.getElementById('denied-help');
-const readyUnsupportedNote = document.getElementById('ready-unsupported-note');
+const toastEl = document.getElementById('toast');
 
 const listeningHeading = document.getElementById('listening-heading');
 const calRingCanvas = document.getElementById('cal-ring-canvas');
 
-// Session status view — the 3-state status/recovery surface.
+// Session status view — the status/recovery surface for companionReady/monitoringActive.
 const sessionStatusHeading = document.getElementById('session-status-heading');
 const sessionStatusLabel = document.getElementById('session-status-label');
 const sessionStatusText = document.getElementById('session-status-text');
-const btnReopenCompanion = document.getElementById('btn-reopen-companion');
 const btnEndSession = document.getElementById('btn-end-session');
 
 // No-Companion-support fallback's own live monitoring view.
@@ -149,7 +174,6 @@ const allStates = {
   b: stateB,
   savePrompt: stateSavePrompt,
   name: stateName,
-  ready: stateReady,
   sessionStatus: stateSessionStatus,
   fallbackMonitor: stateFallbackMonitor,
   returnToPip: stateReturnToPip,
@@ -217,55 +241,195 @@ function transitionToState(name) {
 function renderProfileSelect() {
   const saved = getSavedProfiles();
 
+  // Data-driven layout: no saved custom profiles → guided choice;
+  // one or more → profile library. See docs/ux/speaking-profile-flow.md.
+  const isLibrary = saved.length > 0;
+  profileGuided.classList.toggle('hidden', isLibrary);
+  profileLibrary.classList.toggle('hidden', !isLibrary);
+  profileCount.textContent = `${saved.length} / 5`;
+
+  // Radios are selection-only here — see chooseRecommended()/chooseSavedProfile()/
+  // goToCalibrationLanding(), which now only run from the primary CTA
+  // (handleProfilePrimaryClick) or the always-immediate Create New action.
   savedProfilesList.innerHTML = '';
-  if (saved.length === 0) {
-    savedProfilesBlock.classList.add('hidden');
-  } else {
-    savedProfilesBlock.classList.remove('hidden');
-    for (const profile of saved) {
-      const row = document.createElement('button');
-      row.className = 'profile-row profile-row-saved';
-      row.innerHTML = `
-        <span class="profile-row-bullet" aria-hidden="true">&bull;</span>
-        <span class="profile-row-text"><span class="profile-row-name"></span></span>
-      `;
-      row.querySelector('.profile-row-name').textContent = profile.name;
-      row.addEventListener('click', () => chooseSavedProfile(profile));
-      savedProfilesList.appendChild(row);
-    }
+  for (const profile of saved) {
+    const radioId = `profile-radio-saved-${profile.id}`;
+    const row = document.createElement('div');
+    row.className = 'profile-row profile-row-saved';
+    row.innerHTML = `
+      <label class="profile-row-radio-label" for="${radioId}">
+        <input type="radio" name="profile-library-choice" id="${radioId}" class="radio-input">
+        <span class="radio-visual" aria-hidden="true"></span>
+        <span class="profile-row-name profile-row-name--sm"></span>
+      </label>
+      <button type="button" class="btn-delete" aria-label="Delete profile"></button>
+    `;
+    row.querySelector('.profile-row-name').textContent = profile.name;
+    const deleteBtn = row.querySelector('.btn-delete');
+    deleteBtn.setAttribute('aria-label', `Delete ${profile.name} profile`);
+    deleteBtn.innerHTML = '<svg width="13" height="14" viewBox="0 0 13 14" fill="none" aria-hidden="true"><path d="M1 3.5h11M4.5 3.5V2h4v1.5M5.5 6.5v4M7.5 6.5v4M2 3.5l.8 8.5h7.4l.8-8.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    deleteBtn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      event.preventDefault();
+      handleDeleteClick(profile, deleteBtn);
+    });
+    savedProfilesList.appendChild(row);
   }
 
+  // Five-profile limit — Create Speaking Profile is replaced by a plain
+  // status message at 5/5, never a disabled link.
+  const atLimit = saved.length >= 5;
+  btnCreateNewProfile.classList.toggle('hidden', atLimit);
+  profileLimitMessage.classList.toggle('hidden', !atLimit);
+
+  // Everyday Conversation is selected by default whenever no valid selected
+  // profile exists — e.g. no selection yet, or a stored savedProfileId that
+  // no longer matches a saved profile.
+  const current = getSelectedProfile();
+  const currentSavedRadio = current?.savedProfileId
+    ? savedProfilesList.querySelector(`#profile-radio-saved-${current.savedProfileId}`)
+    : null;
+  if (currentSavedRadio) {
+    currentSavedRadio.checked = true;
+  } else {
+    radioRecommendedLibrary.checked = true;
+  }
+  radioRecommendedGuided.checked = true;
+  radioCustomGuided.checked = false;
+
+  updatePrimaryButtonLabel();
   transitionToState('profileSelect');
+}
+
+/** Guided state only — the CTA reflects the selected path; library state's CTA never changes. */
+function updatePrimaryButtonLabel() {
+  const inGuided = !profileGuided.classList.contains('hidden');
+  btnProfilePrimary.textContent = inGuided && radioCustomGuided.checked ? 'Continue' : 'Start Monitoring';
+}
+
+/** Primary CTA — acts on whichever radio is currently selected. Rows themselves only select. */
+function handleProfilePrimaryClick() {
+  if (!profileGuided.classList.contains('hidden')) {
+    if (radioCustomGuided.checked) {
+      goToCalibrationLanding();
+    } else {
+      chooseRecommended();
+    }
+    return;
+  }
+
+  if (radioRecommendedLibrary.checked) {
+    chooseRecommended();
+    return;
+  }
+  const checkedSavedRadio = savedProfilesList.querySelector('.radio-input:checked');
+  const savedId = checkedSavedRadio?.id.replace('profile-radio-saved-', '');
+  const profile = savedId ? getSavedProfiles().find((p) => p.id === savedId) : null;
+  profile ? chooseSavedProfile(profile) : chooseRecommended();
 }
 
 function chooseRecommended() {
   setSelectedProfile(RECOMMENDED_PROFILE);
-  showReady();
+  startMonitoringForProfile(RECOMMENDED_PROFILE);
 }
 
-/** "Create Custom Profile" — go to calibration's landing view (not straight into capture). */
+/** "Custom Speaking Profile" / "Create New Speaking Profile" — go to calibration's landing view (not straight into capture). */
 function goToCalibrationLanding() {
   transitionToState('b');
 }
 
 function chooseSavedProfile(profile) {
-  setSelectedProfile({
+  const selected = {
     name: profile.name,
     speakingDb: profile.speakingDb,
     savedProfileId: profile.id,
-  });
-  showReady();
+  };
+  setSelectedProfile(selected);
+  startMonitoringForProfile(selected);
 }
 
 // =============================================================================
-// Ready Screen (pre-session — "You're All Set")
+// Delete Profile
 // =============================================================================
 
-function showReady() {
-  const selected = getSelectedProfile();
-  currentProfileName.textContent = selected ? selected.name : RECOMMENDED_PROFILE.name;
-  session.setActiveProfile(selected || RECOMMENDED_PROFILE);
-  transitionToState('ready');
+// Set while the confirmation dialog is open; cleared on Cancel or Delete.
+let pendingDeleteProfileId = null;
+let pendingDeleteTriggerBtn = null;
+
+function handleDeleteClick(profile, triggerBtn) {
+  pendingDeleteProfileId = profile.id;
+  pendingDeleteTriggerBtn = triggerBtn;
+  deleteDialogName.textContent = profile.name;
+  deleteDialogOverlay.classList.remove('hidden');
+  btnDeleteCancel.focus();
+}
+
+function closeDeleteDialog() {
+  deleteDialogOverlay.classList.add('hidden');
+  pendingDeleteTriggerBtn?.focus();
+  pendingDeleteProfileId = null;
+  pendingDeleteTriggerBtn = null;
+}
+
+function handleDeleteCancel() {
+  closeDeleteDialog();
+}
+
+function handleDeleteConfirm() {
+  if (!pendingDeleteProfileId) return;
+  const deletedId = pendingDeleteProfileId;
+  const remaining = getSavedProfiles().filter((p) => p.id !== deletedId);
+  saveSavedProfiles(remaining);
+
+  // Keep a valid profile selected — if the deleted profile was the current
+  // selection, fall back to Everyday Conversation automatically.
+  const current = getSelectedProfile();
+  if (current?.savedProfileId === deletedId) {
+    setSelectedProfile(RECOMMENDED_PROFILE);
+  }
+
+  deleteDialogOverlay.classList.add('hidden');
+  pendingDeleteProfileId = null;
+  pendingDeleteTriggerBtn = null;
+  // The deleted row no longer exists once the list rebuilds, so — unlike
+  // Cancel — there's no original control to return focus to. The primary
+  // CTA is the one stable landing spot regardless of which layout results.
+  renderProfileSelect();
+  btnProfilePrimary.focus();
+}
+
+// =============================================================================
+// Start monitoring with the given profile — the Speaking Profile page's
+// primary CTA is the only route in, with no "You're All Set" screen and no
+// separate Companion Ready confirmation for this first session: opening the
+// Companion and starting monitoring happen as one action. Called from a real
+// click (a genuine user gesture, which is what Document PiP requires) in
+// every caller.
+// =============================================================================
+
+async function startMonitoringForProfile(profile) {
+  if (pipSupported) {
+    transitionToState('sessionStatus');
+    await session.startMonitoring(profile);
+  } else {
+    session.setActiveProfile(profile);
+    const ok = await session.startFallbackMonitoring(fallbackCircleContainer);
+    if (ok) transitionToState('fallbackMonitor');
+  }
+}
+
+// =============================================================================
+// Toast (transient confirmation — e.g. after saving a custom profile)
+// =============================================================================
+
+let toastTimeout = null;
+
+function showToast(message) {
+  if (!toastEl) return;
+  toastEl.textContent = message;
+  toastEl.classList.add('toast-visible');
+  clearTimeout(toastTimeout);
+  toastTimeout = setTimeout(() => toastEl.classList.remove('toast-visible'), 3200);
 }
 
 // =============================================================================
@@ -381,10 +545,12 @@ function finishCalibration() {
   const { baselineRMS } = engine.getCalibrationValues();
   const speakingDb = 20 * Math.log10(baselineRMS + 1e-10);
 
-  // This profile is temporary until the user explicitly saves it — select it
-  // immediately so Ready/monitoring can use it either way.
+  // Held only transiently, long enough to be named+saved (handleSaveProfileClick
+  // → handleNameFormSubmit) or discarded (handleCancelCalibration) — never
+  // persisted as the selected profile before the user confirms saving. There is
+  // no temporary or session-only profile state; calibration always ends in
+  // either a saved Custom Profile or nothing at all.
   pendingCalibratedProfile = { speakingDb, calibratedTs: Date.now() };
-  setSelectedProfile({ name: null, speakingDb, savedProfileId: null });
 
   trackCalibrationCompleted();
 
@@ -396,18 +562,20 @@ function finishCalibration() {
 // Save Prompt / Naming
 // =============================================================================
 
-function handleSaveNotNow() {
-  const profile = getSelectedProfile(); // set by finishCalibration() just before this prompt
-  pendingCalibratedProfile = null;
-  isCreateProfileEntry ? returnToPip(profile) : showReady();
-}
-
 function handleSaveProfileClick() {
   profileNameInput.value = '';
   transitionToState('name');
   requestAnimationFrame(() => profileNameInput.focus());
 }
 
+/** Cancel — discard the unsaved calibration result and return to calibration so the user can try again. Mic permission (granted earlier in state "a") is reused as-is; audio.acquire() re-requests the stream, not the permission. No temporary profile is ever created. */
+function handleCancelCalibration() {
+  pendingCalibratedProfile = null;
+  resetCalibrationView();
+  transitionToState('b');
+}
+
+/** Names and persists the new profile, then returns to Speaking Profile (now showing the profile library, this profile auto-selected) with a confirmation toast — it does not open the Companion automatically. */
 function handleNameFormSubmit(event) {
   event.preventDefault();
   const name = profileNameInput.value.trim();
@@ -423,63 +591,36 @@ function handleNameFormSubmit(event) {
   setSelectedProfile(selected);
   pendingCalibratedProfile = null;
 
-  isCreateProfileEntry ? returnToPip(selected) : showReady();
+  if (isCreateProfileEntry) {
+    returnToPip(selected);
+  } else {
+    renderProfileSelect();
+    showToast('Speaking profile saved.');
+  }
 }
 
 // =============================================================================
-// Open Companion (from Ready) — Companion-capable browsers
-// =============================================================================
-
-/**
- * A real click on this document — exactly what Document PiP requires, no
- * relay through a second window needed. The status view shows immediately
- * (its static markup defaults to the "closed" copy, matching sessionState's
- * initial value) and updates reactively once openCompanion() resolves.
- */
-async function handleOpenMezzoClick() {
-  transitionToState('sessionStatus');
-  await session.openCompanion();
-}
-
-// =============================================================================
-// Start Monitoring (from Ready) — no-Companion-support fallback only
-// =============================================================================
-
-async function handleFallbackStartClick() {
-  const ok = await session.startFallbackMonitoring(fallbackCircleContainer);
-  if (ok) transitionToState('fallbackMonitor');
-}
-
-// =============================================================================
-// Session Status View (companionReady / monitoringActive / companionClosed)
+// Session Status View (companionReady / monitoringActive) + Companion-closed
+// routing back to the profile library
 // =============================================================================
 
 // No "bring to front" / "show" control anywhere — the Mezzo Companion is a
 // Document PiP window and already stays above other windows on its own, so
-// a focus/raise action would be misleading. This page reports status only;
-// "Re-open Companion" is the sole primary action, and only appears once the
-// Companion has actually closed. The secondary action is always "End
-// Session" here (a full teardown) — Mezzo never offers a softer "stop but
-// keep everything open" action; that's what the Companion's own Stop
-// Monitoring button is for.
+// a focus/raise action would be misleading. This page reports status only,
+// with no primary action of its own — the only action here is "End Session"
+// (a full teardown). Mezzo never offers a softer "stop but keep everything
+// open" action; that's what the Companion's own Stop button is for. There is
+// deliberately no "companionClosed" entry — see handleSessionStateChange().
 const SESSION_VIEW_COPY = {
   [session.SESSION_STATES.COMPANION_READY]: {
     heading: 'Mezzo Companion is open',
     statusLabel: 'Ready',
     body: "Start monitoring from the Mezzo Companion when you're ready.",
-    primaryLabel: null,
   },
   [session.SESSION_STATES.MONITORING_ACTIVE]: {
     heading: 'Monitoring is active',
     statusLabel: '',
     body: 'The Mezzo Companion will stay visible above your other windows.',
-    primaryLabel: null,
-  },
-  [session.SESSION_STATES.COMPANION_CLOSED]: {
-    heading: 'Mezzo Companion is closed',
-    statusLabel: '',
-    body: 'Monitoring is not active.',
-    primaryLabel: 'Re-open Companion',
   },
 };
 
@@ -492,10 +633,22 @@ function renderSessionStatusView(state) {
     sessionStatusLabel.classList.toggle('hidden', !copy.statusLabel);
   }
   if (sessionStatusText) sessionStatusText.textContent = copy.body;
-  if (btnReopenCompanion) {
-    btnReopenCompanion.classList.toggle('hidden', !copy.primaryLabel);
-    if (copy.primaryLabel) btnReopenCompanion.textContent = copy.primaryLabel;
+}
+
+/**
+ * Whenever the Companion closes — native ✕, "Close Companion," "Create New
+ * Profile...", or End Session — Mezzo returns to the profile library with
+ * the current profile still selected and "Start Monitoring" as the primary
+ * CTA, rather than showing a "Companion is closed" status screen. This is
+ * the single place that routing happens, so every close path (including
+ * ones this page didn't itself initiate) converges on the same behavior.
+ */
+function handleSessionStateChange(state) {
+  if (state === session.SESSION_STATES.COMPANION_CLOSED) {
+    renderProfileSelect();
+    return;
   }
+  renderSessionStatusView(state);
 }
 
 // =============================================================================
@@ -514,14 +667,6 @@ function returnToPip(profile) {
 }
 
 // =============================================================================
-// Change Profile
-// =============================================================================
-
-function handleChangeProfile() {
-  renderProfileSelect();
-}
-
-// =============================================================================
 // Initial Screen Routing
 // =============================================================================
 
@@ -530,19 +675,19 @@ function handleChangeProfile() {
  *   - ?entry=create-profile (opened from the Companion) → straight to calibration,
  *     skipping Choose a Profile entirely — the user already made that choice
  *     by clicking "+ Create New Profile..." there.
- *   - a profile already resolvable (this tab's own selection, or the
- *     cross-tab last-used profile — what lets a fresh tab launched by the
- *     browser extension skip straight to Ready) → resume Ready.
- *   - otherwise → Choose a Profile.
+ *   - otherwise → Choose a Speaking Profile, which pre-selects a resolvable
+ *     profile (this tab's own selection, or the cross-tab last-used profile)
+ *     via renderProfileSelect()'s own fallback logic. Opening the Companion
+ *     always needs a fresh click here regardless — Document PiP requires a
+ *     genuine user gesture on this document, which a page load never has.
  */
 function goToInitialScreen() {
   if (isCreateProfileEntry) {
     goToCalibrationLanding();
-  } else if (resolveActiveProfile()) {
-    showReady();
-  } else {
-    renderProfileSelect();
+    return;
   }
+  resolveActiveProfile(); // syncs this tab's selection from the cross-tab last-used profile, if any
+  renderProfileSelect();
 }
 
 async function detectInitialState() {
@@ -570,35 +715,31 @@ async function detectInitialState() {
 // =============================================================================
 
 btnEnableMic?.addEventListener('click', requestMicPermission);
-btnChooseRecommended?.addEventListener('click', chooseRecommended);
-btnCreateCustom?.addEventListener('click', goToCalibrationLanding);
+radioRecommendedGuided?.addEventListener('change', updatePrimaryButtonLabel);
+radioCustomGuided?.addEventListener('change', updatePrimaryButtonLabel);
+btnCreateNewProfile?.addEventListener('click', goToCalibrationLanding);
+btnProfilePrimary?.addEventListener('click', handleProfilePrimaryClick);
 btnStartCalibration?.addEventListener('click', startCalibration);
-btnSaveNotNow?.addEventListener('click', handleSaveNotNow);
 btnSaveProfile?.addEventListener('click', handleSaveProfileClick);
+btnCancelCalibration?.addEventListener('click', handleCancelCalibration);
 nameForm?.addEventListener('submit', handleNameFormSubmit);
-btnChangeProfile?.addEventListener('click', handleChangeProfile);
 
-// The Ready screen's primary action is decided once, per browser
-// capability — never both "Open Companion" and "Start Monitoring."
-if (btnStartMonitoring) {
-  btnStartMonitoring.textContent = pipSupported ? 'Open Companion' : 'Start Monitoring';
-  btnStartMonitoring.addEventListener('click', pipSupported ? handleOpenMezzoClick : handleFallbackStartClick);
-}
-if (!pipSupported && readyUnsupportedNote) {
-  readyUnsupportedNote.classList.remove('hidden');
-}
+btnDeleteCancel?.addEventListener('click', handleDeleteCancel);
+btnDeleteConfirm?.addEventListener('click', handleDeleteConfirm);
+// Clicking the dimmed backdrop (not the dialog card itself) cancels, same as Cancel.
+deleteDialogOverlay?.addEventListener('click', (event) => {
+  if (event.target === deleteDialogOverlay) handleDeleteCancel();
+});
+window.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !deleteDialogOverlay.classList.contains('hidden')) handleDeleteCancel();
+});
 
-// Only ever visible in the companionClosed state (see renderSessionStatusView) —
-// a real click here, so this is exactly what reopens the Companion via a
-// fresh Document PiP request, same as the very first "Open Companion."
-btnReopenCompanion?.addEventListener('click', () => session.openCompanion());
 // Always a full teardown, in every session state — Mezzo doesn't offer a
 // softer "stop but keep everything open" action; that lives only inside
-// the Companion itself (its own Stop Monitoring button).
-btnEndSession?.addEventListener('click', () => {
-  session.endSession();
-  transitionToState('ready');
-});
+// the Companion itself (its own Stop button). endSession() sets sessionState
+// to companionClosed, which handleSessionStateChange() already routes back
+// to the profile library — no need to also call renderProfileSelect() here.
+btnEndSession?.addEventListener('click', () => session.endSession());
 
 btnFallbackStop?.addEventListener('click', () => session.stopMonitoring());
 

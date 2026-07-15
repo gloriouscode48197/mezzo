@@ -71,46 +71,95 @@
       </div>
     </main>
 
-    <!-- ── State: Choose a Profile ── -->
+    <!-- ── State: Choose a Speaking Profile ──
+         Two mutually-exclusive layouts toggled by renderProfileSelect() based
+         on getSavedProfiles().length — see docs/ux/speaking-profile-flow.md.
+         Radios are selection-only. #btn-profile-primary ("Start Monitoring" /
+         "Continue" in guided state) is the sole way to open the Mezzo
+         Companion and start monitoring, or begin custom profile creation —
+         see try-it.js's handleProfilePrimaryClick(). ── -->
     <main id="state-profile-select" class="state-view page-content hidden">
       <div class="state-col">
-        <h1 class="type-section-heading state-heading">Choose a Profile</h1>
-        <div class="profile-list">
-          <button id="btn-choose-recommended" class="profile-row profile-row-recommended">
-            <span class="profile-check" aria-hidden="true">&#10003;</span>
+        <h1 class="type-section-heading state-heading">Choose a Speaking Profile</h1>
+        <p class="type-hero-body state-body">Choose the speaking range you'd like Mezzo to monitor during this session.</p>
+
+        <!-- Guided choice: shown when no custom profiles are saved -->
+        <div id="profile-guided" class="profile-list">
+          <label class="profile-row profile-row-radio" for="profile-radio-recommended">
+            <input type="radio" name="profile-guided-choice" id="profile-radio-recommended" class="radio-input" checked>
+            <span class="radio-visual" aria-hidden="true"></span>
             <span class="profile-row-text">
-              <span class="profile-row-name">Recommended</span>
-              <span class="profile-row-desc">Uses Mezzo's recommended conversational speaking level.</span>
+              <span class="profile-row-name-line">
+                <span class="profile-row-name">Everyday Conversation</span>
+                <span class="profile-row-badge">Recommended</span>
+              </span>
+              <span class="profile-row-desc">A balanced starting point for everyday conversations.</span>
             </span>
-          </button>
+          </label>
 
           <hr class="profile-divider">
 
-          <button id="btn-create-custom" class="profile-row">
+          <label class="profile-row profile-row-radio" for="profile-radio-custom">
+            <input type="radio" name="profile-guided-choice" id="profile-radio-custom" class="radio-input">
+            <span class="radio-visual" aria-hidden="true"></span>
             <span class="profile-row-text">
-              <span class="profile-row-name">Create Custom Profile</span>
+              <span class="profile-row-name">Custom Speaking Profile</span>
+              <span class="profile-row-desc">Teach Mezzo the speaking range you'd like to maintain.</span>
             </span>
-          </button>
+          </label>
+        </div>
 
-          <div id="saved-profiles-block" class="hidden">
-            <hr class="profile-divider">
-            <p class="type-tag profile-section-label">Saved Profiles</p>
-            <div id="saved-profiles-list" class="profile-list"></div>
+        <!-- Profile library: shown when one or more custom profiles are saved -->
+        <div id="profile-library" class="profile-list hidden">
+          <label class="profile-row profile-row-radio" for="profile-radio-recommended-lib">
+            <input type="radio" name="profile-library-choice" id="profile-radio-recommended-lib" class="radio-input" checked>
+            <span class="radio-visual" aria-hidden="true"></span>
+            <span class="profile-row-text">
+              <span class="profile-row-name-line">
+                <span class="profile-row-name">Everyday Conversation</span>
+                <span class="profile-row-badge">Recommended</span>
+              </span>
+              <span class="profile-row-desc">A balanced starting point for everyday conversations.</span>
+            </span>
+          </label>
+
+          <hr class="profile-divider">
+
+          <div class="profile-section-header">
+            <span class="profile-section-label">Custom Profiles</span>
+            <span id="profile-count" class="profile-section-count">0 / 5</span>
+          </div>
+
+          <div id="saved-profiles-list"></div>
+
+          <div class="profile-create-row">
+            <button id="btn-create-new-profile" type="button" class="profile-create-link">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" class="profile-create-icon">
+                <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.3" stroke-dasharray="2.4 2.4"/>
+                <path d="M8 5v6M5 8h6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+              </svg>
+              Create Speaking Profile
+            </button>
+            <p id="profile-limit-message" class="profile-limit-message hidden">Delete a profile to create another.</p>
           </div>
         </div>
+
+        <button id="btn-profile-primary" class="btn-primary btn-wide">Start Monitoring</button>
+        <p class="type-microcopy state-micro">You can change your selection before monitoring begins.</p>
       </div>
     </main>
 
-    <!-- ── State: Save this profile? ── -->
+    <!-- ── State: Save this profile? — every calibration ends here: Save Profile
+         (names + saves it as a Custom Profile) or Cancel (discards it and returns
+         to calibration). There is no "use once without saving" path. ── -->
     <main id="state-save-prompt" class="state-view page-content hidden">
       <div class="state-col">
         <h1 class="type-section-heading state-heading">Save this profile?</h1>
         <p class="type-hero-body state-body">Save it to reuse this baseline next time without recalibrating.</p>
         <div class="prompt-actions">
-          <button id="btn-save-not-now" class="btn-outline">Continue Without Saving</button>
           <button id="btn-save-profile" class="btn-primary btn-wide">Save Profile</button>
+          <button id="btn-cancel-calibration" class="btn-outline">Cancel</button>
         </div>
-        <p class="type-microcopy state-micro-revoke">This calibration will be used for this session but won't be available next time.</p>
       </div>
     </main>
 
@@ -125,37 +174,24 @@
       </div>
     </main>
 
-    <!-- ── State: Ready to monitor ── -->
-    <main id="state-ready" class="state-view page-content state-ready hidden">
-      <div class="state-col">
-        <h1 class="type-section-heading state-heading">You're All Set</h1>
-        <p class="type-tag profile-section-label">Current Profile</p>
-        <p id="current-profile-name" class="type-hero-body current-profile-name">Recommended</p>
-        <button id="btn-start-monitoring" class="btn-primary btn-wide">Open Companion</button>
-        <button id="btn-change-profile" class="btn-recalibrate-link">Change Profile</button>
-        <p id="ready-unsupported-note" class="type-microcopy state-micro hidden">Your browser doesn't support the Mezzo Companion, so monitoring will stay in this window.</p>
-      </div>
-      <footer class="state-footer">
-        <p class="type-microcopy state-footer-text">Mezzo doesn't record audio or transcribe speech.</p>
-        <p class="type-microcopy state-footer-text">Your mic data stays in your browser and disappears when you close the tab.</p>
-      </footer>
-    </main>
-
-    <!-- ── State: Session Status — the status/recovery surface for all three
-         sessionState values (companionReady, monitoringActive,
-         companionClosed) on a Companion-capable browser. Never shows the
-         live circle — that lives inside the Companion itself. Static copy
-         below matches companionClosed, sessionState's initial value, so
-         there's no incorrect flash before src/mezzo-session.js's
-         subscription paints the real state. ── -->
+    <!-- ── State: Session Status — the status/recovery surface for the two
+         sessionState values reachable while the Companion is open
+         (companionReady / monitoringActive) on a Companion-capable browser.
+         Never shows the live circle — that lives inside the Companion
+         itself. When the Companion closes (companionClosed), Mezzo
+         navigates away from this screen back to the profile library instead
+         of showing status copy here — see try-it.js's handleSessionStateChange().
+         Static copy below matches monitoringActive, the state Start
+         Monitoring almost always reaches, so there's no visible flash of
+         the wrong copy before src/mezzo-session.js's subscription paints
+         the real state. ── -->
     <main id="state-session-status" class="state-view page-content state-ready hidden" data-surface="light">
       <div class="state-col">
         <img src="assets/pip-icon.svg" class="session-status-icon" alt="" aria-hidden="true">
-        <h1 id="session-status-heading" class="type-section-heading state-heading">Mezzo Companion is closed</h1>
+        <h1 id="session-status-heading" class="type-section-heading state-heading">Monitoring is active</h1>
         <p id="session-status-label" class="type-tag session-status-label hidden"></p>
-        <p class="type-body session-status-body"><span class="mon-status-dot"></span><span id="session-status-text">Monitoring is not active.</span></p>
+        <p class="type-body session-status-body"><span class="mon-status-dot"></span><span id="session-status-text">The Mezzo Companion will stay visible above your other windows.</span></p>
         <div class="session-status-actions">
-          <button id="btn-reopen-companion" class="btn-primary btn-wide">Re-open Companion</button>
           <button id="btn-end-session" class="btn-outline btn-wide">End Session</button>
         </div>
         <p class="type-microcopy state-micro">Nothing is recorded or saved.</p>
@@ -187,8 +223,8 @@
          profile via ?entry=create-profile ── -->
     <main id="state-return-to-pip" class="state-view page-content state-ready hidden">
       <div class="state-col">
-        <h1 class="type-section-heading state-heading">You're All Set</h1>
-        <p class="type-hero-body state-body">Continue in your Mezzo Companion to start monitoring with this profile.</p>
+        <h1 class="type-section-heading state-heading">Speaking Profile Saved</h1>
+        <p class="type-hero-body state-body">Return to Mezzo to start monitoring with this profile.</p>
       </div>
       <footer class="state-footer">
         <p class="type-microcopy state-footer-text">You can close this tab now.</p>
@@ -202,7 +238,21 @@
     <a href="privacy.html" class="type-footer-link">Privacy</a>
   </footer>
 
-  <script src="try-it.js?v=13" type="module"></script>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <!-- Delete-profile confirmation — see docs/ux/speaking-profile-flow.md's "Deleting Profiles" -->
+  <div id="delete-dialog-overlay" class="dialog-overlay hidden">
+    <div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-dialog-title" aria-describedby="delete-dialog-body">
+      <h2 id="delete-dialog-title" class="type-section-heading dialog-title">Delete "<span id="delete-dialog-name"></span>"?</h2>
+      <p id="delete-dialog-body" class="type-body dialog-body">This profile will be permanently deleted.</p>
+      <div class="dialog-actions">
+        <button id="btn-delete-confirm" type="button" class="btn-delete-confirm">Delete</button>
+        <button id="btn-delete-cancel" type="button" class="btn-outline btn-wide">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="try-it.js?v=14" type="module"></script>
   <script>
     /* Calibration ring — ambient PiP visualization (monitoring state) */
     (function () {
