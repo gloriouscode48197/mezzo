@@ -201,23 +201,23 @@ Calibrate if creating a Custom Profile
 Choose:
 
 * Save Profile
-* Continue Without Saving
+* Cancel (returns to Calibrate to try again)
 
 ↓
 
-You're All Set
+Name the profile, if saving
 
 ↓
 
-Open Companion
+Speaking Profile page — selected profile visible
 
 ↓
 
-Mezzo Companion opens, Ready
+Start Monitoring
 
 ↓
 
-Start Monitoring (inside the Companion)
+Mezzo Companion opens, Monitoring
 
 ↓
 
@@ -225,11 +225,11 @@ Meeting
 
 ↓
 
-Stop Monitoring (inside the Companion)
+Stop (inside the Companion)
 
 ↓
 
-Ready
+Companion Ready (still open — start again, switch profiles, or close)
 
 ↓
 
@@ -279,53 +279,61 @@ Explain:
 * what Mezzo is measuring
 * what will happen next
 
-When the user chooses not to save calibration:
+After calibration finishes, ask the user to confirm before it becomes a profile:
+
+* Save Profile
+* Cancel
 
 Use:
 
-* Continue Without Saving
-* Use Once
+* Save Profile
+* Cancel
 
 Avoid:
 
+* Continue Without Saving
+* Use Once
 * Not Now
 
-Include clear supporting copy explaining that the calibration will be available only for the current session.
-
----
-
-## Open Companion
-
-After onboarding, users open the Mezzo Companion directly — not Mezzo alone.
-
-Avoid presenting multiple "Ready" checkpoints across separate windows before monitoring can begin.
-
-The primary action is:
-
-Open Companion
-
-This opens the Companion in its own Ready state, from the same Mezzo page that just handled onboarding — no second window. It does not request microphone access or start monitoring — those only happen from a later, separate action inside the Companion itself.
+Cancel discards the calibration result and returns the user to calibration to try again. There is no way to continue into monitoring with an unsaved calibration, and no temporary or session-only profile is ever created — calibration always ends in either a saved Custom Profile or nothing at all.
 
 ---
 
 ## Start Monitoring
 
-Start Monitoring lives inside the Mezzo Companion, not on Mezzo itself.
+After onboarding, a profile is already selected and visible in Mezzo. The primary action is:
 
-When the Companion is in its Ready state, show:
+Start Monitoring
 
-* selected profile
-* profile selector
-* Start Monitoring
-
-Monitoring begins only after the user explicitly chooses Start Monitoring inside the Companion. That action should:
+Selecting it opens the Mezzo Companion directly into its Monitoring state, using that profile immediately — from the same Mezzo page that just handled onboarding, no second window. That single action should:
 
 * confirm microphone access
 * start the monitoring session
+* open the Companion straight into Monitoring
+* transition Mezzo into its Monitoring Active status
+
+There is no intermediate Companion Ready checkpoint and no second Start Monitoring action for this first session — avoid presenting multiple "Ready" checkpoints across separate windows before monitoring can begin. Monitoring should never begin automatically on its own, without this explicit action.
+
+---
+
+## Start Monitoring Again (from the Companion)
+
+Once the user stops monitoring, the Companion remains open and returns to its own Ready state — this is where a second, later "Start Monitoring" lives, inside the Mezzo Companion, not on Mezzo itself.
+
+When the Companion is in its Ready state, show:
+
+* selected profile (the previously used one, still selected)
+* profile selector
+* Start Monitoring
+
+Selecting Start Monitoring there should:
+
+* start the monitoring session again, with whichever profile is selected
+* lock profile selection
 * transition the Companion into its Monitoring state
 * transition Mezzo into its Monitoring Active status
 
-Monitoring should never begin automatically — including when the Companion itself first opens.
+This lets the user start additional monitoring sessions later in the day without ever returning to Mezzo.
 
 ---
 
@@ -339,23 +347,15 @@ Open Mezzo
 
 ↓
 
-Previously used profile is selected
+Previously used profile is selected and visible
 
 ↓
 
-You're All Set
+Start Monitoring
 
 ↓
 
-Open Companion
-
-↓
-
-Mezzo Companion opens, Ready
-
-↓
-
-Start Monitoring (inside the Companion)
+Mezzo Companion opens, Monitoring
 
 ↓
 
@@ -363,11 +363,11 @@ Meeting
 
 ↓
 
-Stop Monitoring (inside the Companion)
+Stop (inside the Companion)
 
 ↓
 
-Ready
+Companion Ready (still open — start again, switch profiles, or close)
 
 ↓
 
@@ -402,7 +402,15 @@ The user should always begin monitoring intentionally.
 
 # Monitoring Lifecycle
 
-Every monitoring session follows the same lifecycle.
+The very first monitoring session in a given Companion-open lifetime starts directly from Mezzo, with no Ready step first:
+
+Start Monitoring (from Mezzo, the Speaking Profile page)
+
+↓
+
+Monitoring Active
+
+Every session after that, for the rest of the day, follows the same repeating lifecycle instead, starting from the Companion's own Ready screen:
 
 Ready (Mezzo Companion open, monitoring inactive)
 
@@ -420,7 +428,7 @@ Meeting
 
 ↓
 
-Stop Monitoring (inside the Companion)
+Stop (inside the Companion)
 
 ↓
 
@@ -432,7 +440,7 @@ Users should always understand:
 
 * whether monitoring is active
 * which profile is active
-* how to re-open the Companion
+* how to start monitoring again, whether the Companion is still open or has closed
 * how to end the session
 
 Monitoring should never continue ambiguously.
@@ -450,7 +458,7 @@ Its responsibility is to keep the monitoring session understandable and recovera
 
 ## Ready State
 
-Mezzo itself does not show a profile selector or a Start Monitoring control — those live inside the Mezzo Companion, which owns starting and stopping monitoring. Mezzo's own Ready state is a status report: the Companion is open and waiting.
+This status screen is only reached once the Mezzo Companion already exists — after stopping monitoring, or if a first attempt to start couldn't acquire the microphone. It is not where the first session begins: that Start Monitoring control lives on Mezzo's own Speaking Profile page, before any Companion exists. Once the Companion is open, Mezzo itself does not also show a profile selector or a Start Monitoring control — those live inside the Mezzo Companion, which owns starting and stopping monitoring from that point on. Mezzo's own Ready state is a status report: the Companion is open and waiting.
 
 The Mezzo Companion is a Document Picture-in-Picture window and already stays above other application windows on its own — Mezzo never offers a "bring to front" / "show" / "focus" control for it. Reporting status is the only job of this screen while the Companion is open.
 
@@ -465,9 +473,9 @@ Suggested language:
 
 > Start monitoring from the Mezzo Companion when you're ready.
 
-End Session is distinct from closing Mezzo: it stops monitoring if active, releases the microphone, and closes the Mezzo Companion, but returns this same screen to its pre-session state rather than closing Mezzo itself. Closing Mezzo entirely is a separate action — see Recovery.
+End Session is distinct from closing Mezzo: it stops monitoring if active, releases the microphone, and closes the Mezzo Companion — returning Mezzo to the Speaking Profile page (profile library), with the current profile still selected and Start Monitoring as the primary action, rather than closing Mezzo itself. Closing Mezzo entirely is a separate action — see Recovery.
 
-Users should never need a second checkpoint on this window before monitoring can begin — the Companion is the checkpoint.
+Users should never need a second checkpoint on this window before the first session's monitoring can begin — Mezzo's own Start Monitoring already handles that. This screen exists only for what happens after the Companion is already open.
 
 ---
 
@@ -521,6 +529,8 @@ The Companion has two distinct states. They should never feel like one screen wi
 
 Purpose: preparation.
 
+The Companion's first open of the day goes directly to Monitoring — Mezzo already chose the profile, so there is nothing to prepare. Ready is reached only afterward, by stopping monitoring, and is where subsequent same-day sessions begin.
+
 The Ready state allows users to:
 
 * review the selected profile
@@ -567,9 +577,9 @@ It does not display:
 * the MEZZO wordmark
 * monitoring status text
 * profile information
-* Stop Monitoring
+* Stop
 
-Closing the native Picture-in-Picture window is the canonical way to stop monitoring from Compact mode. This is an intentional product decision, not a missing feature: it stops monitoring, releases the microphone, and follows the same recovery path described under Mezzo Companion Closed below — the Companion closes, but Mezzo remains open and offers Re-open Companion.
+Closing the native Picture-in-Picture window is the canonical way to stop monitoring from Compact mode. This is an intentional product decision, not a missing feature: it stops monitoring, releases the microphone, and follows the same recovery path described under Mezzo Companion Closed below — the Companion closes, and Mezzo returns to the Speaking Profile page with Start Monitoring as the primary action.
 
 Expanding always returns to the Expanded layout without interrupting monitoring, the selected profile, or the current monitoring state.
 
@@ -757,22 +767,13 @@ Users should always understand:
 
 ## Mezzo Companion Closed
 
-Monitoring can never continue without the Mezzo Companion open. If the Companion closes while monitoring is active, monitoring stops immediately and microphone resources are released — not left running invisibly.
+Monitoring can never continue without the Mezzo Companion open. If the Companion closes — the native window control, "Close Companion," "Create New Profile…," or End Session — monitoring stops immediately if it was active, and microphone resources are released — not left running invisibly.
 
-Mezzo should clearly explain:
+There is no separate "Mezzo Companion is closed" status screen and no Re-open Companion action. Instead, Mezzo returns directly to the Speaking Profile page (profile library), with the current profile still selected and the primary action:
 
-> Mezzo Companion is closed.
+Start Monitoring
 
-Supporting language:
-
-> Monitoring is not active.
-
-Available actions:
-
-* Re-open Companion
-* End Session
-
-Reopening the Companion returns it to Ready — it never resumes monitoring on its own.
+Selecting it opens a fresh Companion directly into Monitoring, exactly like the first session — it never resumes monitoring on its own.
 
 ---
 
