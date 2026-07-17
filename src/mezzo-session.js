@@ -79,16 +79,21 @@ import {
   setLastUsedProfile,
 } from './profiles.js';
 
-// One product-oriented configuration source for both supported Companion
-// sizes — named for what they are, not for the underlying Picture-in-Picture
-// API. Avoid introducing a third bespoke size; intermediate sizes (from a
-// user manually resizing) are handled by responsive CSS, not new constants.
-const MEZZO_COMPANION_EXPANDED_SIZE = { width: 400, height: 500 };
-// 220×220 — the intentional Compact footprint: a small square built for
-// peripheral awareness, not a shrunk-down Expanded window. The wordmark and
-// "Monitoring" label are dropped entirely; only the visualization, the live
-// awareness state, and Stop/Expand remain, laid out as corner overlays.
-const MEZZO_COMPANION_COMPACT_SIZE = { width: 220, height: 220 };
+// One product-oriented configuration source for every fixed Companion size —
+// named for what they are, not for the underlying Picture-in-Picture API.
+// Avoid introducing further bespoke sizes; intermediate sizes (from a user
+// manually resizing) are handled by responsive CSS, not new constants.
+// Ready is its own fixed size, distinct from Monitoring's Expanded size —
+// the two used to share one constant, but the Ready and Monitoring cards
+// have different target dimensions.
+const MEZZO_COMPANION_READY_SIZE = { width: 320, height: 300 };
+const MEZZO_COMPANION_EXPANDED_SIZE = { width: 380, height: 420 };
+// 220×260 — the intentional Compact footprint: a small, tall-ish window
+// built for peripheral awareness, not a shrunk-down Expanded window. The
+// wordmark and "Monitoring" label are dropped entirely; only the
+// visualization, the live awareness state, and Stop/Expand remain, laid
+// out as corner overlays.
+const MEZZO_COMPANION_COMPACT_SIZE = { width: 220, height: 260 };
 
 const LAYOUT_MODES = Object.freeze({ EXPANDED: 'expanded', COMPACT: 'compact' });
 
@@ -112,6 +117,43 @@ function zoneLabel(zone) {
 function profileMetaText(profile) {
   const name = profile?.name || RECOMMENDED_PROFILE.name;
   return profile?.savedProfileId ? `Profile: ${name} (Custom)` : `Profile: ${name} (Recommended)`;
+}
+
+// Decorative window chrome shared by the Ready screen and both Monitoring
+// layouts — three non-interactive dots, a centered wordmark (CSS swaps
+// between the "Mezzo Companion"/"Mezzo" text depending on [data-layout]),
+// and a small accent mark. Purely presentational: no click handlers, no
+// state, safe to build fresh for each screen that needs one.
+function buildTitlebar(doc) {
+  const bar = doc.createElement('div');
+  bar.className = 'pip-titlebar';
+
+  const dots = doc.createElement('div');
+  dots.className = 'pip-titlebar-dots';
+  dots.setAttribute('aria-hidden', 'true');
+  for (const tone of ['red', 'yellow', 'green']) {
+    const dot = doc.createElement('span');
+    dot.className = `pip-titlebar-dot pip-titlebar-dot-${tone}`;
+    dots.appendChild(dot);
+  }
+  bar.appendChild(dots);
+
+  const labelFull = doc.createElement('span');
+  labelFull.className = 'pip-titlebar-label pip-titlebar-label-full';
+  labelFull.textContent = 'Mezzo Companion';
+  bar.appendChild(labelFull);
+
+  const labelCompact = doc.createElement('span');
+  labelCompact.className = 'pip-titlebar-label pip-titlebar-label-compact';
+  labelCompact.textContent = 'Mezzo';
+  bar.appendChild(labelCompact);
+
+  const accent = doc.createElement('span');
+  accent.className = 'pip-titlebar-accent';
+  accent.setAttribute('aria-hidden', 'true');
+  bar.appendChild(accent);
+
+  return bar;
 }
 
 export function createMezzoSession({
@@ -158,7 +200,9 @@ export function createMezzoSession({
   // Ready-screen DOM refs, (re)assigned each time startMonitoring() builds the document
   let readyScreenEl = null;
   let readyProfileNameEl = null;
-  let readyProfileDropdown = null;
+  let readyProfileSelectorEl = null; // the trigger button — dropdown-close refocuses it
+  let readyProfileDropdown = null; // the dropdown's row-list container, not the backdrop/modal itself
+  let readyProfileBackdropEl = null; // the centered-modal overlay that shows/hides the dropdown
 
   // Monitoring-screen DOM refs
   let monitoringScreenEl = null;
@@ -189,6 +233,10 @@ export function createMezzoSession({
     onFallbackHeadingChange?.(text);
     if (pipStatusHeadingEl && sessionState.get() === SESSION_STATES.MONITORING_ACTIVE) {
       pipStatusHeadingEl.textContent = text;
+      // Presentational only — drives the status label's per-zone color (see
+      // the .pip-status-heading[data-zone] CSS). Doesn't change what zone is
+      // computed or when the label updates, both still decided above.
+      pipStatusHeadingEl.dataset.zone = String(zone);
     }
   }
 
@@ -304,25 +352,32 @@ export function createMezzoSession({
   }
 
   /**
-   * Applies an explicit layout mode: updates the state variable, flips the
-   * data-layout attribute that the Compact/Expanded CSS keys off (the
-   * intentional, state-driven presentation), and best-effort resizes the
-   * actual window to match. Resizing an already-open Document PiP window
-   * isn't guaranteed by every browser — if it's unsupported or blocked,
-   * the layout still renders correctly at whatever size the window
-   * actually is; explicit state, not window dimensions, decides which
-   * content shows.
+   * Best-effort resizes the actual window to a given fixed size. Resizing an
+   * already-open Document PiP window isn't guaranteed by every browser — if
+   * it's unsupported or blocked, the layout still renders correctly at
+   * whatever size the window actually is; explicit state, not window
+   * dimensions, decides which content shows.
    */
-  function applyLayoutMode(mode) {
-    layoutMode = mode;
-    if (pipDocument?.body) pipDocument.body.setAttribute('data-layout', mode);
+  function resizeCompanionTo(size) {
     if (!pipWindow) return;
-    const size = mode === LAYOUT_MODES.COMPACT ? MEZZO_COMPANION_COMPACT_SIZE : MEZZO_COMPANION_EXPANDED_SIZE;
     try {
       pipWindow.resizeTo(size.width, size.height);
     } catch (err) {
       console.warn('[Session] Could not resize the Mezzo Companion:', err.message);
     }
+  }
+
+  /**
+   * Applies an explicit Monitoring layout mode: updates the state variable,
+   * flips the data-layout attribute that the Compact/Expanded CSS keys off
+   * (the intentional, state-driven presentation), and resizes to that
+   * layout's fixed size. Ready has its own fixed size and resize path (see
+   * enterPipReadyMode) — this is Monitoring-only.
+   */
+  function applyLayoutMode(mode) {
+    layoutMode = mode;
+    if (pipDocument?.body) pipDocument.body.setAttribute('data-layout', mode);
+    resizeCompanionTo(mode === LAYOUT_MODES.COMPACT ? MEZZO_COMPANION_COMPACT_SIZE : MEZZO_COMPANION_EXPANDED_SIZE);
   }
 
   function enterExpandedLayout() {
@@ -354,7 +409,7 @@ export function createMezzoSession({
     }
 
     try {
-      pipWindow = await documentPictureInPicture.requestWindow(MEZZO_COMPANION_EXPANDED_SIZE);
+      pipWindow = await documentPictureInPicture.requestWindow(MEZZO_COMPANION_EXPANDED_SIZE); // first open always goes straight to Monitoring
     } catch (err) {
       console.error('[Session] Failed to open the Mezzo Companion:', err.message);
       return false;
@@ -394,6 +449,13 @@ export function createMezzoSession({
         height: 100%;
         position: relative;
       }
+      /* Shared "card" treatment — every screen renders as a rounded,
+         shadowed card filling the real (fixed-size) Picture-in-Picture
+         window, matching the reference's own per-state card mockups.
+         position:relative so the Ready screen's profile-dropdown backdrop
+         (a child of .pip-screen-ready) can use inset:0 against this card's
+         own bounds, not the whole document. overflow:hidden keeps the
+         backdrop's corners and everything else clipped to the radius. */
       .pip-screen {
         width: 100%;
         height: 100%;
@@ -401,15 +463,71 @@ export function createMezzoSession({
         display: flex;
         flex-direction: column;
         align-items: center;
+        position: relative;
+        overflow: hidden;
+        border-radius: 14px;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        box-shadow: 0 24px 56px rgba(0, 0, 0, 0.55), inset 0 0 40px rgba(0, 0, 0, 0.16);
+        background: #3c3b3f;
       }
-      .pip-mode-label {
+      /* ── Shared title bar — decorative window chrome reused by Ready and
+         both Monitoring layouts (Expanded/Compact), keyed off the same
+         [data-layout] attribute the rest of the Companion's layout state
+         uses. The three dots are non-interactive (aria-hidden, no cursor,
+         no listeners) — a purely visual "app window" signature, not a
+         stand-in for the real native Picture-in-Picture close control,
+         which stays the only functional way to close the Companion. Two
+         label spans occupy the same centered grid cell; CSS (not JS)
+         swaps which is visible so Monitoring's single title bar can read
+         "Mezzo Companion" (Expanded) or "Mezzo" (Compact) without the
+         caller having to know or care which layout is active. ── */
+      .pip-titlebar {
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        align-items: center;
+        width: 100%;
+        box-sizing: border-box;
+        padding: 10px 14px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        flex-shrink: 0;
+      }
+      .pip-titlebar-dots {
+        grid-column: 1;
+        justify-self: start;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .pip-titlebar-dot {
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+        flex-shrink: 0;
+      }
+      .pip-titlebar-dot-red { background: #ec6a5e; }
+      .pip-titlebar-dot-yellow { background: #f4bf4f; }
+      .pip-titlebar-dot-green { background: #61c554; }
+      .pip-titlebar-label {
+        grid-column: 2;
+        justify-self: center;
         font-family: var(--font-body);
-        font-weight: var(--weight-regular);
-        font-size: 11px;
-        letter-spacing: 0.1em;
+        font-weight: var(--weight-medium);
+        font-size: 9px;
+        letter-spacing: 0.18em;
         text-transform: uppercase;
-        color: var(--text-subdued);
+        color: rgba(172, 158, 136, 0.90);
+        white-space: nowrap;
       }
+      .pip-titlebar-label-compact { display: none; }
+      .pip-titlebar-accent {
+        grid-column: 3;
+        justify-self: end;
+        width: 14px;
+        height: 2px;
+        border-radius: 1px;
+        background: rgba(172, 158, 136, 0.35);
+      }
+
       .pip-status-heading {
         font-family: var(--font-display);
         font-weight: var(--weight-light);
@@ -423,97 +541,140 @@ export function createMezzoSession({
       }
 
       /* ── Ready screen — no visualization, always Expanded (there is no
-         Compact Ready variant). Layout: wordmark pinned near the top
-         (left-aligned, a quiet signature — not centered with the rest), a
-         flexible spacer, the headline/profile/button cluster, then another
-         flexible spacer absorbing the remaining space below. The two
-         spacers (not justify-content:center) are what let the wordmark sit
-         at its own fixed position while everything below it centers
-         naturally. There is no footer here — the native Picture-in-Picture
-         window close control is the only way to close the Companion, so
-         there is nothing for a footer to hold. ── */
+         Compact Ready variant). Composition rebuilt to match the reference
+         card exactly: the shared title bar pinned at the very top, a
+         "poster" area that centers the heading in the remaining space
+         (flex:1 + justify-content:center, not a spacer-pair), then a
+         fixed-padding action card pinned at the bottom holding the profile
+         selector and Start Monitoring. There is no footer here — the
+         native Picture-in-Picture window close control is the only way to
+         close the Companion, so there is nothing for a footer to hold. ── */
       .pip-screen-ready {
-        padding: 24px 28px 20px;
+        justify-content: flex-start;
       }
 
-      .pip-ready-wordmark {
-        align-self: flex-start;
-        font-family: var(--font-body);
-        font-weight: var(--weight-medium);
-        font-size: 11px;
-        letter-spacing: 0.2em;
-        text-transform: uppercase;
-        color: var(--text-subdued);
+      .pip-ready-poster {
+        flex: 1;
+        width: 100%;
+        min-height: 0;
+        box-sizing: border-box;
+        padding: 8px 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
-
-      .pip-ready-spacer { flex: 1; min-height: 12px; }
 
       .pip-ready-heading {
         font-family: var(--font-display);
         font-weight: var(--weight-light);
-        font-size: 23px;
-        line-height: 130%;
-        color: var(--text-primary);
+        font-size: 22px;
+        line-height: 1.4;
+        letter-spacing: 0.01em;
+        color: rgba(222, 210, 194, 0.82);
         text-align: center;
-        margin-bottom: 28px;
+        max-width: 240px;
+        margin: 0;
       }
 
-      .pip-ready-main {
-        width: 100%;
+      /* Fixed-padding action card, not a flex-centered spacer child —
+         matches the reference's own dedicated card region. */
+      .pip-ready-card {
+        width: calc(100% - 48px);
+        margin: 0 24px;
+        padding: 8px 16px 28px;
+        box-sizing: border-box;
+        flex-shrink: 0;
         display: flex;
         flex-direction: column;
-        align-items: stretch;
+        align-items: center;
       }
 
-      .pip-profile-label {
-        font-family: var(--font-body);
-        font-weight: var(--weight-regular);
-        font-size: 11px;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
-        color: var(--text-subdued);
-        margin-bottom: 8px;
-      }
-
-      /* Wrapper, not the button itself, positions the dropdown — a button
-         cannot validly contain another button, which is what caused the
-         dropdown's clipping/reopening bugs before this fix. */
-      .pip-profile-wrap { position: relative; width: 100%; margin-bottom: 28px; }
+      /* Wrapper only needs to size and position the trigger button now —
+         the dropdown itself is a centered overlay (see .pip-profile-backdrop
+         below), not anchored beneath this wrapper. */
+      .pip-profile-wrap { width: 100%; margin-bottom: 16px; }
 
       .pip-profile-selector {
         width: 100%;
+        box-sizing: border-box;
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 8px;
-        background: var(--surface-card);
-        border: 1px solid var(--border);
-        border-radius: 10px;
-        padding: 13px 14px;
+        padding: 11px 14px;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.10);
         font-family: var(--font-body);
-        font-size: 14px;
-        color: var(--text-default);
+        font-size: 13px;
+        letter-spacing: 0.02em;
+        color: rgba(222, 210, 194, 0.92);
         cursor: pointer;
+        transition: opacity 0.15s ease;
+      }
+      .pip-profile-selector:hover { opacity: 0.88; }
+      /* Squares off the trigger's bottom corners while the menu above it
+         is open — a "pressed" visual echo of the reference, even though
+         the menu itself renders as a centered overlay, not anchored here. */
+      .pip-profile-selector.is-open { border-radius: 8px 8px 0 0; }
+
+      .pip-ready-start-btn {
+        width: 90%;
+        background: var(--hanko-fill);
+        border: none;
+        border-radius: 50px;
+        padding: 12px;
+        font-family: var(--font-body);
+        font-size: 13px;
+        font-weight: var(--weight-medium);
+        color: rgba(255, 255, 255, 0.92);
+        letter-spacing: 0.04em;
+        cursor: pointer;
+        transition: opacity 0.15s ease;
+      }
+      .pip-ready-start-btn:hover { opacity: 0.88; }
+
+      /* Centered modal overlay, not an anchored dropdown — a dimmed
+         backdrop covering the Ready card's own bounds (a child of
+         .pip-screen-ready, which is position:relative — see the shared
+         .pip-screen card rule above) with the menu centered and
+         height-constrained with internal scrolling. This keeps the menu
+         inside the Companion's own small bounds at every supported window
+         size, where an anchored dropdown could previously clip outside
+         content that simply isn't rendered at all. Clicking the dimmed
+         backdrop (not the menu itself) or pressing Escape closes it, same
+         as any other modal dismissal. */
+      .pip-profile-backdrop {
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.55);
+        border-radius: 14px;
+        z-index: 20;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
         box-sizing: border-box;
       }
-      .pip-profile-selector:hover { border-color: var(--border-outline); }
-
-      /* Opens downward and is height-constrained with internal scrolling —
-         opening upward (as before) could clip outside the Companion's own
-         small window bounds, where content simply isn't rendered at all. */
       .pip-profile-dropdown {
-        position: absolute;
-        top: calc(100% + 8px);
-        left: 0;
-        right: 0;
-        background: var(--surface);
-        border: 1px solid var(--border);
-        border-radius: 10px;
-        box-shadow: 0 8px 28px rgba(0, 0, 0, 0.32);
-        padding: 6px;
+        width: 100%;
+        background: #3c3b3f;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 12px;
+        box-shadow: 0 16px 48px rgba(0, 0, 0, 0.72);
+        overflow: hidden;
+      }
+      .pip-profile-dropdown-label {
+        font-family: var(--font-body);
+        font-weight: var(--weight-medium);
+        font-size: 9px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: rgba(172, 158, 136, 0.50);
+        padding: 12px 16px 8px;
+      }
+      .pip-profile-dropdown-list {
         display: flex;
         flex-direction: column;
-        z-index: 10;
         max-height: 200px;
         overflow-y: auto;
       }
@@ -525,34 +686,59 @@ export function createMezzoSession({
         text-align: left;
         background: none;
         border: none;
-        border-left: 2px solid transparent;
-        padding: 10px 10px;
+        border-left: 3px solid transparent;
+        padding: 13px 14px 13px 10px;
         font-family: var(--font-body);
+        font-weight: var(--weight-regular);
         font-size: 13px;
-        color: var(--text-default);
+        letter-spacing: 0.02em;
+        color: rgba(222, 210, 194, 0.75);
         cursor: pointer;
-        border-radius: 6px;
         white-space: nowrap;
+        transition: background 0.10s ease;
       }
-      .pip-profile-option:hover,
-      .pip-profile-option:focus-visible { background: var(--surface-card); }
+      /* Hover is a plain background darkening — no accent bar — so it
+         never reads as "selected." */
+      .pip-profile-option:hover { background: rgba(0, 0, 0, 0.18); color: rgba(222, 210, 194, 0.95); }
+      /* Keyboard focus gets its own distinct treatment (an outline, not a
+         background tint or the selected state's left bar) so hovered,
+         focused, and selected never look the same as one another. */
+      .pip-profile-option:focus-visible {
+        outline: 1px solid var(--border-outline);
+        outline-offset: -1px;
+        background: rgba(0, 0, 0, 0.18);
+      }
       .pip-profile-option-tag {
         font-size: 11px;
         font-weight: var(--weight-light);
-        color: var(--text-subdued);
+        color: rgba(172, 158, 136, 0.60);
       }
       /* Already selected — restrained, not louder: a quiet accent bar and
-         dimmer text, rather than a bright checkmark competing for attention. */
+         dimmer text, rather than a bright checkmark competing for attention.
+         Deliberately its own look (left bar), distinct from hover's plain
+         background darkening and focus's outline. */
       .pip-profile-option.is-active {
-        color: var(--text-subdued);
-        background: var(--surface-card);
+        color: rgba(222, 210, 194, 0.45);
+        background: rgba(0, 0, 0, 0.12);
         border-left-color: var(--hanko-fill);
+        cursor: default;
       }
-      .pip-profile-divider { border: none; border-top: 1px solid var(--border); margin: 4px 0; }
-      .pip-profile-option-create { color: var(--hanko-text); justify-content: flex-start; }
+      .pip-profile-option.is-active:hover { background: rgba(0, 0, 0, 0.12); color: rgba(222, 210, 194, 0.45); }
+      .pip-profile-divider { border: none; border-top: 1px solid rgba(255, 255, 255, 0.08); margin: 4px 14px; }
+      /* Neutral by default, orange only on hover/focus — kept as its own
+         rule (not the shared :hover/:focus-visible above) since this row's
+         hover state is a text-color change with no background darkening,
+         unlike the other rows. */
+      .pip-profile-option-create {
+        border-left-width: 2px;
+        padding: 13px 14px 13px 12px;
+        color: rgba(222, 210, 194, 0.75);
+        justify-content: flex-start;
+      }
+      .pip-profile-option-create:hover,
+      .pip-profile-option-create:focus-visible { background: none; color: rgba(196, 89, 58, 0.85); }
 
-      /* ── Monitoring screen — header at top (left-aligned, same quiet
-         signature treatment as the Ready screen's wordmark), circle fills
+      /* ── Monitoring screen — the shared title bar at top, circle fills
          the middle and stays the visual hero, restrained bottom control
          bar. The only screen that ever shows the visualization or the
          live zone label, and the only screen with two layouts (Expanded /
@@ -565,34 +751,36 @@ export function createMezzoSession({
       .pip-monitoring-header {
         display: none;
         flex-direction: column;
-        align-items: flex-start;
-        gap: 2px;
-        padding: 20px 24px 0;
+        flex-shrink: 0;
         width: 100%;
         box-sizing: border-box;
       }
-      .pip-monitoring-wordmark {
-        background: none;
-        border: none;
-        padding: 0;
-        cursor: default;
+      .pip-monitoring-status-block {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 14px 24px 0;
       }
-      .pip-mode-label { margin-top: 8px; }
       /* The awareness state (Quiet / Within Range / Approaching End of
-         Range / Outside Range) is the most prominent text in the header —
-         "Monitoring" above it is stable chrome; this is what's actually
-         changing and worth noticing. Shared by Expanded and Compact —
-         Compact repositions rather than duplicates this element. */
+         Range / Outside Range) is the most prominent text in the header.
+         Shared by Expanded and Compact — Compact repositions rather than
+         duplicates this element. Color is keyed off data-zone, a purely
+         presentational attribute updateHeading() sets alongside the
+         existing textContent assignment — the zone-classification and
+         label-text logic themselves are untouched. */
       .pip-status-heading {
         font-size: 20px;
         color: var(--text-primary);
-        margin-top: 2px;
       }
+      .pip-status-heading[data-zone="0"],
+      .pip-status-heading[data-zone="1"] { color: var(--text-subdued); }
+      .pip-status-heading[data-zone="2"] { color: var(--text-default); }
+      .pip-status-heading[data-zone="3"] { color: var(--hanko-text); }
       .pip-profile-info {
         font-family: var(--font-body);
-        font-size: 12px;
+        font-size: 10px;
         color: var(--text-subdued);
-        margin-top: 8px;
+        letter-spacing: 0.02em;
       }
       .pip-circle-wrapper {
         flex: 1;
@@ -672,21 +860,55 @@ export function createMezzoSession({
 
       /* ── Compact layout — explicit state ([data-layout="compact"]), not
          a media query. Peripheral awareness only, not session management:
-         the visualization (centered, dominant) and Expand (bottom-right
-         corner) are the only persistent content. There is no Stop in
-         Compact at all — the native window-close control is the way to
-         stop monitoring from here (see handlePipClose) — and no wordmark,
-         status text, or profile metadata competing for the small space.
-         The awareness state stays in the DOM and keeps announcing via
-         aria-live for assistive tech; it's just visually hidden, not
-         removed, since there's no visible text status in Compact. ── */
+         the title bar (reading "Mezzo" instead of "Mezzo Companion", with
+         smaller dots and no right-side accent), the visualization
+         (centered, dominant), and Expand (bottom-right corner) are the
+         only persistent content. There is no Stop in Compact at all — the
+         native window-close control is the way to stop monitoring from
+         here (see handlePipClose) — and no status text or profile
+         metadata competing for the small space. The awareness state stays
+         in the DOM and keeps announcing via aria-live for assistive tech;
+         it's just visually hidden, not removed, since there's no visible
+         text status in Compact. ── */
+      /* Compact's card is smaller-radius, single-layer shadow (no inset
+         glow) — its own distinct treatment, not just a scaled-down Ready/
+         Monitoring card. */
+      body[data-layout="compact"] .pip-screen-monitoring {
+        border-radius: 12px;
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.52);
+      }
       body[data-layout="compact"] .pip-monitoring-header {
         display: block;
-        position: static;
+      }
+      body[data-layout="compact"] .pip-titlebar {
+        padding: 8px 10px;
+      }
+      body[data-layout="compact"] .pip-titlebar-dot {
+        width: 9px;
+        height: 9px;
+      }
+      body[data-layout="compact"] .pip-titlebar-dots {
+        gap: 5px;
+      }
+      body[data-layout="compact"] .pip-titlebar-label {
+        font-size: 8px;
+        letter-spacing: 0.20em;
+      }
+      body[data-layout="compact"] .pip-titlebar-label-full {
+        display: none;
+      }
+      body[data-layout="compact"] .pip-titlebar-label-compact {
+        display: inline;
+      }
+      body[data-layout="compact"] .pip-titlebar-accent {
+        display: none;
+      }
+      /* Collapses the block's own padding rather than hiding it outright —
+         .pip-status-heading (inside it) needs display other than none to
+         keep announcing via aria-live; see below. */
+      body[data-layout="compact"] .pip-monitoring-status-block {
         padding: 0;
       }
-      body[data-layout="compact"] .pip-monitoring-wordmark,
-      body[data-layout="compact"] .pip-mode-label,
       body[data-layout="compact"] .pip-profile-info {
         display: none;
       }
@@ -700,15 +922,6 @@ export function createMezzoSession({
         overflow: hidden;
         clip: rect(0, 0, 0, 0);
         white-space: nowrap;
-      }
-      body[data-layout="compact"] .pip-circle-wrapper {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        width: 168px;
-        height: 168px;
-        flex: none;
       }
       body[data-layout="compact"] .pip-monitoring-controls {
         position: static;
@@ -737,32 +950,27 @@ export function createMezzoSession({
     const layout = pipDoc.createElement('div');
     layout.className = 'pip-layout';
 
-    // ── Ready screen — wordmark pinned top-left, headline/profile/button
-    //    cluster centered via two flexible spacers, footer pinned bottom. ──
+    // ── Ready screen — shared title bar pinned at top, a "poster" area
+    //    that centers the heading in the remaining space, then a
+    //    fixed-padding action card (profile selector + Start Monitoring)
+    //    pinned at the bottom. Matches the reference card's own
+    //    composition rather than the flexible-spacer approach used before. ──
     const readyScreen = pipDoc.createElement('div');
     readyScreen.className = 'pip-screen pip-screen-ready';
+    readyScreen.appendChild(buildTitlebar(pipDoc));
 
-    const readyWordmark = pipDoc.createElement('span');
-    readyWordmark.className = 'pip-ready-wordmark';
-    readyWordmark.textContent = 'Mezzo';
-    readyScreen.appendChild(readyWordmark);
-
-    const topSpacer = pipDoc.createElement('div');
-    topSpacer.className = 'pip-ready-spacer';
-    readyScreen.appendChild(topSpacer);
+    const readyPoster = pipDoc.createElement('div');
+    readyPoster.className = 'pip-ready-poster';
 
     const readyHeading = pipDoc.createElement('h1');
     readyHeading.className = 'pip-ready-heading';
-    readyHeading.textContent = 'Ready when you are.';
-    readyScreen.appendChild(readyHeading);
+    readyHeading.textContent = 'Ready for the next conversation.';
+    readyPoster.appendChild(readyHeading);
 
-    const readyMain = pipDoc.createElement('div');
-    readyMain.className = 'pip-ready-main';
+    readyScreen.appendChild(readyPoster);
 
-    const profileLabel = pipDoc.createElement('span');
-    profileLabel.className = 'pip-profile-label';
-    profileLabel.textContent = 'Profile';
-    readyMain.appendChild(profileLabel);
+    const readyCard = pipDoc.createElement('div');
+    readyCard.className = 'pip-ready-card';
 
     const profileWrap = pipDoc.createElement('div');
     profileWrap.className = 'pip-profile-wrap';
@@ -779,27 +987,47 @@ export function createMezzoSession({
     profileSelector.appendChild(chevronSpan);
     profileSelector.addEventListener('click', toggleReadyProfileDropdown);
     readyProfileNameEl = profileNameSpan;
-
-    const dropdown = pipDoc.createElement('div');
-    dropdown.className = 'pip-profile-dropdown hidden';
-    readyProfileDropdown = dropdown;
+    readyProfileSelectorEl = profileSelector;
 
     profileWrap.appendChild(profileSelector);
-    profileWrap.appendChild(dropdown);
-    readyMain.appendChild(profileWrap);
+    readyCard.appendChild(profileWrap);
 
     const pipStartBtn = pipDoc.createElement('button');
-    pipStartBtn.className = 'btn-primary btn-wide';
-    pipStartBtn.style.width = '100%';
+    pipStartBtn.className = 'pip-ready-start-btn';
     pipStartBtn.textContent = 'Start Monitoring';
     pipStartBtn.addEventListener('click', resumeMonitoringFromPipReady);
-    readyMain.appendChild(pipStartBtn);
+    readyCard.appendChild(pipStartBtn);
 
-    readyScreen.appendChild(readyMain);
+    readyScreen.appendChild(readyCard);
 
-    const bottomSpacer = pipDoc.createElement('div');
-    bottomSpacer.className = 'pip-ready-spacer';
-    readyScreen.appendChild(bottomSpacer);
+    // ── Profile dropdown — a centered modal overlay scoped to this Ready
+    //    card's own bounds (.pip-screen-ready is position:relative — see
+    //    the shared .pip-screen card rule). Only ever rendered/opened while
+    //    Ready; monitoring locks the profile. ──
+    const profileBackdrop = pipDoc.createElement('div');
+    profileBackdrop.className = 'pip-profile-backdrop hidden';
+    // Only close on a direct backdrop click — clicks inside the menu
+    // itself bubble here too, and must not be treated as "click outside."
+    profileBackdrop.addEventListener('click', (event) => {
+      if (event.target === profileBackdrop) closeReadyProfileDropdown();
+    });
+
+    const dropdown = pipDoc.createElement('div');
+    dropdown.className = 'pip-profile-dropdown';
+
+    const dropdownLabel = pipDoc.createElement('div');
+    dropdownLabel.className = 'pip-profile-dropdown-label';
+    dropdownLabel.textContent = 'Select Profile';
+    dropdown.appendChild(dropdownLabel);
+
+    const dropdownList = pipDoc.createElement('div');
+    dropdownList.className = 'pip-profile-dropdown-list';
+    dropdown.appendChild(dropdownList);
+    readyProfileDropdown = dropdownList;
+
+    profileBackdrop.appendChild(dropdown);
+    readyScreen.appendChild(profileBackdrop);
+    readyProfileBackdropEl = profileBackdrop;
 
     layout.appendChild(readyScreen);
     readyScreenEl = readyScreen;
@@ -811,36 +1039,31 @@ export function createMezzoSession({
 
     const monitoringHeader = pipDoc.createElement('div');
     monitoringHeader.className = 'pip-monitoring-header';
+    monitoringHeader.appendChild(buildTitlebar(pipDoc));
 
-    // Plain, non-interactive — Compact hides it entirely (its own Expand
-    // control is the way back to Expanded; see below).
-    const monitoringWordmark = pipDoc.createElement('span');
-    monitoringWordmark.className = 'pip-ready-wordmark pip-monitoring-wordmark';
-    monitoringWordmark.textContent = 'Mezzo';
-    monitoringHeader.appendChild(monitoringWordmark);
+    const statusBlock = pipDoc.createElement('div');
+    statusBlock.className = 'pip-monitoring-status-block';
 
-    const modeLabel = pipDoc.createElement('span');
-    modeLabel.className = 'pip-mode-label';
-    modeLabel.textContent = 'Monitoring';
-    monitoringHeader.appendChild(modeLabel);
-
-    // Shared by Expanded and Compact — Compact repositions this as a
-    // top-left corner overlay via CSS rather than duplicating it.
     // aria-live so assistive tech hears state changes without the
-    // interruption a stronger "assertive" politeness would cause.
+    // interruption a stronger "assertive" politeness would cause. Shared
+    // by Expanded and Compact — Compact visually hides the surrounding
+    // status block but keeps this element announcing (see the
+    // [data-layout="compact"] CSS).
     const statusHeading = pipDoc.createElement('span');
     statusHeading.className = 'pip-status-heading';
     statusHeading.textContent = zoneLabel(currentZone);
+    statusHeading.dataset.zone = String(currentZone);
     statusHeading.setAttribute('aria-live', 'polite');
-    monitoringHeader.appendChild(statusHeading);
+    statusBlock.appendChild(statusHeading);
     pipStatusHeadingEl = statusHeading;
 
     const profileInfo = pipDoc.createElement('span');
     profileInfo.className = 'pip-profile-info';
     profileInfo.textContent = profileMetaText(activeProfile);
-    monitoringHeader.appendChild(profileInfo);
+    statusBlock.appendChild(profileInfo);
     monitoringProfileNameEl = profileInfo;
 
+    monitoringHeader.appendChild(statusBlock);
     monitoringScreen.appendChild(monitoringHeader);
 
     const circleWrapper = pipDoc.createElement('div');
@@ -937,11 +1160,14 @@ export function createMezzoSession({
     sessionState.set(SESSION_STATES.COMPANION_CLOSED);
   }
 
-  /** Ready is always Expanded — restores it here so every path back to
-   *  Ready (first open, reopen, stopping monitoring) converges. */
+  /** Ready is always Expanded (data-layout) and has its own fixed size,
+   *  distinct from Monitoring's Expanded size — restores both here so every
+   *  path back to Ready (first open, reopen, stopping monitoring) converges. */
   function enterPipReadyMode() {
     if (!pipWindow) return;
-    enterExpandedLayout();
+    layoutMode = LAYOUT_MODES.EXPANDED; // Ready has no Compact variant; kept in sync for when Monitoring resumes
+    if (pipDocument?.body) pipDocument.body.setAttribute('data-layout', LAYOUT_MODES.EXPANDED);
+    resizeCompanionTo(MEZZO_COMPANION_READY_SIZE);
     activeCircle = null; // Ready never shows a visualization
     if (readyScreenEl) readyScreenEl.classList.remove('hidden');
     if (monitoringScreenEl) monitoringScreenEl.classList.add('hidden');
@@ -1050,12 +1276,43 @@ export function createMezzoSession({
   }
 
   function toggleReadyProfileDropdown() {
-    if (readyProfileDropdown) renderReadyProfileDropdown();
-    if (readyProfileDropdown) readyProfileDropdown.classList.toggle('hidden');
+    if (!readyProfileBackdropEl) return;
+    const opening = readyProfileBackdropEl.classList.contains('hidden');
+    if (opening) renderReadyProfileDropdown();
+    readyProfileBackdropEl.classList.toggle('hidden');
+    readyProfileSelectorEl?.classList.toggle('is-open', opening);
+    if (pipDocument) {
+      if (opening) {
+        pipDocument.addEventListener('keydown', handleProfileDropdownKeydown);
+        // Move focus into the menu (selected row, or the first row if
+        // none) — otherwise Tab from the trigger would fall through to
+        // whatever's next in the Ready screen's own DOM order instead of
+        // entering the now-open modal, since the backdrop is a sibling of
+        // the screens, not nested where the trigger sits.
+        const active = readyProfileDropdown?.querySelector('.pip-profile-option.is-active');
+        const firstOption = active || readyProfileDropdown?.querySelector('.pip-profile-option');
+        firstOption?.focus();
+      } else {
+        pipDocument.removeEventListener('keydown', handleProfileDropdownKeydown);
+      }
+    }
   }
 
   function closeReadyProfileDropdown() {
-    if (readyProfileDropdown) readyProfileDropdown.classList.add('hidden');
+    if (!readyProfileBackdropEl) return;
+    const wasOpen = !readyProfileBackdropEl.classList.contains('hidden');
+    const focusWasInside = wasOpen && pipDocument && readyProfileBackdropEl.contains(pipDocument.activeElement);
+    readyProfileBackdropEl.classList.add('hidden');
+    readyProfileSelectorEl?.classList.remove('is-open');
+    if (pipDocument) pipDocument.removeEventListener('keydown', handleProfileDropdownKeydown);
+    // Return focus to the trigger only if it was actually inside the menu —
+    // avoids stealing focus on the other, defensive closeReadyProfileDropdown()
+    // calls (e.g. entering Ready mode) where the menu was never open.
+    if (focusWasInside) readyProfileSelectorEl?.focus();
+  }
+
+  function handleProfileDropdownKeydown(event) {
+    if (event.key === 'Escape') closeReadyProfileDropdown();
   }
 
   // Profile selection only ever happens while Ready — monitoring locks it —
@@ -1110,7 +1367,9 @@ export function createMezzoSession({
     pipDocument = null;
     readyScreenEl = null;
     readyProfileNameEl = null;
+    readyProfileSelectorEl = null;
     readyProfileDropdown = null;
+    readyProfileBackdropEl = null;
     monitoringScreenEl = null;
     pipStatusHeadingEl = null;
     monitoringProfileNameEl = null;
