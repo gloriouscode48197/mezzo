@@ -37,7 +37,7 @@ It should support the conversation without becoming part of it.
 
 # North Star
 
-A successful Mezzo session feels almost invisible.
+A successful experience with Mezzo feels almost invisible.
 
 The user opens Mezzo, starts monitoring, keeps the Mezzo Companion beside the meeting, and notices it only when needed.
 
@@ -139,6 +139,25 @@ Users should understand:
 Onboarding should never feel like a test.
 
 It is preparation.
+
+---
+
+## Anchor Page
+
+Internal term only — see Canonical Terminology in `CLAUDE.md`. It is the browser page that must stay open to keep the Mezzo Companion running: the same page that shows the Speaking Profile page and onboarding before a Companion exists, and that keeps the Companion alive once one does.
+
+The Anchor page:
+
+* keeps the Mezzo Companion running
+* reflects whether monitoring is active or inactive
+* explains why the page must remain open
+* closes the Companion if it closes itself
+
+It is not the primary monitoring interface, and should not duplicate the Start Monitoring or Stop controls that belong inside the Companion.
+
+The Mezzo Companion, not the Anchor page, is meant to stay available across an entire meeting-filled day — monitoring starts and stops independently inside it, session by session, without the Companion needing to reopen.
+
+User-facing copy never names this page — it says things like "this page," "keep this page open," or "closing this page will also close the Mezzo Companion." Full behavior: "Anchor Page Experience," below.
 
 ---
 
@@ -459,9 +478,9 @@ Monitoring should never continue ambiguously.
 Recovery should feel like a normal part of the experience rather than an error condition.
 ---
 
-# Session Window Experience
+# Anchor Page Experience
 
-The Mezzo window supports preparation, monitoring, recovery, and session management. Its own "Ready" and "Monitoring Active" statuses below mirror, but are distinct from, the Companion's own Ready and Monitoring states — see Companion States.
+The Anchor page supports monitoring, recovery, and keeping the Mezzo Companion alive. Its own "Ready" and "Monitoring Active" statuses below mirror, but are distinct from, the Companion's own Ready and Monitoring states — see Companion States.
 
 During an active meeting, it is not intended to be the user's primary focus.
 
@@ -503,7 +522,7 @@ Suggested language:
 
 > The Mezzo Companion will stay visible above your other windows.
 
-The Session Window should not duplicate the live visualization while the Mezzo Companion is available.
+The Anchor page should not duplicate the live visualization while the Mezzo Companion is available.
 
 Users should feel comfortable minimizing or ignoring Mezzo during the meeting.
 
@@ -931,7 +950,7 @@ If the answer to any of these questions is "no," revisit the experience before i
 
 # Success Criteria
 
-A successful Mezzo session should feel effortless.
+A successful experience with Mezzo should feel effortless.
 
 The user:
 

@@ -110,6 +110,13 @@ Exact strings to use in code, UI copy, and commit messages:
 * Create New Profile…
 * End Session
 
+Terminology rules:
+
+* **Mezzo** is the whole product — never use it to mean only the floating window.
+* **Mezzo Companion** is the user-facing name for the floating always-on-top window. Use it on first mention in user-facing explanatory copy; **Companion** is acceptable afterward. Internal documentation may generally say **Companion** once the term is established.
+* **Anchor page** is internal-only terminology for the browser page that keeps the Companion running — never surface it in UI copy (see Internal-only terms below).
+* **Session** refers only to a period when monitoring is active — not the Anchor page, the browser tab lifecycle, the Companion window's lifecycle, or the overall time Mezzo stays open during the day.
+
 Two rules that directly affect what gets built:
 
 * There is no "Open Companion" or "Re-open Companion" action — don't build one. Start Monitoring, from Mezzo, opens the Companion and begins the first session; Start Monitoring, from the Companion's own Ready screen, begins every session after that.
@@ -117,7 +124,7 @@ Two rules that directly affect what gets built:
 
 Never introduce alternate names for the Companion in code or UI: no Companion Window, Floating Companion, Control Room, Control Page, "Bring Companion to Front," or "Pop Out."
 
-Internal-only terms — never surface to users: Marketing Site, Onboarding, Session Window, Document Picture-in-Picture.
+Internal-only terms — never surface to users: Marketing Site, Onboarding, Session Window, Anchor page, Document Picture-in-Picture.
 
 Full terminology usage in context lives in `docs/product-experience.md`.
 
@@ -134,6 +141,8 @@ Implemented as the Session Window: `try-it.html`/`try-it.js` — also handles on
 Owns: microphone access, monitoring engine, audio processing, active profile, calibration state, session lifecycle, and the Document Picture-in-Picture integration.
 
 "Session Window" is an architectural term only — never surface it to users.
+
+Once the Companion is open, this same page also takes on the narrower Anchor page role described in `docs/product-experience.md`'s "Anchor Page Experience" — a related but distinct internal term for what the page does at that point, not a rename of the Session Window concept itself.
 
 ## Mezzo Companion
 
