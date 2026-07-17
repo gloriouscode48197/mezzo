@@ -67,11 +67,15 @@ These are settled. Do not revisit them without an explicit product-strategy conv
 * Start Monitoring, from Mezzo, opens the Companion directly into Monitoring for the first session — there is no intermediate Ready checkpoint.
 * Closing the Companion stops monitoring and returns Mezzo to profile selection, on the Speaking Profile page.
 * There is no "Re-open Companion" flow. Starting again always opens a fresh Companion straight into Monitoring.
-* The Session Window — `try-it.html`/`try-it.js` plus `src/mezzo-session.js` — is the single source of truth for the monitoring session.
+* `try-it.html`/`try-it.js` plus `src/mezzo-session.js` are the single source of truth for the monitoring session. The same page renders the Speaking Profile page and onboarding before a Companion exists, and takes on the Anchor page role once one does — one file group, not two.
 * Session state, Companion state, monitoring state, and layout mode are four separate concerns and must never be conflated or inferred from one another.
+* There is no Close Companion button anywhere in the Companion — the native Picture-in-Picture window-close control is the only way to close it directly.
+* There is no End Session control on the Anchor page. A monitoring session ends by closing the Anchor page (which closes the Companion too) or by closing the Companion natively — never a dedicated button.
 * Speaking profiles are local-only: stored in the browser, no account required, never uploaded or synced to any server, as part of the profile experience. This describes profile data specifically — it is not a claim that Mezzo makes zero network requests. Anonymous, audio-free product-usage analytics exist separately (see Privacy Principles) and never carry profile content, audio, or volume data.
 * Privacy is primarily demonstrated through architecture. Surface it in user-facing copy where it materially affects trust, but do not repeat privacy messaging indiscriminately across every screen.
 * Compact mode is an intentional peripheral-awareness mode, not a responsive fallback for small windows.
+* The Companion has three fixed target sizes, one per state, not a single default: Ready 320×300, Monitoring Expanded 380×420, Compact 220×260. Ready and Monitoring Expanded are visually related (both "the Expanded family") but are not the same size — do not merge them back into one constant.
+* The Anchor page's embedded Companion preview is static illustrative imagery, not live session UI — see "Anchor Page" below.
 
 ---
 
@@ -107,14 +111,14 @@ Exact strings to use in code, UI copy, and commit messages:
 * Stop
 * Create New Speaking Profile
 * Create New Profile…
-* End Session
 
 Terminology rules:
 
 * **Mezzo** is the whole product — never use it to mean only the floating window.
 * **Mezzo Companion** is the user-facing name for the floating always-on-top window. Use it on first mention in user-facing explanatory copy; **Companion** is acceptable afterward. Internal documentation may generally say **Companion** once the term is established.
 * **Anchor page** is internal-only terminology for the browser page that keeps the Companion running — never surface it in UI copy (see Internal-only terms below).
-* **Session** refers only to a period when monitoring is active — not the Anchor page, the browser tab lifecycle, the Companion window's lifecycle, or the overall time Mezzo stays open during the day.
+* **Speaking Profile page** is the user-facing name for the profile-selection and profile-creation experience (choosing Everyday Conversation or a saved profile, and the calibration flow that creates a new one). It's the same `try-it.html`/`try-it.js` page as the Anchor page, before a Companion exists.
+* **Monitoring session** (or just **Session**) refers only to a period when monitoring is active — not the Anchor page, the browser tab lifecycle, the Companion window's lifecycle, or the overall time Mezzo stays open during the day.
 
 Two rules that directly affect what gets built:
 
@@ -123,7 +127,9 @@ Two rules that directly affect what gets built:
 
 Never introduce alternate names for the Companion in code or UI: no Companion Window, Floating Companion, Control Room, Control Page, "Bring Companion to Front," or "Pop Out."
 
-Internal-only terms — never surface to users: Marketing Site, Onboarding, Session Window, Anchor page, Document Picture-in-Picture.
+Internal-only terms — never surface to users: Marketing Site, Onboarding, Anchor page, Document Picture-in-Picture.
+
+Avoid outdated terms that no longer describe the implementation: "Session Window" (retired — see the Non-Negotiable Decisions entry above), "Open Companion" (never existed as a real action), and coaching-oriented language generally (see Product Decision Principles). These may appear when describing history, but not as current-state terminology.
 
 Full terminology usage in context lives in `docs/product-experience.md`.
 
@@ -135,23 +141,21 @@ Two named experiences, from the user's perspective. Full description: `docs/prod
 
 ## Mezzo
 
-Implemented as the Session Window: `try-it.html`/`try-it.js` — also handles onboarding, since there is only one user-facing Mezzo experience, not a separate window per step — plus `src/mezzo-session.js`, which owns session logic and is reused by that page.
+Implemented as `try-it.html`/`try-it.js` — also handles onboarding, since there is only one user-facing Mezzo experience, not a separate window per step — plus `src/mezzo-session.js`, which owns session logic and is reused by that page.
 
 Owns: microphone access, monitoring engine, audio processing, active profile, calibration state, session lifecycle, and the Document Picture-in-Picture integration.
 
-"Session Window" is an architectural term only — never surface it to users.
-
-Once the Companion is open, this same page also takes on the narrower Anchor page role described in `docs/product-experience.md`'s "Anchor Page Experience" — a related but distinct internal term for what the page does at that point, not a rename of the Session Window concept itself.
+Once the Companion is open, this same page also takes on the narrower Anchor page role described in `docs/product-experience.md`'s "Anchor Page Experience" — a related but distinct internal term for what the page does at that point, not a separate file or a rename of anything.
 
 ## Mezzo Companion
 
-Implemented via the Document Picture-in-Picture API.
+Implemented via the Document Picture-in-Picture API, built by `src/mezzo-session.js`.
 
-Owns: live visualization, monitoring awareness, peripheral feedback, Start Monitoring for subsequent same-day sessions (from its own Ready screen), Stop, its own window state, and its own layout mode. Never contains an End Session action — that stays Mezzo's responsibility.
+Owns: live visualization, monitoring awareness, peripheral feedback, Start Monitoring for subsequent same-day sessions (from its own Ready screen), Stop, its own window state, and its own layout mode. Never contains an End Session action — that stays Mezzo's responsibility. Never contains a Close Companion action — the native window-close control is the only way to close it.
 
-**States** — Ready (always Expanded) and Monitoring — must never be built as one screen with elements toggled. Full behavior: `docs/product-experience.md`'s "Companion States."
+**States** — Ready and Monitoring — must never be built as one screen with elements toggled. Full behavior: `docs/product-experience.md`'s "Companion States."
 
-**Layout modes**, meaningful only while Monitoring: Expanded (400×500, default) and Compact (220×220). Full behavior: `docs/product-experience.md`'s "Compact Companion."
+**Fixed sizes**, one per state — see the Non-Negotiable Decisions entry above for exact pixels. Ready is always this size; Monitoring is meaningfully different only in its Expanded/Compact **layout mode**. Full behavior: `docs/product-experience.md`'s "Compact Companion."
 
 ## Profiles
 
@@ -162,18 +166,20 @@ Owns: live visualization, monitoring awareness, peripheral feedback, Start Monit
 
 # Single Source of Truth
 
-The Session Window owns the monitoring session: microphone access, monitoring engine, active profile, calibration, monitoring lifecycle, session recovery, cleanup.
+`try-it.html`/`try-it.js` plus `src/mezzo-session.js` own the monitoring session: microphone access, monitoring engine, active profile, calibration, monitoring lifecycle, session recovery, cleanup.
 
 The Companion presents monitoring information. It never independently owns monitoring state.
 
 Four concerns are related but distinct and must never be conflated or inferred from one another:
 
-* **Session state** — whether a monitoring session exists at all. Owned by the Session Window.
+* **Session state** — whether a monitoring session exists at all. Owned by `try-it.js`/`src/mezzo-session.js`.
 * **Companion state** — whether the Companion window is open or closed.
 * **Monitoring state** — whether monitoring is active or inactive.
 * **Layout mode** — Expanded or Compact, meaningful only while the Companion is open.
 
 Layout mode must never be inferred from window dimensions. Monitoring state must never be inferred from whether the Companion window merely exists.
+
+The Anchor page's embedded Companion preview (see `docs/product-experience.md`'s "Anchor Page Experience") is a fixed illustration, not a fifth piece of state — it never reads session state, zone, or profile, and must not be wired up to do so.
 
 ---
 
@@ -192,10 +198,10 @@ Use: Quiet, Within Range, Approaching End of Range, Outside Range. Never: Too Lo
 # Engineering Rules
 
 * Inspect the existing codebase before making large changes.
-* Reuse and extend existing systems before rewriting stable ones.
+* Reuse and extend existing systems before rewriting stable ones; prefer a reusable component over a one-off implementation.
 * Preserve established behavior unless intentionally changing the experience.
 * Keep product logic, the monitoring engine, UI, visualization, and browser integration separated — business logic independent of rendering; the visualization communicates state, it does not compute it.
-* Avoid duplicated business logic and duplicated state.
+* Avoid duplicated business logic and duplicated state — one source of truth per concern, referenced rather than copied.
 * Favor explicitness over cleverness. Document architectural decisions.
 * If implementation appears to conflict with product intent: stop, and clarify the intended experience before changing architecture.
 
@@ -225,6 +231,7 @@ When a proposed implementation conflicts with a Non-Negotiable Decision, preserv
 
 * **CLAUDE.md** (this file) — operational guide for working on Mezzo: terminology to use in code, architecture boundaries, and decision rules that affect implementation. Changes only when those rules change.
 * **`docs/product-experience.md`** — canonical description of the product itself: values, positioning, user journeys, screen-by-screen behavior, monitoring states, visualization behavior.
+* **`docs/ux/speaking-profile-flow.md`** — detailed UX reference for the Speaking Profile page's screens and copy.
 * **`docs/design-principles.md`** — reusable visual, interaction, motion, and copy principles that extend beyond a single feature. *(proposed — not yet created)*
 * **`docs/natural-systems.md`** — the philosophy behind breathing, propagation, contour behavior, organic motion, peripheral awareness. *(proposed — not yet created)*
 * **PRDs** — individual feature requirements: problem, goals, scope, constraints, acceptance criteria, open questions. Never redefine the product.

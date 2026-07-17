@@ -54,14 +54,14 @@ From the user's perspective there are only two named product experiences.
 Mezzo is the application used to:
 
 * prepare for monitoring
-* select or create profiles
+* select or create Speaking Profiles
 * calibrate when needed
 * start monitoring
 * manage an active session
 * recover monitoring
 * end monitoring
 
-Users may move between different pages or windows while using Mezzo, but they should never feel like they are switching between different products.
+Users may move between different screens while using Mezzo, but they should never feel like they are switching between different products — it is the same page throughout, from first launch through active monitoring.
 
 ---
 
@@ -123,7 +123,7 @@ The product itself should remain the visual hero.
 Purpose:
 
 * explain microphone access
-* introduce profiles
+* introduce Speaking Profiles
 * support calibration
 * prepare the user to begin monitoring
 
@@ -134,7 +134,7 @@ Users should understand:
 * why microphone access is needed
 * what Mezzo does with microphone input
 * when monitoring begins
-* how profiles work
+* how Speaking Profiles work
 
 Onboarding should never feel like a test.
 
@@ -149,15 +149,16 @@ Internal term only — see Canonical Terminology in `CLAUDE.md`. It is the brows
 The Anchor page:
 
 * keeps the Mezzo Companion running
-* reflects whether monitoring is active or inactive
+* reflects whether monitoring is active or inactive, via a small status indicator
+* shows a static, illustrative preview of the Companion — not a live view — so a user who has never opened one knows roughly what to expect
 * explains why the page must remain open
 * closes the Companion if it closes itself
 
-It is not the primary monitoring interface, and should not duplicate the Start Monitoring or Stop controls that belong inside the Companion.
+It is not the primary monitoring interface. It does not duplicate the Companion's real Start Monitoring or Stop controls, and its Companion preview does not run a second visualization or reflect real session data — see "Anchor Page Experience," below, for exactly what it shows and why.
 
 The Mezzo Companion, not the Anchor page, is meant to stay available across an entire meeting-filled day — monitoring starts and stops independently inside it, session by session, without the Companion needing to reopen.
 
-User-facing copy never names this page — it says things like "this page," "keep this page open," or "closing this page will also close the Mezzo Companion." Full behavior: "Anchor Page Experience," below.
+User-facing copy never names this page — it says things like "this page," "keep this page open," or "closing this page will also close the Mezzo Companion."
 
 ---
 
@@ -206,14 +207,14 @@ Grant microphone permission
 
 ↓
 
-Choose:
+Choose a Speaking Profile:
 
-* Recommended Profile
-* Create Custom Profile
+* Everyday Conversation
+* Create a Speaking Profile
 
 ↓
 
-Calibrate if creating a Custom Profile
+Calibrate if creating a Speaking Profile
 
 ↓
 
@@ -225,7 +226,7 @@ Choose:
 
 * Save (transitions in place to naming, below)
 * Try Again (restarts calibration directly)
-* Discard (returns to Choose a Profile)
+* Discard (returns to Choose a Speaking Profile)
 
 ↓
 
@@ -233,7 +234,7 @@ Name the profile, if saving
 
 ↓
 
-Speaking Profile page — selected profile visible
+Speaking Profile page — selected profile visible, primary action reads "Start Monitoring" (or "Set Up Profile" if a not-yet-created profile is still selected)
 
 ↓
 
@@ -257,7 +258,7 @@ Companion Ready (still open — start again, switch profiles, or close)
 
 ↓
 
-End Session
+Close the Anchor page, or close the Companion natively, to end the session
 
 ---
 
@@ -275,19 +276,21 @@ Privacy messaging should be specific, calm, and verifiable.
 
 ---
 
-## Choose a Profile
+## Choose a Speaking Profile
 
 Users should be able to begin quickly.
 
 Offer:
 
-* Recommended
-* Create Custom Profile
-* Previously Saved Profiles (when available)
+* Everyday Conversation, badged "Recommended"
+* Create a Speaking Profile ("Calibrated to your voice and environment")
+* previously saved Speaking Profiles, once any exist
 
-The Recommended profile minimizes setup.
+Everyday Conversation minimizes setup — it requires no calibration.
 
-Custom profiles allow users to define a preferred speaking range for their own environment.
+A created Speaking Profile lets users define a preferred speaking range for their own environment.
+
+The primary action's label reflects the current selection: "Start Monitoring" for Everyday Conversation or any saved profile, "Set Up Profile" when "Create a Speaking Profile" is selected instead.
 
 ---
 
@@ -323,9 +326,9 @@ Avoid:
 * Use Once
 * Not Now
 
-Try Again discards this take and restarts calibration capture directly, with no separate landing step in between. Discard abandons the calibration result entirely and returns to Choose a Profile. Save transitions that same modal, in place, to a "Name your profile" step — never a second modal or a separate page — where naming and saving completes the new Custom Profile.
+Try Again discards this take and restarts calibration capture directly, with no separate landing step in between. Discard abandons the calibration result entirely and returns to Choose a Speaking Profile. Save transitions that same modal, in place, to a "Name your profile" step — never a second modal or a separate page — where naming and saving completes the new Speaking Profile.
 
-There is no way to continue into monitoring with an unsaved calibration, and no temporary or session-only profile is ever created — calibration always ends in either a saved Custom Profile or nothing at all.
+There is no way to continue into monitoring with an unsaved calibration, and no temporary or session-only profile is ever created — calibration always ends in either a saved Speaking Profile or nothing at all.
 
 ---
 
@@ -340,7 +343,7 @@ Selecting it opens the Mezzo Companion directly into its Monitoring state, using
 * confirm microphone access
 * start the monitoring session
 * open the Companion straight into Monitoring
-* transition Mezzo into its Monitoring Active status
+* transition the Anchor page into its "Monitoring is active" status
 
 There is no intermediate Companion Ready checkpoint and no second Start Monitoring action for this first session — avoid presenting multiple "Ready" checkpoints across separate windows before monitoring can begin. Monitoring should never begin automatically on its own, without this explicit action.
 
@@ -352,6 +355,7 @@ Once the user stops monitoring, the Companion remains open and returns to its ow
 
 When the Companion is in its Ready state, show:
 
+* "Ready for the next conversation."
 * selected profile (the previously used one, still selected)
 * profile selector
 * Start Monitoring
@@ -361,9 +365,9 @@ Selecting Start Monitoring there should:
 * start the monitoring session again, with whichever profile is selected
 * lock profile selection
 * transition the Companion into its Monitoring state
-* transition Mezzo into its Monitoring Active status
+* transition the Anchor page into its "Monitoring is active" status
 
-This lets the user start additional monitoring sessions later in the day without ever returning to Mezzo.
+This lets the user start additional monitoring sessions later in the day without ever returning to the Speaking Profile page.
 
 ---
 
@@ -401,7 +405,7 @@ Companion Ready (still open — start again, switch profiles, or close)
 
 ↓
 
-End Session
+Close the Anchor page, or close the Companion natively, to end the session
 
 Returning users should not repeat onboarding unless required.
 
@@ -476,55 +480,39 @@ Users should always understand:
 Monitoring should never continue ambiguously.
 
 Recovery should feel like a normal part of the experience rather than an error condition.
+
 ---
 
 # Anchor Page Experience
 
-The Anchor page supports monitoring, recovery, and keeping the Mezzo Companion alive. Its own "Ready" and "Monitoring Active" statuses below mirror, but are distinct from, the Companion's own Ready and Monitoring states — see Companion States.
+The Anchor page supports monitoring, recovery, and keeping the Mezzo Companion alive. Its own "active"/"inactive" status below mirrors, but is distinct from, the Companion's own Ready and Monitoring states — see Companion States.
 
 During an active meeting, it is not intended to be the user's primary focus.
 
-Its responsibility is to keep the monitoring session understandable and recoverable.
+Its responsibility is to keep the monitoring session understandable and recoverable — nothing more. There is no End Session (or any other) button on this screen. A monitoring session ends by closing this page, which closes the Companion too, or by closing the Companion itself using its native window control.
 
-## Ready State
+## What It Shows
 
-This status screen is only reached once the Mezzo Companion already exists — after stopping monitoring, or if a first attempt to start couldn't acquire the microphone. It is not where the first session begins: that Start Monitoring control lives on Mezzo's own Speaking Profile page, before any Companion exists. Once the Companion is open, Mezzo itself does not also show a profile selector or a Start Monitoring control — those live inside the Mezzo Companion, which owns starting and stopping monitoring from that point on. Mezzo's own Ready state is a status report: the Companion is open and waiting.
+Once the Companion is open — whether monitoring is active or the Companion is sitting on its own Ready screen — the Anchor page shows the same structure, with one thing that changes:
 
-The Mezzo Companion is a Document Picture-in-Picture window and already stays above other application windows on its own — Mezzo never offers a "bring to front" / "show" / "focus" control for it. Reporting status is the only job of this screen while the Companion is open.
+* a small status indicator: a filled dot and "Monitoring is active." while monitoring, or a hollow dot and "Monitoring is inactive." while the Companion is Ready — the only part of this screen that reflects real session state
+* a fixed heading: "Your Mezzo Companion is open" — shown regardless of the status above it
+* a static illustrative preview of the Companion window — see "Companion Preview" below
+* a caption explaining the preview: "The Mezzo Companion is the floating window you'll use while monitoring."
+* a divider
+* guidance to keep the page open and that closing it closes the Companion too: "Keep this page open while using Mezzo." / "Closing it will also close the Mezzo Companion."
 
-When the Companion is open but monitoring has not started, Mezzo should display:
+The Mezzo Companion is a Document Picture-in-Picture window and already stays above other application windows on its own — Mezzo never offers a "bring to front" / "show" / "focus" control for it, and never duplicates its Start Monitoring or Stop controls here. Reporting status is the only job of this screen while the Companion is open.
 
-* Mezzo Companion is open
-* Ready
-* supporting copy explaining the next step happens in the Companion
-* End Session
+## Companion Preview
 
-Suggested language:
+The preview shown on the Anchor page is a fixed, illustrative graphic, not a live view into the real Companion. It always shows the same reference imagery — an Expanded Monitoring Companion reading "Approaching End of Range" with a "Coffee Shop" profile — regardless of the user's actual profile, actual zone, or whether the Companion is really Monitoring or sitting on Ready.
 
-> Start monitoring from the Mezzo Companion when you're ready.
+This is intentional: the preview exists to show a first-time user what the Companion looks like, not to report live status (the status indicator above it already does that, accurately). It does not run a second monitoring or visualization loop, does not read the user's real profile or zone, and its "Stop"/"Compact" labels are not functional controls.
 
-End Session is distinct from closing Mezzo: it stops monitoring if active, releases the microphone, and closes the Mezzo Companion — returning Mezzo to the Speaking Profile page (profile library), with the current profile still selected and Start Monitoring as the primary action, rather than closing Mezzo itself. Closing Mezzo entirely is a separate action — see Recovery.
+## Recovery
 
-Users should never need a second checkpoint on this window before the first session's monitoring can begin — Mezzo's own Start Monitoring already handles that. This screen exists only for what happens after the Companion is already open.
-
----
-
-## Monitoring Active
-
-Once monitoring begins, Mezzo should communicate:
-
-* Monitoring is active
-* End Session
-
-It should also explain the relationship between Mezzo and the active session, and that the Companion remains visible without any action needed.
-
-Suggested language:
-
-> The Mezzo Companion will stay visible above your other windows.
-
-The Anchor page should not duplicate the live visualization while the Mezzo Companion is available.
-
-Users should feel comfortable minimizing or ignoring Mezzo during the meeting.
+Users should never need a second checkpoint on this page before the first session's monitoring can begin — Mezzo's own Start Monitoring already handles that. This screen exists only to report status once the Companion is already open, and to explain how closing things works.
 
 ---
 
@@ -538,9 +526,8 @@ A user should understand its current state with a brief peripheral glance rather
 
 The Companion should:
 
-* open at a useful default size
-* support resizing
-* remain legible at supported sizes
+* open at a useful default size, and resize appropriately as it moves between Ready, Expanded Monitoring, and Compact
+* remain legible at each of its fixed sizes
 * prioritize the visualization over controls
 * communicate monitoring status clearly
 * remain visually stable throughout a meeting
@@ -559,19 +546,23 @@ The Companion has two distinct states. They should never feel like one screen wi
 
 Purpose: preparation.
 
+Target size: 320×300 — its own fixed size, not shared with Monitoring's Expanded size.
+
 The Companion's first open of the day goes directly to Monitoring — Mezzo already chose the profile, so there is nothing to prepare. Ready is reached only afterward, by stopping monitoring, and is where subsequent same-day sessions begin.
 
-The Ready state allows users to:
+Ready shows:
 
-* review the selected profile
-* choose another existing profile
-* create a new profile (by returning to Mezzo)
-* start monitoring
-* close the Companion
+* "Ready for the next conversation."
+* a profile selector, offering Everyday Conversation, any saved profiles, and "Create New Profile…"
+* Start Monitoring
+
+The profile selector opens a centered menu over the Companion, rather than an anchored dropdown — this keeps it fully visible regardless of where the trigger sits in the small window. The selected profile is marked distinctly from a hovered or keyboard-focused one.
+
+From Ready, users can review the selected profile, choose another existing one, create a new one (which hands off to the Speaking Profile page — see "Profile Model" below), or start monitoring. There is no in-Companion control to close it — the native Picture-in-Picture window-close control is the only way, from any state.
 
 The visualization is intentionally hidden. Monitoring is inactive.
 
-Ready always uses the Expanded layout.
+Ready always uses the Expanded layout — there is no Compact Ready variant.
 
 ---
 
@@ -579,11 +570,15 @@ Ready always uses the Expanded layout.
 
 Purpose: ambient awareness.
 
+Target size (Expanded): 380×420.
+
 Monitoring displays:
 
-* current monitoring state
+* current monitoring state (Quiet / Within Range / Approaching End of Range / Outside Range)
 * selected profile (read only)
 * live visualization
+* Stop
+* Compact
 
 Users cannot change profiles while monitoring.
 
@@ -595,16 +590,18 @@ Stopping monitoring returns to Ready.
 
 Compact is an intentional product mode, not a responsive fallback for small windows.
 
+Target size: 220×260.
+
 It exists only while monitoring. Its purpose is peripheral awareness.
 
-The Compact Companion intentionally removes interface chrome. It displays:
+The Compact Companion removes most interface chrome, keeping only what's essential at a glance. It displays:
 
 * the visualization
+* a minimal "Mezzo" label
 * an Expand control
 
 It does not display:
 
-* the MEZZO wordmark
 * monitoring status text
 * profile information
 * Stop
@@ -619,11 +616,11 @@ Expanding always returns to the Expanded layout without interrupting monitoring,
 
 Profile responsibilities are intentionally divided between Mezzo and the Companion.
 
-In Mezzo:
+In Mezzo (the Speaking Profile page):
 
-* create profiles
+* create Speaking Profiles
 * calibrate
-* manage profiles
+* manage saved profiles
 
 In the Companion:
 
@@ -734,6 +731,8 @@ The visualization grows through accumulation.
 
 Each monitoring state adds information rather than replacing the previous state.
 
+Concretely: rising energy introduces a new outer contour that emerges from the currently active contour's own displayed size — not from nothing, and not from a fixed resting radius — and grows outward smoothly from there. That new outer contour becomes the active, radiating one the moment it starts emerging. Falling energy reverses this the same way: the outer contour recedes and radiating activity transfers back to the next contour inward, rather than the whole visualization jumping between fixed states.
+
 The container remains fixed.
 
 The visualization should never cause surrounding layout changes.
@@ -797,7 +796,7 @@ Users should always understand:
 
 ## Mezzo Companion Closed
 
-Monitoring can never continue without the Mezzo Companion open. If the Companion closes — the native window control or End Session — monitoring stops immediately if it was active, and microphone resources are released — not left running invisibly.
+Monitoring can never continue without the Mezzo Companion open. If the Companion closes — only ever via its native window-close control, since there is no in-app Close Companion action — monitoring stops immediately if it was active, and microphone resources are released — not left running invisibly.
 
 There is no separate "Mezzo Companion is closed" status screen and no Re-open Companion action. Instead, Mezzo returns directly to the Speaking Profile page (profile library), with the current profile still selected and the primary action:
 
@@ -811,9 +810,9 @@ Selecting it opens a fresh Companion directly into Monitoring, exactly like the 
 
 ## Mezzo Closed
 
-Closing Mezzo ends the monitoring session.
+Closing the Anchor page (the browser tab) ends the monitoring session — this is the primary way a session ends; there is no dedicated End Session control.
 
-When possible, users should understand this before the window closes.
+When possible, users should understand this before the page closes — see the Anchor page's own footer guidance ("Closing it will also close the Mezzo Companion").
 
 Ending the session should:
 
@@ -878,6 +877,8 @@ Core promises should remain simple and verifiable:
 * audio is never transmitted as part of the core experience
 * speech is never transcribed
 * conversation content is never analyzed
+
+Speaking Profile data is the one thing Mezzo does persist, and only locally — see `CLAUDE.md`'s Non-Negotiable Decisions and the Privacy page for the exact claim.
 
 Trust should come from consistent behavior rather than reassurance alone.
 
