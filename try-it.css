@@ -191,10 +191,15 @@ body {
 .profile-row:hover { background: rgba(60, 59, 63, 0.04); }
 
 .profile-row:has(.radio-input:checked) {
-  background: rgba(60, 59, 63, 0.06);
+  background: rgba(60, 59, 63, 0.035);
   outline: 1px solid rgba(60, 59, 63, 0.18);
   outline-offset: -1px;
 }
+
+/* Guided choice's two rows sit edge-to-edge — a border directly on the
+   second row divides them, instead of a separate <hr> with its own
+   margin, which reads as an oversized gap between just two options. */
+.profile-row-bordered-top { border-top: 1px solid var(--border); }
 
 .profile-row-text { display: flex; flex-direction: column; gap: 4px; }
 
