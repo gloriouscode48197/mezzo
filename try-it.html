@@ -52,18 +52,29 @@
       </div>
     </main>
 
-    <!-- ── State B: Calibration (landing + listening in one view) ── -->
+    <!-- ── State B: Calibration (landing + listening in one view) ──
+         Headings differ between phases (see docs/ux/speaking-profile-flow.md's
+         mockup), so each phase carries its own heading rather than sharing
+         one above cal-content-area. Back returns to Choose a Speaking Profile
+         — only offered before listening starts. There is no manual "I'm done
+         speaking" control in the listening phase; it ends only via the
+         existing automatic countdown (see finishCalibration() in try-it.js). ── -->
     <main id="state-b" class="state-view page-content hidden">
       <div class="state-col">
-        <h1 class="type-section-heading state-heading">Speak at the volume you'd like to&nbsp;keep</h1>
         <div class="cal-content-area">
-          <!-- Pre-calibration: body text + button -->
+          <!-- Pre-calibration: back link + heading + body text + button -->
           <div class="cal-pre-content">
-            <p class="type-hero-body state-body">Talk for a few seconds so Mezzo can learn the speaking level you consider appropriate for the people around you.</p>
-            <button id="btn-start-calibration" class="btn-primary btn-wide">OK</button>
+            <button id="btn-calibration-back" type="button" class="back-link">
+              <svg width="12" height="12" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M9 11L5 7l4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              Back
+            </button>
+            <h1 class="type-section-heading state-heading">Create your speaking profile</h1>
+            <p class="type-hero-body state-body">Speak naturally for a few seconds while Mezzo learns the speaking level you'd like to maintain.</p>
+            <button id="btn-start-calibration" class="btn-primary btn-wide">I'm Ready</button>
           </div>
           <!-- Listening: countdown + ring visualization -->
           <div class="cal-listen-content">
+            <h1 class="type-section-heading state-heading">Talk at your desired speaking level.</h1>
             <p id="listening-heading" class="cal-countdown">Listening...6s</p>
             <canvas id="cal-ring-canvas" width="200" height="200" aria-hidden="true" style="display:block; width:200px; height:200px; margin:0 auto var(--space-circle-to-button);"></canvas>
           </div>
@@ -75,12 +86,12 @@
          Two mutually-exclusive layouts toggled by renderProfileSelect() based
          on getSavedProfiles().length — see docs/ux/speaking-profile-flow.md.
          Radios are selection-only. #btn-profile-primary ("Start Monitoring" /
-         "Continue" in guided state) is the sole way to open the Mezzo
+         "Set Up Profile" in guided state) is the sole way to open the Mezzo
          Companion and start monitoring, or begin custom profile creation —
          see try-it.js's handleProfilePrimaryClick(). ── -->
     <main id="state-profile-select" class="state-view page-content hidden">
       <div class="state-col">
-        <h1 class="type-section-heading state-heading">Choose a Speaking Profile</h1>
+        <h1 class="type-section-heading state-heading">Choose a speaking profile</h1>
         <p class="type-hero-body state-body">Choose the speaking range you'd like Mezzo to monitor during this session.</p>
 
         <!-- Guided choice: shown when no custom profiles are saved -->
@@ -103,8 +114,8 @@
             <input type="radio" name="profile-guided-choice" id="profile-radio-custom" class="radio-input">
             <span class="radio-visual" aria-hidden="true"></span>
             <span class="profile-row-text">
-              <span class="profile-row-name">Custom Speaking Profile</span>
-              <span class="profile-row-desc">Teach Mezzo the speaking range you'd like to maintain.</span>
+              <span class="profile-row-name">Create a speaking profile</span>
+              <span class="profile-row-desc">Calibrated to your voice and environment.</span>
             </span>
           </label>
         </div>
@@ -125,52 +136,17 @@
 
           <hr class="profile-divider">
 
-          <div class="profile-section-header">
-            <span class="profile-section-label">Custom Profiles</span>
-            <span id="profile-count" class="profile-section-count">0 / 5</span>
-          </div>
-
           <div id="saved-profiles-list"></div>
 
           <div class="profile-create-row">
-            <button id="btn-create-new-profile" type="button" class="profile-create-link">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" class="profile-create-icon">
-                <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.3" stroke-dasharray="2.4 2.4"/>
-                <path d="M8 5v6M5 8h6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
-              </svg>
-              Create Speaking Profile
-            </button>
-            <p id="profile-limit-message" class="profile-limit-message hidden">Delete a profile to create another.</p>
+            <button id="btn-create-new-profile" type="button" class="profile-create-link">+ Create speaking profile</button>
+            <span id="profile-slots-remaining" class="profile-slots-remaining">(4 slots remaining)</span>
+            <p id="profile-limit-message" class="profile-limit-message hidden">Maximum of 5 custom profiles reached. Delete a profile to create another.</p>
           </div>
         </div>
 
         <button id="btn-profile-primary" class="btn-primary btn-wide">Start Monitoring</button>
         <p class="type-microcopy state-micro">You can change your selection before monitoring begins.</p>
-      </div>
-    </main>
-
-    <!-- ── State: Save this profile? — every calibration ends here: Save Profile
-         (names + saves it as a Custom Profile) or Cancel (discards it and returns
-         to calibration). There is no "use once without saving" path. ── -->
-    <main id="state-save-prompt" class="state-view page-content hidden">
-      <div class="state-col">
-        <h1 class="type-section-heading state-heading">Save this profile?</h1>
-        <p class="type-hero-body state-body">Save it to reuse this baseline next time without recalibrating.</p>
-        <div class="prompt-actions">
-          <button id="btn-save-profile" class="btn-primary btn-wide">Save Profile</button>
-          <button id="btn-cancel-calibration" class="btn-outline">Cancel</button>
-        </div>
-      </div>
-    </main>
-
-    <!-- ── State: Name the profile ── -->
-    <main id="state-name" class="state-view page-content hidden">
-      <div class="state-col">
-        <h1 class="type-section-heading state-heading">Profile Name</h1>
-        <form id="name-form">
-          <input id="profile-name-input" class="text-input" type="text" placeholder="e.g. Team Standups" maxlength="40" autocomplete="off">
-          <button id="btn-save-name" type="submit" class="btn-primary btn-wide">Save</button>
-        </form>
       </div>
     </main>
 
@@ -239,6 +215,50 @@
   </footer>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <!-- Save-profile modal — every calibration ends here, as an overlay on top of
+       the (still-visible, frozen) listening screen rather than its own page.
+       Two steps toggled in place, never a second modal: "prompt" (Save / Try
+       Again / Discard) and "name" (Name your profile / Back). There is no
+       "use once without saving" path — see try-it.js's finishCalibration(). -->
+  <div id="save-dialog-overlay" class="dialog-overlay hidden">
+    <div class="dialog dialog-save" role="dialog" aria-modal="true" aria-labelledby="save-dialog-title">
+      <!-- Step: Save this profile? -->
+      <div id="save-step-prompt" class="save-dialog-step">
+        <h2 id="save-dialog-title" class="type-section-heading dialog-title">Save this profile?</h2>
+        <p class="type-body dialog-body">Reuse this speaking profile anytime in this browser.</p>
+        <div class="save-dialog-actions">
+          <button id="btn-save-profile" type="button" class="btn-primary">Save</button>
+          <button id="btn-try-again" type="button" class="btn-outline btn-with-icon">
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"><path d="M11 6.5A4.5 4.5 0 1 1 9.8 3.3M11 6.5V2.5M11 6.5H7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Try Again
+          </button>
+        </div>
+        <hr class="save-dialog-divider">
+        <div class="save-dialog-discard-row">
+          <span class="save-dialog-or">or</span>
+          <button id="btn-discard-calibration" type="button" class="save-dialog-discard">
+            <svg width="12" height="13" viewBox="0 0 16 18" fill="none" aria-hidden="true"><path d="M1 4h14M5.5 4V2h5v2M6.5 8v6M9.5 8v6M2 4l1 12h10l1-12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Discard
+          </button>
+        </div>
+        <p class="type-microcopy save-dialog-privacy-note">Saved only in this browser. No account required.</p>
+      </div>
+
+      <!-- Step: Name your profile -->
+      <div id="save-step-name" class="save-dialog-step hidden">
+        <h2 class="type-section-heading dialog-title">Name your profile</h2>
+        <form id="name-form">
+          <input id="profile-name-input" class="text-input" type="text" maxlength="40" autocomplete="off">
+          <p class="type-microcopy save-dialog-hint">Coffee Shop &bull; Quiet Office &bull; Presentation</p>
+          <div class="save-dialog-actions">
+            <button id="btn-save-name" type="submit" class="btn-primary">Save</button>
+            <button id="btn-name-back" type="button" class="btn-outline">Back</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
 
   <!-- Delete-profile confirmation — see docs/ux/speaking-profile-flow.md's "Deleting Profiles" -->
   <div id="delete-dialog-overlay" class="dialog-overlay hidden">

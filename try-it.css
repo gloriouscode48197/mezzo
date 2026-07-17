@@ -79,7 +79,9 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  min-height: 220px;
+  /* Each phase now carries its own heading (see try-it.html), so this must be
+     tall enough for the taller of the two absolutely-positioned phases. */
+  min-height: 480px;
   width: 100%;
 }
 
@@ -92,6 +94,24 @@ body {
   width: 100%;
   transition: opacity 0.5s ease, transform 0.5s ease;
 }
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  margin-bottom: 20px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--text-subdued);
+  transition: color 0.15s ease;
+}
+
+.back-link:hover,
+.back-link:focus-visible { color: var(--text-default); }
 
 .cal-pre-content .state-body { margin-bottom: 40px; }
 
@@ -198,6 +218,14 @@ body {
 
 .profile-row-name--sm { font-size: 16px; flex: 1; }
 
+/* Guided-choice (no saved profiles) state only: no selection outline, and
+   name weight is a static per-option distinction rather than a
+   selection-driven one — Everyday Conversation always reads as the primary
+   choice, "Create a speaking profile" always reads as plain body text. */
+#profile-guided .profile-row:has(.radio-input:checked) { outline: none; }
+#profile-guided .profile-row:has(#profile-radio-recommended) .profile-row-name { font-weight: var(--weight-medium); }
+#profile-guided .profile-row:has(#profile-radio-custom) .profile-row-name { font-weight: var(--weight-light); }
+
 /* Subdued pill — deliberately quieter than the profile name, never the accent color. */
 .profile-row-badge {
   flex-shrink: 0;
@@ -296,32 +324,6 @@ body {
 .profile-row-saved:hover .btn-delete,
 .profile-row-saved:focus-within .btn-delete { opacity: 1; }
 
-/* ── Custom Profiles section header (label + count) ── */
-.profile-section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 4px 18px 8px;
-  border-bottom: 1px solid var(--border);
-}
-
-.profile-section-label {
-  font-family: var(--font-body);
-  font-size: 9px;
-  font-weight: var(--weight-medium);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--text-subdued);
-}
-
-.profile-section-count {
-  font-family: var(--font-body);
-  font-size: 11px;
-  font-weight: var(--weight-medium);
-  letter-spacing: 0.06em;
-  color: var(--hanko-text);
-}
-
 /* ── Delete control (saved custom profiles only) ── */
 .btn-delete {
   flex-shrink: 0;
@@ -339,12 +341,14 @@ body {
 .btn-delete:focus-visible { color: var(--text-default); }
 
 /* ── Create Speaking Profile (profile-library state only) ── */
-.profile-create-row { padding: 14px 18px; }
+.profile-create-row {
+  padding: 14px 18px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
 
 .profile-create-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
   background: none;
   border: none;
   cursor: pointer;
@@ -357,12 +361,16 @@ body {
   transition: color 0.15s ease, transform 0.15s ease;
 }
 
-.profile-create-icon { flex-shrink: 0; }
-
 .profile-create-link:hover,
 .profile-create-link:focus-visible {
   color: var(--hanko-fill);
   transform: translateX(3px);
+}
+
+.profile-slots-remaining {
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--text-subdued);
 }
 
 .profile-limit-message {
@@ -438,8 +446,82 @@ body {
   font-size: 15px;
 }
 
-/* ── Save Prompt ── */
-.prompt-actions { display: flex; flex-direction: column; align-items: center; gap: 20px; }
+/* ── Save-profile dialog (calibration) — overlay on top of the listening
+   screen, not a page of its own. Two steps toggled in place; see
+   #save-dialog-overlay in try-it.html and try-it.js's showSaveDialogStep(). ── */
+.dialog-save { max-width: 400px; }
+
+.save-dialog-step .dialog-title { margin-bottom: 10px; }
+.save-dialog-step .dialog-body { margin-bottom: 24px; }
+
+.save-dialog-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.save-dialog-actions .btn-primary,
+.save-dialog-actions .btn-outline { flex: 1; }
+
+/* This dialog's outline buttons (Try Again, Back) read in normal case at the
+   same size as Save, unlike the app's other (uppercase, compact) .btn-outline
+   usages — scoped narrowly so it doesn't affect .btn-outline elsewhere. */
+.save-dialog-actions .btn-outline {
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 15px;
+  padding: 13px 16px;
+}
+
+.save-dialog-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 0 0 16px;
+}
+
+.save-dialog-discard-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.save-dialog-or {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--text-ghost);
+}
+
+.save-dialog-discard {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--text-subdued);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.save-dialog-discard:hover,
+.save-dialog-discard:focus-visible {
+  background: rgba(60, 59, 63, 0.06);
+  color: var(--text-default);
+}
+
+.save-dialog-privacy-note { margin-top: 20px; color: var(--text-ghost); }
+
+.save-dialog-hint {
+  text-align: left;
+  width: 100%;
+  color: var(--text-subdued);
+}
 
 /* ── Toast (transient confirmation, e.g. after saving a profile) ── */
 .toast {

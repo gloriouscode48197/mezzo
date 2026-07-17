@@ -65,7 +65,7 @@ If a user deletes all saved custom speaking profiles, the page returns to the gu
 When no custom speaking profiles are saved, Mezzo presents a guided choice between two paths:
 
 - Everyday Conversation
-- Custom Speaking Profile
+- Create a Speaking Profile
 
 Both options are shown as radio-button choices.
 
@@ -79,15 +79,15 @@ When selected:
 - Selecting the button opens the Mezzo Companion directly into Monitoring, using Everyday Conversation.
 - Profile creation does not begin.
 
-### Custom Speaking Profile
+### Create a Speaking Profile
 
 When selected:
 
-- The primary button label is **Continue**.
+- The primary button label is **Set Up Profile**.
 - Selecting the button begins the custom profile creation flow.
 - The Companion does not open.
 
-The button uses **Continue** rather than repeating the selected option.
+The button uses **Set Up Profile** rather than repeating the selected option.
 
 ### Purpose of This State
 
@@ -214,11 +214,11 @@ The behavior of custom-profile creation depends on the page state.
 
 ### No Saved Custom Profiles
 
-Custom Speaking Profile is presented as a radio-button choice.
+Create a Speaking Profile is presented as a radio-button choice.
 
 Selecting it does not begin profile creation immediately.
 
-The user begins profile creation by selecting **Continue**.
+The user begins profile creation by selecting **Set Up Profile**.
 
 ### Saved Custom Profiles
 
@@ -256,9 +256,9 @@ When **Everyday Conversation** is selected, the primary button is:
 
 **Start Monitoring**
 
-When **Custom Speaking Profile** is selected, the primary button changes to:
+When **Create a Speaking Profile** is selected, the primary button changes to:
 
-**Continue**
+**Set Up Profile**
 
 ### Saved Custom Profiles
 
@@ -330,7 +330,7 @@ If the final saved custom profile is deleted:
 
 - Return to the **No Saved Custom Profiles** presentation.
 - Select Everyday Conversation by default.
-- Show Custom Speaking Profile as the second guided radio option.
+- Show Create a Speaking Profile as the second guided radio option.
 
 No separate empty-library state is needed.
 
@@ -347,10 +347,10 @@ Selecting **Everyday Conversation**:
 - Selects the built-in profile.
 - Changes the primary button to **Start Monitoring**.
 
-Selecting **Custom Speaking Profile**:
+Selecting **Create a Speaking Profile**:
 
 - Selects the creation path.
-- Changes the primary button to **Continue**.
+- Changes the primary button to **Set Up Profile**.
 
 Neither radio option takes action immediately.
 
@@ -384,7 +384,7 @@ The page is organized into:
 
 1. Page title and explanation
 2. Everyday Conversation option
-3. Custom Speaking Profile option
+3. Create a Speaking Profile option
 4. Dynamic primary action
 5. Reassurance text
 
@@ -464,7 +464,7 @@ Each control has one responsibility.
 
 - Radio button → Choose a path.
 - Start Monitoring → Open the Companion directly into Monitoring, using Everyday Conversation.
-- Continue → Begin custom profile creation.
+- Set Up Profile → Begin custom profile creation.
 
 ### Saved Custom Profiles
 
@@ -482,7 +482,7 @@ The primary action reflects the next meaningful step.
 ### Guided Choice
 
 - Everyday Conversation selected → **Start Monitoring**
-- Custom Speaking Profile selected → **Continue**
+- Create a Speaking Profile selected → **Set Up Profile**
 
 ### Profile Library
 

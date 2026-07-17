@@ -4,7 +4,7 @@
  * try-it.js is Mezzo: onboarding (mic permission, profile choice,
  * calibration) *and* the session-owning page once a profile is chosen —
  * there is no second window in between. The Speaking Profile screen's
- * primary CTA ("Start Monitoring" / "Continue") is the sole trigger for
+ * primary CTA ("Start Monitoring" / "Set Up Profile") is the sole trigger for
  * opening the Mezzo Companion — there is no separate "You're All Set"
  * confirmation screen, and no second profile-selection or Start Monitoring
  * step inside the Companion for this first session. Mezzo chooses the
@@ -20,22 +20,29 @@
  *
  * States, one visible at a time:
  *   a:                Mic permission not granted → show enable mic prompt
- *   profile-select:   Choose a Speaking Profile — Everyday Conversation, Custom Speaking
+ *   profile-select:   Choose a Speaking Profile — Everyday Conversation, Create a Speaking
  *                     Profile, or a saved profile (guided-choice vs profile-library layout).
  *                     Its primary CTA is the only way to start monitoring (opening the
  *                     Companion directly into Monitoring) or begin custom profile
  *                     creation — see startMonitoringForProfile(). Also where Mezzo lands
  *                     after the Companion closes, for any reason.
  *   b:                Calibration (creates a custom profile) — landing + listening. On
- *                     finishing, always goes to "save-prompt" — there is no session-only
+ *                     finishing, always opens the save dialog (see below) as an overlay on
+ *                     top of the still-visible listening screen — there is no session-only
  *                     "use once without saving" path, and no profile is selected yet.
- *   save-prompt:      "Save this profile?" — Save Profile goes to "name"; Cancel discards
- *                     the calibration result (no temporary profile is ever created) and
- *                     returns to "b" so the user can recalibrate.
- *   name:             Name the just-calibrated profile before saving it. On submit, returns
- *                     to profile-select (now showing the profile library, the new profile
- *                     auto-selected) with a confirmation toast — does not open the
- *                     Companion automatically.
+ *
+ * Save dialog (#save-dialog-overlay): a modal overlay, not a state — opened by
+ * finishCalibration() on top of "b", never a separate full-page view. Two steps toggled
+ * in place, never a second modal:
+ *   prompt: "Save this profile?" — Save goes to the "name" step; Try Again discards this
+ *           take and restarts calibration capture directly; Discard abandons the
+ *           calibration result entirely and returns to profile-select. No temporary
+ *           profile is ever created by any of these.
+ *   name:   Name the just-calibrated profile before saving it. Back returns to "prompt"
+ *           without losing the result. On submit, closes the dialog and returns to
+ *           profile-select (now showing the profile library, the new profile
+ *           auto-selected) with a confirmation toast — does not open the Companion
+ *           automatically.
  *   session-status:   Companion-capable browsers only — the status/recovery view for the
  *                     two sessionState values reachable while the Companion is open
  *                     (companionReady / monitoringActive). Reached the moment Start
@@ -125,8 +132,6 @@ if (!isCreateProfileEntry) session.init(null);
 const stateA = document.getElementById('state-a');
 const stateProfileSelect = document.getElementById('state-profile-select');
 const stateB = document.getElementById('state-b');
-const stateSavePrompt = document.getElementById('state-save-prompt');
-const stateName = document.getElementById('state-name');
 const stateSessionStatus = document.getElementById('state-session-status');
 const stateFallbackMonitor = document.getElementById('state-fallback-monitor');
 const stateReturnToPip = document.getElementById('state-return-to-pip');
@@ -137,20 +142,30 @@ const profileLibrary = document.getElementById('profile-library');
 const radioRecommendedGuided = document.getElementById('profile-radio-recommended');
 const radioCustomGuided = document.getElementById('profile-radio-custom');
 const radioRecommendedLibrary = document.getElementById('profile-radio-recommended-lib');
-const profileCount = document.getElementById('profile-count');
 const savedProfilesList = document.getElementById('saved-profiles-list');
 const btnCreateNewProfile = document.getElementById('btn-create-new-profile');
+const profileSlotsRemaining = document.getElementById('profile-slots-remaining');
 const profileLimitMessage = document.getElementById('profile-limit-message');
 const btnProfilePrimary = document.getElementById('btn-profile-primary');
 const deleteDialogOverlay = document.getElementById('delete-dialog-overlay');
 const deleteDialogName = document.getElementById('delete-dialog-name');
 const btnDeleteConfirm = document.getElementById('btn-delete-confirm');
 const btnDeleteCancel = document.getElementById('btn-delete-cancel');
+const btnCalibrationBack = document.getElementById('btn-calibration-back');
 const btnStartCalibration = document.getElementById('btn-start-calibration');
+
+// Save-profile modal — one overlay, two steps, never a second modal (see
+// the HTML comment above #save-dialog-overlay).
+const saveDialogOverlay = document.getElementById('save-dialog-overlay');
+const saveStepPrompt = document.getElementById('save-step-prompt');
+const saveStepName = document.getElementById('save-step-name');
 const btnSaveProfile = document.getElementById('btn-save-profile');
-const btnCancelCalibration = document.getElementById('btn-cancel-calibration');
+const btnTryAgain = document.getElementById('btn-try-again');
+const btnDiscardCalibration = document.getElementById('btn-discard-calibration');
 const nameForm = document.getElementById('name-form');
 const profileNameInput = document.getElementById('profile-name-input');
+const btnNameBack = document.getElementById('btn-name-back');
+
 const deniedHelp = document.getElementById('denied-help');
 const toastEl = document.getElementById('toast');
 
@@ -172,8 +187,6 @@ const allStates = {
   a: stateA,
   profileSelect: stateProfileSelect,
   b: stateB,
-  savePrompt: stateSavePrompt,
-  name: stateName,
   sessionStatus: stateSessionStatus,
   fallbackMonitor: stateFallbackMonitor,
   returnToPip: stateReturnToPip,
@@ -246,7 +259,6 @@ function renderProfileSelect() {
   const isLibrary = saved.length > 0;
   profileGuided.classList.toggle('hidden', isLibrary);
   profileLibrary.classList.toggle('hidden', !isLibrary);
-  profileCount.textContent = `${saved.length} / 5`;
 
   // Radios are selection-only here — see chooseRecommended()/chooseSavedProfile()/
   // goToCalibrationLanding(), which now only run from the primary CTA
@@ -276,10 +288,12 @@ function renderProfileSelect() {
     savedProfilesList.appendChild(row);
   }
 
-  // Five-profile limit — Create Speaking Profile is replaced by a plain
-  // status message at 5/5, never a disabled link.
+  // Five-profile limit — the create link + slots-remaining count is replaced
+  // by a plain status message at 5/5, never a disabled link.
   const atLimit = saved.length >= 5;
   btnCreateNewProfile.classList.toggle('hidden', atLimit);
+  profileSlotsRemaining.classList.toggle('hidden', atLimit);
+  profileSlotsRemaining.textContent = `(${5 - saved.length} slots remaining)`;
   profileLimitMessage.classList.toggle('hidden', !atLimit);
 
   // Everyday Conversation is selected by default whenever no valid selected
@@ -304,7 +318,7 @@ function renderProfileSelect() {
 /** Guided state only — the CTA reflects the selected path; library state's CTA never changes. */
 function updatePrimaryButtonLabel() {
   const inGuided = !profileGuided.classList.contains('hidden');
-  btnProfilePrimary.textContent = inGuided && radioCustomGuided.checked ? 'Continue' : 'Start Monitoring';
+  btnProfilePrimary.textContent = inGuided && radioCustomGuided.checked ? 'Set Up Profile' : 'Start Monitoring';
 }
 
 /** Primary CTA — acts on whichever radio is currently selected. Rows themselves only select. */
@@ -333,9 +347,14 @@ function chooseRecommended() {
   startMonitoringForProfile(RECOMMENDED_PROFILE);
 }
 
-/** "Custom Speaking Profile" / "Create New Speaking Profile" — go to calibration's landing view (not straight into capture). */
+/** "Create a speaking profile" / "Create New Speaking Profile" — go to calibration's landing view (not straight into capture). */
 function goToCalibrationLanding() {
   transitionToState('b');
+}
+
+/** Back, from calibration's landing view only (not offered once listening starts) — returns to Choose a Speaking Profile without acquiring the mic. */
+function handleCalibrationBack() {
+  renderProfileSelect();
 }
 
 function chooseSavedProfile(profile) {
@@ -546,33 +565,72 @@ function finishCalibration() {
   const speakingDb = 20 * Math.log10(baselineRMS + 1e-10);
 
   // Held only transiently, long enough to be named+saved (handleSaveProfileClick
-  // → handleNameFormSubmit) or discarded (handleCancelCalibration) — never
-  // persisted as the selected profile before the user confirms saving. There is
-  // no temporary or session-only profile state; calibration always ends in
-  // either a saved Custom Profile or nothing at all.
+  // → handleNameFormSubmit), retried (handleTryAgain), or abandoned
+  // (handleDiscardCalibration) — never persisted as the selected profile
+  // before the user confirms saving. There is no temporary or session-only
+  // profile state; calibration always ends in either a saved Custom Profile
+  // or nothing at all.
   pendingCalibratedProfile = { speakingDb, calibratedTs: Date.now() };
 
   trackCalibrationCompleted();
 
-  resetCalibrationView();
-  transitionToState('savePrompt');
+  // Deliberately does NOT call resetCalibrationView() here — the save dialog
+  // is an overlay on top of the (now-frozen) listening screen, not a
+  // navigation away from it, so the ring/heading stay as they were until the
+  // user actually leaves calibration (Discard) or finishes saving.
+  openSaveDialog();
 }
 
 // =============================================================================
-// Save Prompt / Naming
+// Save Dialog — a single modal overlay with two steps ("prompt" and "name"),
+// never a second modal. Opened by finishCalibration(); the listening screen
+// underneath stays visible (frozen) for as long as it's open.
 // =============================================================================
+
+function showSaveDialogStep(step) {
+  saveStepPrompt.classList.toggle('hidden', step !== 'prompt');
+  saveStepName.classList.toggle('hidden', step !== 'name');
+}
+
+function openSaveDialog() {
+  showSaveDialogStep('prompt');
+  saveDialogOverlay.classList.remove('hidden');
+}
+
+function closeSaveDialog() {
+  saveDialogOverlay.classList.add('hidden');
+}
 
 function handleSaveProfileClick() {
   profileNameInput.value = '';
-  transitionToState('name');
+  showSaveDialogStep('name');
   requestAnimationFrame(() => profileNameInput.focus());
 }
 
-/** Cancel — discard the unsaved calibration result and return to calibration so the user can try again. Mic permission (granted earlier in state "a") is reused as-is; audio.acquire() re-requests the stream, not the permission. No temporary profile is ever created. */
-function handleCancelCalibration() {
+/** Back — from the name step, return to the save-prompt step without losing the calibration result. */
+function handleNameBack() {
+  showSaveDialogStep('prompt');
+}
+
+/** Try Again — discard this take and restart calibration capture directly (no separate landing screen), reusing the mic permission granted earlier in state "a". */
+async function handleTryAgain() {
+  pendingCalibratedProfile = null;
+  closeSaveDialog();
+  await startCalibration();
+}
+
+/** Discard — abandon the unsaved calibration result entirely and return to Choose a Speaking Profile. No temporary profile is ever created. */
+function handleDiscardCalibration() {
   pendingCalibratedProfile = null;
   resetCalibrationView();
-  transitionToState('b');
+  closeSaveDialog();
+  // isCreateProfileEntry's tab never shows Choose a Speaking Profile (see
+  // goToInitialScreen) — there's nothing to return to but calibration itself.
+  if (isCreateProfileEntry) {
+    transitionToState('b');
+  } else {
+    renderProfileSelect();
+  }
 }
 
 /** Names and persists the new profile, then returns to Speaking Profile (now showing the profile library, this profile auto-selected) with a confirmation toast — it does not open the Companion automatically. */
@@ -590,6 +648,9 @@ function handleNameFormSubmit(event) {
   const selected = { name, speakingDb: newProfile.speakingDb, savedProfileId: id };
   setSelectedProfile(selected);
   pendingCalibratedProfile = null;
+
+  resetCalibrationView();
+  closeSaveDialog();
 
   if (isCreateProfileEntry) {
     returnToPip(selected);
@@ -719,9 +780,16 @@ radioRecommendedGuided?.addEventListener('change', updatePrimaryButtonLabel);
 radioCustomGuided?.addEventListener('change', updatePrimaryButtonLabel);
 btnCreateNewProfile?.addEventListener('click', goToCalibrationLanding);
 btnProfilePrimary?.addEventListener('click', handleProfilePrimaryClick);
+btnCalibrationBack?.addEventListener('click', handleCalibrationBack);
+// This tab never shows Choose a Speaking Profile (see goToInitialScreen), so
+// calibration's Back link — which would otherwise land there — has nowhere
+// sensible to go and is hidden instead.
+if (isCreateProfileEntry) btnCalibrationBack?.classList.add('hidden');
 btnStartCalibration?.addEventListener('click', startCalibration);
 btnSaveProfile?.addEventListener('click', handleSaveProfileClick);
-btnCancelCalibration?.addEventListener('click', handleCancelCalibration);
+btnTryAgain?.addEventListener('click', handleTryAgain);
+btnDiscardCalibration?.addEventListener('click', handleDiscardCalibration);
+btnNameBack?.addEventListener('click', handleNameBack);
 nameForm?.addEventListener('submit', handleNameFormSubmit);
 
 btnDeleteCancel?.addEventListener('click', handleDeleteCancel);

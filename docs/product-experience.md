@@ -198,10 +198,15 @@ Calibrate if creating a Custom Profile
 
 ↓
 
+Calibration completes automatically
+
+↓
+
 Choose:
 
-* Save Profile
-* Cancel (returns to Calibrate to try again)
+* Save (transitions in place to naming, below)
+* Try Again (restarts calibration directly)
+* Discard (returns to Choose a Profile)
 
 ↓
 
@@ -279,23 +284,29 @@ Explain:
 * what Mezzo is measuring
 * what will happen next
 
-After calibration finishes, ask the user to confirm before it becomes a profile:
+Calibration completes automatically — there is no manual "I'm done" action. Its result then surfaces as a save decision, presented as a modal overlay on top of the calibration screen rather than a separate page:
 
-* Save Profile
-* Cancel
+* Save
+* Try Again
+* Discard
 
 Use:
 
-* Save Profile
-* Cancel
+* Save
+* Try Again
+* Discard
 
 Avoid:
 
+* Save Profile
+* Cancel
 * Continue Without Saving
 * Use Once
 * Not Now
 
-Cancel discards the calibration result and returns the user to calibration to try again. There is no way to continue into monitoring with an unsaved calibration, and no temporary or session-only profile is ever created — calibration always ends in either a saved Custom Profile or nothing at all.
+Try Again discards this take and restarts calibration capture directly, with no separate landing step in between. Discard abandons the calibration result entirely and returns to Choose a Profile. Save transitions that same modal, in place, to a "Name your profile" step — never a second modal or a separate page — where naming and saving completes the new Custom Profile.
+
+There is no way to continue into monitoring with an unsaved calibration, and no temporary or session-only profile is ever created — calibration always ends in either a saved Custom Profile or nothing at all.
 
 ---
 
