@@ -105,7 +105,6 @@ Exact strings to use in code, UI copy, and commit messages:
 * Open Mezzo
 * Start Monitoring
 * Stop
-* Close Companion
 * Create New Speaking Profile
 * Create New Profile…
 * End Session

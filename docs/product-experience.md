@@ -797,7 +797,7 @@ Users should always understand:
 
 ## Mezzo Companion Closed
 
-Monitoring can never continue without the Mezzo Companion open. If the Companion closes — the native window control, "Close Companion," "Create New Profile…," or End Session — monitoring stops immediately if it was active, and microphone resources are released — not left running invisibly.
+Monitoring can never continue without the Mezzo Companion open. If the Companion closes — the native window control, "Create New Profile…," or End Session — monitoring stops immediately if it was active, and microphone resources are released — not left running invisibly.
 
 There is no separate "Mezzo Companion is closed" status screen and no Re-open Companion action. Instead, Mezzo returns directly to the Speaking Profile page (profile library), with the current profile still selected and the primary action:
 

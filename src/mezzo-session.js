@@ -56,13 +56,14 @@
  * path only) startFallbackMonitoring/startDemo. There is deliberately no
  * "bring to front"/"focus" export — the Companion is a Document PiP window
  * and already stays above other windows on its own, so a focus/raise
- * action would be misleading. There is also no "Close Companion" export
- * beyond what the Companion's own button calls internally — Mezzo never
+ * action would be misleading. There is also no "Close Companion" control
+ * anywhere in the Companion itself — the native Picture-in-Picture window
+ * close control is the only way a user closes it directly. Mezzo never
  * closes the Companion on the user's behalf except via endSession() (a
- * full session teardown, not the same action) or when the Companion's own
- * "+ Create New Profile..." action closes it. Layout mode is likewise
- * entirely internal — nothing outside the Companion needs to know or care
- * whether it's Expanded or Compact.
+ * full session teardown) or when the Companion's own "+ Create New
+ * Profile..." action closes it. Layout mode is likewise entirely internal —
+ * nothing outside the Companion needs to know or care whether it's Expanded
+ * or Compact.
  */
 
 import { AudioProcessor } from './audio.js?v=2';
@@ -409,11 +410,13 @@ export function createMezzoSession({
       /* ── Ready screen — no visualization, always Expanded (there is no
          Compact Ready variant). Layout: wordmark pinned near the top
          (left-aligned, a quiet signature — not centered with the rest), a
-         flexible spacer, the headline/profile/button cluster, another
-         flexible spacer, then the footer pinned to the bottom. The two
-         spacers (not justify-content:center) are what let the wordmark and
-         footer sit at their own fixed positions while everything between
-         them centers naturally. ── */
+         flexible spacer, the headline/profile/button cluster, then another
+         flexible spacer absorbing the remaining space below. The two
+         spacers (not justify-content:center) are what let the wordmark sit
+         at its own fixed position while everything below it centers
+         naturally. There is no footer here — the native Picture-in-Picture
+         window close control is the only way to close the Companion, so
+         there is nothing for a footer to hold. ── */
       .pip-screen-ready {
         padding: 24px 28px 20px;
       }
@@ -532,28 +535,6 @@ export function createMezzoSession({
       }
       .pip-profile-divider { border: none; border-top: 1px solid var(--border); margin: 4px 0; }
       .pip-profile-option-create { color: var(--hanko-text); justify-content: flex-start; }
-
-      .pip-ready-footer {
-        width: 100%;
-        border-top: 1px solid var(--border);
-        padding-top: 14px;
-        display: flex;
-        justify-content: center;
-      }
-      .pip-footer-link {
-        font-family: var(--font-body);
-        font-weight: var(--weight-regular);
-        font-size: 11px;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
-        color: var(--text-subdued);
-        background: none;
-        border: none;
-        cursor: pointer;
-        padding: 6px 10px;
-        transition: color 0.15s ease;
-      }
-      .pip-footer-link:hover { color: var(--text-default); }
 
       /* ── Monitoring screen — header at top (left-aligned, same quiet
          signature treatment as the Ready screen's wordmark), circle fills
@@ -805,15 +786,6 @@ export function createMezzoSession({
     bottomSpacer.className = 'pip-ready-spacer';
     readyScreen.appendChild(bottomSpacer);
 
-    const readyFooter = pipDoc.createElement('div');
-    readyFooter.className = 'pip-ready-footer';
-    const closeBtn = pipDoc.createElement('button');
-    closeBtn.className = 'pip-footer-link';
-    closeBtn.textContent = 'Close Companion';
-    closeBtn.addEventListener('click', handleCloseCompanionClick);
-    readyFooter.appendChild(closeBtn);
-    readyScreen.appendChild(readyFooter);
-
     layout.appendChild(readyScreen);
     readyScreenEl = readyScreen;
 
@@ -948,20 +920,6 @@ export function createMezzoSession({
       try { pipWindow.close(); } catch { /* ignore */ }
     }
     sessionState.set(SESSION_STATES.COMPANION_CLOSED);
-  }
-
-  /**
-   * The Companion's own "Close Companion" button (Ready screen only) —
-   * closes just the Companion, leaving Mezzo (try-it.html) open. Monitoring
-   * shouldn't be active while the Ready screen is showing, but this stops
-   * it defensively first if it somehow is, exactly like endSession() does,
-   * before closing — the only difference is this is a Companion-owned
-   * action, not a session-ending one; handlePipClose() (via the window's
-   * own pagehide) does the rest, identically to closing via the OS ✕.
-   */
-  function handleCloseCompanionClick() {
-    if (isMonitoringActive) teardownMonitoringEngine();
-    try { pipWindow.close(); } catch { /* ignore */ }
   }
 
   /** Ready is always Expanded — restores it here so every path back to
@@ -1136,14 +1094,13 @@ export function createMezzoSession({
     if (isPageUnloading) return; // this page's own pagehide is already tearing everything down
 
     // This fires for every way the Companion actually goes away — the
-    // native ✕ (the only way out of Compact, which has no Stop control),
-    // the Companion's own "Close Companion" button, and endSession()'s
+    // native ✕ (the only way to close it, in any state) and endSession()'s
     // programmatic pipWindow.close() — since Document PiP's own pagehide
-    // is what's wired to this handler, not any one of those call sites
-    // individually. By the time this runs after handleCloseCompanionClick()
-    // or endSession(), monitoring has already been torn down there, so
-    // wasActive is already false and this is a harmless no-op pass-through
-    // for those paths. What matters is the native-✕ case: monitoring can
+    // is what's wired to this handler, not either of those call sites
+    // individually. By the time this runs after endSession(), monitoring
+    // has already been torn down there, so wasActive is already false and
+    // this is a harmless no-op pass-through for that path. What matters is
+    // the native-✕ case: monitoring can
     // never continue without the Companion open, so if it was still active
     // reaching here, tear it down now — not "silently keep running" — and
     // reflect the closed Companion (not a full endSession) in session

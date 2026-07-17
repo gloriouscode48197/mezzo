@@ -697,8 +697,8 @@ function renderSessionStatusView(state) {
 }
 
 /**
- * Whenever the Companion closes — native ✕, "Close Companion," "Create New
- * Profile...", or End Session — Mezzo returns to the profile library with
+ * Whenever the Companion closes — native ✕, "Create New Profile...", or End
+ * Session — Mezzo returns to the profile library with
  * the current profile still selected and "Start Monitoring" as the primary
  * CTA, rather than showing a "Companion is closed" status screen. This is
  * the single place that routing happens, so every close path (including
