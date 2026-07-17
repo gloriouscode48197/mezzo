@@ -25,11 +25,16 @@
  *                     Its primary CTA is the only way to start monitoring (opening the
  *                     Companion directly into Monitoring) or begin custom profile
  *                     creation — see startMonitoringForProfile(). Also where Mezzo lands
- *                     after the Companion closes, for any reason.
- *   b:                Calibration (creates a custom profile) — landing + listening. On
- *                     finishing, always opens the save dialog (see below) as an overlay on
- *                     top of the still-visible listening screen — there is no session-only
- *                     "use once without saving" path, and no profile is selected yet.
+ *                     after the Companion closes for any ordinary reason (native ✕, End
+ *                     Session) — see handleSessionStateChange().
+ *   b:                Calibration (creates a custom profile) — landing + listening. Reached
+ *                     either from profile-select's own "Create a Speaking Profile" path, or
+ *                     — via onCreateNewProfileRequested — from the Companion's own "+ Create
+ *                     New Profile..." action, which closes the Companion and hands off to
+ *                     this same page in place, never a new tab. On finishing, always opens
+ *                     the save dialog (see below) as an overlay on top of the still-visible
+ *                     listening screen — there is no session-only "use once without saving"
+ *                     path, and no profile is selected yet.
  *
  * Save dialog (#save-dialog-overlay): a modal overlay, not a state — opened by
  * finishCalibration() on top of "b", never a separate full-page view. Two steps toggled
@@ -48,13 +53,11 @@
  *                     (companionReady / monitoringActive). Reached the moment Start
  *                     Monitoring is clicked, and shown for as long as the Companion stays
  *                     open. When the Companion closes (companionClosed), Mezzo navigates
- *                     back to profile-select instead of showing status copy here.
+ *                     back to profile-select instead of showing status copy here — unless
+ *                     the close was caused by "+ Create New Profile...", in which case it
+ *                     transitions to "b" instead (see handleSessionStateChange()).
  *   fallback-monitor: The no-Companion-support fallback's own live monitoring view (dark,
  *                     in-page circle) — the one case where monitoring itself is shown here.
- *   return-to-pip:    Reached only via ?entry=create-profile (opened from the Companion's
- *                     "+ Create New Profile...", which closes the Companion first) — hands
- *                     the new profile back to the original tab via BroadcastChannel, instead
- *                     of becoming a session owner itself.
  *
  * Profile storage lives in src/profiles.js — see that file for the three storage layers
  * (saved-profile library, this-tab selection, cross-tab last-used).
@@ -94,13 +97,7 @@ function rmsToEnergy(rms) {
   return Math.min(1, Math.max(0, (db - ENERGY_DB_MIN) / (ENERGY_DB_MAX - ENERGY_DB_MIN)));
 }
 
-// Set when opened from the Companion's "+ Create New Profile..." — a genuinely new tab
-// (Document PiP doesn't survive its opener navigating, so this can never be the same tab
-// that owns an open Companion). Skips straight to calibration and, on completion, hands
-// the profile back via BroadcastChannel instead of ever becoming a session owner itself.
-const isCreateProfileEntry = new URLSearchParams(window.location.search).get('entry') === 'create-profile';
 const isDemo = new URLSearchParams(window.location.search).get('demo') === 'true';
-const profileSyncChannel = new BroadcastChannel('mezzo-profile-sync');
 
 // =============================================================================
 // Instances
@@ -117,13 +114,11 @@ const session = createMezzoSession({
   onSessionStateChange: handleSessionStateChange,
   onFallbackHeadingChange: (text) => { if (fallbackHeadingEl) fallbackHeadingEl.textContent = text; },
   onFallbackMonitoringStop: () => renderProfileSelect(),
-  onProfileSynced: () => { if (!stateProfileSelect.classList.contains('hidden')) renderProfileSelect(); },
+  onCreateNewProfileRequested: () => goToCalibrationLanding(),
 });
 const pipSupported = session.isPipSupported();
 
-// The ?entry=create-profile tab never becomes a session owner — no listeners,
-// no beforeunload/pagehide teardown responsibility for it.
-if (!isCreateProfileEntry) session.init(null);
+session.init(null);
 
 // =============================================================================
 // DOM References
@@ -134,7 +129,6 @@ const stateProfileSelect = document.getElementById('state-profile-select');
 const stateB = document.getElementById('state-b');
 const stateSessionStatus = document.getElementById('state-session-status');
 const stateFallbackMonitor = document.getElementById('state-fallback-monitor');
-const stateReturnToPip = document.getElementById('state-return-to-pip');
 
 const btnEnableMic = document.getElementById('btn-enable-mic');
 const profileGuided = document.getElementById('profile-guided');
@@ -189,7 +183,6 @@ const allStates = {
   b: stateB,
   sessionStatus: stateSessionStatus,
   fallbackMonitor: stateFallbackMonitor,
-  returnToPip: stateReturnToPip,
 };
 
 // =============================================================================
@@ -624,13 +617,7 @@ function handleDiscardCalibration() {
   pendingCalibratedProfile = null;
   resetCalibrationView();
   closeSaveDialog();
-  // isCreateProfileEntry's tab never shows Choose a Speaking Profile (see
-  // goToInitialScreen) — there's nothing to return to but calibration itself.
-  if (isCreateProfileEntry) {
-    transitionToState('b');
-  } else {
-    renderProfileSelect();
-  }
+  renderProfileSelect();
 }
 
 /** Names and persists the new profile, then returns to Speaking Profile (now showing the profile library, this profile auto-selected) with a confirmation toast — it does not open the Companion automatically. */
@@ -652,12 +639,8 @@ function handleNameFormSubmit(event) {
   resetCalibrationView();
   closeSaveDialog();
 
-  if (isCreateProfileEntry) {
-    returnToPip(selected);
-  } else {
-    renderProfileSelect();
-    showToast('Speaking profile saved.');
-  }
+  renderProfileSelect();
+  showToast('Speaking profile saved.');
 }
 
 // =============================================================================
@@ -698,14 +681,23 @@ function renderSessionStatusView(state) {
 
 /**
  * Whenever the Companion closes — native ✕, "Create New Profile...", or End
- * Session — Mezzo returns to the profile library with
- * the current profile still selected and "Start Monitoring" as the primary
- * CTA, rather than showing a "Companion is closed" status screen. This is
- * the single place that routing happens, so every close path (including
- * ones this page didn't itself initiate) converges on the same behavior.
+ * Session — Mezzo reacts, rather than showing a "Companion is closed" status
+ * screen. This is the single place that routing happens, so every close path
+ * (including ones this page didn't itself initiate) converges on the same
+ * behavior:
+ *   - native ✕ / End Session (closeIntent is null): return to the profile
+ *     library, current profile still selected, "Start Monitoring" primary.
+ *   - "+ Create New Profile..." (closeIntent is session.COMPANION_CLOSE_INTENTS.CREATE_PROFILE,
+ *     set explicitly by src/mezzo-session.js — never inferred from timing):
+ *     go straight to calibration's landing screen instead.
+ * onCreateNewProfileRequested (passed into createMezzoSession()) is what
+ * actually performs that second transition; this function's job is only to
+ * make sure the *ordinary* COMPANION_CLOSED handling doesn't also fire and
+ * yank the user back to profile-select a moment later.
  */
-function handleSessionStateChange(state) {
+function handleSessionStateChange(state, closeIntent) {
   if (state === session.SESSION_STATES.COMPANION_CLOSED) {
+    if (closeIntent === session.COMPANION_CLOSE_INTENTS.CREATE_PROFILE) return;
     renderProfileSelect();
     return;
   }
@@ -713,40 +705,18 @@ function handleSessionStateChange(state) {
 }
 
 // =============================================================================
-// Return to PiP (only reached via ?entry=create-profile)
-// =============================================================================
-
-/**
- * Hand the freshly-created profile back to whichever tab owns the open
- * Companion, via BroadcastChannel — this tab never navigates that one
- * directly (Document PiP doesn't survive its opener navigating away), so
- * cross-tab messaging is the only way to close the loop.
- */
-function returnToPip(profile) {
-  profileSyncChannel.postMessage({ type: 'PROFILE_READY', profile });
-  transitionToState('returnToPip');
-}
-
-// =============================================================================
 // Initial Screen Routing
 // =============================================================================
 
 /**
- * After mic permission is confirmed granted, decide where to land:
- *   - ?entry=create-profile (opened from the Companion) → straight to calibration,
- *     skipping Choose a Profile entirely — the user already made that choice
- *     by clicking "+ Create New Profile..." there.
- *   - otherwise → Choose a Speaking Profile, which pre-selects a resolvable
- *     profile (this tab's own selection, or the cross-tab last-used profile)
- *     via renderProfileSelect()'s own fallback logic. Opening the Companion
- *     always needs a fresh click here regardless — Document PiP requires a
- *     genuine user gesture on this document, which a page load never has.
+ * After mic permission is confirmed granted, land on Choose a Speaking
+ * Profile, which pre-selects a resolvable profile (this tab's own selection,
+ * or the cross-tab last-used profile) via renderProfileSelect()'s own
+ * fallback logic. Opening the Companion always needs a fresh click here
+ * regardless — Document PiP requires a genuine user gesture on this
+ * document, which a page load never has.
  */
 function goToInitialScreen() {
-  if (isCreateProfileEntry) {
-    goToCalibrationLanding();
-    return;
-  }
   resolveActiveProfile(); // syncs this tab's selection from the cross-tab last-used profile, if any
   renderProfileSelect();
 }
@@ -781,10 +751,6 @@ radioCustomGuided?.addEventListener('change', updatePrimaryButtonLabel);
 btnCreateNewProfile?.addEventListener('click', goToCalibrationLanding);
 btnProfilePrimary?.addEventListener('click', handleProfilePrimaryClick);
 btnCalibrationBack?.addEventListener('click', handleCalibrationBack);
-// This tab never shows Choose a Speaking Profile (see goToInitialScreen), so
-// calibration's Back link — which would otherwise land there — has nowhere
-// sensible to go and is hidden instead.
-if (isCreateProfileEntry) btnCalibrationBack?.classList.add('hidden');
 btnStartCalibration?.addEventListener('click', startCalibration);
 btnSaveProfile?.addEventListener('click', handleSaveProfileClick);
 btnTryAgain?.addEventListener('click', handleTryAgain);

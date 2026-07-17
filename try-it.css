@@ -69,10 +69,6 @@ body {
   margin-right: auto;
 }
 
-/* ── Footer (state-return-to-pip) ── */
-.state-footer { margin-top: 72px; text-align: center; }
-.state-footer-text { color: var(--text-subdued); margin-top: 2px; }
-
 /* ── Calibration Crossfade ── */
 .cal-content-area {
   position: relative;

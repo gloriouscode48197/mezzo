@@ -634,7 +634,7 @@ The Companion does not contain profile creation. Instead, its profile menu ends 
 
 > Create New Profile…
 
-Selecting this returns the user to Mezzo's profile creation flow.
+Selecting this closes the Companion, brings the Anchor page forward, and transitions that same page, in place, to the first screen of the Create Speaking Profile flow — never a new tab. Saving there returns to the Speaking Profile page with the new profile selected.
 
 ---
 
@@ -797,13 +797,15 @@ Users should always understand:
 
 ## Mezzo Companion Closed
 
-Monitoring can never continue without the Mezzo Companion open. If the Companion closes — the native window control, "Create New Profile…," or End Session — monitoring stops immediately if it was active, and microphone resources are released — not left running invisibly.
+Monitoring can never continue without the Mezzo Companion open. If the Companion closes — the native window control or End Session — monitoring stops immediately if it was active, and microphone resources are released — not left running invisibly.
 
 There is no separate "Mezzo Companion is closed" status screen and no Re-open Companion action. Instead, Mezzo returns directly to the Speaking Profile page (profile library), with the current profile still selected and the primary action:
 
 Start Monitoring
 
 Selecting it opens a fresh Companion directly into Monitoring, exactly like the first session — it never resumes monitoring on its own.
+
+"Create New Profile…" (from the Companion's Ready-state dropdown) closes the Companion the same way monitoring-wise, but routes differently: Mezzo comes forward and transitions straight to the first screen of the Create Speaking Profile flow instead of the Speaking Profile page — see "Profile Model." Saving there returns to the Speaking Profile page with the new profile selected, same as any other newly created profile.
 
 ---
 

@@ -92,6 +92,11 @@ const MEZZO_COMPANION_COMPACT_SIZE = { width: 220, height: 220 };
 
 const LAYOUT_MODES = Object.freeze({ EXPANDED: 'expanded', COMPACT: 'compact' });
 
+// The one recognized value of companionCloseIntent (see the declaration
+// below) — named and exported (not a raw string) so the host doesn't have
+// to match a magic string to tell this COMPANION_CLOSED apart from others.
+const COMPANION_CLOSE_INTENTS = Object.freeze({ CREATE_PROFILE: 'createProfile' });
+
 const OUTSIDE_ZONE = 3; // "Outside Range" — there's no higher volume tier
 const SUSTAINED_DRIFT_MS = 1000; // continuous time outside range before drift escalates
 
@@ -111,10 +116,10 @@ function profileMetaText(profile) {
 
 export function createMezzoSession({
   baseUrl,
-  onSessionStateChange,       // (state) => void — drives the host's 3-state status view
-  onFallbackHeadingChange,    // (text) => void — fallback/demo path's own zone-label heading
-  onFallbackMonitoringStop,   // () => void — fallback path: host switches back to its own Ready view
-  onProfileSynced,            // () => void — a profile created via the Companion's "+ Create New Profile..." arrived back over BroadcastChannel; host should refresh its profile library view if it's currently showing
+  onSessionStateChange,          // (state, closeIntent) => void — drives the host's 3-state status view. closeIntent is COMPANION_CLOSE_INTENTS.CREATE_PROFILE on the one COMPANION_CLOSED transition caused by "+ Create New Profile...", null otherwise — see companionCloseIntent below.
+  onFallbackHeadingChange,       // (text) => void — fallback/demo path's own zone-label heading
+  onFallbackMonitoringStop,      // () => void — fallback path: host switches back to its own Ready view
+  onCreateNewProfileRequested,   // () => void — "+ Create New Profile..." was chosen; host should transition itself (in place, no navigation) to the first screen of the Create Speaking Profile flow
 } = {}) {
   const pipSupported = 'documentPictureInPicture' in window;
   const sessionState = createSessionState();
@@ -138,6 +143,18 @@ export function createMezzoSession({
   // Ready is unconditionally Expanded regardless of this value.
   let layoutMode = LAYOUT_MODES.EXPANDED;
 
+  // Explicit bookkeeping for *why* the Companion is closing — set only by
+  // handleCreateNewProfile(), read once by the sessionState listener below,
+  // then cleared immediately. This exists so the host (try-it.js) can tell
+  // "Companion closed because of Create New Profile" apart from "Companion
+  // closed natively / via End Session" without ever guessing from timing:
+  // the real Document PiP `pagehide` for this same close arrives later,
+  // asynchronously (see handlePipClose), and by then this is already back
+  // to null — that later, redundant sessionState.set() call is a no-op
+  // (createSessionState() guards against re-firing on an unchanged value),
+  // so it never has a stale intent to misread in the first place.
+  let companionCloseIntent = null;
+
   // Ready-screen DOM refs, (re)assigned each time startMonitoring() builds the document
   let readyScreenEl = null;
   let readyProfileNameEl = null;
@@ -156,8 +173,6 @@ export function createMezzoSession({
   let monitoringStartTime = null;
   let sessionUsedPip = false;
   let sessionAlertTriggered = false;
-
-  const profileSyncChannel = new BroadcastChannel('mezzo-profile-sync');
 
   function profilesMatch(a, b) {
     if (!a || !b) return false;
@@ -1061,16 +1076,27 @@ export function createMezzoSession({
    * The Companion never contains calibration/profile-creation UI itself.
    * Stops monitoring if it's somehow active (defensive — Create New Profile
    * only ever appears on the Ready screen, so this shouldn't normally be
-   * reachable mid-session), closes the Companion, and hands off to Mezzo in
-   * a genuinely new tab — Document PiP does not survive this tab navigating
-   * away, so the calibration flow can never happen in the Companion-owning
-   * tab itself.
+   * reachable mid-session), closes the Companion, brings the Anchor page
+   * (this same tab — this function already runs in its JS realm, since the
+   * Companion's own document only ever calls back into functions defined
+   * here) into focus, and hands off to it via onCreateNewProfileRequested —
+   * never a new tab, never a real navigation. companionCloseIntent marks
+   * this specific close so the sessionState listener (wired below) can tell
+   * it apart from a native ✕ or End Session close; it's set right before
+   * the eager sessionState.set() below and cleared immediately after, the
+   * same eager-transition pattern endSession() already uses rather than
+   * waiting for the Document PiP window's own asynchronous pagehide.
    */
   function handleCreateNewProfile() {
     closeReadyProfileDropdown();
     if (isMonitoringActive) teardownMonitoringEngine();
+    activeCircle = null;
+    companionCloseIntent = COMPANION_CLOSE_INTENTS.CREATE_PROFILE;
     try { pipWindow.close(); } catch { /* ignore */ }
-    window.open('try-it.html?entry=create-profile', '_blank');
+    sessionState.set(SESSION_STATES.COMPANION_CLOSED);
+    companionCloseIntent = null;
+    window.focus();
+    onCreateNewProfileRequested?.();
   }
 
   function handlePipClose() {
@@ -1094,19 +1120,25 @@ export function createMezzoSession({
     if (isPageUnloading) return; // this page's own pagehide is already tearing everything down
 
     // This fires for every way the Companion actually goes away — the
-    // native ✕ (the only way to close it, in any state) and endSession()'s
-    // programmatic pipWindow.close() — since Document PiP's own pagehide
-    // is what's wired to this handler, not either of those call sites
-    // individually. By the time this runs after endSession(), monitoring
-    // has already been torn down there, so wasActive is already false and
-    // this is a harmless no-op pass-through for that path. What matters is
-    // the native-✕ case: monitoring can
-    // never continue without the Companion open, so if it was still active
-    // reaching here, tear it down now — not "silently keep running" — and
-    // reflect the closed Companion (not a full endSession) in session
-    // state, so Mezzo (try-it.html) returns to the profile library instead
-    // of a full endSession() teardown — see try-it.js's
-    // handleSessionStateChange().
+    // native ✕ (the only way to close it directly, in any state),
+    // endSession()'s programmatic pipWindow.close(), and
+    // handleCreateNewProfile()'s programmatic pipWindow.close() — since
+    // Document PiP's own pagehide is what's wired to this handler, not any
+    // of those call sites individually. By the time this runs after
+    // endSession() or handleCreateNewProfile(), monitoring has already been
+    // torn down there and sessionState has already been eagerly set to
+    // COMPANION_CLOSED, so wasActive is already false and the
+    // sessionState.set() below is a harmless no-op for those paths
+    // (createSessionState() guards against re-firing on an unchanged
+    // value) — companionCloseIntent is also already back to null by the
+    // time this async handler runs, so there's nothing stale to misread
+    // even if it weren't a no-op. What matters is the native-✕ case:
+    // monitoring can never continue without the Companion open, so if it
+    // was still active reaching here, tear it down now — not "silently
+    // keep running" — and reflect the closed Companion (not a full
+    // endSession) in session state, so Mezzo (try-it.html) returns to the
+    // profile library instead of a full endSession() teardown — see
+    // try-it.js's handleSessionStateChange().
     if (wasActive) {
       teardownMonitoringEngine();
       activeCircle = null;
@@ -1172,24 +1204,6 @@ export function createMezzoSession({
   function init(resolvedProfile) {
     activeProfile = resolvedProfile;
 
-    profileSyncChannel.addEventListener('message', (event) => {
-      if (event.data?.type !== 'PROFILE_READY' || !event.data.profile) return;
-      const profile = event.data.profile;
-      setSelectedProfile(profile);
-      setLastUsedProfile(profile);
-
-      // Only adopt it as the active profile if we're not mid-session —
-      // profile selection is Ready-only, same as picking one from the
-      // Companion's own dropdown.
-      if (!isMonitoringActive) activateProfile(profile);
-
-      // The Companion is closed by now (handleCreateNewProfile closes it
-      // before opening the create-profile tab), so this tab has already
-      // navigated back to the profile library — refresh it to show the
-      // newly saved profile instead of leaving it stale until next render.
-      onProfileSynced?.();
-    });
-
     // This page is the runtime owner of the session — closing it stops
     // monitoring and the Companion (see the pagehide handler below).
     // beforeunload asks for confirmation only: Chrome hasn't allowed custom
@@ -1214,10 +1228,14 @@ export function createMezzoSession({
     });
   }
 
-  sessionState.subscribe((state) => onSessionStateChange?.(state));
+  // companionCloseIntent is read here, at the moment the listener actually
+  // fires — see handleCreateNewProfile()'s eager sessionState.set() and the
+  // comment on the companionCloseIntent declaration above.
+  sessionState.subscribe((state) => onSessionStateChange?.(state, companionCloseIntent));
 
   return {
     SESSION_STATES,
+    COMPANION_CLOSE_INTENTS,
     getSessionState: sessionState.get,
     subscribe: sessionState.subscribe,
     getActiveProfile: () => activeProfile,
