@@ -20,6 +20,17 @@
 
 const ZONE_TARGETS = [0, 0.22, 0.54, 0.82];
 
+// Ring-activation hysteresis (see _draw()'s emergence handling below). The
+// activate edge matches r1vis/r2vis's own visibility ramp start exactly, so
+// a ring starts emerging the instant it would first become visible at all —
+// not partway through its fade-in. The deactivate edge sits a little below
+// that, purely so energy hovering right at the boundary can't flicker
+// ownership back and forth; it does not change the visible fade (r1vis/r2vis
+// are already 0 throughout that narrow band).
+const R1_ACTIVATE_E = 0.38, R1_DEACTIVATE_E = 0.35;
+const R2_ACTIVATE_E = 0.62, R2_DEACTIVATE_E = 0.59;
+const EMERGE_TAU = 0.4; // seconds — how quickly an emerging ring eases to its resting radius
+
 // The canvas is deliberately position:absolute inside a position:relative
 // wrapper, not a normal-flow block sized by width:100%/height:100%. A
 // canvas's `width`/`height` HTML attributes (its raster resolution, set
@@ -69,6 +80,24 @@ function rgba(ct, a) {
   return `rgba(${r},${g},${b},${a.toFixed(3)})`;
 }
 
+// Exponential, frame-rate-independent ease toward `target` — same idiom the
+// energy/mp0/mp1 smoothing below already uses, factored out since it's now
+// also used per-ring for the emergence animation.
+function easeToward(current, target, dt, tau) {
+  return current + (target - current) * (1 - Math.exp(-dt / tau));
+}
+
+// Canvas safety: every radius that feeds a stroke/arc/gradient call passes
+// through this first, so a NaN or non-positive value (e.g. a container not
+// yet laid out, giving scale=0) can never reach the canvas API — which is
+// exactly the failure mode that previously blanked the canvas (an invalid
+// radius reaching createRadialGradient() throws synchronously, and since
+// the next frame is already scheduled before _draw() runs, the canvas gets
+// cleared and never redrawn on every subsequent frame).
+function clampRadius(value) {
+  return Number.isFinite(value) && value > 0 ? value : 0.001;
+}
+
 function contourPath(ctx, cx, cy, dx, dy, r, dpx, p0, p1) {
   ctx.beginPath();
   for (let j = 0; j <= 160; j++) {
@@ -97,6 +126,16 @@ export class MezzoWaveVisualizer {
     this.dr1 = 1.3;
     this.dr2 = 2.7;
     this.orbitPhase = 0;
+
+    // Ring-emergence state — see _draw(). r1Active/r2Active are the
+    // hysteresis-gated "does this ring currently own radiation" booleans;
+    // r1DisplayRadius/r2DisplayRadius are the actual animated radius each
+    // ring eases through while emerging, reset to null on deactivation so
+    // the next activation always starts fresh rather than from a stale value.
+    this.r1Active = false;
+    this.r2Active = false;
+    this.r1DisplayRadius = null;
+    this.r2DisplayRadius = null;
     this.wavePool = [];
     this.lastWaveSpawn = 0;
     this.lastTime = 0;
@@ -205,10 +244,23 @@ export class MezzoWaveVisualizer {
     }
     if (this.wavePool.length > 60) this.wavePool.splice(0, this.wavePool.length - 60);
 
-    this._draw(e, this.sessionTime, nowSec);
+    // Guarded, not left to throw uncaught: an exception here would abort
+    // _draw() partway through every frame from here on (ctx.clearRect()
+    // already ran, nothing after the throw point ever draws again) — a
+    // silently, persistently blank canvas. Logging keeps that failure mode
+    // loud instead of silent; clampRadius()/finite guards below are the
+    // actual prevention, this is the net under them.
+    try {
+      this._draw(e, this.sessionTime, nowSec, dt);
+    } catch (err) {
+      console.error('[MezzoWaveVisualizer] _draw() failed — canvas will stay blank until this clears:', err, {
+        energy: this.energy, r1Active: this.r1Active, r2Active: this.r2Active,
+        r1DisplayRadius: this.r1DisplayRadius, r2DisplayRadius: this.r2DisplayRadius,
+      });
+    }
   }
 
-  _draw(e, sess, nowSec) {
+  _draw(e, sess, nowSec, dt) {
     const ctx = this.ctx;
     const cw = this.el.offsetWidth || 240;
     const ch = this.el.offsetHeight || 220;
@@ -223,30 +275,73 @@ export class MezzoWaveVisualizer {
     const ct2 = mapE(e, 0.54, 0, 0.65, 0.18, 0.72, 0.60, 1.0, 1.0);
     const ctDot = mapE(e, 0.68, 0, 0.72, 0.10, 1.0, 1.0);
 
-    const r0 = 34 * scale * bs, r0dpx = r0 * mapE(e, 0, 0.004, 0.25, 0.006, 0.72, 0.012, 1.0, 0.030);
-    const r1base = 54 * scale, r1 = r1base * bs;
+    const r0 = clampRadius(34 * scale * bs);
+    const r0dpx = r0 * mapE(e, 0, 0.004, 0.25, 0.006, 0.72, 0.012, 1.0, 0.030);
+
+    // r1/r2 visibility ramps — raw energy thresholds, unchanged; still drive
+    // each ring's own stroke alpha and deformation-amplitude scaling exactly
+    // as before.
+    const r1base = 54 * scale, r1target = clampRadius(r1base * bs);
     const r1vis = mapE(e, 0.38, 0, 0.54, 1.0);
-    const r1dpx = r1 * mapE(e, 0.38, 0, 0.54, 0.130, 0.72, 0.110, 1.0, 0.130) * r1vis;
     const r1da = mapE(e, 0.54, 0, 0.60, 4.0, 0.72, 5.0, 1.0, 6.0) * r1vis * scale;
     const r1dx = Math.sin(this.dr1) * r1da, r1dy = Math.cos(this.dr1 * 0.73 + 0.9) * r1da;
 
-    const r2base = 76 * scale, r2 = r2base * bs;
+    const r2base = 76 * scale, r2target = clampRadius(r2base * bs);
     const r2vis = mapE(e, 0.62, 0, 0.80, 1.0);
-    const r2dpx = r2 * mapE(e, 0.65, 0, 0.72, 0.060, 0.82, 0.095, 1.0, 0.145) * r2vis;
     const r2da = mapE(e, 0.65, 0, 0.72, 0, 1.0, 4.5) * r2vis * scale;
     const r2dx = Math.sin(this.dr2) * r2da, r2dy = Math.cos(this.dr2 * 0.73 + 1.8) * r2da;
 
-    const aR = r1vis > 0.5 && r2vis > 0.5 ? r2 : r1vis > 0.5 ? r1 : r0;
-    const aDpx = r1vis > 0.5 && r2vis > 0.5 ? r2dpx : r1vis > 0.5 ? r1dpx : r0dpx;
-    const aDx = r1vis > 0.5 && r2vis > 0.5 ? r2dx : r1vis > 0.5 ? r1dx : 0;
-    const aDy = r1vis > 0.5 && r2vis > 0.5 ? r2dy : r1vis > 0.5 ? r1dy : 0;
-    const aCT = r1vis > 0.5 && r2vis > 0.5 ? ct2 : r1vis > 0.5 ? ct1 : ct0;
-    const aP0 = r1vis > 0.5 && r2vis < 0.5 ? this.mp0 + Math.PI * 0.7 : this.mp0;
-    const aP1 = r1vis > 0.5 && r2vis < 0.5 ? this.mp1 + Math.PI * 1.1 : this.mp1;
+    // Ring activation, with hysteresis — see the R1/R2_ACTIVATE/DEACTIVATE_E
+    // constants above. This (not r1vis/r2vis) is what now decides both
+    // whether a ring is drawn at all and which ring radiates.
+    const r1WasActive = this.r1Active;
+    this.r1Active = this.r1Active ? e > R1_DEACTIVATE_E : e > R1_ACTIVATE_E;
+    const r2WasActive = this.r2Active;
+    this.r2Active = this.r2Active ? e > R2_DEACTIVATE_E : e > R2_ACTIVATE_E;
 
-    // Glow
+    // Emergence: on activation, start from whatever the previously-active
+    // ring's current on-screen radius is (r0's live value for r1; r1's own
+    // just-updated live value for r2 — falling back to r1's resting target
+    // only if r1 isn't currently active, e.g. energy jumped straight past
+    // r1's whole range in one step) and ease toward the ring's own resting
+    // radius. On deactivation the ring is removed immediately — no shrink
+    // animation — and its stored radius is cleared so the next activation
+    // always starts fresh rather than resuming a stale value.
+    if (this.r1Active) {
+      if (!r1WasActive) this.r1DisplayRadius = r0;
+      this.r1DisplayRadius = easeToward(this.r1DisplayRadius ?? r0, r1target, dt, EMERGE_TAU);
+    } else {
+      this.r1DisplayRadius = null;
+    }
+    const r1 = this.r1Active ? clampRadius(this.r1DisplayRadius) : r1target;
+    const r1dpx = r1 * mapE(e, 0.38, 0, 0.54, 0.130, 0.72, 0.110, 1.0, 0.130) * r1vis;
+
+    if (this.r2Active) {
+      if (!r2WasActive) this.r2DisplayRadius = this.r1Active ? r1 : r1target;
+      this.r2DisplayRadius = easeToward(this.r2DisplayRadius ?? r1target, r2target, dt, EMERGE_TAU);
+    } else {
+      this.r2DisplayRadius = null;
+    }
+    const r2 = this.r2Active ? clampRadius(this.r2DisplayRadius) : r2target;
+    const r2dpx = r2 * mapE(e, 0.65, 0, 0.72, 0.060, 0.82, 0.095, 1.0, 0.145) * r2vis;
+
+    // Active (radiating) ring — by activation state, not a 0.5 visibility
+    // cutoff, so ownership transfers the instant a ring starts emerging
+    // rather than partway through its fade-in.
+    const aR = this.r2Active ? r2 : this.r1Active ? r1 : r0;
+    const aDpx = this.r2Active ? r2dpx : this.r1Active ? r1dpx : r0dpx;
+    const aDx = this.r2Active ? r2dx : this.r1Active ? r1dx : 0;
+    const aDy = this.r2Active ? r2dy : this.r1Active ? r1dy : 0;
+    const aCT = this.r2Active ? ct2 : this.r1Active ? ct1 : ct0;
+    const aP0 = this.r1Active && !this.r2Active ? this.mp0 + Math.PI * 0.7 : this.mp0;
+    const aP1 = this.r1Active && !this.r2Active ? this.mp1 + Math.PI * 1.1 : this.mp1;
+
+    // Glow — inner/outer radii both guarded finite/positive, outer forced
+    // strictly greater than inner, so createRadialGradient() can never throw.
     const gs = mapE(e, 0, 0.018, 0.22, 0.028, 0.54, 0.050, 0.72, 0.085, 1.0, 0.110);
-    const gr = ctx.createRadialGradient(cx + aDx, cy + aDy, aR * 0.7, cx + aDx, cy + aDy, aR * 1.55);
+    const glowInner = clampRadius(aR * 0.7);
+    const glowOuter = Math.max(glowInner + 0.001, clampRadius(aR * 1.55));
+    const gr = ctx.createRadialGradient(cx + aDx, cy + aDy, glowInner, cx + aDx, cy + aDy, glowOuter);
     gr.addColorStop(0, rgba(aCT, 0));
     gr.addColorStop(0.4, rgba(aCT, gs));
     gr.addColorStop(1, rgba(aCT, 0));
@@ -267,9 +362,13 @@ export class MezzoWaveVisualizer {
       return true;
     });
 
+    // Drawn while active — removed immediately (no shrink tween) the frame
+    // activation clears; r1vis/r2vis (unchanged) still drive each ring's own
+    // fade-in alpha and are already ~0 through the short hysteresis window,
+    // so this reads identically to before during ordinary rising energy.
     const sw = 2.0 + sess * 0.7;
-    if (r2vis > 0.02) { contourPath(ctx, cx, cy, r2dx, r2dy, r2, r2dpx, this.mp0, this.mp1); ctx.strokeStyle = rgba(ct2, 0.44 * r2vis); ctx.lineWidth = sw; ctx.stroke(); }
-    if (r1vis > 0.02) { contourPath(ctx, cx, cy, r1dx, r1dy, r1, r1dpx, this.mp0 + Math.PI * 0.7, this.mp1 + Math.PI * 1.1); ctx.strokeStyle = rgba(ct1, 0.48 * r1vis); ctx.lineWidth = sw; ctx.stroke(); }
+    if (this.r2Active) { contourPath(ctx, cx, cy, r2dx, r2dy, r2, r2dpx, this.mp0, this.mp1); ctx.strokeStyle = rgba(ct2, 0.44 * r2vis); ctx.lineWidth = sw; ctx.stroke(); }
+    if (this.r1Active) { contourPath(ctx, cx, cy, r1dx, r1dy, r1, r1dpx, this.mp0 + Math.PI * 0.7, this.mp1 + Math.PI * 1.1); ctx.strokeStyle = rgba(ct1, 0.48 * r1vis); ctx.lineWidth = sw; ctx.stroke(); }
     contourPath(ctx, cx, cy, 0, 0, r0, r0dpx, this.mp0, this.mp1); ctx.strokeStyle = rgba(ct0, 0.52); ctx.lineWidth = sw; ctx.stroke();
 
     // Orbital highlight
