@@ -546,13 +546,6 @@ body {
 
 /* ── Session Status (companionReady / monitoringActive only — companionClosed
    renders no dedicated view here; it routes back to the profile library) ── */
-.session-status-icon {
-  width: 64px;
-  height: 64px;
-  margin-bottom: 32px;
-  opacity: 0.4;
-}
-
 .mon-status {
   display: flex;
   align-items: center;
@@ -573,25 +566,236 @@ body {
   50%       { opacity: 0.54; transform: scale(1.22); }
 }
 
-.session-status-label {
-  margin-bottom: 12px;
-}
-
-.session-status-body {
+/* Status pill above the heading — a small dot + text, not the old icon/
+   button/microcopy stack. Active: small filled green dot. Inactive: a
+   slightly larger hollow dot, same treatment the Companion's own Ready
+   state implies (open, but not monitoring). */
+.session-status-pill {
   display: flex;
   align-items: center;
-  gap: 8px;
-  justify-content: center;
-  margin-bottom: 40px;
+  gap: 7px;
+  margin-bottom: 14px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--text-body);
 }
 
-.session-status-actions {
+.session-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: #5a8a5a;
+}
+
+.session-status-dot.session-status-dot-inactive {
+  width: 9px;
+  height: 9px;
+  background: transparent;
+  border: 1.5px solid var(--text-ghost);
+}
+
+.anchor-preview-figure {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  margin: 0 0 20px;
+}
+
+/* Sized to the same aspect ratio as the real Monitoring Companion
+   (380×420) so this reads as a photo of that exact window, not a
+   differently-proportioned illustration. */
+.anchor-preview-wrap {
+  width: 260px;
+  aspect-ratio: 380 / 420;
+  margin-bottom: 16px;
+}
+
+.anchor-preview-card {
+  position: relative;
   width: 100%;
-  margin-inline: auto;
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 24px 56px rgba(0, 0, 0, 0.55), inset 0 0 40px rgba(0, 0, 0, 0.16);
+  background: #3c3b3f;
+}
+
+.anchor-preview-titlebar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+}
+
+.anchor-preview-dots { grid-column: 1; justify-self: start; display: flex; align-items: center; gap: 6px; }
+.anchor-preview-dot { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; }
+.anchor-preview-dot-red { background: #ec6a5e; }
+.anchor-preview-dot-yellow { background: #f4bf4f; }
+.anchor-preview-dot-green { background: #61c554; }
+
+.anchor-preview-titlebar-label {
+  grid-column: 2;
+  justify-self: center;
+  font-family: var(--font-body);
+  font-weight: var(--weight-medium);
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(172, 158, 136, 0.90);
+  white-space: nowrap;
+}
+
+.anchor-preview-accent {
+  grid-column: 3;
+  justify-self: end;
+  width: 14px;
+  height: 2px;
+  border-radius: 1px;
+  background: rgba(172, 158, 136, 0.35);
+}
+
+.anchor-preview-status {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 16px 0;
+  text-align: left;
+}
+
+/* Always "Approaching End of Range" — the one fixed reference state this
+   illustrative card shows — so this is a single fixed color (zone 2's),
+   not a per-zone switch. */
+.anchor-preview-zone {
+  font-family: var(--font-display);
+  font-weight: var(--weight-light);
+  font-size: 14px;
+  color: var(--text-default);
+}
+
+.anchor-preview-profile {
+  font-family: var(--font-body);
+  font-size: 9px;
+  letter-spacing: 0.02em;
+  color: rgba(172, 158, 136, 0.60);
+}
+
+.anchor-preview-viz {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+/* A fixed, non-animated illustration of two concentric rings + a drift dot
+   — evoking the real visualization's "Approaching End of Range" look
+   without instantiating or driving the real (animated, live) component. */
+.anchor-preview-viz-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  border-radius: 50%;
+  border: 1.5px solid var(--text-ghost);
+  transform: translate(-50%, -50%);
+}
+.anchor-preview-viz-ring-outer { width: 108px; height: 108px; }
+.anchor-preview-viz-ring-inner { width: 62px; height: 62px; }
+
+.anchor-preview-viz-dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-subdued);
+  transform: translate(-50%, -50%);
+}
+
+.anchor-preview-viz-edge-dot {
+  position: absolute;
+  top: 50%;
+  left: calc(50% + 54px);
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--hanko-text);
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 6px 1px rgba(196, 89, 58, 0.5);
+}
+
+.anchor-preview-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 14px 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+}
+
+.anchor-preview-footer-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-body);
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-subdued);
+}
+
+.anchor-preview-footer-icon-stop {
+  width: 6px;
+  height: 6px;
+  background: currentColor;
+  border-radius: 1px;
+  flex-shrink: 0;
+}
+
+.anchor-preview-footer-icon-compact {
+  width: 10px;
+  height: 8px;
+  border: 1px solid currentColor;
+  border-radius: 1.5px;
+  flex-shrink: 0;
+}
+
+.anchor-preview-caption {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--text-ghost);
+  line-height: 1.5;
+  max-width: 280px;
+  text-align: center;
+}
+
+.anchor-preview-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  width: 260px;
+  margin: 4px 0 24px;
+}
+
+.session-status-footer-copy {
+  max-width: 340px;
+  margin: 0 auto;
+  line-height: 1.65;
 }
 
 /* ── No-Companion-support fallback monitoring view ── */

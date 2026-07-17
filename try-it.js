@@ -167,10 +167,11 @@ const listeningHeading = document.getElementById('listening-heading');
 const calRingCanvas = document.getElementById('cal-ring-canvas');
 
 // Session status view — the status/recovery surface for companionReady/monitoringActive.
-const sessionStatusHeading = document.getElementById('session-status-heading');
-const sessionStatusLabel = document.getElementById('session-status-label');
-const sessionStatusText = document.getElementById('session-status-text');
-const btnEndSession = document.getElementById('btn-end-session');
+// No End Session control here — see the file-header state comment for
+// "session-status" and CLAUDE.md; closing this page (or the Companion's own
+// native ✕) is the only way to end things.
+const sessionStatusDot = document.getElementById('session-status-dot');
+const sessionStatusPillText = document.getElementById('session-status-pill-text');
 
 // No-Companion-support fallback's own live monitoring view.
 const fallbackHeadingEl = document.getElementById('fallback-mon-heading');
@@ -651,32 +652,24 @@ function handleNameFormSubmit(event) {
 // No "bring to front" / "show" control anywhere — the Mezzo Companion is a
 // Document PiP window and already stays above other windows on its own, so
 // a focus/raise action would be misleading. This page reports status only,
-// with no primary action of its own — the only action here is "End Session"
-// (a full teardown). Mezzo never offers a softer "stop but keep everything
-// open" action; that's what the Companion's own Stop button is for. There is
-// deliberately no "companionClosed" entry — see handleSessionStateChange().
+// with no action of its own at all — there is no End Session control here;
+// closing this page (which the footer copy says explicitly) or the
+// Companion's own native ✕ are the only ways to end things. Mezzo never
+// offers a softer "stop but keep everything open" action; that's what the
+// Companion's own Stop button is for. There is deliberately no
+// "companionClosed" entry — see handleSessionStateChange().
 const SESSION_VIEW_COPY = {
-  [session.SESSION_STATES.COMPANION_READY]: {
-    heading: 'Mezzo Companion is open',
-    statusLabel: 'Ready',
-    body: "Start monitoring from the Mezzo Companion when you're ready.",
-  },
-  [session.SESSION_STATES.MONITORING_ACTIVE]: {
-    heading: 'Monitoring is active',
-    statusLabel: '',
-    body: 'The Mezzo Companion will stay visible above your other windows.',
-  },
+  [session.SESSION_STATES.COMPANION_READY]: { active: false },
+  [session.SESSION_STATES.MONITORING_ACTIVE]: { active: true },
 };
 
 function renderSessionStatusView(state) {
   const copy = SESSION_VIEW_COPY[state];
   if (!copy) return;
-  if (sessionStatusHeading) sessionStatusHeading.textContent = copy.heading;
-  if (sessionStatusLabel) {
-    sessionStatusLabel.textContent = copy.statusLabel || '';
-    sessionStatusLabel.classList.toggle('hidden', !copy.statusLabel);
+  if (sessionStatusDot) sessionStatusDot.classList.toggle('session-status-dot-inactive', !copy.active);
+  if (sessionStatusPillText) {
+    sessionStatusPillText.textContent = copy.active ? 'Monitoring is active.' : 'Monitoring is inactive.';
   }
-  if (sessionStatusText) sessionStatusText.textContent = copy.body;
 }
 
 /**
@@ -767,13 +760,6 @@ deleteDialogOverlay?.addEventListener('click', (event) => {
 window.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && !deleteDialogOverlay.classList.contains('hidden')) handleDeleteCancel();
 });
-
-// Always a full teardown, in every session state — Mezzo doesn't offer a
-// softer "stop but keep everything open" action; that lives only inside
-// the Companion itself (its own Stop button). endSession() sets sessionState
-// to companionClosed, which handleSessionStateChange() already routes back
-// to the profile library — no need to also call renderProfileSelect() here.
-btnEndSession?.addEventListener('click', () => session.endSession());
 
 btnFallbackStop?.addEventListener('click', () => session.stopMonitoring());
 

@@ -153,24 +153,61 @@
     <!-- ── State: Session Status — the status/recovery surface for the two
          sessionState values reachable while the Companion is open
          (companionReady / monitoringActive) on a Companion-capable browser.
-         Never shows the live circle — that lives inside the Companion
-         itself. When the Companion closes (companionClosed), Mezzo
-         navigates away from this screen back to the profile library instead
-         of showing status copy here — see try-it.js's handleSessionStateChange().
-         Static copy below matches monitoringActive, the state Start
-         Monitoring almost always reaches, so there's no visible flash of
-         the wrong copy before src/mezzo-session.js's subscription paints
-         the real state. ── -->
+         The Companion card below is static illustrative imagery, not
+         session-state UI — it always shows the same fixed reference state
+         (Monitoring, "Approaching End of Range", Coffee Shop) regardless of
+         the real session's actual profile/zone/active state. Only the
+         status pill (dot + text) above it is live — see
+         try-it.js's renderSessionStatusView(). The card is aria-hidden; the
+         figcaption already conveys its purpose to assistive tech. When the
+         Companion closes (companionClosed), Mezzo navigates away from this
+         screen back to the profile library instead of showing status copy
+         here — see try-it.js's handleSessionStateChange(). There is no End
+         Session control here — closing this page (or the Companion's own
+         native ✕) is the only way to end things; see the footer copy. ── -->
     <main id="state-session-status" class="state-view page-content state-ready hidden" data-surface="light">
       <div class="state-col">
-        <img src="assets/pip-icon.svg" class="session-status-icon" alt="" aria-hidden="true">
-        <h1 id="session-status-heading" class="type-section-heading state-heading">Monitoring is active</h1>
-        <p id="session-status-label" class="type-tag session-status-label hidden"></p>
-        <p class="type-body session-status-body"><span class="mon-status-dot"></span><span id="session-status-text">The Mezzo Companion will stay visible above your other windows.</span></p>
-        <div class="session-status-actions">
-          <button id="btn-end-session" class="btn-outline btn-wide">End Session</button>
+        <div class="session-status-pill">
+          <span id="session-status-dot" class="session-status-dot"></span>
+          <span id="session-status-pill-text">Monitoring is active.</span>
         </div>
-        <p class="type-microcopy state-micro">Nothing is recorded or saved.</p>
+        <h1 class="type-section-heading state-heading">Your Mezzo Companion is open</h1>
+        <figure class="anchor-preview-figure">
+          <div class="anchor-preview-wrap" aria-hidden="true" data-surface="dark">
+            <div class="anchor-preview-card">
+              <div class="anchor-preview-titlebar">
+                <span class="anchor-preview-dots">
+                  <span class="anchor-preview-dot anchor-preview-dot-red"></span>
+                  <span class="anchor-preview-dot anchor-preview-dot-yellow"></span>
+                  <span class="anchor-preview-dot anchor-preview-dot-green"></span>
+                </span>
+                <span class="anchor-preview-titlebar-label">Mezzo Companion</span>
+                <span class="anchor-preview-accent"></span>
+              </div>
+              <div class="anchor-preview-status">
+                <span class="anchor-preview-zone">Approaching End of Range</span>
+                <span class="anchor-preview-profile">Profile: Coffee Shop</span>
+              </div>
+              <div class="anchor-preview-viz">
+                <span class="anchor-preview-viz-ring anchor-preview-viz-ring-outer"></span>
+                <span class="anchor-preview-viz-ring anchor-preview-viz-ring-inner"></span>
+                <span class="anchor-preview-viz-dot"></span>
+                <span class="anchor-preview-viz-edge-dot"></span>
+              </div>
+              <div class="anchor-preview-footer">
+                <span class="anchor-preview-footer-item">
+                  <span class="anchor-preview-footer-icon-stop"></span>Stop
+                </span>
+                <span class="anchor-preview-footer-item">
+                  <span class="anchor-preview-footer-icon-compact"></span>Compact
+                </span>
+              </div>
+            </div>
+          </div>
+          <figcaption class="anchor-preview-caption">The Mezzo Companion is the floating window you'll use while monitoring.</figcaption>
+        </figure>
+        <hr class="anchor-preview-divider">
+        <p class="type-body session-status-footer-copy">Keep this page open while using Mezzo.<br>Closing it will also close the Mezzo Companion.</p>
       </div>
     </main>
 
