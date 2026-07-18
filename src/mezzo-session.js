@@ -19,15 +19,20 @@
  *     the most prominent text in the header), locked profile metadata,
  *     the visualization, and a restrained bottom control bar (Stop,
  *     Compact) — never a large full-width Stop Monitoring button.
- *   - Compact (MEZZO_COMPANION_COMPACT_SIZE, 220×220): peripheral awareness
- *     only, not session management. The visualization (centered, dominant)
- *     and an Expand control (bottom-right corner overlay) are the ONLY
- *     persistent content — no wordmark, no visible status text, no profile
- *     metadata, and deliberately no Stop control. The awareness-state
- *     element stays in the DOM (visually hidden, still aria-live) so
- *     assistive tech keeps hearing state changes; there is no visible
- *     equivalent. With no Stop in Compact, the native window-close control
- *     is the way to stop monitoring from here — see handlePipClose, which
+ *   - Compact (MEZZO_COMPANION_COMPACT_SIZE, 220×220): peripheral awareness,
+ *     but with the same Stop reachable as Expanded — not session management
+ *     beyond that. The visualization (centered, dominant), a Stop control
+ *     (bottom-left corner overlay), and an Expand control (bottom-right
+ *     corner overlay) are the ONLY persistent content — no wordmark, no
+ *     visible status text, no profile metadata. Both corner controls are
+ *     icon-only (aria-label carries their accessible name, same as
+ *     Expand already did). The awareness-state element stays in the DOM
+ *     (visually hidden, still aria-live) so assistive tech keeps hearing
+ *     state changes; there is no visible equivalent. Stop in Compact calls
+ *     the exact same stopMonitoring() Expanded's Stop does — it returns to
+ *     Ready, it does not close the Companion. The native window-close
+ *     control remains a separate, always-available way to close the
+ *     Companion outright from any state — see handlePipClose, which
  *     already treats any Companion close (native ✕ or programmatic) as
  *     "stop monitoring, keep Mezzo open, layout resets to Expanded for the
  *     next open" rather than a full endSession() teardown.
@@ -88,12 +93,13 @@ import {
 // have different target dimensions.
 const MEZZO_COMPANION_READY_SIZE = { width: 320, height: 300 };
 const MEZZO_COMPANION_EXPANDED_SIZE = { width: 380, height: 420 };
-// 220×260 — the intentional Compact footprint: a small, tall-ish window
-// built for peripheral awareness, not a shrunk-down Expanded window. The
-// wordmark and "Monitoring" label are dropped entirely; only the
-// visualization, the live awareness state, and Stop/Expand remain, laid
-// out as corner overlays.
-const MEZZO_COMPANION_COMPACT_SIZE = { width: 220, height: 260 };
+// 220×220 — the intentional Compact footprint: a small, square window built
+// for peripheral awareness, not a shrunk-down Expanded window (was
+// 220×260 — matched against the approved design direction and updated).
+// No title bar (the real Document PiP window chrome covers that) and no
+// wordmark/status text/profile metadata; only the visualization and the
+// Stop/Expand corner-overlay controls remain.
+const MEZZO_COMPANION_COMPACT_SIZE = { width: 220, height: 220 };
 
 const LAYOUT_MODES = Object.freeze({ EXPANDED: 'expanded', COMPACT: 'compact' });
 
@@ -119,11 +125,11 @@ function profileMetaText(profile) {
   return profile?.savedProfileId ? `Profile: ${name} (Custom)` : `Profile: ${name} (Recommended)`;
 }
 
-// Decorative window chrome shared by the Ready screen and both Monitoring
-// layouts — three non-interactive dots, a centered wordmark (CSS swaps
-// between the "Mezzo Companion"/"Mezzo" text depending on [data-layout]),
-// and a small accent mark. Purely presentational: no click handlers, no
-// state, safe to build fresh for each screen that needs one.
+// Decorative in-page window chrome for the Ready screen only — Monitoring
+// (Expanded and Compact) uses the real Document Picture-in-Picture window
+// chrome instead (see pipDoc.title in startMonitoring()), so it never calls
+// this. Three non-interactive dots, a centered wordmark, and a small accent
+// mark. Purely presentational: no click handlers, no state.
 function buildTitlebar(doc) {
   const bar = doc.createElement('div');
   bar.className = 'pip-titlebar';
@@ -417,6 +423,12 @@ export function createMezzoSession({
 
     const pipDoc = pipWindow.document;
     pipDocument = pipDoc;
+
+    // The real Document Picture-in-Picture window chrome is the Companion's
+    // only title bar now (see the Monitoring screen build below, which no
+    // longer constructs an in-page one) — this is what makes it read
+    // "MEZZO COMPANION" instead of falling back to this document's URL.
+    pipDoc.title = 'MEZZO COMPANION';
 
     const fontLink = pipDoc.createElement('link');
     fontLink.rel = 'stylesheet';
@@ -848,7 +860,7 @@ export function createMezzoSession({
         background: currentColor;
         border-radius: 1px;
       }
-      .pip-control-icon-expand { width: 13px; height: 13px; flex-shrink: 0; }
+      .pip-control-icon-expand { width: 14px; height: 14px; flex-shrink: 0; }
       .pip-control-btn-stop:hover { color: var(--hanko-text); }
       /* Expand only ever appears in Compact — see the [data-layout] rules
          below, which are what actually reveal it. */
@@ -859,17 +871,20 @@ export function createMezzoSession({
       }
 
       /* ── Compact layout — explicit state ([data-layout="compact"]), not
-         a media query. Peripheral awareness only, not session management:
-         the title bar (reading "Mezzo" instead of "Mezzo Companion", with
-         smaller dots and no right-side accent), the visualization
-         (centered, dominant), and Expand (bottom-right corner) are the
-         only persistent content. There is no Stop in Compact at all — the
-         native window-close control is the way to stop monitoring from
-         here (see handlePipClose) — and no status text or profile
-         metadata competing for the small space. The awareness state stays
-         in the DOM and keeps announcing via aria-live for assistive tech;
-         it's just visually hidden, not removed, since there's no visible
-         text status in Compact. ── */
+         a media query. Peripheral awareness, but Stop stays reachable: the
+         visualization (centered, dominant), Stop (bottom-left corner), and
+         Expand (bottom-right corner) are the only persistent content — no
+         in-page title bar either (the real Document PiP window chrome
+         covers that, same as Expanded), and no status text or profile
+         metadata competing for the small space. Stop here is the exact
+         same button/handler as Expanded's Stop, just repositioned and
+         icon-only — it stops monitoring and returns to Ready, it does not
+         close the Companion. The native window-close control remains a
+         separate, always-available way to close the Companion outright
+         (see handlePipClose). The awareness state stays in the DOM and
+         keeps announcing via aria-live for assistive tech; it's just
+         visually hidden, not removed, since there's no visible text status
+         in Compact. ── */
       /* Compact's card is smaller-radius, single-layer shadow (no inset
          glow) — its own distinct treatment, not just a scaled-down Ready/
          Monitoring card. */
@@ -879,29 +894,6 @@ export function createMezzoSession({
       }
       body[data-layout="compact"] .pip-monitoring-header {
         display: block;
-      }
-      body[data-layout="compact"] .pip-titlebar {
-        padding: 8px 10px;
-      }
-      body[data-layout="compact"] .pip-titlebar-dot {
-        width: 9px;
-        height: 9px;
-      }
-      body[data-layout="compact"] .pip-titlebar-dots {
-        gap: 5px;
-      }
-      body[data-layout="compact"] .pip-titlebar-label {
-        font-size: 8px;
-        letter-spacing: 0.20em;
-      }
-      body[data-layout="compact"] .pip-titlebar-label-full {
-        display: none;
-      }
-      body[data-layout="compact"] .pip-titlebar-label-compact {
-        display: inline;
-      }
-      body[data-layout="compact"] .pip-titlebar-accent {
-        display: none;
       }
       /* Collapses the block's own padding rather than hiding it outright —
          .pip-status-heading (inside it) needs display other than none to
@@ -928,9 +920,32 @@ export function createMezzoSession({
         border-top: none;
         padding: 0;
       }
-      body[data-layout="compact"] .pip-control-btn-compact,
-      body[data-layout="compact"] .pip-control-btn-stop {
+      /* Compact-toggle hidden — already in Compact, nothing to switch to. */
+      body[data-layout="compact"] .pip-control-btn-compact {
         display: none;
+      }
+      /* Stop — bottom-left corner overlay, icon-only (its text label is
+         hidden below; aria-label already carries the accessible name, same
+         as Expand). Same stopMonitoring() click handler as Expanded's Stop
+         — this is that exact button repositioned, not a second one — so it
+         returns to Ready, it does not close the Companion. */
+      body[data-layout="compact"] .pip-control-btn-stop {
+        display: flex;
+        position: absolute;
+        bottom: 8px;
+        left: 8px;
+        margin: 0;
+        padding: 12px;
+        border-radius: 6px;
+        z-index: 2;
+        color: rgba(172, 158, 136, 0.82);
+      }
+      body[data-layout="compact"] .pip-control-btn-stop span:not(.pip-control-icon-stop) {
+        display: none;
+      }
+      body[data-layout="compact"] .pip-control-icon-stop {
+        width: 12px;
+        height: 12px;
       }
       body[data-layout="compact"] .pip-control-btn-expand {
         display: flex;
@@ -938,8 +953,23 @@ export function createMezzoSession({
         bottom: 8px;
         right: 8px;
         margin: 0;
-        padding: 8px;
+        padding: 12px;
+        border-radius: 6px;
         z-index: 2;
+        color: rgba(172, 158, 136, 0.82);
+      }
+      /* Hover stays background-only here too, same as Expanded — see the
+         approved correction above (.pip-control-btn-stop:hover etc.):
+         icon color is deliberately pinned to Compact's own default (0.82,
+         not Monitoring's 0.75) rather than left to fall through to any
+         other rule, so it visibly does NOT change on hover. Scoped with
+         [data-layout="compact"] so it doesn't affect Monitoring's own
+         hover color. */
+      body[data-layout="compact"] .pip-control-btn-stop:hover,
+      body[data-layout="compact"] .pip-control-btn-expand:hover {
+        color: rgba(172, 158, 136, 0.82);
+        background: rgba(0, 0, 0, 0.36);
+        border-radius: 6px;
       }
     `;
     pipDoc.head.appendChild(style);
@@ -1039,7 +1069,10 @@ export function createMezzoSession({
 
     const monitoringHeader = pipDoc.createElement('div');
     monitoringHeader.className = 'pip-monitoring-header';
-    monitoringHeader.appendChild(buildTitlebar(pipDoc));
+    // No in-page title bar here (see startMonitoring()'s pipDoc.title) —
+    // the real Document PiP window chrome is the only title bar for
+    // Monitoring now, in both Expanded and Compact. Ready still has its own
+    // via buildTitlebar(), unaffected.
 
     const statusBlock = pipDoc.createElement('div');
     statusBlock.className = 'pip-monitoring-status-block';
@@ -1073,9 +1106,10 @@ export function createMezzoSession({
 
     // Control bar — shared by Expanded and Compact. Expanded lays these out
     // as a normal-flow bottom bar (Stop, Compact); Compact repositions Stop
-    // as a top-right corner overlay (icon-only there), hides the
-    // Compact-toggle entirely, and reveals a dedicated Expand control
-    // (bottom-right corner) instead — see the [data-layout="compact"] CSS.
+    // as a bottom-left corner overlay (icon-only there), hides the
+    // Compact-toggle entirely (already in Compact — nothing to toggle to),
+    // and reveals a dedicated Expand control (bottom-right corner) — see
+    // the [data-layout="compact"] CSS.
     const controls = pipDoc.createElement('div');
     controls.className = 'pip-monitoring-controls';
 

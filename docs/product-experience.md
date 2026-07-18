@@ -590,23 +590,22 @@ Stopping monitoring returns to Ready.
 
 Compact is an intentional product mode, not a responsive fallback for small windows.
 
-Target size: 220×260.
+Target size: 220×220.
 
 It exists only while monitoring. Its purpose is peripheral awareness.
 
 The Compact Companion removes most interface chrome, keeping only what's essential at a glance. It displays:
 
 * the visualization
-* a minimal "Mezzo" label
-* an Expand control
+* Stop and Expand controls, as icon-only corner overlays (Stop bottom-left, Expand bottom-right) — no visible text label on either, same restrained treatment as the rest of Compact
 
 It does not display:
 
+* a title bar or wordmark — the real Document Picture-in-Picture window chrome is the only title bar, in both Expanded and Compact
 * monitoring status text
 * profile information
-* Stop
 
-Closing the native Picture-in-Picture window is the canonical way to stop monitoring from Compact mode. This is an intentional product decision, not a missing feature: it stops monitoring, releases the microphone, and follows the same recovery path described under Mezzo Companion Closed below — the Companion closes, and Mezzo returns to the Speaking Profile page with Start Monitoring as the primary action.
+Stop in Compact behaves identically to Stop in Expanded: it stops monitoring and returns the Companion to Ready, without closing it. Closing the native Picture-in-Picture window remains a separate, more final action, available from Compact the same as from every other state: it stops monitoring, releases the microphone, and follows the recovery path described under Mezzo Companion Closed below — the Companion closes, and Mezzo returns to the Speaking Profile page with Start Monitoring as the primary action.
 
 Expanding always returns to the Expanded layout without interrupting monitoring, the selected profile, or the current monitoring state.
 
