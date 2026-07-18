@@ -546,7 +546,7 @@ The Companion has two distinct states. They should never feel like one screen wi
 
 Purpose: preparation.
 
-Target size: 320×300 — its own fixed size, not shared with Monitoring's Expanded size.
+Target size: 320×354 — its own fixed size, not shared with Monitoring's Expanded size.
 
 The Companion's first open of the day goes directly to Monitoring — Mezzo already chose the profile, so there is nothing to prepare. Ready is reached only afterward, by stopping monitoring, and is where subsequent same-day sessions begin.
 
@@ -563,6 +563,8 @@ From Ready, users can review the selected profile, choose another existing one, 
 The visualization is intentionally hidden. Monitoring is inactive.
 
 Ready always uses the Expanded layout — there is no Compact Ready variant.
+
+Ready has no in-page title bar either — the real Document Picture-in-Picture window chrome is the only title bar, the same as every Monitoring state.
 
 ---
 

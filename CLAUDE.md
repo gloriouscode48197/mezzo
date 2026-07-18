@@ -74,7 +74,7 @@ These are settled. Do not revisit them without an explicit product-strategy conv
 * Speaking profiles are local-only: stored in the browser, no account required, never uploaded or synced to any server, as part of the profile experience. This describes profile data specifically — it is not a claim that Mezzo makes zero network requests. Anonymous, audio-free product-usage analytics exist separately (see Privacy Principles) and never carry profile content, audio, or volume data.
 * Privacy is primarily demonstrated through architecture. Surface it in user-facing copy where it materially affects trust, but do not repeat privacy messaging indiscriminately across every screen.
 * Compact mode is an intentional peripheral-awareness mode, not a responsive fallback for small windows.
-* The Companion has three fixed target sizes, one per state, not a single default: Ready 320×300, Monitoring Expanded 380×420, Compact 220×220. Ready and Monitoring Expanded are visually related (both "the Expanded family") but are not the same size — do not merge them back into one constant.
+* The Companion has three fixed target sizes, one per state, not a single default: Ready 320×354, Monitoring Expanded 380×420, Compact 220×220. Ready and Monitoring Expanded are visually related (both "the Expanded family") but are not the same size — do not merge them back into one constant.
 * The Anchor page's embedded Companion preview is static illustrative imagery, not live session UI — see "Anchor Page" below.
 
 ---

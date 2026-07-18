@@ -91,7 +91,7 @@ import {
 // Ready is its own fixed size, distinct from Monitoring's Expanded size —
 // the two used to share one constant, but the Ready and Monitoring cards
 // have different target dimensions.
-const MEZZO_COMPANION_READY_SIZE = { width: 320, height: 300 };
+const MEZZO_COMPANION_READY_SIZE = { width: 320, height: 354 };
 const MEZZO_COMPANION_EXPANDED_SIZE = { width: 380, height: 420 };
 // 220×220 — the intentional Compact footprint: a small, square window built
 // for peripheral awareness, not a shrunk-down Expanded window (was
@@ -123,43 +123,6 @@ function zoneLabel(zone) {
 function profileMetaText(profile) {
   const name = profile?.name || RECOMMENDED_PROFILE.name;
   return profile?.savedProfileId ? `Profile: ${name} (Custom)` : `Profile: ${name} (Recommended)`;
-}
-
-// Decorative in-page window chrome for the Ready screen only — Monitoring
-// (Expanded and Compact) uses the real Document Picture-in-Picture window
-// chrome instead (see pipDoc.title in startMonitoring()), so it never calls
-// this. Three non-interactive dots, a centered wordmark, and a small accent
-// mark. Purely presentational: no click handlers, no state.
-function buildTitlebar(doc) {
-  const bar = doc.createElement('div');
-  bar.className = 'pip-titlebar';
-
-  const dots = doc.createElement('div');
-  dots.className = 'pip-titlebar-dots';
-  dots.setAttribute('aria-hidden', 'true');
-  for (const tone of ['red', 'yellow', 'green']) {
-    const dot = doc.createElement('span');
-    dot.className = `pip-titlebar-dot pip-titlebar-dot-${tone}`;
-    dots.appendChild(dot);
-  }
-  bar.appendChild(dots);
-
-  const labelFull = doc.createElement('span');
-  labelFull.className = 'pip-titlebar-label pip-titlebar-label-full';
-  labelFull.textContent = 'Mezzo Companion';
-  bar.appendChild(labelFull);
-
-  const labelCompact = doc.createElement('span');
-  labelCompact.className = 'pip-titlebar-label pip-titlebar-label-compact';
-  labelCompact.textContent = 'Mezzo';
-  bar.appendChild(labelCompact);
-
-  const accent = doc.createElement('span');
-  accent.className = 'pip-titlebar-accent';
-  accent.setAttribute('aria-hidden', 'true');
-  bar.appendChild(accent);
-
-  return bar;
 }
 
 export function createMezzoSession({
@@ -482,64 +445,6 @@ export function createMezzoSession({
         box-shadow: 0 24px 56px rgba(0, 0, 0, 0.55), inset 0 0 40px rgba(0, 0, 0, 0.16);
         background: #3c3b3f;
       }
-      /* ── Shared title bar — decorative window chrome reused by Ready and
-         both Monitoring layouts (Expanded/Compact), keyed off the same
-         [data-layout] attribute the rest of the Companion's layout state
-         uses. The three dots are non-interactive (aria-hidden, no cursor,
-         no listeners) — a purely visual "app window" signature, not a
-         stand-in for the real native Picture-in-Picture close control,
-         which stays the only functional way to close the Companion. Two
-         label spans occupy the same centered grid cell; CSS (not JS)
-         swaps which is visible so Monitoring's single title bar can read
-         "Mezzo Companion" (Expanded) or "Mezzo" (Compact) without the
-         caller having to know or care which layout is active. ── */
-      .pip-titlebar {
-        display: grid;
-        grid-template-columns: 1fr auto 1fr;
-        align-items: center;
-        width: 100%;
-        box-sizing: border-box;
-        padding: 10px 14px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-        flex-shrink: 0;
-      }
-      .pip-titlebar-dots {
-        grid-column: 1;
-        justify-self: start;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-      }
-      .pip-titlebar-dot {
-        width: 11px;
-        height: 11px;
-        border-radius: 50%;
-        flex-shrink: 0;
-      }
-      .pip-titlebar-dot-red { background: #ec6a5e; }
-      .pip-titlebar-dot-yellow { background: #f4bf4f; }
-      .pip-titlebar-dot-green { background: #61c554; }
-      .pip-titlebar-label {
-        grid-column: 2;
-        justify-self: center;
-        font-family: var(--font-body);
-        font-weight: var(--weight-medium);
-        font-size: 9px;
-        letter-spacing: 0.18em;
-        text-transform: uppercase;
-        color: rgba(172, 158, 136, 0.90);
-        white-space: nowrap;
-      }
-      .pip-titlebar-label-compact { display: none; }
-      .pip-titlebar-accent {
-        grid-column: 3;
-        justify-self: end;
-        width: 14px;
-        height: 2px;
-        border-radius: 1px;
-        background: rgba(172, 158, 136, 0.35);
-      }
-
       .pip-status-heading {
         font-family: var(--font-display);
         font-weight: var(--weight-light);
@@ -553,13 +458,14 @@ export function createMezzoSession({
       }
 
       /* ── Ready screen — no visualization, always Expanded (there is no
-         Compact Ready variant). Composition rebuilt to match the reference
-         card exactly: the shared title bar pinned at the very top, a
-         "poster" area that centers the heading in the remaining space
-         (flex:1 + justify-content:center, not a spacer-pair), then a
-         fixed-padding action card pinned at the bottom holding the profile
-         selector and Start Monitoring. There is no footer here — the
-         native Picture-in-Picture window close control is the only way to
+         Compact Ready variant). No in-page title bar — the real Document
+         Picture-in-Picture window chrome is the only title bar (see
+         pipDoc.title in startMonitoring()). Composition: a "poster" area
+         that centers the heading in the remaining space (flex:1 +
+         justify-content:center, not a spacer-pair), then a fixed-padding
+         action card pinned at the bottom holding the profile selector and
+         Start Monitoring. There is no footer here — the native
+         Picture-in-Picture window close control is the only way to
          close the Companion, so there is nothing for a footer to hold. ── */
       .pip-screen-ready {
         justify-content: flex-start;
@@ -570,7 +476,7 @@ export function createMezzoSession({
         width: 100%;
         min-height: 0;
         box-sizing: border-box;
-        padding: 8px 20px;
+        padding: 32px 20px 20px;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -593,7 +499,7 @@ export function createMezzoSession({
       .pip-ready-card {
         width: calc(100% - 48px);
         margin: 0 24px;
-        padding: 8px 16px 28px;
+        padding: 20px 16px 40px;
         box-sizing: border-box;
         flex-shrink: 0;
         display: flex;
@@ -630,7 +536,7 @@ export function createMezzoSession({
       .pip-profile-selector.is-open { border-radius: 8px 8px 0 0; }
 
       .pip-ready-start-btn {
-        width: 90%;
+        width: 100%;
         background: var(--hanko-fill);
         border: none;
         border-radius: 50px;
@@ -987,7 +893,9 @@ export function createMezzoSession({
     //    composition rather than the flexible-spacer approach used before. ──
     const readyScreen = pipDoc.createElement('div');
     readyScreen.className = 'pip-screen pip-screen-ready';
-    readyScreen.appendChild(buildTitlebar(pipDoc));
+    // No in-page title bar here either — the real Document PiP window
+    // chrome is the only title bar now, in every state (see pipDoc.title
+    // in startMonitoring()).
 
     const readyPoster = pipDoc.createElement('div');
     readyPoster.className = 'pip-ready-poster';
@@ -1070,9 +978,8 @@ export function createMezzoSession({
     const monitoringHeader = pipDoc.createElement('div');
     monitoringHeader.className = 'pip-monitoring-header';
     // No in-page title bar here (see startMonitoring()'s pipDoc.title) —
-    // the real Document PiP window chrome is the only title bar for
-    // Monitoring now, in both Expanded and Compact. Ready still has its own
-    // via buildTitlebar(), unaffected.
+    // the real Document PiP window chrome is the only title bar for every
+    // Companion state now, Ready included.
 
     const statusBlock = pipDoc.createElement('div');
     statusBlock.className = 'pip-monitoring-status-block';
