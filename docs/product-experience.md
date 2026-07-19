@@ -499,20 +499,21 @@ Once the Companion is open — whether monitoring is active or the Companion is 
 * a fixed heading: "Your Mezzo Companion is open" — shown regardless of the status above it
 * a static illustrative preview of the Companion window — see "Companion Preview" below
 * a caption explaining the preview: "The Mezzo Companion is the floating window you'll use while monitoring."
+* Close Companion — see "Recovery" below
 * a divider
 * guidance to keep the page open and that closing it closes the Companion too: "Keep this page open while using Mezzo." / "Closing it will also close the Mezzo Companion."
 
-The Mezzo Companion is a Document Picture-in-Picture window and already stays above other application windows on its own — Mezzo never offers a "bring to front" / "show" / "focus" control for it, and never duplicates its Start Monitoring or Stop controls here. Reporting status is the only job of this screen while the Companion is open.
+The Mezzo Companion is a Document Picture-in-Picture window and already stays above other application windows on its own — Mezzo never offers a "bring to front" / "show" / "focus" control for it, and never duplicates its Start Monitoring or Stop controls here. Reporting status and offering Close Companion (a recovery action, not a status or monitoring control — see "Recovery") are the only jobs of this screen while the Companion is open.
 
 ## Companion Preview
 
-The preview shown on the Anchor page is a fixed, illustrative graphic, not a live view into the real Companion. It always shows the same reference imagery — an Expanded Monitoring Companion reading "Approaching End of Range" with a "Coffee Shop" profile — regardless of the user's actual profile, actual zone, or whether the Companion is really Monitoring or sitting on Ready.
+The preview shown on the Anchor page is a fixed, illustrative graphic, not a live view into the real Companion. It always shows the same reference imagery — an Expanded Monitoring Companion in "Approaching End of Range" territory — regardless of the user's actual profile, actual zone, or whether the Companion is really Monitoring or sitting on Ready.
 
-This is intentional: the preview exists to show a first-time user what the Companion looks like, not to report live status (the status indicator above it already does that, accurately). It does not run a second monitoring or visualization loop, does not read the user's real profile or zone, and its "Stop"/"Compact" labels are not functional controls.
+This is intentional: the preview exists to show a first-time user what the Companion looks like, not to report live status (the status indicator above it already does that, accurately). It does not run a second monitoring or visualization loop, does not read the user's real profile or zone. Its status/profile text and its "Stop"/"Compact" controls are rendered as abstract placeholder bars and icons, not literal readable text — deliberately, so nothing in this illustration can be mistaken for the real, live status indicator sitting directly above it.
 
 ## Recovery
 
-Users should never need a second checkpoint on this page before the first session's monitoring can begin — Mezzo's own Start Monitoring already handles that. This screen exists only to report status once the Companion is already open, and to explain how closing things works.
+Users should never need a second checkpoint on this page before the first session's monitoring can begin — Mezzo's own Start Monitoring already handles that. Once the Companion is open, this screen offers exactly one action: **Close Companion**. It has the exact same effect as the Companion's own native window-close control — stops monitoring, closes the Companion, and returns to the Speaking Profile page — and exists only because the floating window's own ✕ may not always be easy to find (e.g. behind other windows). It is deliberately not framed as "End Session": it isn't a second way to decide you're done, it's the same close action the native control already performs, made reachable from the page. Beyond that, this screen exists only to report status once the Companion is already open, and to explain how closing things works.
 
 ---
 

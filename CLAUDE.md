@@ -70,11 +70,11 @@ These are settled. Do not revisit them without an explicit product-strategy conv
 * `try-it.html`/`try-it.js` plus `src/mezzo-session.js` are the single source of truth for the monitoring session. The same page renders the Speaking Profile page and onboarding before a Companion exists, and takes on the Anchor page role once one does — one file group, not two.
 * Session state, Companion state, monitoring state, and layout mode are four separate concerns and must never be conflated or inferred from one another.
 * There is no Close Companion button anywhere in the Companion — the native Picture-in-Picture window-close control is the only way to close it directly.
-* There is no End Session control on the Anchor page. A monitoring session ends by closing the Anchor page (which closes the Companion too) or by closing the Companion natively — never a dedicated button.
+* The Anchor page has one dedicated control: **Close Companion** — a recovery action for closing the floating window when its native ✕ isn't reachable (e.g. it's behind other windows). It has the exact same effect as the Companion's own native window-close control: stops monitoring, closes the Companion, and returns Mezzo to the Speaking Profile page. This is deliberately not a revived End Session control — it isn't framed as a second way to decide the user is done, only as a page-side path to the same close action the native control already performs. A monitoring session otherwise ends by closing the Anchor page (which closes the Companion too) or by closing the Companion natively.
 * Speaking profiles are local-only: stored in the browser, no account required, never uploaded or synced to any server, as part of the profile experience. This describes profile data specifically — it is not a claim that Mezzo makes zero network requests. Anonymous, audio-free product-usage analytics exist separately (see Privacy Principles) and never carry profile content, audio, or volume data.
 * Privacy is primarily demonstrated through architecture. Surface it in user-facing copy where it materially affects trust, but do not repeat privacy messaging indiscriminately across every screen.
 * Compact mode is an intentional peripheral-awareness mode, not a responsive fallback for small windows.
-* The Companion has three fixed target sizes, one per state, not a single default: Ready 320×354, Monitoring Expanded 380×420, Compact 220×220. Ready and Monitoring Expanded are visually related (both "the Expanded family") but are not the same size — do not merge them back into one constant.
+* The Companion has three fixed target sizes, one per state, not a single default: Ready 320×354, Monitoring Expanded 290×420, Compact 220×220. Ready and Monitoring Expanded are visually related (both "the Expanded family") but are not the same size — do not merge them back into one constant.
 * The Anchor page's embedded Companion preview is static illustrative imagery, not live session UI — see "Anchor Page" below.
 
 ---
@@ -109,6 +109,7 @@ Exact strings to use in code, UI copy, and commit messages:
 * Open Mezzo
 * Start Monitoring
 * Stop
+* Close Companion
 * Create New Speaking Profile
 * Create New Profile…
 

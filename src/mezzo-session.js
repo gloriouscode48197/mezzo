@@ -13,12 +13,15 @@
  * Monitoring — never a shared layout with elements toggled. Ready has no
  * visualization at all and is always Expanded; there is no Compact Ready
  * variant. Monitoring is the only screen with two layouts:
- *   - Expanded (MEZZO_COMPANION_EXPANDED_SIZE, 400×500): wordmark, a stable
- *     "Monitoring" system-state label, the live awareness-state label
- *     (Quiet / Within Range / Approaching End of Range / Outside Range —
- *     the most prominent text in the header), locked profile metadata,
- *     the visualization, and a restrained bottom control bar (Stop,
- *     Compact) — never a large full-width Stop Monitoring button.
+ *   - Expanded (MEZZO_COMPANION_EXPANDED_SIZE, 290×420): the live
+ *     awareness-state label (Quiet / Within Range / Approaching End of
+ *     Range / Outside Range — the most prominent text in the header),
+ *     locked profile metadata, the visualization, and a restrained bottom
+ *     control bar (Stop, Compact) — never a large full-width Stop
+ *     Monitoring button. No in-page title bar — the real Document
+ *     Picture-in-Picture window chrome is the only title bar (see
+ *     `pipDoc.title` below); Ready uses the same real window chrome too,
+ *     with no in-page title bar of its own.
  *   - Compact (MEZZO_COMPANION_COMPACT_SIZE, 220×220): peripheral awareness,
  *     but with the same Stop reachable as Expanded — not session management
  *     beyond that. The visualization (centered, dominant), a Stop control
@@ -92,7 +95,7 @@ import {
 // the two used to share one constant, but the Ready and Monitoring cards
 // have different target dimensions.
 const MEZZO_COMPANION_READY_SIZE = { width: 320, height: 354 };
-const MEZZO_COMPANION_EXPANDED_SIZE = { width: 380, height: 420 };
+const MEZZO_COMPANION_EXPANDED_SIZE = { width: 290, height: 420 };
 // 220×220 — the intentional Compact footprint: a small, square window built
 // for peripheral awareness, not a shrunk-down Expanded window (was
 // 220×260 — matched against the approved design direction and updated).
@@ -210,7 +213,10 @@ export function createMezzoSession({
   }
 
   function onAudioFrame({ rms }) {
-    engine.processFrame(rms);
+    // Explicit real timestamp, not engine.js's own performance.now() default —
+    // keeps the caller in control of the clock the Outside-of-Range entry
+    // dwell (see OUTSIDE_ENTRY_DWELL_MS in engine.js) measures against.
+    engine.processFrame(rms, performance.now());
     markClassification(); // TEMPORARY — see docs/monitoring-runtime-investigation.md
 
     const zone = engine.getZone();
@@ -687,18 +693,21 @@ export function createMezzoSession({
          existing textContent assignment — the zone-classification and
          label-text logic themselves are untouched. */
       .pip-status-heading {
-        font-size: 20px;
+        font-family: var(--font-body);
+        font-size: 11px;
+        font-weight: var(--weight-medium);
         color: var(--text-primary);
       }
       .pip-status-heading[data-zone="0"],
-      .pip-status-heading[data-zone="1"] { color: var(--text-subdued); }
-      .pip-status-heading[data-zone="2"] { color: var(--text-default); }
-      .pip-status-heading[data-zone="3"] { color: var(--hanko-text); }
+      .pip-status-heading[data-zone="1"] { color: rgba(222, 210, 194, 0.58); }
+      .pip-status-heading[data-zone="2"] { color: rgba(210, 155, 75, 0.85); }
+      .pip-status-heading[data-zone="3"] { color: rgba(248, 130, 65, 0.80); }
       .pip-profile-info {
         font-family: var(--font-body);
-        font-size: 10px;
-        color: var(--text-subdued);
-        letter-spacing: 0.02em;
+        font-size: 9px;
+        font-weight: var(--weight-light);
+        color: rgba(222, 210, 194, 0.58);
+        letter-spacing: 0.06em;
       }
       .pip-circle-wrapper {
         flex: 1;
@@ -712,13 +721,14 @@ export function createMezzoSession({
       /* Bottom control bar — shared by Expanded and Compact. Restrained
          icon+text buttons, never a large full-width primary button; the
          visualization stays the focal point, controls stay discoverable
-         but visually secondary. Compact repositions individual buttons as
-         corner overlays rather than using this as a bar — see below. */
+         but visually secondary. No divider above it — the gap alone reads
+         as a separate row without adding extra visual weight. Compact
+         repositions individual buttons as corner overlays rather than
+         using this as a bar — see below. */
       .pip-monitoring-controls {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        border-top: 1px solid var(--border);
         padding: 12px 20px 16px;
         width: 100%;
         box-sizing: border-box;
@@ -741,16 +751,55 @@ export function createMezzoSession({
         transition: background 0.15s ease, color 0.15s ease;
       }
       .pip-control-btn:hover { background: var(--surface-card); color: var(--text-default); }
+      /* Stop/Compact get their own literal typography/color spec rather than
+         the shared .pip-control-btn defaults above — Expand (Compact-layout
+         only) is intentionally left on the shared defaults, out of scope
+         here. Padding grows well past the shared default's hit-area padding,
+         so the negative margin grows to match, keeping the same resting
+         (non-hover) visual position instead of pushing the row wider. */
+      .pip-control-btn-stop,
+      .pip-control-btn-compact {
+        font-family: var(--font-body);
+        font-size: 10px;
+        font-weight: var(--weight-medium);
+        letter-spacing: 0.10em;
+        color: rgba(172, 158, 136, 0.75);
+        padding: 10px 16px;
+        margin: -10px -16px;
+        border-radius: 6px;
+      }
+      /* Background-only affordance — text/icon color (currentColor-driven
+         for the icons) deliberately stays pinned to each button's own
+         resting color on hover, no orange accent. Just omitting color
+         here does NOT mean "unchanged" — the shared .pip-control-btn:hover
+         above still sets it (equal specificity, cascade is per-property,
+         not per-rule), so color is re-declared explicitly, matching each
+         button's own resting value, to actually cancel that out (caught
+         live: hover was still recoloring text/icons even after removing
+         the orange color value, because that same fallback rule filled
+         the gap). Applies to every control button across both Monitoring
+         layouts: Stop/Compact here, Expand below (Compact's own control). */
+      .pip-control-btn-stop:hover,
+      .pip-control-btn-compact:hover {
+        color: rgba(172, 158, 136, 0.75);
+        background: rgba(0, 0, 0, 0.36);
+        border-radius: 6px;
+      }
+      .pip-control-btn-expand:hover {
+        color: var(--text-subdued);
+        background: rgba(0, 0, 0, 0.36);
+        border-radius: 6px;
+      }
       .pip-control-icon-stop {
-        width: 8px;
-        height: 8px;
+        width: 7px;
+        height: 7px;
         background: currentColor;
         border-radius: 1px;
         flex-shrink: 0;
       }
       .pip-control-icon-compact {
-        width: 13px;
-        height: 11px;
+        width: 14px;
+        height: 12px;
         border: 1.5px solid currentColor;
         border-radius: 2px;
         position: relative;
@@ -759,20 +808,27 @@ export function createMezzoSession({
       .pip-control-icon-compact::after {
         content: '';
         position: absolute;
-        right: 1px;
+        right: 1.5px;
         top: 3.5px;
-        width: 5px;
-        height: 4.5px;
+        width: 5.5px;
+        height: 5px;
         background: currentColor;
         border-radius: 1px;
       }
       .pip-control-icon-expand { width: 14px; height: 14px; flex-shrink: 0; }
-      .pip-control-btn-stop:hover { color: var(--hanko-text); }
       /* Expand only ever appears in Compact — see the [data-layout] rules
          below, which are what actually reveal it. */
       .pip-control-btn-expand { display: none; }
 
-      @media (min-width: 300px) and (min-height: 350px) {
+      /* A responsive fallback for the window being manually resized too
+         small to fit the header reasonably, not for the fixed default size
+         itself — min-width was 300px when MEZZO_COMPANION_EXPANDED_SIZE
+         defaulted to 380px (80px of shrink headroom); left unchanged after
+         that default became 290px, it would have hidden the header outright
+         at the new default and taken the status label/profile text with it
+         (caught live, screenshotting the new default size). Lowered to keep
+         similar headroom below the new default instead. */
+      @media (min-width: 260px) and (min-height: 350px) {
         .pip-monitoring-header { display: flex; }
       }
 
@@ -823,7 +879,6 @@ export function createMezzoSession({
       }
       body[data-layout="compact"] .pip-monitoring-controls {
         position: static;
-        border-top: none;
         padding: 0;
       }
       /* Compact-toggle hidden — already in Compact, nothing to switch to. */

@@ -20,6 +20,15 @@
 
 const ZONE_TARGETS = [0, 0.22, 0.54, 0.82];
 
+// Faster rise specifically when easing toward the Outside-of-Range target
+// (ZONE_TARGETS[3]) — measured live: with the shared 1.8s rise tau below,
+// the ring was still well under half its full visual intensity a full
+// second after the (now dwell-confirmed) Outside label committed, on top of
+// the confirmation dwell itself in src/engine.js. Only the rising-toward-
+// Outside case uses this; de-escalation and every other target keep the
+// original shared tau untouched — see the tau selection in _loop() below.
+const OUTSIDE_RISE_TAU = 0.9;
+
 // Ring-activation hysteresis (see _draw()'s emergence handling below). The
 // activate edge matches r1vis/r2vis's own visibility ramp start exactly, so
 // a ring starts emerging the instant it would first become visible at all —
@@ -73,10 +82,24 @@ function mapE(e, ...pts) {
   return pts[pts.length - 1];
 }
 
+// Two-stage color ramp, keyed by the shared `ct` (see colorProgressFromEnergy
+// below) — NOT the single-stage lerp straight to the app's #C4593A accent
+// this used before. ct 0–0.5 blends Quiet/Within Range's muted cream toward
+// Approaching's amber; ct 0.5–1 blends that amber toward Outside's brighter
+// orange. Deliberately a different, more saturated orange than the app
+// accent color — approved mockup calls for rgb(235,105,45) specifically for
+// this state, not a reuse of the CTA/hanko color.
+const CT_STOP_QUIET = [172, 158, 136];       // Quiet / Within Range — muted cream
+const CT_STOP_APPROACHING = [210, 155, 75];  // Approaching End of Range — amber
+const CT_STOP_OUTSIDE = [235, 105, 45];      // Outside of Range — bright orange
+
 function rgba(ct, a) {
-  const r = Math.round(172 + (196 - 172) * ct);
-  const g = Math.round(158 + (89 - 158) * ct);
-  const b = Math.round(136 + (58 - 136) * ct);
+  const [from, to, localT] = ct <= 0.5
+    ? [CT_STOP_QUIET, CT_STOP_APPROACHING, ct / 0.5]
+    : [CT_STOP_APPROACHING, CT_STOP_OUTSIDE, (ct - 0.5) / 0.5];
+  const r = Math.round(from[0] + (to[0] - from[0]) * localT);
+  const g = Math.round(from[1] + (to[1] - from[1]) * localT);
+  const b = Math.round(from[2] + (to[2] - from[2]) * localT);
   return `rgba(${r},${g},${b},${a.toFixed(3)})`;
 }
 
@@ -96,6 +119,35 @@ function easeToward(current, target, dt, tau) {
 // cleared and never redrawn on every subsequent frame).
 function clampRadius(value) {
   return Number.isFinite(value) && value > 0 ? value : 0.001;
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+// Maps display energy to color progress (0–1), reusing ZONE_TARGETS rather
+// than inventing new breakpoints. Flat at 0 through Within Range (e <=
+// ZONE_TARGETS[1]) — the earlier single lerp (ct = e / ZONE_TARGETS[3]) put
+// Within Range at ct≈0.27, visibly warming a zone the status label treats as
+// identical to Quiet (see mezzo-session.js's shared data-zone="0","1" color).
+// 0–0.5 covers Within Range -> Approaching; 0.5–1 covers Approaching ->
+// Outside, matching the two color-ramp stages in rgba() above.
+function colorProgressFromEnergy(e) {
+  const within = ZONE_TARGETS[1];
+  const approaching = ZONE_TARGETS[2];
+  const outside = ZONE_TARGETS[3];
+
+  if (e <= within) {
+    return 0;
+  }
+
+  if (e <= approaching) {
+    const t = (e - within) / (approaching - within);
+    return 0.5 * t;
+  }
+
+  const t = (e - approaching) / (outside - approaching);
+  return 0.5 + 0.5 * t;
 }
 
 function contourPath(ctx, cx, cy, dx, dy, r, dpx, p0, p1) {
@@ -216,7 +268,14 @@ export class MezzoWaveVisualizer {
     const dt = Math.min((now - this.lastTime) / 1000, 0.05);
     this.lastTime = now;
 
-    const tau = this.energy > this.targetEnergy ? 1.2 : 1.8;
+    // Falling (de-escalation, any target) keeps its original 1.2s tau.
+    // Rising keeps the original 1.8s tau UNLESS the rise is specifically
+    // toward the Outside-of-Range target, which uses the faster
+    // OUTSIDE_RISE_TAU instead — Quiet/Within/Approaching rises are
+    // untouched either way.
+    const isFalling = this.energy > this.targetEnergy;
+    const isRisingTowardOutside = !isFalling && this.targetEnergy === ZONE_TARGETS[3];
+    const tau = isFalling ? 1.2 : (isRisingTowardOutside ? OUTSIDE_RISE_TAU : 1.8);
     this.energy += (this.targetEnergy - this.energy) * (1 - Math.exp(-dt / tau));
 
     if (this.isSustained) {
@@ -270,10 +329,16 @@ export class MezzoWaveVisualizer {
     const breath = Math.sin(this.breathPhase);
     const bs = 1 + 0.048 * breath;
 
-    const ct0 = mapE(e, 0.72, 0, 1.0, 1.0);
-    const ct1 = mapE(e, 0.60, 0, 0.72, 0.30, 1.0, 1.0);
-    const ct2 = mapE(e, 0.54, 0, 0.65, 0.18, 0.72, 0.60, 1.0, 1.0);
-    const ctDot = mapE(e, 0.68, 0, 0.72, 0.10, 1.0, 1.0);
+    // Color follows the same smoothed display energy (e) as ring geometry,
+    // preventing visual color flicker from raw microphone samples. `e` is
+    // already this component's own eased, frame-rate-independent energy
+    // (see _loop() above) — never the raw per-frame mic sample — so
+    // colorProgressFromEnergy(e) (using the existing ZONE_TARGETS bounds,
+    // not new thresholds) is the single source of truth for every color
+    // output below: both ring strokes, the center orb, the radiating waves,
+    // and the glow all read this same `ct`, rather than each animating its
+    // own independent color curve.
+    const ct = clamp(colorProgressFromEnergy(e), 0, 1);
 
     const r0 = clampRadius(34 * scale * bs);
     const r0dpx = r0 * mapE(e, 0, 0.004, 0.25, 0.006, 0.72, 0.012, 1.0, 0.030);
@@ -332,7 +397,6 @@ export class MezzoWaveVisualizer {
     const aDpx = this.r2Active ? r2dpx : this.r1Active ? r1dpx : r0dpx;
     const aDx = this.r2Active ? r2dx : this.r1Active ? r1dx : 0;
     const aDy = this.r2Active ? r2dy : this.r1Active ? r1dy : 0;
-    const aCT = this.r2Active ? ct2 : this.r1Active ? ct1 : ct0;
     const aP0 = this.r1Active && !this.r2Active ? this.mp0 + Math.PI * 0.7 : this.mp0;
     const aP1 = this.r1Active && !this.r2Active ? this.mp1 + Math.PI * 1.1 : this.mp1;
 
@@ -342,9 +406,9 @@ export class MezzoWaveVisualizer {
     const glowInner = clampRadius(aR * 0.7);
     const glowOuter = Math.max(glowInner + 0.001, clampRadius(aR * 1.55));
     const gr = ctx.createRadialGradient(cx + aDx, cy + aDy, glowInner, cx + aDx, cy + aDy, glowOuter);
-    gr.addColorStop(0, rgba(aCT, 0));
-    gr.addColorStop(0.4, rgba(aCT, gs));
-    gr.addColorStop(1, rgba(aCT, 0));
+    gr.addColorStop(0, rgba(ct, 0));
+    gr.addColorStop(0.4, rgba(ct, gs));
+    gr.addColorStop(1, rgba(ct, 0));
     ctx.beginPath(); ctx.arc(cx, cy, aR * 1.55, 0, Math.PI * 2); ctx.fillStyle = gr; ctx.fill();
 
     // Waves
@@ -356,7 +420,7 @@ export class MezzoWaveVisualizer {
       if (tr > wMax) return false;
       const prog = tr / wMax, wR = aR + tr, wDpx = aDpx * (1 + tr / Math.max(1, aR) * 0.5);
       contourPath(ctx, cx, cy, aDx, aDy, wR, wDpx, aP0, aP1);
-      ctx.strokeStyle = rgba(aCT, wPk * (1 - prog));
+      ctx.strokeStyle = rgba(ct, wPk * (1 - prog));
       ctx.lineWidth = 1.3;
       ctx.stroke();
       return true;
@@ -367,9 +431,9 @@ export class MezzoWaveVisualizer {
     // fade-in alpha and are already ~0 through the short hysteresis window,
     // so this reads identically to before during ordinary rising energy.
     const sw = 2.0 + sess * 0.7;
-    if (this.r2Active) { contourPath(ctx, cx, cy, r2dx, r2dy, r2, r2dpx, this.mp0, this.mp1); ctx.strokeStyle = rgba(ct2, 0.44 * r2vis); ctx.lineWidth = sw; ctx.stroke(); }
-    if (this.r1Active) { contourPath(ctx, cx, cy, r1dx, r1dy, r1, r1dpx, this.mp0 + Math.PI * 0.7, this.mp1 + Math.PI * 1.1); ctx.strokeStyle = rgba(ct1, 0.48 * r1vis); ctx.lineWidth = sw; ctx.stroke(); }
-    contourPath(ctx, cx, cy, 0, 0, r0, r0dpx, this.mp0, this.mp1); ctx.strokeStyle = rgba(ct0, 0.52); ctx.lineWidth = sw; ctx.stroke();
+    if (this.r2Active) { contourPath(ctx, cx, cy, r2dx, r2dy, r2, r2dpx, this.mp0, this.mp1); ctx.strokeStyle = rgba(ct, 0.44 * r2vis); ctx.lineWidth = sw; ctx.stroke(); }
+    if (this.r1Active) { contourPath(ctx, cx, cy, r1dx, r1dy, r1, r1dpx, this.mp0 + Math.PI * 0.7, this.mp1 + Math.PI * 1.1); ctx.strokeStyle = rgba(ct, 0.48 * r1vis); ctx.lineWidth = sw; ctx.stroke(); }
+    contourPath(ctx, cx, cy, 0, 0, r0, r0dpx, this.mp0, this.mp1); ctx.strokeStyle = rgba(ct, 0.52); ctx.lineWidth = sw; ctx.stroke();
 
     // Orbital highlight
     const hlV = mapE(e, 0.05, 0.14, 0.22, 0.70, 0.54, 0.70, 0.82, 0.85, 1.0, 1.0);
@@ -379,17 +443,17 @@ export class MezzoWaveVisualizer {
       const rrHL = Math.max(3, aR + dHL);
       const hx = cx + aDx + rrHL * Math.cos(a), hy = cy + aDy + rrHL * Math.sin(a);
       const hlG = ctx.createRadialGradient(hx, hy, 0, hx, hy, 16 * scale);
-      hlG.addColorStop(0, rgba(aCT, 0.22 * hlV));
-      hlG.addColorStop(1, rgba(aCT, 0));
+      hlG.addColorStop(0, rgba(ct, 0.22 * hlV));
+      hlG.addColorStop(1, rgba(ct, 0));
       ctx.beginPath(); ctx.arc(hx, hy, 16 * scale, 0, Math.PI * 2); ctx.fillStyle = hlG; ctx.fill();
-      ctx.beginPath(); ctx.arc(hx, hy, 3.2 * scale, 0, Math.PI * 2); ctx.fillStyle = rgba(aCT, 0.85 * hlV); ctx.fill();
+      ctx.beginPath(); ctx.arc(hx, hy, 3.2 * scale, 0, Math.PI * 2); ctx.fillStyle = rgba(ct, 0.85 * hlV); ctx.fill();
     }
 
     // Center dot
     ctx.shadowBlur = (5 + 4 * (0.5 + 0.5 * breath)) * scale;
-    ctx.shadowColor = rgba(ctDot, 0.30);
+    ctx.shadowColor = rgba(ct, 0.30);
     ctx.beginPath(); ctx.arc(cx, cy, 3.2 * bs * scale, 0, Math.PI * 2);
-    ctx.fillStyle = rgba(ctDot, 0.62 + 0.24 * (0.5 + 0.5 * breath));
+    ctx.fillStyle = rgba(ct, 0.62 + 0.24 * (0.5 + 0.5 * breath));
     ctx.fill();
     ctx.shadowBlur = 0;
   }

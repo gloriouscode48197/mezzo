@@ -23,6 +23,23 @@ export const ZONE_ACCEPTABLE_MULT = 1.8;  // <= this × baseline -> zone 2 (With
 export const INITIAL_GRACE_MS_MIN = 5000;
 export const INITIAL_GRACE_MS_MAX = 8000;
 
+// Confirmation window before a rise into zone 3 (Outside of Range) actually
+// commits. Investigated live: an ordinary ~150ms vocal attack crosses the
+// entire zone-2 band and reaches zone 3 in ~150ms, which is fast enough that
+// a brief, non-sustained spike could commit — and then reverse — before a
+// user could perceive it, and faster than the visualizer's own display
+// energy can visually catch up, so the ring was still visibly escalating
+// after the label had already dropped back down. 300ms was tried first and
+// measured against a real ~500ms vocal-emphasis event; it still let that
+// ordinary emphasis commit zone 3. Compared 300/500/700ms head to head:
+// 500ms is the smallest value that keeps that same ~500ms emphasis from
+// ever committing, and 700ms didn't filter anything more in that same
+// comparison, just added delay before genuinely sustained loud speech gets
+// its full-severity confirmation. This gate only delays the *commit* to
+// zone 3 — de-escalation and every other zone transition are untouched.
+// See processFrame() below.
+export const OUTSIDE_ENTRY_DWELL_MS = 500;
+
 // Assumed real interval between processFrame() calls. Must match the
 // caller's actual sampling cadence (audio.js's SAMPLE_INTERVAL_MS = 50) for
 // INITIAL_GRACE_MS_* to mean what its name says.
@@ -47,6 +64,12 @@ export class MezzoEngine {
     // Grace period
     this.gracePeriodActive = false;
     this.graceRemainingMs = 0;
+
+    // Outside-of-Range entry confirmation — see OUTSIDE_ENTRY_DWELL_MS above.
+    // Monotonic timestamp (matches whatever clock processFrame()'s nowMs
+    // argument uses) marking when the signal first qualified for zone 3 and
+    // hasn't yet been confirmed; null whenever there's no pending escalation.
+    this.pendingOutsideSince = null;
   }
 
   // ===========================================================================
@@ -116,6 +139,7 @@ export class MezzoEngine {
 
     // Reset zone state
     this.currentZone = 0;
+    this.pendingOutsideSince = null;
 
     // Set monitoring state
     this.monitoringActive = true;
@@ -139,6 +163,7 @@ export class MezzoEngine {
     this.currentZone = 0;
     this.gracePeriodActive = false;
     this.graceRemainingMs = 0;
+    this.pendingOutsideSince = null;
 
     // Set monitoring state
     this.monitoringActive = false;
@@ -151,11 +176,17 @@ export class MezzoEngine {
   /**
    * Process a single audio frame.
    *
-   * Called once per FRAME_MS interval with current RMS value.
+   * Called once per FRAME_MS interval with current RMS value. `nowMs` is a
+   * monotonic timestamp (defaults to performance.now()) — the Outside-of-
+   * Range entry dwell (see OUTSIDE_ENTRY_DWELL_MS) is measured against real
+   * elapsed time, not frame counts, so it behaves the same regardless of the
+   * caller's actual sampling cadence. Tests pass synthetic, deterministic
+   * timestamps explicitly rather than relying on real wall-clock time.
    *
    * @param {number} rmsValue - Current RMS value from audio processor
+   * @param {number} [nowMs] - Monotonic timestamp for this frame
    */
-  processFrame(rmsValue) {
+  processFrame(rmsValue, nowMs = performance.now()) {
     if (!this.monitoringActive) {
       return;
     }
@@ -165,10 +196,49 @@ export class MezzoEngine {
       if (this.graceRemainingMs <= 0) {
         this.gracePeriodActive = false;
       }
+      this.pendingOutsideSince = null; // no pending escalation carries into/through grace
       return; // No zone updates during grace period
     }
 
-    this.currentZone = this._computeZone(rmsValue);
+    this.currentZone = this._resolveZone(this._computeZone(rmsValue), nowMs);
+  }
+
+  /**
+   * Gates entry into zone 3 (Outside of Range) behind OUTSIDE_ENTRY_DWELL_MS
+   * of continuous qualification — every other transition (0->1, 1->2, and
+   * de-escalation out of 3) passes through immediately, unchanged. While a
+   * rise into zone 3 is pending confirmation, the emitted zone is 2
+   * (Approaching End of Range) — not whatever the raw zone is — since the
+   * signal hasn't yet earned the more severe state. Dropping back below the
+   * Outside threshold at any point cancels the pending timer outright, not
+   * just pauses it: the next rise starts a fresh dwell window.
+   *
+   * @param {number} rawZone - _computeZone()'s immediate, undebounced result
+   * @param {number} nowMs - monotonic timestamp for this frame
+   * @returns {number} the zone to actually commit/emit
+   * @private
+   */
+  _resolveZone(rawZone, nowMs) {
+    if (rawZone < 3) {
+      this.pendingOutsideSince = null;
+      return rawZone;
+    }
+
+    // Already confirmed and still qualifying — stays 3, no re-confirmation.
+    if (this.currentZone === 3) {
+      return 3;
+    }
+
+    if (this.pendingOutsideSince === null) {
+      this.pendingOutsideSince = nowMs;
+    }
+
+    if (nowMs - this.pendingOutsideSince >= OUTSIDE_ENTRY_DWELL_MS) {
+      this.pendingOutsideSince = null;
+      return 3;
+    }
+
+    return 2; // held at Approaching End of Range while confirmation pends
   }
 
   // ===========================================================================

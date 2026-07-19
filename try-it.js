@@ -167,11 +167,12 @@ const listeningHeading = document.getElementById('listening-heading');
 const calRingCanvas = document.getElementById('cal-ring-canvas');
 
 // Session status view — the status/recovery surface for companionReady/monitoringActive.
-// No End Session control here — see the file-header state comment for
-// "session-status" and CLAUDE.md; closing this page (or the Companion's own
-// native ✕) is the only way to end things.
+// Close Companion is a page-side recovery action, not a revived End
+// Session control — see the file-header state comment for "session-status"
+// in try-it.html and CLAUDE.md's Non-Negotiable Decisions.
 const sessionStatusDot = document.getElementById('session-status-dot');
 const sessionStatusPillText = document.getElementById('session-status-pill-text');
+const btnCloseCompanion = document.getElementById('btn-close-companion');
 
 // No-Companion-support fallback's own live monitoring view.
 const fallbackHeadingEl = document.getElementById('fallback-mon-heading');
@@ -762,6 +763,11 @@ window.addEventListener('keydown', (event) => {
 });
 
 btnFallbackStop?.addEventListener('click', () => session.stopMonitoring());
+// Same effect as the Companion's own native ✕ (session.endSession() closes
+// the pipWindow and stops monitoring) — a page-side recovery path for when
+// the floating window itself isn't reachable, not a second "end session"
+// decision. See the DOM-ref comment above and CLAUDE.md.
+btnCloseCompanion?.addEventListener('click', () => session.endSession());
 
 // Clean up calibration's own mic instance on unload — independent of
 // src/mezzo-session.js's own beforeunload/pagehide teardown.

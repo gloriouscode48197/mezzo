@@ -60,6 +60,12 @@
   --text-primary: var(--ink);
   --text-default: var(--ink);
   --text-body: var(--ink-soft);
+  /* Sits between --text-body (7.14:1) and --text-subdued (3.18:1, fails
+     AA) — for content that needs to read as visibly quieter than body
+     text while staying accessible at normal sizes (~4.9:1). No dark- or
+     mid-surface equivalent defined yet; add one only when a real use case
+     on those surfaces needs it. */
+  --text-quiet: #696463;
   --text-subdued: #8A827A;
   --text-ghost: #C8C0B5;
 

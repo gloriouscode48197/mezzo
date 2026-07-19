@@ -76,7 +76,7 @@
           <div class="cal-listen-content">
             <h1 class="type-section-heading state-heading">Talk at your desired speaking level.</h1>
             <p id="listening-heading" class="cal-countdown">Listening...6s</p>
-            <canvas id="cal-ring-canvas" width="200" height="200" aria-hidden="true" style="display:block; width:200px; height:200px; margin:0 auto var(--space-circle-to-button);"></canvas>
+            <canvas id="cal-ring-canvas" width="200" height="200" aria-hidden="true" style="display:block; width:200px; height:200px; margin:-60px auto var(--space-circle-to-button);"></canvas>
           </div>
         </div>
       </div>
@@ -108,7 +108,7 @@
             </span>
           </label>
 
-          <label class="profile-row profile-row-radio profile-row-bordered-top" for="profile-radio-custom">
+          <label class="profile-row profile-row-radio profile-row-bordered" for="profile-radio-custom">
             <input type="radio" name="profile-guided-choice" id="profile-radio-custom" class="radio-input">
             <span class="radio-visual" aria-hidden="true"></span>
             <span class="profile-row-text">
@@ -132,8 +132,6 @@
             </span>
           </label>
 
-          <hr class="profile-divider">
-
           <div id="saved-profiles-list"></div>
 
           <div class="profile-create-row">
@@ -153,16 +151,26 @@
          (companionReady / monitoringActive) on a Companion-capable browser.
          The Companion card below is static illustrative imagery, not
          session-state UI — it always shows the same fixed reference state
-         (Monitoring, "Approaching End of Range", Coffee Shop) regardless of
-         the real session's actual profile/zone/active state. Only the
-         status pill (dot + text) above it is live — see
-         try-it.js's renderSessionStatusView(). The card is aria-hidden; the
-         figcaption already conveys its purpose to assistive tech. When the
-         Companion closes (companionClosed), Mezzo navigates away from this
-         screen back to the profile library instead of showing status copy
-         here — see try-it.js's handleSessionStateChange(). There is no End
-         Session control here — closing this page (or the Companion's own
-         native ✕) is the only way to end things; see the footer copy. ── -->
+         (Monitoring, "Approaching End of Range" territory, abstracted into
+         placeholder bars rather than literal readable text so it can't be
+         mistaken for a live status readout) regardless of the real
+         session's actual profile/zone/active state. Deliberately a soft,
+         single-tone line-art diagram (see the .anchor-preview-* rules in
+         try-it.css) rather than a realistic dark-window "screenshot" — user
+         testing found the earlier, more realistic version got mistaken for
+         a second real Companion window floating on the desktop. It should
+         read as obviously symbolic ("a window exists"), never as something
+         to inspect or confuse with the real, live Companion sitting nearby.
+         Only the status pill (dot + text) above it is live — see try-it.js's
+         renderSessionStatusView(). The card is aria-hidden; the figcaption
+         already conveys its purpose to assistive tech. When the Companion
+         closes (companionClosed), Mezzo navigates away from this screen
+         back to the profile library instead of showing status copy here —
+         see try-it.js's handleSessionStateChange(). Close Companion below
+         is a page-side recovery action, not a revived End Session control —
+         it calls the exact same session.endSession() the native ✕ already
+         triggers, just reachable from the page when the floating window
+         itself isn't. See CLAUDE.md's Non-Negotiable Decisions. ── -->
     <main id="state-session-status" class="state-view page-content state-ready hidden" data-surface="light">
       <div class="state-col">
         <div class="session-status-pill">
@@ -171,20 +179,20 @@
         </div>
         <h1 class="type-section-heading state-heading">Your Mezzo Companion is open</h1>
         <figure class="anchor-preview-figure">
-          <div class="anchor-preview-wrap" aria-hidden="true" data-surface="dark">
+          <div class="anchor-preview-wrap" aria-hidden="true">
             <div class="anchor-preview-card">
               <div class="anchor-preview-titlebar">
                 <span class="anchor-preview-dots">
-                  <span class="anchor-preview-dot anchor-preview-dot-red"></span>
-                  <span class="anchor-preview-dot anchor-preview-dot-yellow"></span>
-                  <span class="anchor-preview-dot anchor-preview-dot-green"></span>
+                  <span class="anchor-preview-dot"></span>
+                  <span class="anchor-preview-dot"></span>
+                  <span class="anchor-preview-dot"></span>
                 </span>
-                <span class="anchor-preview-titlebar-label">Mezzo Companion</span>
+                <span class="anchor-preview-titlebar-label"></span>
                 <span class="anchor-preview-accent"></span>
               </div>
-              <div class="anchor-preview-status">
-                <span class="anchor-preview-zone">Approaching End of Range</span>
-                <span class="anchor-preview-profile">Profile: Coffee Shop</span>
+              <div class="anchor-preview-status" aria-hidden="true">
+                <span class="anchor-preview-status-bar anchor-preview-status-bar-zone"></span>
+                <span class="anchor-preview-status-bar anchor-preview-status-bar-profile"></span>
               </div>
               <div class="anchor-preview-viz">
                 <span class="anchor-preview-viz-ring anchor-preview-viz-ring-outer"></span>
@@ -194,16 +202,17 @@
               </div>
               <div class="anchor-preview-footer">
                 <span class="anchor-preview-footer-item">
-                  <span class="anchor-preview-footer-icon-stop"></span>Stop
+                  <span class="anchor-preview-footer-icon-stop"></span>
                 </span>
                 <span class="anchor-preview-footer-item">
-                  <span class="anchor-preview-footer-icon-compact"></span>Compact
+                  <span class="anchor-preview-footer-icon-compact"></span>
                 </span>
               </div>
             </div>
           </div>
           <figcaption class="anchor-preview-caption">The Mezzo Companion is the floating window you'll use while monitoring.</figcaption>
         </figure>
+        <button id="btn-close-companion" type="button" class="btn-outline btn-close-companion">Close Companion</button>
         <hr class="anchor-preview-divider">
         <p class="type-body session-status-footer-copy">Keep this page open while using Mezzo.<br>Closing it will also close the Mezzo Companion.</p>
       </div>
@@ -250,22 +259,19 @@
       <div id="save-step-prompt" class="save-dialog-step">
         <h2 id="save-dialog-title" class="type-section-heading dialog-title">Save this profile?</h2>
         <p class="type-body dialog-body">Reuse this speaking profile anytime in this browser.</p>
+        <p class="type-microcopy save-dialog-privacy-note">Saved only in this browser. No account required.</p>
         <div class="save-dialog-actions">
           <button id="btn-save-profile" type="button" class="btn-primary">Save</button>
-          <button id="btn-try-again" type="button" class="btn-outline btn-with-icon">
-            <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"><path d="M11 6.5A4.5 4.5 0 1 1 9.8 3.3M11 6.5V2.5M11 6.5H7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            Try Again
-          </button>
+          <button id="btn-try-again" type="button" class="btn-outline">Try Again</button>
         </div>
         <hr class="save-dialog-divider">
         <div class="save-dialog-discard-row">
           <span class="save-dialog-or">or</span>
           <button id="btn-discard-calibration" type="button" class="save-dialog-discard">
-            <svg width="12" height="13" viewBox="0 0 16 18" fill="none" aria-hidden="true"><path d="M1 4h14M5.5 4V2h5v2M6.5 8v6M9.5 8v6M2 4l1 12h10l1-12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <svg width="12" height="13" viewBox="0 0 13 14" fill="none" aria-hidden="true"><path d="M1 3.5h11M4.5 3.5V2h4v1.5M5.5 6.5v4M7.5 6.5v4M2 3.5l.8 8.5h7.4l.8-8.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
             Discard
           </button>
         </div>
-        <p class="type-microcopy save-dialog-privacy-note">Saved only in this browser. No account required.</p>
       </div>
 
       <!-- Step: Name your profile -->
@@ -289,8 +295,8 @@
       <h2 id="delete-dialog-title" class="type-section-heading dialog-title">Delete "<span id="delete-dialog-name"></span>"?</h2>
       <p id="delete-dialog-body" class="type-body dialog-body">This profile will be permanently deleted.</p>
       <div class="dialog-actions">
+        <button id="btn-delete-cancel" type="button" class="btn-outline">Cancel</button>
         <button id="btn-delete-confirm" type="button" class="btn-delete-confirm">Delete</button>
-        <button id="btn-delete-cancel" type="button" class="btn-outline btn-wide">Cancel</button>
       </div>
     </div>
   </div>
@@ -308,10 +314,22 @@
       const ctx = canvas.getContext('2d');
       ctx.scale(dpr, dpr);
 
-      let breathPhase = 0, mp0 = 1.1, mp1 = 2.4, orbitPhase = 0, last = 0;
+      let breathPhase = 0, mp0 = 1.1, mp1 = 2.4, last = 0;
+      let wavePool = [], lastWaveSpawn = 0;
       // Energy tracks from 0 (silence) to 0.22 (within range) over calibration
       // try-it.js controls the #cal-ring-canvas-energy attribute to drive the level
       let energy = 0, targetEnergy = 0;
+
+      // Frozen, not just dimmed, while the Save/Name Profile modal is open —
+      // recording has already finished by this point, so a still-animating
+      // visualization behind the modal would wrongly suggest Mezzo is still
+      // listening. Checked once per frame rather than driven by an event
+      // listener so it stays correct regardless of how the modal's own
+      // hidden class gets toggled.
+      const saveDialogOverlayEl = document.getElementById('save-dialog-overlay');
+      function isPausedForModal() {
+        return !!saveDialogOverlayEl && !saveDialogOverlayEl.classList.contains('hidden');
+      }
 
       function rgba(ct, a) {
         // Idle-state base (ct=0) darkened from the original light tan —
@@ -345,20 +363,33 @@
 
       function frame(now) {
         requestAnimationFrame(frame);
+        if (isPausedForModal()) {
+          // Keep 'last' fresh so the eventual un-pause doesn't see a huge
+          // elapsed dt (which Math.min already clamps, but this avoids
+          // relying on that clamp) — canvas is simply never touched again
+          // below, so whatever was last drawn stays exactly as-is.
+          last = now;
+          return;
+        }
         var dt = Math.min((now - last)/1000, 0.05); last = now;
+        var nowSec = now / 1000;
 
         // Read energy from dataset if try-it.js sets it
         var attr = parseFloat(canvas.dataset.energy);
         if (!isNaN(attr)) targetEnergy = attr;
-        energy += (targetEnergy - energy) * (1 - Math.exp(-dt / 0.8));
+        // Fast-tracking tau (was 0.8s) — the ring should visibly catch up to
+        // actual speaking within a fraction of a second, not drift slowly
+        // behind it, so it reads as responsive rather than laggy.
+        energy += (targetEnergy - energy) * (1 - Math.exp(-dt / 0.18));
 
         breathPhase += dt * 1.70;
         mp0 += dt * 0.32; mp1 += dt * 0.46;
-        orbitPhase += dt * mapE(energy, 0,0.18, 0.25,0.30, 0.55,0.55, 0.82,1.10, 1.0,1.40);
 
         ctx.clearRect(0, 0, SIZE, SIZE);
         var breath = Math.sin(breathPhase);
-        var bs = 1 + 0.048*breath;
+        // Breathing amplitude — was 0.048 (barely perceptible ~5% swing),
+        // now a clearly visible ~32% peak-to-peak swing.
+        var bs = 1 + 0.16*breath;
         var cx = SIZE/2, cy = SIZE/2;
         var e = energy;
 
@@ -373,32 +404,42 @@
         var r2 = 66*bs, r2vis = mapE(e, 0,0, 0.62,0, 0.80,1.0, 1.0,1.0);
         var r2dpx = r2*mapE(e, 0,0, 0.65,0, 0.82,0.095, 1.0,0.145)*r2vis;
 
-        // Active ring glow
+        // Active ring — the same ring the glow and outward-radiating waves
+        // both key off, matching the Companion's monitoring visualization.
         var aR = r1vis>0.5&&r2vis>0.5 ? r2/bs*bs : r1vis>0.5 ? r1 : r0;
-        var gs = mapE(e, 0,0.018, 0.22,0.028, 0.54,0.050, 0.72,0.085, 1.0,0.110);
+        var aDpx = r1vis>0.5&&r2vis>0.5 ? r2dpx : r1vis>0.5 ? r1dpx : r0dpx;
+        var aP0 = r1vis>0.5&&r2vis<0.5 ? mp0+Math.PI*0.7 : mp0;
+        var aP1 = r1vis>0.5&&r2vis<0.5 ? mp1+Math.PI*1.1 : mp1;
         var aCT = r1vis>0.5&&r2vis>0.5 ? ct2 : r1vis>0.5 ? ct1 : ct0;
+        var gs = mapE(e, 0,0.018, 0.22,0.028, 0.54,0.050, 0.72,0.085, 1.0,0.110);
         var gr = ctx.createRadialGradient(cx,cy,aR*0.7, cx,cy,aR*1.55);
         gr.addColorStop(0,rgba(aCT,0)); gr.addColorStop(0.4,rgba(aCT,gs)); gr.addColorStop(1,rgba(aCT,0));
         ctx.beginPath(); ctx.arc(cx,cy,aR*1.55,0,Math.PI*2); ctx.fillStyle=gr; ctx.fill();
 
+        // Radiating waves — contours spawn at the active ring and expand
+        // outward, fading as they go; spawn rate and peak opacity both
+        // driven by live speaking energy, same propagating-glow treatment
+        // as the Companion's own monitoring-state visualization.
+        var wSpd = mapE(e, 0,5, 0.22,6, 0.54,9, 0.82,13, 1.0,16);
+        var wMax = Math.max(5, aR*0.28);
+        var wPk = mapE(e, 0.05,0.14, 0.22,0.20, 0.54,0.30, 0.82,0.44, 1.0,0.54);
+        var spawnInterval = e < 0.05 ? 99999 : mapE(e, 0.05,3.8, 0.22,2.8, 0.54,1.2, 0.82,0.42, 1.0,0.24);
+        if (nowSec - lastWaveSpawn > spawnInterval) { wavePool.push({ birth: nowSec }); lastWaveSpawn = nowSec; }
+        if (wavePool.length > 40) wavePool.splice(0, wavePool.length - 40);
+        wavePool = wavePool.filter(function (wave) {
+          var tr = (nowSec - wave.birth) * wSpd;
+          if (tr > wMax) return false;
+          var prog = tr / wMax, wR = aR + tr, wDpx = aDpx * (1 + tr / Math.max(1, aR) * 0.5);
+          contour(wR, wDpx, aP0, aP1);
+          ctx.strokeStyle = rgba(aCT, wPk * (1 - prog));
+          ctx.lineWidth = 1.3;
+          ctx.stroke();
+          return true;
+        });
+
         if (r2vis>0.02) { contour(r2,r2dpx,mp0,mp1); ctx.strokeStyle=rgba(ct2,0.44*r2vis); ctx.lineWidth=2.0; ctx.stroke(); }
         if (r1vis>0.02) { contour(r1,r1dpx,mp0+Math.PI*0.7,mp1+Math.PI*1.1); ctx.strokeStyle=rgba(ct1,0.48*r1vis); ctx.lineWidth=2.0; ctx.stroke(); }
         contour(r0,r0dpx,mp0,mp1); ctx.strokeStyle=rgba(ct0,0.52); ctx.lineWidth=2.0; ctx.stroke();
-
-        // Orbital highlight
-        var hlV = mapE(e, 0.05,0.14, 0.22,0.70, 0.54,0.70, 0.82,0.85, 1.0,1.0);
-        if (hlV > 0.01) {
-          var aP0 = r1vis>0.5&&r2vis<0.5 ? mp0+Math.PI*0.7 : mp0;
-          var aP1 = r1vis>0.5&&r2vis<0.5 ? mp1+Math.PI*1.1 : mp1;
-          var aDpx = r1vis>0.5&&r2vis>0.5 ? r2dpx : r1vis>0.5 ? r1dpx : r0dpx;
-          var dHL = aDpx*(0.48*Math.sin(2*orbitPhase+aP0)+0.30*Math.sin(3*orbitPhase+aP1)+0.14*Math.sin(4*orbitPhase-aP0*0.6+0.9)+0.08*Math.sin(5*orbitPhase+aP1*0.8+2.1));
-          var rrHL = Math.max(3, aR+dHL);
-          var hx = cx+rrHL*Math.cos(orbitPhase), hy = cy+rrHL*Math.sin(orbitPhase);
-          var hlG = ctx.createRadialGradient(hx,hy,0,hx,hy,10);
-          hlG.addColorStop(0,rgba(aCT,0.22*hlV)); hlG.addColorStop(1,rgba(aCT,0));
-          ctx.beginPath(); ctx.arc(hx,hy,10,0,Math.PI*2); ctx.fillStyle=hlG; ctx.fill();
-          ctx.beginPath(); ctx.arc(hx,hy,2.4,0,Math.PI*2); ctx.fillStyle=rgba(aCT,0.85*hlV); ctx.fill();
-        }
 
         // Center dot
         ctx.shadowBlur=4+4*(0.5+0.5*breath); ctx.shadowColor=rgba(ctDot,0.30);
