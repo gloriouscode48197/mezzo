@@ -9,16 +9,47 @@
 // Constants (all configurable)
 // =============================================================================
 
-// Zone thresholds, expressed as multipliers on the calibrated baseline RMS.
-// Zone 0 (Listening) sits below ZONE_SILENCE_RATIO; each successive zone
-// runs up to its multiplier; zone 3 (Outside of Range) is open-ended above
-// ZONE_ACCEPTABLE_MULT — there's no volume tier beyond it. "Sustained/
-// consistent outside" is a duration flag owned by src/mezzo-session.js, not a
-// louder-volume zone.
-export const ZONE_SILENCE_RATIO = 0.3;    // < this × baseline -> zone 0 (Listening)
-export const ZONE_TARGET_MULT = 1.15;     // <= this × baseline -> zone 1 (Within Range, target)
-export const ZONE_ACCEPTABLE_MULT = 1.8;  // <= this × baseline -> zone 2 (Within Range, acceptable)
-                                           // above -> zone 3 (Outside of Range)
+// Zone thresholds, expressed as offsets from the calibrated baseline in
+// multiples of that same calibration's own measured spread (spreadDb — see
+// calibrate() below), not fixed dB or ratio constants. This scales each
+// profile's zone widths to how variable that person's voice actually was
+// during calibration, instead of one-size-fits-all multipliers: a person who
+// calibrates with a very steady voice gets tighter zones, a person with more
+// natural dynamic range gets wider ones. Zone 0 (Listening) sits below
+// ZONE_SILENCE_SPREAD_MULT; each successive zone runs up to its multiplier;
+// zone 3 (Outside of Range) is open-ended above ZONE_ACCEPTABLE_SPREAD_MULT
+// — there's no volume tier beyond it. "Sustained/consistent outside" is a
+// duration flag owned by src/mezzo-session.js, not a louder-volume zone.
+//
+// These four multipliers are a reasoned starting point, not yet validated
+// against real listening tests — the same "first-pass tunable default"
+// status the old fixed Everyday Conversation baseline had, before it was
+// retired in favor of per-profile calibration. Expect to retune by ear.
+export const ZONE_SILENCE_SPREAD_MULT = -2.0;   // baseline + this × spread -> zone 0/1 boundary
+export const ZONE_TARGET_SPREAD_MULT = 1.0;     // baseline + this × spread -> zone 1/2 boundary
+export const ZONE_ACCEPTABLE_SPREAD_MULT = 2.5; // baseline + this × spread -> zone 2/3 boundary
+
+// Floor applied to a calibration's measured spread before it's used to
+// derive zone boundaries (see calibrate() and _computeZone() below) — never
+// applied to the spreadDb value actually stored/reported. Two distinct
+// situations need this floor: a genuinely very steady real voice (measured
+// spread small but nonzero, which would otherwise produce uncomfortably
+// tight zones), and a perfectly uniform synthetic calibration — e.g. a fixed
+// demo baseline, or a test fixture that fills every sample with one value —
+// whose measured spread is exactly 0 and would otherwise collapse every zone
+// boundary onto the baseline itself, so that any deviation at all reads as
+// Outside Range.
+export const MIN_SPREAD_DB = 2;
+
+// Calibration rejection thresholds — see calibrate() below. Each guards a
+// different failure mode: a silent room, "forgot to speak" (voice present
+// but not for most of the window), and an inconsistent environment
+// (background noise, a door slam) that would otherwise just look like
+// unusually wide — but genuine — vocal variance.
+export const MIN_USABLE_BASELINE_DB = -55;  // trimmed-mean baseline below this reads as no real speech, not calibrated silence
+const MIN_VOICED_SAMPLE_RATIO = 0.4; // fraction of the raw (untrimmed) window that must sit meaningfully above the window's own quietest moment
+export const VOICED_SAMPLE_MARGIN_DB = 6;   // "meaningfully above" = at least this many dB over the raw buffer's own minimum; also gates whether the check runs at all — see calibrate()
+export const MAX_SPREAD_DB = 20;            // measured spread above this reads as an unstable environment, not a steady voice
 
 export const INITIAL_GRACE_MS_MIN = 5000;
 export const INITIAL_GRACE_MS_MAX = 8000;
@@ -49,10 +80,16 @@ export const FRAME_MS = 50;
 // Engine Class
 // =============================================================================
 
+// Local, dependency-free — mirrors audio.js's own EPSILON/rmsToDb, kept
+// separate rather than imported so this file stays pure logic with no
+// browser/UI dependencies, per the file header above.
+const EPSILON = 1e-10;
+
 export class MezzoEngine {
   constructor() {
     // Calibration values
     this.baselineRMS = null;
+    this.spreadDb = null; // dB standard deviation of the trimmed calibration samples — see calibrate()
 
     // Current zone (0-3)
     this.currentZone = 0;
@@ -79,13 +116,15 @@ export class MezzoEngine {
   /**
    * Calibrate the engine with RMS samples.
    *
-   * - Sort samples
-   * - Remove lowest 10% and highest 10%
-   * - Compute mean of remaining values
-   * - Set baselineRMS
+   * - Sort samples, trim the lowest and highest 10%
+   * - Compute mean of the remaining values -> baselineRMS
+   * - Compute the dB standard deviation of those same trimmed values -> spreadDb
+   * - Reject the calibration outright (throws, nothing is set) if it looks
+   *   like silence, mostly-unvoiced input, or an unstable environment —
+   *   see the three rejection checks below and their constants above
    *
    * @param {number[]} rmsSamples - Array of RMS values from calibration period
-   * @throws {Error} If no valid samples exist after trimming
+   * @throws {Error} If no valid samples exist, or the sample set fails validation
    */
   calibrate(rmsSamples) {
     if (!rmsSamples || rmsSamples.length === 0) {
@@ -98,7 +137,10 @@ export class MezzoEngine {
     // Calculate trim counts (10% from each end)
     const trimCount = Math.floor(sorted.length * 0.1);
 
-    // Trim lowest 10% and highest 10%
+    // Trim lowest 10% and highest 10%. Trimming here in the RMS domain
+    // (rather than converting to dB first) produces an identical trimmed
+    // set either way, since dB conversion is monotonic — this just avoids
+    // an extra pass over the untrimmed data.
     const trimmed = sorted.slice(trimCount, sorted.length - trimCount);
 
     if (trimmed.length === 0) {
@@ -114,8 +156,66 @@ export class MezzoEngine {
       throw new Error('Calibration failed: samples appear to be silence-only');
     }
 
+    const baselineDb = MezzoEngine.rmsToDb(mean);
+    if (baselineDb < MIN_USABLE_BASELINE_DB) {
+      throw new Error('Calibration failed: not enough clear speech detected');
+    }
+
+    // Voiced-sample check, against the RAW (untrimmed) buffer — trimming
+    // protects the *mean* from a single outlier, but this check needs to
+    // know how much of the whole window was actually voiced, which trimming
+    // would hide (e.g. one loud moment surrounded mostly by near-silence can
+    // trim clean while still failing this check).
+    //
+    // Measured relative to the raw buffer's OWN minimum, not a fixed
+    // absolute floor — a fixed floor (e.g. MIN_USABLE_BASELINE_DB + margin)
+    // would reject a stable, clearly-voiced speaker whose whole calibration
+    // legitimately sits just above MIN_USABLE_BASELINE_DB: a soft-but-
+    // consistent voice at, say, -52dB has nothing in it that clears a fixed
+    // -49dB bar, even though every sample is equally, legitimately voice —
+    // that directly contradicts the baseline check just above, which already
+    // accepted -52dB as usable.
+    //
+    // Only applied when the raw buffer's own dB range is at least
+    // VOICED_SAMPLE_MARGIN_DB wide. Below that, the check is skipped rather
+    // than run: this isn't just a degenerate-uniform-data special case, it's
+    // mathematically necessary — if the whole buffer spans less than the
+    // margin, no sample could *ever* clear "raw minimum + margin", so an
+    // unconditional check would reject every low-range buffer regardless of
+    // legitimacy, including both a soft-but-stable voice AND (already
+    // covered by the baseline check above) genuine near-silence. A
+    // meaningful low-vs-high split — the actual failure mode this check
+    // exists to catch — always has range comfortably above the margin, so
+    // this doesn't weaken the check for that case; do not set
+    // VOICED_SAMPLE_MARGIN_DB and the range gate independently — the gate
+    // must stay at least the margin, or the check becomes impossible to
+    // pass by construction.
+    const rawDb = rmsSamples.map((s) => MezzoEngine.rmsToDb(s));
+    const rawMinDb = Math.min(...rawDb);
+    const rawMaxDb = Math.max(...rawDb);
+    if (rawMaxDb - rawMinDb >= VOICED_SAMPLE_MARGIN_DB) {
+      const voicedCount = rawDb.filter((db) => db >= rawMinDb + VOICED_SAMPLE_MARGIN_DB).length;
+      if (voicedCount / rmsSamples.length < MIN_VOICED_SAMPLE_RATIO) {
+        throw new Error('Calibration failed: not enough clear speech detected');
+      }
+    }
+
+    // Spread: dB standard deviation of the trimmed samples around their own
+    // dB-domain mean (not around baselineDb, which is the dB of the RMS
+    // mean — a different, and for this purpose wrong, center to measure
+    // dispersion against).
+    const dbSamples = trimmed.map((s) => MezzoEngine.rmsToDb(s));
+    const dbMean = dbSamples.reduce((a, b) => a + b, 0) / dbSamples.length;
+    const variance = dbSamples.reduce((acc, v) => acc + (v - dbMean) ** 2, 0) / dbSamples.length;
+    const spreadDb = Math.sqrt(variance);
+
+    if (spreadDb > MAX_SPREAD_DB) {
+      throw new Error('Calibration failed: environment too inconsistent — try somewhere quieter');
+    }
+
     // Set calibration values
     this.baselineRMS = mean;
+    this.spreadDb = spreadDb;
     this.calibrationComplete = true;
   }
 
@@ -274,14 +374,42 @@ export class MezzoEngine {
   }
 
   /**
-   * Get calibration values (for debugging/testing).
+   * Get calibration values (for debugging/testing, and for callers — e.g.
+   * try-it.js's calibration flow — that persist a profile from them).
    *
-   * @returns {{ baselineRMS: number|null }}
+   * @returns {{ baselineRMS: number|null, spreadDb: number|null }}
    */
   getCalibrationValues() {
     return {
       baselineRMS: this.baselineRMS,
+      spreadDb: this.spreadDb,
     };
+  }
+
+  /**
+   * Load an already-computed calibration directly — for starting a
+   * monitoring session from a saved profile's stored speakingDb/spreadDb,
+   * as opposed to calibrate(), which validates a fresh batch of raw
+   * samples. A saved profile was already validated once, when it was first
+   * calibrated (or last recalibrated); re-deriving it by feeding calibrate()
+   * a synthetic uniform-fill sample array — the previous approach — is both
+   * redundant (nothing left to validate) and lossy (a single stored number
+   * can't reconstruct the real spreadDb a uniform-fill always measures as
+   * exactly 0, silently discarding the profile's real calibrated spread).
+   *
+   * @param {{ baselineRMS: number, spreadDb?: number }} values
+   * @throws {Error} If baselineRMS isn't a usable positive number
+   */
+  loadCalibration({ baselineRMS, spreadDb }) {
+    if (typeof baselineRMS !== 'number' || !Number.isFinite(baselineRMS) || baselineRMS <= 0) {
+      throw new Error('loadCalibration requires a positive, finite baselineRMS');
+    }
+    this.baselineRMS = baselineRMS;
+    // Older profiles saved before spreadDb existed carry none — falls back
+    // to 0, which _computeZone()'s own MIN_SPREAD_DB floor already handles
+    // exactly like a freshly-measured, perfectly uniform calibration would.
+    this.spreadDb = typeof spreadDb === 'number' && Number.isFinite(spreadDb) ? spreadDb : 0;
+    this.calibrationComplete = true;
   }
 
   // ===========================================================================
@@ -289,7 +417,10 @@ export class MezzoEngine {
   // ===========================================================================
 
   /**
-   * Classify an RMS value into a zone (0-3) relative to the calibrated baseline.
+   * Classify an RMS value into a zone (0-3) relative to the calibrated
+   * baseline, using zone boundaries derived from this calibration's own
+   * spreadDb (see the ZONE_*_SPREAD_MULT constants above) rather than fixed
+   * ratios shared across every profile.
    *
    * @param {number} rmsValue
    * @returns {number}
@@ -300,11 +431,12 @@ export class MezzoEngine {
       return 0;
     }
 
-    const ratio = rmsValue / this.baselineRMS;
+    const spread = Math.max(this.spreadDb || 0, MIN_SPREAD_DB);
+    const diffDb = MezzoEngine.rmsToDb(rmsValue) - MezzoEngine.rmsToDb(this.baselineRMS);
 
-    if (ratio < ZONE_SILENCE_RATIO) return 0;
-    if (ratio <= ZONE_TARGET_MULT) return 1;
-    if (ratio <= ZONE_ACCEPTABLE_MULT) return 2;
+    if (diffDb < ZONE_SILENCE_SPREAD_MULT * spread) return 0;
+    if (diffDb <= ZONE_TARGET_SPREAD_MULT * spread) return 1;
+    if (diffDb <= ZONE_ACCEPTABLE_SPREAD_MULT * spread) return 2;
     return 3;
   }
 
@@ -318,5 +450,13 @@ export class MezzoEngine {
    */
   _randomBetween(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
+
+  // ===========================================================================
+  // Static Utilities
+  // ===========================================================================
+
+  static rmsToDb(rms) {
+    return 20 * Math.log10(rms + EPSILON);
   }
 }

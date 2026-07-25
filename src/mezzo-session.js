@@ -60,32 +60,77 @@
  * Expanded/Compact layout, directly — those controls live *inside* the
  * Companion's own document and are wired here. try-it.js only needs: init,
  * startMonitoring, stopMonitoring (for its own "End Session" click),
- * endSession, setActiveProfile, subscribe/getSessionState, and (fallback
- * path only) startFallbackMonitoring/startDemo. There is deliberately no
- * "bring to front"/"focus" export — the Companion is a Document PiP window
- * and already stays above other windows on its own, so a focus/raise
- * action would be misleading. There is also no "Close Companion" control
- * anywhere in the Companion itself — the native Picture-in-Picture window
- * close control is the only way a user closes it directly. Mezzo never
- * closes the Companion on the user's behalf except via endSession() (a
- * full session teardown) or when the Companion's own "+ Create New
- * Profile..." action closes it. Layout mode is likewise entirely internal —
- * nothing outside the Companion needs to know or care whether it's Expanded
- * or Compact.
+ * endSession, setActiveProfile, subscribe/getSessionState,
+ * calibrationController (shared with the Speaking Profile page's own
+ * pre-Companion calibration screens — see its export comment below), and
+ * (fallback path only) startFallbackMonitoring/startDemo. There is
+ * deliberately no "bring to front"/"focus" export — the Companion is a
+ * Document PiP window and already stays above other windows on its own, so
+ * a focus/raise action would be misleading. There is also no "Close
+ * Companion" control anywhere in the Companion itself — the native
+ * Picture-in-Picture window close control is the only way a user closes it
+ * directly. Mezzo never closes the Companion on the user's behalf except
+ * via endSession() (a full session teardown). Layout mode is likewise
+ * entirely internal — nothing outside the Companion needs to know or care
+ * whether it's Expanded or Compact.
  */
 
 import { AudioProcessor } from './audio.js?v=2';
 import { MezzoEngine } from './engine.js?v=5';
 import { MezzoWaveVisualizer } from './wave-visualizer.js';
+import { createCalibrationController, CALIBRATION_OWNERS } from './calibration-controller.js';
+import { createCalibrationLock } from './calibration-lock.js';
 import { trackMonitoringStarted, trackMonitoringSession } from './analytics.js';
 import { markClassification, markPipUpdate } from './_timing-debug.js';
 import { SESSION_STATES, createSessionState } from './session-state.js';
 import {
-  RECOMMENDED_PROFILE,
   getSavedProfiles,
   setSelectedProfile,
   setLastUsedProfile,
+  promoteTemporaryProfile,
 } from './profiles.js';
+
+// Calibration failure codes (src/calibration-controller.js) mapped to calm,
+// specific UI copy — never the raw engine.js error message, which is meant
+// for logs/tests, not users. Both engine.js's baseline-floor and voiced-
+// ratio rejections currently share one INSUFFICIENT_VOICE code (see
+// calibration-controller.js's mapCalibrationError) and so share one message
+// here too — distinguishing them further would require engine.js's own
+// messages to diverge first.
+//
+// CROSS_TAB_LOCKED is not one of calibration-controller.js's own codes — it
+// never reaches the controller at all. src/calibration-lock.js's acquire()
+// is checked before a calibration attempt starts (see beginCalibrationFlow()
+// on both surfaces); a rejection there is reported through this exact same
+// Calibration Failed screen and copy map for a calm, consistent experience,
+// without ever touching the controller, the mic, or generating a real
+// calibration failure of its own.
+export const CALIBRATION_FAILURE_COPY = {
+  SILENCE: "Didn't catch enough clear speech — let's try again.",
+  INSUFFICIENT_VOICE: "Didn't catch enough clear speech — let's try again.",
+  UNSTABLE_ENVIRONMENT: 'Try somewhere a little quieter.',
+  MIC_PERMISSION_DENIED: 'Mezzo needs microphone access to calibrate. Check your browser\'s microphone permission for this site, then try again.',
+  NO_SAMPLES: "Didn't catch enough clear speech — let's try again.",
+  CROSS_TAB_LOCKED: 'Calibration is already open in another Mezzo tab.',
+  UNKNOWN: "Something went wrong — let's try again.",
+};
+
+// Exported (along with isTemporaryProfile/profileMetaText below) purely so
+// these pure, DOM-free helpers can be unit tested directly — see
+// src/mezzo-session.test.js — without needing a Document PiP-capable
+// browser environment, which this module otherwise requires end to end.
+export function calibrationFailureMessage(failure) {
+  return CALIBRATION_FAILURE_COPY[failure?.code] || CALIBRATION_FAILURE_COPY.UNKNOWN;
+}
+
+// The one and only signal for "this profile is a runtime-only calibration
+// that hasn't been saved" — never inferred from name, a missing id,
+// calibratedTs recency, or which screen produced it. See CLAUDE.md's
+// Profiles section and src/profiles.js's file header for the same rule
+// applied to storage.
+export function isTemporaryProfile(profile) {
+  return profile?.temporary === true;
+}
 
 // One product-oriented configuration source for every fixed Companion size —
 // named for what they are, not for the underlying Picture-in-Picture API.
@@ -106,13 +151,15 @@ const MEZZO_COMPANION_COMPACT_SIZE = { width: 220, height: 220 };
 
 const LAYOUT_MODES = Object.freeze({ EXPANDED: 'expanded', COMPACT: 'compact' });
 
-// The one recognized value of companionCloseIntent (see the declaration
-// below) — named and exported (not a raw string) so the host doesn't have
-// to match a magic string to tell this COMPANION_CLOSED apart from others.
-const COMPANION_CLOSE_INTENTS = Object.freeze({ CREATE_PROFILE: 'createProfile' });
-
 const OUTSIDE_ZONE = 3; // "Outside Range" — there's no higher volume tier
 const SUSTAINED_DRIFT_MS = 1000; // continuous time outside range before drift escalates
+
+// Calibrating screen's live meter — same dB-to-0..1 mapping try-it.js's own
+// calibration ring already uses (ENERGY_DB_MIN/MAX there), duplicated here
+// rather than imported since try-it.js is a page script, not a module this
+// file can import from.
+const CALIBRATION_METER_DB_MIN = -50;
+const CALIBRATION_METER_DB_MAX = -10;
 
 function zoneLabel(zone) {
   if (zone === 0) return 'Quiet';
@@ -121,25 +168,114 @@ function zoneLabel(zone) {
   return 'Outside Range'; // zone === OUTSIDE_ZONE
 }
 
-// The Monitoring screen's read-only profile line, e.g. "Profile: Everyday
-// Conversation (Recommended)" or "Profile: Coffee Shop (Custom)".
-function profileMetaText(profile) {
-  const name = profile?.name || RECOMMENDED_PROFILE.name;
-  return profile?.savedProfileId ? `Profile: ${name} (Custom)` : `Profile: ${name} (Recommended)`;
+// The Monitoring screen's read-only profile line, e.g. "Profile: Coffee Shop
+// (Custom)" or "Profile: Current speaking range (Unsaved)" for a temporary
+// calibration — checked first and only via isTemporaryProfile(), never
+// inferred from name/id shape. A profile counts as "Custom" if and only if
+// it carries `id` — the one canonical shape every production caller now
+// produces for a saved-profile monitoring session (the persisted saved-
+// profile object itself: {id, name, speakingDb, spreadDb, calibratedTs} —
+// see src/profiles.js's addSavedProfile()/updateSavedProfile()). The older
+// `savedProfileId`-wrapper shape (no `id`) that try-it.js used to construct
+// for this purpose is gone — Step 7 normalized every production call site
+// onto the direct saved-profile object instead of wrapping it, so there is
+// nothing left to check `savedProfileId` for here. `savedProfileId: null`
+// still appears, but only as part of the *temporary* shape (alongside
+// `temporary: true`), which isTemporaryProfile() already catches above.
+export function profileMetaText(profile) {
+  // A neutral fallback — there is no built-in default profile to fall back
+  // to a label for. Every real profile shape reaching this function
+  // (temporary, or saved via `id`) already carries a real `name`; this
+  // branch is only reached with `profile` itself missing entirely (e.g.
+  // before init() resolves an active profile), never with a real, named
+  // profile lacking one.
+  const name = profile?.name || 'Unknown Profile';
+  if (isTemporaryProfile(profile)) return `Profile: ${name} (Unsaved)`;
+  return profile?.id ? `Profile: ${name} (Custom)` : `Profile: ${name}`;
 }
 
 export function createMezzoSession({
   baseUrl,
-  onSessionStateChange,          // (state, closeIntent) => void — drives the host's 3-state status view. closeIntent is COMPANION_CLOSE_INTENTS.CREATE_PROFILE on the one COMPANION_CLOSED transition caused by "+ Create New Profile...", null otherwise — see companionCloseIntent below.
+  onSessionStateChange,          // (state) => void — drives the host's 3-state status view.
   onFallbackHeadingChange,       // (text) => void — fallback/demo path's own zone-label heading
   onFallbackMonitoringStop,      // () => void — fallback path: host switches back to its own Ready view
-  onCreateNewProfileRequested,   // () => void — "+ Create New Profile..." was chosen; host should transition itself (in place, no navigation) to the first screen of the Create Speaking Profile flow
 } = {}) {
   const pipSupported = 'documentPictureInPicture' in window;
   const sessionState = createSessionState();
 
   const audio = new AudioProcessor();
   const engine = new MezzoEngine();
+  // One instance for this tab's whole session — shared by the Companion's
+  // own Calibrating/Calibrated/Calibration-Failed screens (this module,
+  // reachable from the Companion's Ready screen) and, via the `calibrationController`
+  // export below, the Speaking Profile page's own pre-Companion calibration
+  // entry points (try-it.js). Reuses this module's own `audio` (AudioProcessor) rather than a second,
+  // redundant mic pipeline — calibration and monitoring are always
+  // sequential, never concurrent, so one shared instance is safe: by the
+  // time any commit method resolves, the controller has already fully
+  // released its own hold on the mic (see calibration-controller.js's
+  // micHeld-gated teardown), well before beginMonitoringSession() below
+  // ever re-acquires it. See CLAUDE.md's "Calibration Controller Instance
+  // Rule" — this single instance is what satisfies it for this tab.
+  const calibrationController = createCalibrationController({ audio });
+
+  // Cross-tab lease (src/calibration-lock.js) — a DIFFERENT browser tab
+  // running its own Mezzo session can't hold the microphone or race this
+  // tab's profile-storage writes during a calibration attempt. One instance
+  // per tab, exposed alongside calibrationController below for try-it.js to
+  // share — see calibration-lock.js's own header for why this is a
+  // localStorage lease, not a second controller, and why it's kept
+  // structurally separate from calibration measurement logic entirely.
+  const calibrationLock = createCalibrationLock();
+
+  // Release is centralized here, not scattered across every cancel/commit/
+  // failure call site on both surfaces: 'idle' covers every commit, cancel,
+  // and close (reset() always lands there, including the pagehide handler's
+  // own calibrationController.cancel() call below) — 'failed' releases too,
+  // since the mic is already free by the time FAILED is reached (see
+  // calibration-controller.js's runCapture()); nothing is left to protect
+  // through the Failed screen's "try again or back" decision. Deliberately
+  // NOT gated by getOwner() — release must happen regardless of which
+  // surface owned the run.
+  calibrationController.subscribe((state) => {
+    if (state.status === 'idle' || state.status === 'failed') {
+      calibrationLock.release();
+    }
+  });
+
+  // Generic reactions to controller state — 'failed' and 'calibrated'
+  // always mean the same screen transition regardless of how the run got
+  // there, so they're handled centrally here. 'calibrating' and 'idle'
+  // are deliberately NOT handled generically: 'calibrating' is already
+  // shown synchronously by whatever called startSessionCalibration()/
+  // startRecalibration()/retry(), and 'idle' can mean several different
+  // next screens depending on context (Ready, or navigating elsewhere
+  // entirely) that a single generic handler couldn't infer safely.
+  //
+  // Gated on calibrationController.getOwner() === COMPANION: try-it.js
+  // registers its own subscriber on this exact same shared instance (see
+  // CLAUDE.md's "Calibration Controller Instance Rule") for calibration runs
+  // it starts itself, pre-Companion. Without this guard, a main-page-driven
+  // calibration would also reach this listener and try to render Companion
+  // screens — today that happens to be a safe no-op whenever pipWindow is
+  // null (every DOM ref below is null, resizeCompanionTo()/showOnlyScreen()
+  // both short-circuit), but that safety is an accident of pipWindow's
+  // current lifecycle, not a guarantee — inferring "who owns this run" from
+  // window/session state elsewhere would silently couple two independently-
+  // evolving systems' invariants together. getOwner() makes the actual rule
+  // explicit instead: only render here when this surface is the one that
+  // started the run. Every real start call site below passes
+  // CALIBRATION_OWNERS.COMPANION explicitly (beginCalibrationFlow); retry()
+  // doesn't need to re-pass it — ownership survives a failed→retry cycle on
+  // its own (see calibration-controller.js).
+  calibrationController.subscribe((state) => {
+    if (calibrationController.getOwner() !== CALIBRATION_OWNERS.COMPANION) return;
+    if (state.status === 'failed') {
+      showFailedScreen(state.failure);
+    } else if (state.status === 'calibrated') {
+      showCalibratedScreen(state);
+    }
+  });
 
   let mainCircle = null;
   let pipCircle = null;
@@ -157,30 +293,61 @@ export function createMezzoSession({
   // Ready is unconditionally Expanded regardless of this value.
   let layoutMode = LAYOUT_MODES.EXPANDED;
 
-  // Explicit bookkeeping for *why* the Companion is closing — set only by
-  // handleCreateNewProfile(), read once by the sessionState listener below,
-  // then cleared immediately. This exists so the host (try-it.js) can tell
-  // "Companion closed because of Create New Profile" apart from "Companion
-  // closed natively / via End Session" without ever guessing from timing:
-  // the real Document PiP `pagehide` for this same close arrives later,
-  // asynchronously (see handlePipClose), and by then this is already back
-  // to null — that later, redundant sessionState.set() call is a no-op
-  // (createSessionState() guards against re-firing on an unchanged value),
-  // so it never has a stale intent to misread in the first place.
-  let companionCloseIntent = null;
-
-  // Ready-screen DOM refs, (re)assigned each time startMonitoring() builds the document
+  // Ready-screen DOM refs, (re)assigned each time startMonitoring() builds the
+  // document. Option B: rows are selection-only (a native radiogroup, inside
+  // its own bounded-scroll region — see the CSS below); Recalibrate is a
+  // single action below the list, its label kept in sync with the current
+  // selection.
   let readyScreenEl = null;
-  let readyProfileNameEl = null;
-  let readyProfileSelectorEl = null; // the trigger button — dropdown-close refocuses it
-  let readyProfileDropdown = null; // the dropdown's row-list container, not the backdrop/modal itself
-  let readyProfileBackdropEl = null; // the centered-modal overlay that shows/hides the dropdown
+  let readyListEl = null; // the scrollable radiogroup container itself
+  let readyStartBtn = null;
+  let readyRecalibrateBtn = null;
 
   // Monitoring-screen DOM refs
   let monitoringScreenEl = null;
   let pipStatusHeadingEl = null;
   let monitoringProfileNameEl = null;
   let pipCircleWrapperEl = null;
+
+  // Calibrating-screen DOM refs
+  let calibratingScreenEl = null;
+  let calibratingSubheadingEl = null; // mode-aware "Recalibrating {name}" line — session mode leaves it empty
+  let calibratingMeterFillEl = null;
+
+  // Calibration Failed-screen DOM refs
+  let failedScreenEl = null;
+  let failedMessageEl = null;
+
+  // Calibrated-checkpoint DOM refs — one screen, two internal steps
+  // (checkpoint / naming), same "single modal, steps toggled in place"
+  // pattern try-it.js's own save dialog already established, not two
+  // separate screens.
+  let calibratedScreenEl = null;
+  let calibratedCheckpointStepEl = null;
+  let calibratedCheckpointHeadingEl = null;
+  let calibratedNameStepEl = null;
+  let calibratedPrimaryBtn = null;
+  let calibratedSecondaryBtn = null;
+  let calibratedErrorEl = null;
+  let calibratedNameInput = null;
+  let calibratedNameForm = null;
+
+  // Save Prompt — a modal overlay on top of Ready (Stop-time, temporary
+  // profile only), not a full screen — mirrors the Calibrated checkpoint's
+  // own two-step (prompt / naming) pattern.
+  let savePromptBackdropEl = null;
+  let savePromptStepEl = null;
+  let savePromptNameStepEl = null;
+  let savePromptErrorEl = null;
+  let savePromptNameInput = null;
+  let savePromptNameForm = null;
+
+  // The profile a save-prompt/calibrated-naming step would persist under —
+  // held only as long as that one step is on screen, not part of any
+  // longer-lived state.
+  let pendingTemporaryProfile = null;
+
+  let unsubscribeCalibrationLevel = null; // Calibrating screen's live-meter subscription — torn down whenever that screen isn't active
 
   let currentZone = 0;
   let isSustained = false;
@@ -189,11 +356,6 @@ export function createMezzoSession({
   let monitoringStartTime = null;
   let sessionUsedPip = false;
   let sessionAlertTriggered = false;
-
-  function profilesMatch(a, b) {
-    if (!a || !b) return false;
-    return (a.savedProfileId ?? null) === (b.savedProfileId ?? null) && a.name === b.name;
-  }
 
   function clearSustained() {
     if (sustainedTimer) { clearTimeout(sustainedTimer); sustainedTimer = null; }
@@ -251,12 +413,19 @@ export function createMezzoSession({
   /** @returns {Promise<boolean>} false if mic acquisition failed */
   async function beginMonitoringSession(profile) {
     activeProfile = profile;
+    // setLastUsedProfile() silently refuses a temporary profile on its own
+    // (src/profiles.js) — no branch needed here to keep that guarantee.
     setSelectedProfile(profile);
     setLastUsedProfile(profile);
 
     baselineRMS = Math.pow(10, profile.speakingDb / 20);
-    const samples = new Array(100).fill(baselineRMS);
-    engine.calibrate(samples);
+    // loadCalibration(), not calibrate() against a synthetic sample array —
+    // this profile's calibration was already validated once when it was
+    // first calibrated (or last recalibrated); re-deriving it from a fake
+    // uniform-fill array would silently discard its real spreadDb (a
+    // uniform array always measures spread as ~0) — see engine.js's own
+    // loadCalibration() doc comment.
+    engine.loadCalibration({ baselineRMS, spreadDb: profile.spreadDb });
     engine.startMonitoring();
 
     currentZone = 0;
@@ -309,15 +478,33 @@ export function createMezzoSession({
   }
 
   function stopMonitoring() {
+    // Captured before teardown/enterPipReadyMode() can touch activeProfile —
+    // isTemporaryProfile() depends only on the explicit `temporary: true`
+    // marker (never inferred from name, a missing id, calibratedTs recency,
+    // or how the session started), so this check is unambiguous regardless
+    // of which path led here.
+    const wasTemporary = isTemporaryProfile(activeProfile);
+    const stoppedProfile = activeProfile;
+
     teardownMonitoringEngine();
 
     if (pipWindow) {
       // The Companion stays open — Document PiP does not survive its opener
       // navigating away, so doing so would silently kill the window.
-      // Return the Companion to its Ready screen (always Expanded), ready
-      // to start again.
-      enterPipReadyMode();
-      sessionState.set(SESSION_STATES.COMPANION_READY);
+      if (wasTemporary) {
+        // showReadyScreen(), not enterPipReadyMode(): the raw renderer,
+        // deliberately skipping the "zero saved profiles -> auto-calibrate"
+        // redirect — that redirect would otherwise fire here (this may be
+        // the user's very first session, with nothing saved yet) and show
+        // Calibrating underneath the Save Prompt about to open, instead of
+        // Ready.
+        showReadyScreen();
+        sessionState.set(SESSION_STATES.COMPANION_READY);
+        openSavePrompt(stoppedProfile);
+      } else {
+        enterPipReadyMode();
+        sessionState.set(SESSION_STATES.COMPANION_READY);
+      }
       return;
     }
 
@@ -395,9 +582,43 @@ export function createMezzoSession({
 
     // The real Document Picture-in-Picture window chrome is the Companion's
     // only title bar now (see the Monitoring screen build below, which no
-    // longer constructs an in-page one) — this is what makes it read
-    // "MEZZO COMPANION" instead of falling back to this document's URL.
-    pipDoc.title = 'MEZZO COMPANION';
+    // longer constructs an in-page one). "Mezzo Companion" matches CLAUDE.md's
+    // canonical terminology exactly (was "MEZZO COMPANION" — normalized,
+    // not a behavior change).
+    //
+    // PiP TITLE INVESTIGATION (Step 7) — what this line actually controls,
+    // and what it doesn't:
+    //  - Confirmed via source + live testing: this sets pipDocument.title on
+    //    a genuinely separate Document object (the PiP window shares the
+    //    opener's JS realm but not its `document`) — reading it back returns
+    //    exactly what was assigned, and changing it never touches the main
+    //    tab's own document.title. Isolation is real, not assumed.
+    //  - Confirmed via the Document Picture-in-Picture spec (wicg.github.io/
+    //    document-picture-in-picture): "It is required that the user agent
+    //    makes it clear to the user which origin is controlling the
+    //    DocumentPictureInPicture window at all times... the user agent may
+    //    display the origin of the website in a titlebar on the window."
+    //    This is a security requirement, not an implementation detail — the
+    //    floating window has no address bar, so the titlebar is the
+    //    substitute origin indicator.
+    //  - NOT verified in this environment: what the real, native OS title
+    //    bar chrome actually renders in Chrome today — whether it's this
+    //    document.title, the origin, or both. Automated testing (Playwright)
+    //    can only inspect the DOM property; it cannot capture native window
+    //    chrome pixels, and this sandbox has no way to eyeball a real
+    //    desktop Chrome window. Community documentation corroborates the
+    //    spec's origin-titlebar reading (see the Step 7 report), which
+    //    suggests this assignment may have little-to-no effect on the
+    //    visible titlebar text specifically, even though it demonstrably
+    //    works as a DOM property.
+    // Kept, not removed: document.title still has real, independent value
+    // for accessibility trees, OS task-switcher/taskbar entries, and
+    // browser history, regardless of what the titlebar glyphs show — see
+    // docs/product-experience.md's engineering notes for the full writeup.
+    // Only the casing changed here; no behavior was added or removed since
+    // the evidence doesn't clearly support that being effective, per this
+    // investigation's own findings.
+    pipDoc.title = 'Mezzo Companion';
 
     const fontLink = pipDoc.createElement('link');
     fontLink.rel = 'stylesheet';
@@ -463,83 +684,133 @@ export function createMezzoSession({
         min-width: 240px;
       }
 
-      /* ── Ready screen — no visualization, always Expanded (there is no
-         Compact Ready variant). No in-page title bar — the real Document
-         Picture-in-Picture window chrome is the only title bar (see
-         pipDoc.title in startMonitoring()). Composition: a "poster" area
-         that centers the heading in the remaining space (flex:1 +
-         justify-content:center, not a spacer-pair), then a fixed-padding
-         action card pinned at the bottom holding the profile selector and
-         Start Monitoring. There is no footer here — the native
-         Picture-in-Picture window close control is the only way to
-         close the Companion, so there is nothing for a footer to hold. ── */
+      /* ── Ready screen — Option B (see design/prototypes/companion-ready-
+         recalibrate-comparison.html for the measured comparison this
+         layout was chosen from). No visualization, always Expanded. No
+         in-page title bar — the real Document Picture-in-Picture window
+         chrome is the only title bar. Rows are selection-only, inside their
+         own bounded, internally-scrollable region — the Companion card
+         itself never scrolls (.pip-screen keeps overflow:hidden) — with
+         Calibrate for this session, Start Monitoring, and the single
+         dynamic Recalibrate action always visible below it, outside the
+         scroll region. There is no footer — the native Picture-in-Picture
+         window close control is the only way to close the Companion. ── */
       .pip-screen-ready {
         justify-content: flex-start;
-      }
-
-      .pip-ready-poster {
-        flex: 1;
-        width: 100%;
-        min-height: 0;
+        padding: 18px 20px 18px;
         box-sizing: border-box;
-        padding: 32px 20px 20px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        gap: 10px;
       }
 
       .pip-ready-heading {
         font-family: var(--font-display);
         font-weight: var(--weight-light);
-        font-size: 22px;
+        font-size: 16px;
         line-height: 1.4;
         letter-spacing: 0.01em;
-        color: rgba(222, 210, 194, 0.82);
+        color: rgba(222, 210, 194, 0.85);
         text-align: center;
-        max-width: 240px;
-        margin: 0;
-      }
-
-      /* Fixed-padding action card, not a flex-centered spacer child —
-         matches the reference's own dedicated card region. */
-      .pip-ready-card {
-        width: calc(100% - 48px);
-        margin: 0 24px;
-        padding: 20px 16px 40px;
-        box-sizing: border-box;
+        margin: 2px 0 0;
         flex-shrink: 0;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
       }
 
-      /* Wrapper only needs to size and position the trigger button now —
-         the dropdown itself is a centered overlay (see .pip-profile-backdrop
-         below), not anchored beneath this wrapper. */
-      .pip-profile-wrap { width: 100%; margin-bottom: 16px; }
+      /* Bounded, internally-scrollable — the one region in this screen
+         allowed to scroll (no nested scrolling: nothing scrollable is
+         nested inside it, and it is not itself nested inside another
+         scrollable ancestor). max-height, not flex:1, so a single short
+         list sizes to its own content instead of stretching to fill unused
+         space; sized so 1-3 typical rows show with no scrollbar and 5 rows
+         scroll within the fixed 354px Companion height without pushing the
+         actions below off screen. */
+      .pip-ready-list {
+        width: 100%;
+        max-height: 122px;
+        overflow-y: auto;
+        overflow-x: hidden;
+        flex-shrink: 0;
+        box-sizing: border-box;
+      }
 
-      .pip-profile-selector {
+      .pip-ready-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 6px;
+        border-radius: 8px;
+        min-height: 40px;
+        box-sizing: border-box;
+      }
+      .pip-ready-row:hover { background: rgba(255, 255, 255, 0.04); }
+
+      /* Native radio input — real keyboard/screen-reader semantics for
+         free, rather than a button visually styled to look like one (the
+         previous dropdown's own rows carried no role/aria-checked at all). */
+      .pip-ready-row-radio {
+        width: 16px;
+        height: 16px;
+        accent-color: var(--hanko-fill);
+        flex-shrink: 0;
+        cursor: pointer;
+      }
+
+      /* Truncates visually with an ellipsis; the full name stays in the DOM
+         (assistive tech always gets it in full — CSS truncation doesn't
+         change computed accessible names) and is repeated in a native
+         title="" tooltip for sighted pointer users, matching the maxlength
+         convention already used for naming (see .pip-name-input below). */
+      .pip-ready-row-name {
+        flex: 1;
+        min-width: 0;
+        font-family: var(--font-body);
+        font-size: 13px;
+        color: rgba(222, 210, 194, 0.92);
+        cursor: pointer;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .pip-calibrate-session-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        box-sizing: border-box;
+        padding: 8px 6px;
+        border-radius: 8px;
+        background: none;
+        border: none;
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+        font-family: var(--font-body);
+        font-size: 12.5px;
+        color: rgba(172, 158, 136, 0.85);
+        cursor: pointer;
+        text-align: left;
+        flex-shrink: 0;
+        min-height: 40px;
+      }
+      .pip-calibrate-session-row:hover { color: rgba(222, 210, 194, 0.95); }
+      .pip-calibrate-session-plus {
+        width: 18px;
+        height: 18px;
+        border: 1.5px dashed rgba(172, 158, 136, 0.55);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        flex-shrink: 0;
+        color: rgba(172, 158, 136, 0.75);
+      }
+
+      .pip-ready-actions {
         width: 100%;
         box-sizing: border-box;
         display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 11px 14px;
-        border-radius: 8px;
-        background: rgba(255, 255, 255, 0.06);
-        border: 1px solid rgba(255, 255, 255, 0.10);
-        font-family: var(--font-body);
-        font-size: 13px;
-        letter-spacing: 0.02em;
-        color: rgba(222, 210, 194, 0.92);
-        cursor: pointer;
-        transition: opacity 0.15s ease;
+        flex-direction: column;
+        gap: 8px;
+        flex-shrink: 0;
       }
-      .pip-profile-selector:hover { opacity: 0.88; }
-      /* Squares off the trigger's bottom corners while the menu above it
-         is open — a "pressed" visual echo of the reference, even though
-         the menu itself renders as a centered overlay, not anchored here. */
-      .pip-profile-selector.is-open { border-radius: 8px 8px 0 0; }
 
       .pip-ready-start-btn {
         width: 100%;
@@ -554,20 +825,197 @@ export function createMezzoSession({
         letter-spacing: 0.04em;
         cursor: pointer;
         transition: opacity 0.15s ease;
+        box-sizing: border-box;
+        min-height: 40px;
       }
       .pip-ready-start-btn:hover { opacity: 0.88; }
 
-      /* Centered modal overlay, not an anchored dropdown — a dimmed
-         backdrop covering the Ready card's own bounds (a child of
-         .pip-screen-ready, which is position:relative — see the shared
-         .pip-screen card rule above) with the menu centered and
-         height-constrained with internal scrolling. This keeps the menu
-         inside the Companion's own small bounds at every supported window
-         size, where an anchored dropdown could previously clip outside
-         content that simply isn't rendered at all. Clicking the dimmed
-         backdrop (not the menu itself) or pressing Escape closes it, same
-         as any other modal dismissal. */
-      .pip-profile-backdrop {
+      /* The single dynamic Recalibrate action — its full text (including
+         the selected profile's name) is both the visible label and the
+         full accessible name; never truncated, never icon-only. */
+      .pip-ready-recalibrate-btn {
+        width: 100%;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        border-radius: 50px;
+        padding: 10px 14px;
+        font-family: var(--font-body);
+        font-size: 12.5px;
+        color: rgba(222, 210, 194, 0.85);
+        cursor: pointer;
+        transition: background 0.15s ease;
+        box-sizing: border-box;
+        min-height: 40px;
+        overflow-wrap: anywhere;
+        line-height: 1.3;
+      }
+      .pip-ready-recalibrate-btn:hover { background: rgba(255, 255, 255, 0.12); }
+
+      /* ── Calibrating — a live meter, automatic completion after the
+         configured capture duration, and a single visible Cancel action;
+         no manual "I'm done" control. Fixed at the Ready size (320×354) —
+         it does not get its own dedicated dimension. ── */
+      .pip-screen-calibrating {
+        justify-content: center;
+        padding: 32px 24px;
+        box-sizing: border-box;
+        gap: 16px;
+      }
+      .pip-calibrating-subheading {
+        font-family: var(--font-body);
+        font-size: 10px;
+        letter-spacing: 0.10em;
+        text-transform: uppercase;
+        color: rgba(172, 158, 136, 0.70);
+        text-align: center;
+        min-height: 12px;
+      }
+      .pip-calibrating-heading {
+        font-family: var(--font-display);
+        font-weight: var(--weight-light);
+        font-size: 15px;
+        line-height: 1.5;
+        color: rgba(222, 210, 194, 0.85);
+        text-align: center;
+        margin: 0;
+        max-width: 250px;
+      }
+      .pip-calibrating-meter-track {
+        width: 100%;
+        max-width: 220px;
+        height: 6px;
+        border-radius: 3px;
+        background: rgba(255, 255, 255, 0.08);
+        overflow: hidden;
+      }
+      .pip-calibrating-meter-fill {
+        height: 100%;
+        width: 0%;
+        background: var(--hanko-fill);
+        border-radius: 3px;
+        transition: width 0.08s linear;
+      }
+      .pip-text-btn {
+        background: none;
+        border: none;
+        font-family: var(--font-body);
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--text-subdued);
+        cursor: pointer;
+        padding: 8px 14px;
+        margin-top: 4px;
+        border-radius: 6px;
+      }
+      .pip-text-btn:hover { background: rgba(255, 255, 255, 0.06); color: var(--text-default); }
+
+      /* ── Calibration Failed — calm, specific copy mapped from a stable
+         controller failure code (never the raw engine.js message). Try
+         Again calls retry() (same mode/target); Back cancels and returns
+         to Ready. ── */
+      .pip-screen-failed {
+        justify-content: center;
+        padding: 32px 28px;
+        box-sizing: border-box;
+        gap: 20px;
+        text-align: center;
+      }
+      .pip-failed-message {
+        font-family: var(--font-display);
+        font-weight: var(--weight-light);
+        font-size: 15px;
+        line-height: 1.5;
+        color: rgba(222, 210, 194, 0.85);
+        margin: 0;
+        max-width: 250px;
+      }
+
+      /* ── Calibrated checkpoint — one screen, two steps toggled in place
+         (checkpoint / naming), the same pattern try-it.js's own save
+         dialog already established, not a second modal or a separate
+         screen. Mode-aware actions built in JS — session mode offers Start
+         Monitoring / Save as New Profile; recalibrate mode offers
+         Update {name} & Start Monitoring / Update {name}. Reused as-is for
+         the Save Prompt's own two steps (see .pip-modal-card below). ── */
+      .pip-screen-calibrated {
+        justify-content: center;
+        padding: 26px 24px;
+        box-sizing: border-box;
+        gap: 14px;
+      }
+      .pip-calibrated-step { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+      .pip-calibrated-heading {
+        font-family: var(--font-display);
+        font-weight: var(--weight-light);
+        font-size: 15px;
+        line-height: 1.5;
+        color: rgba(222, 210, 194, 0.85);
+        text-align: center;
+        margin: 0;
+        max-width: 250px;
+      }
+      .pip-calibrated-error {
+        font-family: var(--font-body);
+        font-size: 11.5px;
+        color: rgba(210, 155, 75, 0.90);
+        text-align: center;
+        margin: 0;
+        max-width: 240px;
+      }
+      .pip-calibrated-actions { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 230px; }
+      .pip-calibrated-primary-btn {
+        width: 100%;
+        background: var(--hanko-fill);
+        border: none;
+        border-radius: 50px;
+        padding: 12px;
+        font-family: var(--font-body);
+        font-size: 12.5px;
+        font-weight: var(--weight-medium);
+        color: rgba(255, 255, 255, 0.92);
+        cursor: pointer;
+        overflow-wrap: anywhere;
+        line-height: 1.3;
+      }
+      .pip-calibrated-primary-btn:hover { opacity: 0.88; }
+      .pip-calibrated-secondary-btn {
+        width: 100%;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        border-radius: 50px;
+        padding: 10px 14px;
+        font-family: var(--font-body);
+        font-size: 12.5px;
+        color: rgba(222, 210, 194, 0.85);
+        cursor: pointer;
+        overflow-wrap: anywhere;
+        line-height: 1.3;
+      }
+      .pip-calibrated-secondary-btn:hover { background: rgba(255, 255, 255, 0.12); }
+
+      .pip-name-input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 11px 14px;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        font-family: var(--font-body);
+        font-size: 13px;
+        color: rgba(222, 210, 194, 0.95);
+      }
+      .pip-name-input:focus-visible { outline: 2px solid var(--border-outline); outline-offset: 1px; }
+
+      /* ── Generic centered modal overlay — reused by the Save Prompt
+         (Stop-time, temporary profile only). Same "centered card, dimmed
+         backdrop" pattern the old profile dropdown established; the
+         backdrop is a child of whichever screen is currently visible
+         underneath it (.pip-screen is already position:relative), covering
+         that screen's own bounds. Clicking the dimmed backdrop itself (not
+         the card) closes it exactly like Escape does, same as any other
+         modal dismissal. */
+      .pip-modal-backdrop {
         position: absolute;
         inset: 0;
         background: rgba(0, 0, 0, 0.55);
@@ -579,88 +1027,15 @@ export function createMezzoSession({
         padding: 20px;
         box-sizing: border-box;
       }
-      .pip-profile-dropdown {
+      .pip-modal-card {
         width: 100%;
         background: #3c3b3f;
         border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 12px;
         box-shadow: 0 16px 48px rgba(0, 0, 0, 0.72);
-        overflow: hidden;
+        padding: 22px 20px;
+        box-sizing: border-box;
       }
-      .pip-profile-dropdown-label {
-        font-family: var(--font-body);
-        font-weight: var(--weight-medium);
-        font-size: 9px;
-        letter-spacing: 0.18em;
-        text-transform: uppercase;
-        color: rgba(172, 158, 136, 0.50);
-        padding: 12px 16px 8px;
-      }
-      .pip-profile-dropdown-list {
-        display: flex;
-        flex-direction: column;
-        max-height: 200px;
-        overflow-y: auto;
-      }
-      .pip-profile-option {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 8px;
-        text-align: left;
-        background: none;
-        border: none;
-        border-left: 3px solid transparent;
-        padding: 13px 14px 13px 10px;
-        font-family: var(--font-body);
-        font-weight: var(--weight-regular);
-        font-size: 13px;
-        letter-spacing: 0.02em;
-        color: rgba(222, 210, 194, 0.75);
-        cursor: pointer;
-        white-space: nowrap;
-        transition: background 0.10s ease;
-      }
-      /* Hover is a plain background darkening — no accent bar — so it
-         never reads as "selected." */
-      .pip-profile-option:hover { background: rgba(0, 0, 0, 0.18); color: rgba(222, 210, 194, 0.95); }
-      /* Keyboard focus gets its own distinct treatment (an outline, not a
-         background tint or the selected state's left bar) so hovered,
-         focused, and selected never look the same as one another. */
-      .pip-profile-option:focus-visible {
-        outline: 1px solid var(--border-outline);
-        outline-offset: -1px;
-        background: rgba(0, 0, 0, 0.18);
-      }
-      .pip-profile-option-tag {
-        font-size: 11px;
-        font-weight: var(--weight-light);
-        color: rgba(172, 158, 136, 0.60);
-      }
-      /* Already selected — restrained, not louder: a quiet accent bar and
-         dimmer text, rather than a bright checkmark competing for attention.
-         Deliberately its own look (left bar), distinct from hover's plain
-         background darkening and focus's outline. */
-      .pip-profile-option.is-active {
-        color: rgba(222, 210, 194, 0.45);
-        background: rgba(0, 0, 0, 0.12);
-        border-left-color: var(--hanko-fill);
-        cursor: default;
-      }
-      .pip-profile-option.is-active:hover { background: rgba(0, 0, 0, 0.12); color: rgba(222, 210, 194, 0.45); }
-      .pip-profile-divider { border: none; border-top: 1px solid rgba(255, 255, 255, 0.08); margin: 4px 14px; }
-      /* Neutral by default, orange only on hover/focus — kept as its own
-         rule (not the shared :hover/:focus-visible above) since this row's
-         hover state is a text-color change with no background darkening,
-         unlike the other rows. */
-      .pip-profile-option-create {
-        border-left-width: 2px;
-        padding: 13px 14px 13px 12px;
-        color: rgba(222, 210, 194, 0.75);
-        justify-content: flex-start;
-      }
-      .pip-profile-option-create:hover,
-      .pip-profile-option-create:focus-visible { background: none; color: rgba(196, 89, 58, 0.85); }
 
       /* ── Monitoring screen — the shared title bar at top, circle fills
          the middle and stays the visual hero, restrained bottom control
@@ -941,89 +1316,154 @@ export function createMezzoSession({
     const layout = pipDoc.createElement('div');
     layout.className = 'pip-layout';
 
-    // ── Ready screen — shared title bar pinned at top, a "poster" area
-    //    that centers the heading in the remaining space, then a
-    //    fixed-padding action card (profile selector + Start Monitoring)
-    //    pinned at the bottom. Matches the reference card's own
-    //    composition rather than the flexible-spacer approach used before. ──
+    // ── Ready screen — Option B. A compact heading, a bounded/scrollable
+    //    radiogroup of saved profiles, Calibrate for this session, then the
+    //    always-visible actions (Start Monitoring, Recalibrate {name}).
+    //    Populated by renderReadyScreen() below, not here — this only
+    //    builds the empty skeleton once; content is (re)rendered every time
+    //    the screen is (re)shown, since saved profiles can change between
+    //    visits (a new one saved, one deleted, one recalibrated). ──
     const readyScreen = pipDoc.createElement('div');
     readyScreen.className = 'pip-screen pip-screen-ready';
     // No in-page title bar here either — the real Document PiP window
     // chrome is the only title bar now, in every state (see pipDoc.title
     // in startMonitoring()).
 
-    const readyPoster = pipDoc.createElement('div');
-    readyPoster.className = 'pip-ready-poster';
-
     const readyHeading = pipDoc.createElement('h1');
     readyHeading.className = 'pip-ready-heading';
     readyHeading.textContent = 'Ready for the next conversation.';
-    readyPoster.appendChild(readyHeading);
+    readyScreen.appendChild(readyHeading);
 
-    readyScreen.appendChild(readyPoster);
+    const readyList = pipDoc.createElement('div');
+    readyList.className = 'pip-ready-list';
+    readyList.setAttribute('role', 'radiogroup');
+    readyList.setAttribute('aria-label', 'Saved Profiles');
+    readyScreen.appendChild(readyList);
+    readyListEl = readyList;
 
-    const readyCard = pipDoc.createElement('div');
-    readyCard.className = 'pip-ready-card';
+    const calibrateSessionRow = pipDoc.createElement('button');
+    calibrateSessionRow.type = 'button';
+    calibrateSessionRow.className = 'pip-calibrate-session-row';
+    const calibrateSessionPlus = pipDoc.createElement('span');
+    calibrateSessionPlus.className = 'pip-calibrate-session-plus';
+    calibrateSessionPlus.setAttribute('aria-hidden', 'true');
+    calibrateSessionPlus.textContent = '+';
+    const calibrateSessionLabel = pipDoc.createElement('span');
+    calibrateSessionLabel.textContent = 'Calibrate for this session';
+    calibrateSessionRow.appendChild(calibrateSessionPlus);
+    calibrateSessionRow.appendChild(calibrateSessionLabel);
+    calibrateSessionRow.addEventListener('click', handleCalibrateForSessionClick);
+    readyScreen.appendChild(calibrateSessionRow);
 
-    const profileWrap = pipDoc.createElement('div');
-    profileWrap.className = 'pip-profile-wrap';
-
-    const profileSelector = pipDoc.createElement('button');
-    profileSelector.type = 'button';
-    profileSelector.className = 'pip-profile-selector';
-    const profileNameSpan = pipDoc.createElement('span');
-    profileNameSpan.textContent = activeProfile?.name || RECOMMENDED_PROFILE.name;
-    const chevronSpan = pipDoc.createElement('span');
-    chevronSpan.textContent = '▾';
-    chevronSpan.setAttribute('aria-hidden', 'true');
-    profileSelector.appendChild(profileNameSpan);
-    profileSelector.appendChild(chevronSpan);
-    profileSelector.addEventListener('click', toggleReadyProfileDropdown);
-    readyProfileNameEl = profileNameSpan;
-    readyProfileSelectorEl = profileSelector;
-
-    profileWrap.appendChild(profileSelector);
-    readyCard.appendChild(profileWrap);
+    const readyActions = pipDoc.createElement('div');
+    readyActions.className = 'pip-ready-actions';
 
     const pipStartBtn = pipDoc.createElement('button');
+    pipStartBtn.type = 'button';
     pipStartBtn.className = 'pip-ready-start-btn';
     pipStartBtn.textContent = 'Start Monitoring';
     pipStartBtn.addEventListener('click', resumeMonitoringFromPipReady);
-    readyCard.appendChild(pipStartBtn);
+    readyActions.appendChild(pipStartBtn);
+    readyStartBtn = pipStartBtn;
 
-    readyScreen.appendChild(readyCard);
+    const recalibrateBtn = pipDoc.createElement('button');
+    recalibrateBtn.type = 'button';
+    recalibrateBtn.className = 'pip-ready-recalibrate-btn';
+    recalibrateBtn.addEventListener('click', handleReadyRecalibrateClick);
+    readyActions.appendChild(recalibrateBtn);
+    readyRecalibrateBtn = recalibrateBtn;
 
-    // ── Profile dropdown — a centered modal overlay scoped to this Ready
-    //    card's own bounds (.pip-screen-ready is position:relative — see
-    //    the shared .pip-screen card rule). Only ever rendered/opened while
-    //    Ready; monitoring locks the profile. ──
-    const profileBackdrop = pipDoc.createElement('div');
-    profileBackdrop.className = 'pip-profile-backdrop hidden';
-    // Only close on a direct backdrop click — clicks inside the menu
-    // itself bubble here too, and must not be treated as "click outside."
-    profileBackdrop.addEventListener('click', (event) => {
-      if (event.target === profileBackdrop) closeReadyProfileDropdown();
+    readyScreen.appendChild(readyActions);
+
+    // Save Prompt — a modal overlay on top of this Ready screen (Stop-time,
+    // temporary profile only — see stopMonitoring()). Built once here,
+    // populated by openSavePrompt().
+    const savePromptBackdrop = pipDoc.createElement('div');
+    savePromptBackdrop.className = 'pip-modal-backdrop hidden';
+    savePromptBackdrop.addEventListener('click', (event) => {
+      if (event.target === savePromptBackdrop) handleSavePromptDiscard();
     });
-
-    const dropdown = pipDoc.createElement('div');
-    dropdown.className = 'pip-profile-dropdown';
-
-    const dropdownLabel = pipDoc.createElement('div');
-    dropdownLabel.className = 'pip-profile-dropdown-label';
-    dropdownLabel.textContent = 'Select Profile';
-    dropdown.appendChild(dropdownLabel);
-
-    const dropdownList = pipDoc.createElement('div');
-    dropdownList.className = 'pip-profile-dropdown-list';
-    dropdown.appendChild(dropdownList);
-    readyProfileDropdown = dropdownList;
-
-    profileBackdrop.appendChild(dropdown);
-    readyScreen.appendChild(profileBackdrop);
-    readyProfileBackdropEl = profileBackdrop;
+    const savePromptCard = pipDoc.createElement('div');
+    savePromptCard.className = 'pip-modal-card';
+    savePromptBackdrop.appendChild(savePromptCard);
+    readyScreen.appendChild(savePromptBackdrop);
+    savePromptBackdropEl = savePromptBackdrop;
+    buildSavePromptSteps(pipDoc, savePromptCard);
 
     layout.appendChild(readyScreen);
     readyScreenEl = readyScreen;
+
+    // ── Calibrating ── (see "Calibration" in docs/product-experience.md)
+    const calibratingScreen = pipDoc.createElement('div');
+    calibratingScreen.className = 'pip-screen pip-screen-calibrating hidden';
+
+    const calibratingSubheading = pipDoc.createElement('div');
+    calibratingSubheading.className = 'pip-calibrating-subheading';
+    calibratingSubheading.setAttribute('aria-live', 'polite');
+    calibratingScreen.appendChild(calibratingSubheading);
+    calibratingSubheadingEl = calibratingSubheading;
+
+    const calibratingHeading = pipDoc.createElement('p');
+    calibratingHeading.className = 'pip-calibrating-heading';
+    calibratingHeading.textContent = "Let's learn your natural speaking volume. Speak as if you're talking with a colleague in a video meeting.";
+    calibratingScreen.appendChild(calibratingHeading);
+
+    const meterTrack = pipDoc.createElement('div');
+    meterTrack.className = 'pip-calibrating-meter-track';
+    meterTrack.setAttribute('aria-hidden', 'true'); // decorative — progress/completion is conveyed via text, not this bar
+    const meterFill = pipDoc.createElement('div');
+    meterFill.className = 'pip-calibrating-meter-fill';
+    meterTrack.appendChild(meterFill);
+    calibratingScreen.appendChild(meterTrack);
+    calibratingMeterFillEl = meterFill;
+
+    const calibratingCancelBtn = pipDoc.createElement('button');
+    calibratingCancelBtn.type = 'button';
+    calibratingCancelBtn.className = 'pip-text-btn';
+    calibratingCancelBtn.textContent = 'Cancel';
+    calibratingCancelBtn.addEventListener('click', handleCalibratingCancel);
+    calibratingScreen.appendChild(calibratingCancelBtn);
+
+    layout.appendChild(calibratingScreen);
+    calibratingScreenEl = calibratingScreen;
+
+    // ── Calibration Failed ──
+    const failedScreen = pipDoc.createElement('div');
+    failedScreen.className = 'pip-screen pip-screen-failed hidden';
+
+    const failedMessage = pipDoc.createElement('p');
+    failedMessage.className = 'pip-failed-message';
+    failedMessage.setAttribute('aria-live', 'assertive');
+    failedScreen.appendChild(failedMessage);
+    failedMessageEl = failedMessage;
+
+    const failedActions = pipDoc.createElement('div');
+    failedActions.className = 'pip-failed-actions';
+    const failedTryAgainBtn = pipDoc.createElement('button');
+    failedTryAgainBtn.type = 'button';
+    failedTryAgainBtn.className = 'pip-calibrated-primary-btn';
+    failedTryAgainBtn.textContent = 'Try Again';
+    failedTryAgainBtn.addEventListener('click', handleFailedTryAgain);
+    failedActions.appendChild(failedTryAgainBtn);
+    failedScreen.appendChild(failedActions);
+
+    const failedBackBtn = pipDoc.createElement('button');
+    failedBackBtn.type = 'button';
+    failedBackBtn.className = 'pip-text-btn';
+    failedBackBtn.textContent = 'Back';
+    failedBackBtn.addEventListener('click', handleFailedBack);
+    failedScreen.appendChild(failedBackBtn);
+
+    layout.appendChild(failedScreen);
+    failedScreenEl = failedScreen;
+
+    // ── Calibrated checkpoint — checkpoint step + naming step, one screen ──
+    const calibratedScreen = pipDoc.createElement('div');
+    calibratedScreen.className = 'pip-screen pip-screen-calibrated hidden';
+    buildCalibratedCheckpointStep(pipDoc, calibratedScreen);
+    buildCalibratedNameStep(pipDoc, calibratedScreen);
+    layout.appendChild(calibratedScreen);
+    calibratedScreenEl = calibratedScreen;
 
     // ── Monitoring screen (Expanded + Compact share this one DOM tree —
     //    see the [data-layout] CSS above for what each hides/shows) ──
@@ -1148,27 +1588,13 @@ export function createMezzoSession({
 
   /** Full teardown: stop monitoring, release the mic, close the Companion. */
   function endSession() {
+    calibrationController.cancel(); // safe from any status, including idle — covers ending mid-calibration
     if (isMonitoringActive) teardownMonitoringEngine();
     activeCircle = null;
     if (pipWindow) {
       try { pipWindow.close(); } catch { /* ignore */ }
     }
     sessionState.set(SESSION_STATES.COMPANION_CLOSED);
-  }
-
-  /** Ready is always Expanded (data-layout) and has its own fixed size,
-   *  distinct from Monitoring's Expanded size — restores both here so every
-   *  path back to Ready (first open, reopen, stopping monitoring) converges. */
-  function enterPipReadyMode() {
-    if (!pipWindow) return;
-    layoutMode = LAYOUT_MODES.EXPANDED; // Ready has no Compact variant; kept in sync for when Monitoring resumes
-    if (pipDocument?.body) pipDocument.body.setAttribute('data-layout', LAYOUT_MODES.EXPANDED);
-    resizeCompanionTo(MEZZO_COMPANION_READY_SIZE);
-    activeCircle = null; // Ready never shows a visualization
-    if (readyScreenEl) readyScreenEl.classList.remove('hidden');
-    if (monitoringScreenEl) monitoringScreenEl.classList.add('hidden');
-    closeReadyProfileDropdown();
-    updateReadyProfileDisplay();
   }
 
   function enterPipMonitoringMode() {
@@ -1210,150 +1636,594 @@ export function createMezzoSession({
     return true;
   }
 
-  // Shared by the Companion's Ready-screen profile dropdown — same options,
-  // same "+ Create New Profile..." row. Only ever rendered while Ready;
-  // monitoring locks the profile and shows it as plain text instead.
-  //
-  // Selected state reads as a quiet accent bar + dimmer text (not a
-  // checkmark) — restrained, since it's already the active choice, not
-  // something that needs to shout. Saved (custom) profiles get a small
-  // "Custom" tag, right-aligned, Title Case — the built-in Everyday
-  // Conversation profile doesn't (it isn't a saved custom profile).
-  function renderProfileDropdown(doc, dropdownEl, { onPick, onCreateNew }) {
-    if (!dropdownEl || !doc) return;
-    dropdownEl.innerHTML = '';
+  // ===========================================================================
+  // Ready screen (Option B) — selection-only rows, Calibrate for this
+  // session, and the always-visible actions below the list.
+  // ===========================================================================
 
-    const profiles = [RECOMMENDED_PROFILE, ...getSavedProfiles()];
-    for (const profile of profiles) {
-      const isActive = profilesMatch(activeProfile, profile);
-      const row = doc.createElement('button');
-      row.type = 'button';
-      row.className = 'pip-profile-option' + (isActive ? ' is-active' : '');
-
-      const nameSpan = doc.createElement('span');
-      nameSpan.textContent = profile.name;
-      row.appendChild(nameSpan);
-
-      if (profile.savedProfileId) {
-        const tag = doc.createElement('span');
-        tag.className = 'pip-profile-option-tag';
-        tag.textContent = 'Custom';
-        row.appendChild(tag);
-      }
-
-      row.addEventListener('click', () => onPick(profile));
-      dropdownEl.appendChild(row);
-    }
-
-    const divider = doc.createElement('hr');
-    divider.className = 'pip-profile-divider';
-    dropdownEl.appendChild(divider);
-
-    const createBtn = doc.createElement('button');
-    createBtn.type = 'button';
-    createBtn.className = 'pip-profile-option pip-profile-option-create';
-    createBtn.textContent = '+ Create New Profile...';
-    createBtn.addEventListener('click', onCreateNew);
-    dropdownEl.appendChild(createBtn);
-  }
-
-  function updateReadyProfileDisplay() {
-    if (readyProfileNameEl) {
-      readyProfileNameEl.textContent = activeProfile?.name || RECOMMENDED_PROFILE.name;
-    }
-    renderReadyProfileDropdown();
-  }
-
-  function renderReadyProfileDropdown() {
-    renderProfileDropdown(pipDocument, readyProfileDropdown, {
-      onPick: handleReadyProfilePick,
-      onCreateNew: handleCreateNewProfile,
+  /** Hides every top-level screen except the given one, and tears down the
+   *  Calibrating screen's live-meter subscription whenever navigating away
+   *  from it — the one chokepoint every screen transition passes through,
+   *  so that cleanup can't be missed by a handler that forgets to do it. */
+  function showOnlyScreen(screenEl) {
+    [readyScreenEl, calibratingScreenEl, failedScreenEl, calibratedScreenEl, monitoringScreenEl].forEach((el) => {
+      if (el) el.classList.toggle('hidden', el !== screenEl);
     });
-  }
-
-  function toggleReadyProfileDropdown() {
-    if (!readyProfileBackdropEl) return;
-    const opening = readyProfileBackdropEl.classList.contains('hidden');
-    if (opening) renderReadyProfileDropdown();
-    readyProfileBackdropEl.classList.toggle('hidden');
-    readyProfileSelectorEl?.classList.toggle('is-open', opening);
-    if (pipDocument) {
-      if (opening) {
-        pipDocument.addEventListener('keydown', handleProfileDropdownKeydown);
-        // Move focus into the menu (selected row, or the first row if
-        // none) — otherwise Tab from the trigger would fall through to
-        // whatever's next in the Ready screen's own DOM order instead of
-        // entering the now-open modal, since the backdrop is a sibling of
-        // the screens, not nested where the trigger sits.
-        const active = readyProfileDropdown?.querySelector('.pip-profile-option.is-active');
-        const firstOption = active || readyProfileDropdown?.querySelector('.pip-profile-option');
-        firstOption?.focus();
-      } else {
-        pipDocument.removeEventListener('keydown', handleProfileDropdownKeydown);
-      }
+    if (screenEl !== calibratingScreenEl && unsubscribeCalibrationLevel) {
+      unsubscribeCalibrationLevel();
+      unsubscribeCalibrationLevel = null;
     }
   }
 
-  function closeReadyProfileDropdown() {
-    if (!readyProfileBackdropEl) return;
-    const wasOpen = !readyProfileBackdropEl.classList.contains('hidden');
-    const focusWasInside = wasOpen && pipDocument && readyProfileBackdropEl.contains(pipDocument.activeElement);
-    readyProfileBackdropEl.classList.add('hidden');
-    readyProfileSelectorEl?.classList.remove('is-open');
-    if (pipDocument) pipDocument.removeEventListener('keydown', handleProfileDropdownKeydown);
-    // Return focus to the trigger only if it was actually inside the menu —
-    // avoids stealing focus on the other, defensive closeReadyProfileDropdown()
-    // calls (e.g. entering Ready mode) where the menu was never open.
-    if (focusWasInside) readyProfileSelectorEl?.focus();
+  /** Raw Ready renderer — always shows Ready, never auto-redirects, even if
+   *  the saved-profile library happens to be empty (that "list is empty"
+   *  case is a normal, valid Ready presentation: just Calibrate for this
+   *  session, no rows). Used by every path that must not risk re-triggering
+   *  the auto-calibrate redirect below — Cancel/Back from Calibrating,
+   *  Calibration Failed, and the Calibrated checkpoint, and Discard from the
+   *  Save Prompt. See enterPipReadyMode() for the "smart" entry point. */
+  function showReadyScreen() {
+    if (!pipWindow) return;
+    layoutMode = LAYOUT_MODES.EXPANDED;
+    if (pipDocument?.body) pipDocument.body.setAttribute('data-layout', LAYOUT_MODES.EXPANDED);
+    resizeCompanionTo(MEZZO_COMPANION_READY_SIZE);
+    activeCircle = null;
+    showOnlyScreen(readyScreenEl);
+    renderReadyScreen();
   }
 
-  function handleProfileDropdownKeydown(event) {
-    if (event.key === 'Escape') closeReadyProfileDropdown();
+  /** Smart Ready entry point — used by the two real "we no longer have an
+   *  active session, show Ready" moments (Stop, and startMonitoring()'s
+   *  mic-acquisition-failure fallback). Skips straight into a session
+   *  calibration instead of rendering a profile list with nothing in it,
+   *  per the product model: there is no built-in, uncalibrated default
+   *  profile, so a user with zero saved profiles has exactly one path in. */
+  function enterPipReadyMode() {
+    if (!pipWindow) return;
+    if (getSavedProfiles().length === 0) {
+      beginCalibrationFlow('session', null);
+      return;
+    }
+    showReadyScreen();
+  }
+
+  /** (Re)builds the profile radiogroup from current storage — saved
+   *  profiles can change between visits (one saved, deleted, or
+   *  recalibrated elsewhere), so this always reads fresh rather than
+   *  diffing. There is no built-in default profile to include here — every
+   *  row is a real saved profile (see CLAUDE.md's Profiles section). */
+  function renderReadyScreen() {
+    if (!readyListEl || !pipDocument) return;
+    readyListEl.innerHTML = '';
+
+    const saved = getSavedProfiles();
+    if (!saved.some((p) => p.id === activeProfile?.id)) {
+      activeProfile = saved[0] ?? null;
+    }
+
+    saved.forEach((profile) => {
+      const row = pipDocument.createElement('div');
+      row.className = 'pip-ready-row';
+
+      const radio = pipDocument.createElement('input');
+      radio.type = 'radio';
+      radio.name = 'ready-profile';
+      radio.className = 'pip-ready-row-radio';
+      radio.id = `ready-profile-${profile.id}`;
+      radio.checked = profile.id === activeProfile?.id;
+      radio.addEventListener('change', () => handleReadyRowChange(profile));
+      row.appendChild(radio);
+
+      // Truncates visually (see .pip-ready-row-name); the full name is
+      // still the label's real text content, so assistive tech always gets
+      // it in full regardless of visual truncation, and title="" repeats it
+      // as a native tooltip for sighted pointer users.
+      const label = pipDocument.createElement('label');
+      label.className = 'pip-ready-row-name';
+      label.setAttribute('for', radio.id);
+      label.textContent = profile.name;
+      label.title = profile.name;
+      row.appendChild(label);
+
+      readyListEl.appendChild(row);
+    });
+
+    updateReadyActionsState();
   }
 
   // Profile selection only ever happens while Ready — monitoring locks it —
   // so this always switches immediately, no confirmation needed.
-  function handleReadyProfilePick(profile) {
-    closeReadyProfileDropdown();
-    if (profilesMatch(activeProfile, profile)) return;
-    activateProfile(profile);
-  }
-
-  function activateProfile(profile) {
+  function handleReadyRowChange(profile) {
     activeProfile = profile;
     setSelectedProfile(profile);
-    updateReadyProfileDisplay();
+    updateReadyActionsState();
+  }
+
+  /** Keeps Start Monitoring and the dynamic Recalibrate label in sync with
+   *  the current selection — including the edge case where nothing is
+   *  selected at all (an empty library reached via showReadyScreen()'s raw
+   *  path, e.g. Cancel before ever saving a first profile). */
+  function updateReadyActionsState() {
+    const hasSelection = !!activeProfile?.id;
+    if (readyStartBtn) readyStartBtn.disabled = !hasSelection;
+    if (readyRecalibrateBtn) {
+      readyRecalibrateBtn.disabled = !hasSelection;
+      const label = hasSelection ? `Recalibrate ${activeProfile.name}` : 'Recalibrate';
+      readyRecalibrateBtn.textContent = label;
+      readyRecalibrateBtn.setAttribute('aria-label', label);
+    }
+  }
+
+  function handleReadyRecalibrateClick() {
+    if (!activeProfile?.id) return; // disabled in this state; defensive
+    beginCalibrationFlow('recalibrate', activeProfile.id);
+  }
+
+  function handleCalibrateForSessionClick() {
+    beginCalibrationFlow('session', null);
+  }
+
+  // ===========================================================================
+  // Calibrating / Calibration Failed / Calibrated checkpoint — driven by the
+  // shared calibration controller (src/calibration-controller.js). This
+  // module owns none of the calibration business logic or storage writes
+  // itself — it only renders the controller's state and calls its methods.
+  // ===========================================================================
+
+  // Set only when the most recent Failed screen was shown because
+  // calibrationLock.acquire() was rejected (another tab holds it), not
+  // because the controller itself failed — see beginCalibrationFlow() and
+  // handleFailedTryAgain() below. In that one case, no controller run ever
+  // started (mode/targetProfileId were never handed to the controller), so
+  // "Try Again" must re-attempt the lock via beginCalibrationFlow() itself
+  // rather than calling calibrationController.retry(), which would throw
+  // (there is nothing to retry — status is still 'idle').
+  let pendingLockedAttempt = null;
+
+  /**
+   * Starts a calibration run (session or recalibrate) and shows the
+   * Calibrating screen. Synchronous startXxx() misuse errors (an unknown
+   * recalibration target, or calling this while already calibrating) are
+   * caught here and fall back to Ready — actual calibration failures
+   * (silence, unstable environment, mic permission) are not exceptions,
+   * they arrive asynchronously via the controller's own state and are
+   * handled by the subscribe() listener set up right after this module
+   * creates calibrationController.
+   */
+  function beginCalibrationFlow(mode, targetProfileId) {
+    if (!pipWindow) return;
+
+    // Checked first, before any Calibrating-screen setup or mic/controller
+    // involvement — a rejection here means a different tab genuinely holds
+    // the cross-tab lease right now (see src/calibration-lock.js), so this
+    // attempt goes straight to the Failed screen instead of ever flashing
+    // Calibrating.
+    if (!calibrationLock.acquire()) {
+      pendingLockedAttempt = { mode, targetProfileId };
+      showFailedScreen({ code: 'CROSS_TAB_LOCKED' });
+      return;
+    }
+    pendingLockedAttempt = null;
+
+    const targetName = targetProfileId
+      ? getSavedProfiles().find((p) => p.id === targetProfileId)?.name ?? null
+      : null;
+
+    layoutMode = LAYOUT_MODES.EXPANDED;
+    if (pipDocument?.body) pipDocument.body.setAttribute('data-layout', LAYOUT_MODES.EXPANDED);
+    resizeCompanionTo(MEZZO_COMPANION_READY_SIZE); // Calibrating shares Ready's fixed size — see CLAUDE.md's Companion sizes
+    activeCircle = null;
+
+    if (calibratingSubheadingEl) {
+      calibratingSubheadingEl.textContent = mode === 'recalibrate' && targetName ? `Recalibrating ${targetName}` : '';
+    }
+    if (calibratingMeterFillEl) calibratingMeterFillEl.style.width = '0%';
+    showOnlyScreen(calibratingScreenEl);
+    unsubscribeCalibrationLevel = calibrationController.subscribeToLevel(handleCalibrationLevelSample);
+
+    try {
+      if (mode === 'recalibrate') {
+        calibrationController.startRecalibration(targetProfileId, CALIBRATION_OWNERS.COMPANION);
+      } else {
+        calibrationController.startSessionCalibration(CALIBRATION_OWNERS.COMPANION);
+      }
+    } catch (err) {
+      console.error('[Session] Could not start calibration:', err.message);
+      calibrationLock.release(); // acquired above, but the controller never actually started
+      showReadyScreen();
+    }
+  }
+
+  function handleCalibrationLevelSample(rms) {
+    if (!calibratingMeterFillEl) return;
+    const db = 20 * Math.log10(rms + 1e-10);
+    const energy = Math.min(1, Math.max(0, (db - CALIBRATION_METER_DB_MIN) / (CALIBRATION_METER_DB_MAX - CALIBRATION_METER_DB_MIN)));
+    calibratingMeterFillEl.style.width = `${Math.round(energy * 100)}%`;
+  }
+
+  function handleCalibratingCancel() {
+    calibrationController.cancel();
+    showReadyScreen();
+  }
+
+  function showFailedScreen(failure) {
+    if (failedMessageEl) failedMessageEl.textContent = calibrationFailureMessage(failure);
+    showOnlyScreen(failedScreenEl);
+  }
+
+  /** Try Again — retry() re-enters the same mode and, in recalibrate mode,
+   *  the same target, so this alone is what keeps session mode session and
+   *  recalibration targeted at the same saved profile across a retry. When
+   *  the Failed screen is showing because of a cross-tab lock rejection
+   *  (pendingLockedAttempt set), no controller run ever started, so this
+   *  re-attempts via beginCalibrationFlow() — re-checking the lock fresh —
+   *  instead of calling retry(), which would throw from an idle controller. */
+  function handleFailedTryAgain() {
+    if (pendingLockedAttempt) {
+      const { mode, targetProfileId } = pendingLockedAttempt;
+      beginCalibrationFlow(mode, targetProfileId);
+      return;
+    }
+    try {
+      calibrationController.retry();
+    } catch (err) {
+      console.error('[Session] Could not retry calibration:', err.message);
+      calibrationController.cancel();
+      showReadyScreen();
+    }
+  }
+
+  function handleFailedBack() {
+    calibrationController.cancel();
+    showReadyScreen();
+  }
+
+  function showCalibratedStep(step) {
+    calibratedCheckpointStepEl?.classList.toggle('hidden', step !== 'checkpoint');
+    calibratedNameStepEl?.classList.toggle('hidden', step !== 'name');
   }
 
   /**
-   * The Companion never contains calibration/profile-creation UI itself.
-   * Stops monitoring if it's somehow active (defensive — Create New Profile
-   * only ever appears on the Ready screen, so this shouldn't normally be
-   * reachable mid-session), closes the Companion, brings the Anchor page
-   * (this same tab — this function already runs in its JS realm, since the
-   * Companion's own document only ever calls back into functions defined
-   * here) into focus, and hands off to it via onCreateNewProfileRequested —
-   * never a new tab, never a real navigation. companionCloseIntent marks
-   * this specific close so the sessionState listener (wired below) can tell
-   * it apart from a native ✕ or End Session close; it's set right before
-   * the eager sessionState.set() below and cleared immediately after, the
-   * same eager-transition pattern endSession() already uses rather than
-   * waiting for the Document PiP window's own asynchronous pagehide.
+   * Renders the mode-aware Calibrated checkpoint. Nothing is persisted
+   * merely by this rendering — every field here is read-only display text;
+   * the only paths that ever write to storage are the explicit commit
+   * handlers below (handleCalibratedPrimary/Secondary/NameSubmit).
    */
-  function handleCreateNewProfile() {
-    closeReadyProfileDropdown();
-    if (isMonitoringActive) teardownMonitoringEngine();
+  function showCalibratedScreen(state) {
+    const { mode } = state;
+    if (calibratedErrorEl) { calibratedErrorEl.classList.add('hidden'); calibratedErrorEl.textContent = ''; }
+    showCalibratedStep('checkpoint');
+
+    if (mode === 'recalibrate') {
+      const name = calibrationController.getTargetSnapshot()?.name ?? 'this profile';
+      if (calibratedCheckpointHeadingEl) calibratedCheckpointHeadingEl.textContent = `New calibration ready for ${name}.`;
+      if (calibratedPrimaryBtn) calibratedPrimaryBtn.textContent = `Update ${name} & Start Monitoring`;
+      if (calibratedSecondaryBtn) calibratedSecondaryBtn.textContent = `Update ${name}`;
+    } else {
+      if (calibratedCheckpointHeadingEl) calibratedCheckpointHeadingEl.textContent = 'Your speaking range is ready.';
+      if (calibratedPrimaryBtn) calibratedPrimaryBtn.textContent = 'Start Monitoring';
+      if (calibratedSecondaryBtn) calibratedSecondaryBtn.textContent = 'Save as New Profile';
+    }
+
+    layoutMode = LAYOUT_MODES.EXPANDED;
+    if (pipDocument?.body) pipDocument.body.setAttribute('data-layout', LAYOUT_MODES.EXPANDED);
+    resizeCompanionTo(MEZZO_COMPANION_READY_SIZE);
     activeCircle = null;
-    companionCloseIntent = COMPANION_CLOSE_INTENTS.CREATE_PROFILE;
-    try { pipWindow.close(); } catch { /* ignore */ }
-    sessionState.set(SESSION_STATES.COMPANION_CLOSED);
-    companionCloseIntent = null;
-    window.focus();
-    onCreateNewProfileRequested?.();
+    showOnlyScreen(calibratedScreenEl);
+  }
+
+  function showCalibratedCommitError() {
+    const err = calibrationController.getState().commitError;
+    if (calibratedErrorEl) {
+      calibratedErrorEl.textContent = err?.message || 'Something went wrong — please try again.';
+      calibratedErrorEl.classList.remove('hidden');
+    }
+    // Stays on the checkpoint step with mode-aware buttons and the result
+    // untouched — the controller's own state already guarantees the result
+    // survives a failed commit; nothing further to do here.
+  }
+
+  /** "Start Monitoring" (session) / "Update {name} & Start Monitoring"
+   *  (recalibrate) — the one commit path that also transitions into
+   *  Monitoring, immediately after committing. */
+  async function handleCalibratedPrimary() {
+    const { mode } = calibrationController.getState();
+    if (mode === 'recalibrate') {
+      const updated = calibrationController.commitUpdateProfileAndStartMonitoring();
+      if (!updated) { showCalibratedCommitError(); return; }
+      activeProfile = updated;
+    } else {
+      activeProfile = calibrationController.commitStartMonitoring();
+    }
+    await resumeMonitoringFromPipReady();
+  }
+
+  /** "Save as New Profile" (session, opens the naming step) / "Update
+   *  {name}" (recalibrate, commits immediately — no naming needed, the
+   *  identity already exists). */
+  function handleCalibratedSecondary() {
+    const { mode } = calibrationController.getState();
+    if (mode === 'recalibrate') {
+      const updated = calibrationController.commitUpdateProfile();
+      if (!updated) { showCalibratedCommitError(); return; }
+      activeProfile = updated;
+      showReadyScreen();
+      return;
+    }
+    if (calibratedNameInput) calibratedNameInput.value = '';
+    showCalibratedStep('name');
+    requestAnimationFrame(() => calibratedNameInput?.focus());
+  }
+
+  function handleCalibratedBack() {
+    calibrationController.cancel();
+    showReadyScreen();
+  }
+
+  /** Existing naming conventions: trim, require non-empty, maxlength=40 on
+   *  the input itself (see buildCalibratedNameStep) — same as try-it.js's
+   *  own handleNameFormSubmit(). */
+  function handleCalibratedNameSubmit(event) {
+    event.preventDefault();
+    const name = calibratedNameInput?.value.trim();
+    if (!name) return;
+
+    const saved = calibrationController.commitSaveAsNewProfile(name);
+    if (!saved) {
+      // 5-profile limit — remain recoverable: back to the checkpoint step,
+      // where Start Monitoring is still available with the intact result,
+      // rather than stranding the user on this now-abandoned naming step.
+      showCalibratedStep('checkpoint');
+      showCalibratedCommitError();
+      return;
+    }
+    activeProfile = saved;
+    showReadyScreen();
+  }
+
+  function buildCalibratedCheckpointStep(doc, container) {
+    const step = doc.createElement('div');
+    step.className = 'pip-calibrated-step';
+
+    const heading = doc.createElement('p');
+    heading.className = 'pip-calibrated-heading';
+    step.appendChild(heading);
+    calibratedCheckpointHeadingEl = heading;
+
+    const error = doc.createElement('p');
+    error.className = 'pip-calibrated-error hidden';
+    error.setAttribute('aria-live', 'polite');
+    step.appendChild(error);
+    calibratedErrorEl = error;
+
+    const actions = doc.createElement('div');
+    actions.className = 'pip-calibrated-actions';
+
+    const primaryBtn = doc.createElement('button');
+    primaryBtn.type = 'button';
+    primaryBtn.className = 'pip-calibrated-primary-btn';
+    primaryBtn.addEventListener('click', handleCalibratedPrimary);
+    actions.appendChild(primaryBtn);
+    calibratedPrimaryBtn = primaryBtn;
+
+    const secondaryBtn = doc.createElement('button');
+    secondaryBtn.type = 'button';
+    secondaryBtn.className = 'pip-calibrated-secondary-btn';
+    secondaryBtn.addEventListener('click', handleCalibratedSecondary);
+    actions.appendChild(secondaryBtn);
+    calibratedSecondaryBtn = secondaryBtn;
+
+    step.appendChild(actions);
+
+    const backBtn = doc.createElement('button');
+    backBtn.type = 'button';
+    backBtn.className = 'pip-text-btn';
+    backBtn.textContent = 'Back';
+    backBtn.addEventListener('click', handleCalibratedBack);
+    step.appendChild(backBtn);
+
+    container.appendChild(step);
+    calibratedCheckpointStepEl = step;
+  }
+
+  function buildCalibratedNameStep(doc, container) {
+    const step = doc.createElement('div');
+    step.className = 'pip-calibrated-step hidden';
+
+    const heading = doc.createElement('p');
+    heading.className = 'pip-calibrated-heading';
+    heading.textContent = 'Name this profile';
+    step.appendChild(heading);
+
+    const form = doc.createElement('form');
+    form.style.cssText = 'width:100%;max-width:230px;display:flex;flex-direction:column;gap:10px;';
+
+    const input = doc.createElement('input');
+    input.type = 'text';
+    input.className = 'pip-name-input';
+    input.maxLength = 40;
+    input.placeholder = 'e.g. Kitchen';
+    input.setAttribute('aria-label', 'Profile name');
+    form.appendChild(input);
+    calibratedNameInput = input;
+
+    const submitBtn = doc.createElement('button');
+    submitBtn.type = 'submit';
+    submitBtn.className = 'pip-calibrated-primary-btn';
+    submitBtn.textContent = 'Save';
+    form.appendChild(submitBtn);
+    form.addEventListener('submit', handleCalibratedNameSubmit);
+    step.appendChild(form);
+    calibratedNameForm = form;
+
+    const backBtn = doc.createElement('button');
+    backBtn.type = 'button';
+    backBtn.className = 'pip-text-btn';
+    backBtn.textContent = 'Back';
+    backBtn.addEventListener('click', () => showCalibratedStep('checkpoint'));
+    step.appendChild(backBtn);
+
+    container.appendChild(step);
+    calibratedNameStepEl = step;
+  }
+
+  // ===========================================================================
+  // Save Prompt — Stop-time modal, temporary profiles only. Shares the
+  // "checkpoint/naming, two steps toggled in place" pattern with the
+  // Calibrated screen above and try-it.js's own save dialog, and shares the
+  // actual promotion operation (profiles.js's promoteTemporaryProfile())
+  // with the Calibrated screen's own "Save as New Profile" — the two paths
+  // must never implement slightly different storage semantics.
+  // ===========================================================================
+
+  function showSavePromptStep(step) {
+    savePromptStepEl?.classList.toggle('hidden', step !== 'prompt');
+    savePromptNameStepEl?.classList.toggle('hidden', step !== 'name');
+  }
+
+  function openSavePrompt(temporaryProfile) {
+    pendingTemporaryProfile = temporaryProfile;
+    if (savePromptErrorEl) { savePromptErrorEl.classList.add('hidden'); savePromptErrorEl.textContent = ''; }
+    showSavePromptStep('prompt');
+    savePromptBackdropEl?.classList.remove('hidden');
+  }
+
+  function closeSavePrompt() {
+    savePromptBackdropEl?.classList.add('hidden');
+    pendingTemporaryProfile = null;
+  }
+
+  function handleSavePromptSaveClick() {
+    if (savePromptNameInput) savePromptNameInput.value = '';
+    showSavePromptStep('name');
+    requestAnimationFrame(() => savePromptNameInput?.focus());
+  }
+
+  /** Discard — drops the temporary calibration entirely; nothing was ever
+   *  written to storage for it (setLastUsedProfile() already refuses a
+   *  temporary profile on its own — see src/profiles.js), so there is
+   *  nothing to undo, only the in-memory reference to forget. */
+  function handleSavePromptDiscard() {
+    closeSavePrompt();
+    activeProfile = null;
+    renderReadyScreen();
+  }
+
+  function handleSavePromptNameSubmit(event) {
+    event.preventDefault();
+    const name = savePromptNameInput?.value.trim();
+    if (!name || !pendingTemporaryProfile) return;
+
+    const { profile, error } = promoteTemporaryProfile(pendingTemporaryProfile, name);
+    if (!profile) {
+      // 5-profile limit — stays recoverable: back to the prompt step with
+      // the temporary calibration still intact (pendingTemporaryProfile is
+      // untouched), so the user can free a slot elsewhere and retry, or
+      // Discard.
+      showSavePromptStep('prompt');
+      if (savePromptErrorEl) {
+        savePromptErrorEl.textContent = error?.message || 'Something went wrong — please try again.';
+        savePromptErrorEl.classList.remove('hidden');
+      }
+      return;
+    }
+
+    setSelectedProfile(profile);
+    setLastUsedProfile(profile);
+    activeProfile = profile;
+    closeSavePrompt();
+    renderReadyScreen();
+  }
+
+  function buildSavePromptSteps(doc, container) {
+    const promptStep = doc.createElement('div');
+    promptStep.className = 'pip-calibrated-step';
+
+    const promptHeading = doc.createElement('p');
+    promptHeading.className = 'pip-calibrated-heading';
+    promptHeading.textContent = 'Save this speaking range for next time?';
+    promptStep.appendChild(promptHeading);
+
+    const promptError = doc.createElement('p');
+    promptError.className = 'pip-calibrated-error hidden';
+    promptError.setAttribute('aria-live', 'polite');
+    promptStep.appendChild(promptError);
+    savePromptErrorEl = promptError;
+
+    const promptActions = doc.createElement('div');
+    promptActions.className = 'pip-calibrated-actions';
+
+    const saveBtn = doc.createElement('button');
+    saveBtn.type = 'button';
+    saveBtn.className = 'pip-calibrated-primary-btn';
+    saveBtn.textContent = 'Save';
+    saveBtn.addEventListener('click', handleSavePromptSaveClick);
+    promptActions.appendChild(saveBtn);
+
+    const discardBtn = doc.createElement('button');
+    discardBtn.type = 'button';
+    discardBtn.className = 'pip-calibrated-secondary-btn';
+    discardBtn.textContent = 'Discard';
+    discardBtn.addEventListener('click', handleSavePromptDiscard);
+    promptActions.appendChild(discardBtn);
+
+    promptStep.appendChild(promptActions);
+    container.appendChild(promptStep);
+    savePromptStepEl = promptStep;
+
+    const nameStep = doc.createElement('div');
+    nameStep.className = 'pip-calibrated-step hidden';
+
+    const nameHeading = doc.createElement('p');
+    nameHeading.className = 'pip-calibrated-heading';
+    nameHeading.textContent = 'Name this profile';
+    nameStep.appendChild(nameHeading);
+
+    const form = doc.createElement('form');
+    form.style.cssText = 'width:100%;max-width:230px;display:flex;flex-direction:column;gap:10px;';
+
+    const input = doc.createElement('input');
+    input.type = 'text';
+    input.className = 'pip-name-input';
+    input.maxLength = 40;
+    input.placeholder = 'e.g. Kitchen';
+    input.setAttribute('aria-label', 'Profile name');
+    form.appendChild(input);
+    savePromptNameInput = input;
+
+    const submitBtn = doc.createElement('button');
+    submitBtn.type = 'submit';
+    submitBtn.className = 'pip-calibrated-primary-btn';
+    submitBtn.textContent = 'Save';
+    form.appendChild(submitBtn);
+    form.addEventListener('submit', handleSavePromptNameSubmit);
+    nameStep.appendChild(form);
+    savePromptNameForm = form;
+
+    const backBtn = doc.createElement('button');
+    backBtn.type = 'button';
+    backBtn.className = 'pip-text-btn';
+    backBtn.textContent = 'Back';
+    backBtn.addEventListener('click', () => showSavePromptStep('prompt'));
+    nameStep.appendChild(backBtn);
+
+    container.appendChild(nameStep);
+    savePromptNameStepEl = nameStep;
   }
 
   function handlePipClose() {
     const wasActive = isMonitoringActive; // capture before teardownMonitoringEngine clears it
+    const wasTemporary = isTemporaryProfile(activeProfile);
+
+    // Covers every state the Companion could have been in when it closed —
+    // idle/Ready (a harmless no-op), mid-Calibrating (stops capture,
+    // releases the mic, discards whatever partial samples existed), or
+    // Calibrated-but-uncommitted (discards the uncommitted result — nothing
+    // was ever written to storage for it). close(), not cancel(): this is
+    // specifically the native-window-close trigger, not a user clicking a
+    // Cancel/Back button — same underlying cleanup, distinct call site for
+    // what it's worth in logs.
+    calibrationController.close();
 
     if (pipCircle) {
       pipCircle.destroy();
@@ -1362,38 +2232,60 @@ export function createMezzoSession({
     pipWindow = null;
     pipDocument = null;
     readyScreenEl = null;
-    readyProfileNameEl = null;
-    readyProfileSelectorEl = null;
-    readyProfileDropdown = null;
-    readyProfileBackdropEl = null;
+    readyListEl = null;
+    readyStartBtn = null;
+    readyRecalibrateBtn = null;
     monitoringScreenEl = null;
     pipStatusHeadingEl = null;
     monitoringProfileNameEl = null;
     pipCircleWrapperEl = null;
+    calibratingScreenEl = null;
+    calibratingSubheadingEl = null;
+    calibratingMeterFillEl = null;
+    failedScreenEl = null;
+    failedMessageEl = null;
+    calibratedScreenEl = null;
+    calibratedCheckpointStepEl = null;
+    calibratedCheckpointHeadingEl = null;
+    calibratedNameStepEl = null;
+    calibratedPrimaryBtn = null;
+    calibratedSecondaryBtn = null;
+    calibratedErrorEl = null;
+    calibratedNameInput = null;
+    calibratedNameForm = null;
+    savePromptBackdropEl = null;
+    savePromptStepEl = null;
+    savePromptNameStepEl = null;
+    savePromptErrorEl = null;
+    savePromptNameInput = null;
+    savePromptNameForm = null;
+    pendingTemporaryProfile = null;
+    if (unsubscribeCalibrationLevel) { unsubscribeCalibrationLevel(); unsubscribeCalibrationLevel = null; }
     layoutMode = LAYOUT_MODES.EXPANDED; // a fresh open always starts Expanded
+
+    // A temporary profile was never written anywhere — closing natively
+    // while monitoring with one (or holding one uncommitted) simply means
+    // there is nothing left to discard beyond this in-memory reference.
+    if (wasTemporary) activeProfile = null;
 
     if (isPageUnloading) return; // this page's own pagehide is already tearing everything down
 
     // This fires for every way the Companion actually goes away — the
-    // native ✕ (the only way to close it directly, in any state),
-    // endSession()'s programmatic pipWindow.close(), and
-    // handleCreateNewProfile()'s programmatic pipWindow.close() — since
-    // Document PiP's own pagehide is what's wired to this handler, not any
-    // of those call sites individually. By the time this runs after
-    // endSession() or handleCreateNewProfile(), monitoring has already been
-    // torn down there and sessionState has already been eagerly set to
-    // COMPANION_CLOSED, so wasActive is already false and the
-    // sessionState.set() below is a harmless no-op for those paths
+    // native ✕ (the only way to close it directly, in any state) and
+    // endSession()'s programmatic pipWindow.close() — since Document PiP's
+    // own pagehide is what's wired to this handler, not either call site
+    // individually. By the time this runs after endSession(), monitoring
+    // has already been torn down there and sessionState has already been
+    // eagerly set to COMPANION_CLOSED, so wasActive is already false and
+    // the sessionState.set() below is a harmless no-op for that path
     // (createSessionState() guards against re-firing on an unchanged
-    // value) — companionCloseIntent is also already back to null by the
-    // time this async handler runs, so there's nothing stale to misread
-    // even if it weren't a no-op. What matters is the native-✕ case:
-    // monitoring can never continue without the Companion open, so if it
-    // was still active reaching here, tear it down now — not "silently
-    // keep running" — and reflect the closed Companion (not a full
-    // endSession) in session state, so Mezzo (try-it.html) returns to the
-    // profile library instead of a full endSession() teardown — see
-    // try-it.js's handleSessionStateChange().
+    // value). What matters is the native-✕ case: monitoring can never
+    // continue without the Companion open, so if it was still active
+    // reaching here, tear it down now — not "silently keep running" — and
+    // reflect the closed Companion (not a full endSession) in session
+    // state, so Mezzo (try-it.html) returns to the profile library instead
+    // of a full endSession() teardown — see try-it.js's
+    // handleSessionStateChange().
     if (wasActive) {
       teardownMonitoringEngine();
       activeCircle = null;
@@ -1475,6 +2367,7 @@ export function createMezzoSession({
     window.addEventListener('pagehide', () => {
       isPageUnloading = true;
       clearSustained();
+      calibrationController.cancel(); // safe from any status — covers the page closing mid-calibration
       if (pipWindow) {
         try { pipWindow.close(); } catch { /* ignore */ }
       }
@@ -1483,19 +2376,26 @@ export function createMezzoSession({
     });
   }
 
-  // companionCloseIntent is read here, at the moment the listener actually
-  // fires — see handleCreateNewProfile()'s eager sessionState.set() and the
-  // comment on the companionCloseIntent declaration above.
-  sessionState.subscribe((state) => onSessionStateChange?.(state, companionCloseIntent));
+  sessionState.subscribe((state) => onSessionStateChange?.(state));
 
   return {
     SESSION_STATES,
-    COMPANION_CLOSE_INTENTS,
     getSessionState: sessionState.get,
     subscribe: sessionState.subscribe,
     getActiveProfile: () => activeProfile,
     setActiveProfile: (profile) => { activeProfile = profile; },
     isPipSupported: () => pipSupported,
+
+    // Exposed so the Speaking Profile page can drive its own pre-Companion
+    // Calibrating/Calibration Failed/Calibrated screens through this exact
+    // same instance — see calibration-controller.js's INSTANCE RULE and
+    // CLAUDE.md's "Calibration Controller Instance Rule": calibration and
+    // monitoring are always sequential, never concurrent, within one tab,
+    // so one shared instance (rather than a second, competing one) is what
+    // actually satisfies "one instance holding the mic per tab," not just a
+    // convention two separate instances happen to honor.
+    calibrationController,
+    calibrationLock,
 
     init,
     startMonitoring,

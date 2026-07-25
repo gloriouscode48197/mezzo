@@ -1,0 +1,11 @@
+{
+  "name": "mezzo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test src/*.test.js"
+  },
+  "devDependencies": {
+    "linkedom": "^0.18.13"
+  }
+}

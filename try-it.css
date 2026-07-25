@@ -49,7 +49,7 @@ body {
    shared .page-content base, so the other screens' current top-anchored
    positioning is unaffected. */
 #state-profile-select,
-#state-b {
+#state-calibrating {
   justify-content: center;
   padding: 80px 32px;
 }
@@ -89,26 +89,12 @@ body {
   margin-right: auto;
 }
 
-/* ── Calibration Crossfade ── */
+/* ── Calibrating ── */
 .cal-content-area {
-  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  /* Each phase now carries its own heading (see try-it.html), so this must be
-     tall enough for the taller of the two absolutely-positioned phases. */
-  min-height: 480px;
   width: 100%;
-}
-
-.cal-pre-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  position: absolute;
-  top: 0;
-  width: 100%;
-  transition: opacity 0.5s ease, transform 0.5s ease;
 }
 
 .back-link {
@@ -129,37 +115,24 @@ body {
 .back-link:hover,
 .back-link:focus-visible { color: var(--text-default); }
 
-.cal-pre-content .state-body { margin-bottom: 40px; }
-
 .cal-listen-content {
   display: flex;
   flex-direction: column;
   align-items: center;
-  position: absolute;
-  top: 0;
   width: 100%;
-  opacity: 0;
-  transform: translateY(8px);
-  transition: opacity 0.5s ease 0.3s, transform 0.5s ease 0.3s;
-  pointer-events: none;
 }
 
-#state-b.state-listening .cal-pre-content {
-  opacity: 0; transform: translateY(-8px); pointer-events: none;
+/* Mode-aware "Recalibrating {name}" line — empty (but reserves its own
+   line height, via min-height) in session mode, so switching between modes
+   never shifts the heading below it up or down. */
+.cal-subheading {
+  min-height: 16px;
+  margin-bottom: 8px;
+  color: var(--text-subdued);
+  letter-spacing: 0.02em;
 }
 
-#state-b.state-listening .cal-listen-content {
-  opacity: 1; transform: translateY(0); pointer-events: auto;
-}
-
-.cal-countdown {
-  font-family: var(--font-body);
-  font-weight: var(--weight-light);
-  font-size: 17px;
-  color: var(--hanko-text);
-  letter-spacing: 0.2px;
-  margin-bottom: 24px;
-}
+.cal-cancel-link { margin-top: var(--space-heading-to-content); margin-bottom: 0; }
 
 /* ── Buttons ── */
 .btn-with-icon { display: inline-flex; align-items: center; gap: 10px; }
@@ -169,28 +142,38 @@ body {
 /* ── Calibration Ring Canvas ── */
 /* #cal-ring-canvas is sized inline (200×200px) by the visualization script */
 
-/* ── Recalibrate ── */
-.btn-recalibrate {
-  background: none; border: none;
-  color: var(--hanko-text);
-  font-family: var(--font-body);
-  font-weight: var(--weight-regular);
-  font-size: 14px;
-  cursor: pointer;
-  padding: 8px 16px;
-  margin-top: var(--space-heading-to-content);
-  transition: var(--transition-hover);
+/* ── Saved Profiles heading + count (docs/ux/speaking-profile-flow.md's
+   "SAVED PROFILES  3 / 5") — shown only once one or more profiles exist. ── */
+.saved-profiles-heading-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  width: 100%;
+  margin-bottom: 12px;
 }
 
-.btn-recalibrate:hover { opacity: 0.7; }
+.saved-profiles-heading {
+  font-family: var(--font-body);
+  font-weight: var(--weight-medium);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-subdued);
+}
+
+.saved-profiles-count {
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--text-subdued);
+}
 
 /* ── Profile List ──
    Selected/hover treatment is a consistent ink-tinted overlay system (not
-   token-based like the rest of the page) so every row — built-in or saved —
-   reads identically at each state: rgba(--ink-rgb, 0.035) when selected,
-   rgba(--ink-rgb, 0.04) on hover (deliberately weaker than selected),
-   transparent when idle. No outline/stroke on the selected row — the
-   background tint and square corners are the only selected treatment. ── */
+   token-based like the rest of the page) so every row reads identically at
+   each state: rgba(--ink-rgb, 0.035) when selected, rgba(--ink-rgb, 0.04) on
+   hover (deliberately weaker than selected), transparent when idle. No
+   outline/stroke on the selected row — the background tint and square
+   corners are the only selected treatment. ── */
 .profile-list { display: flex; flex-direction: column; gap: 4px; text-align: left; margin-bottom: 36px; width: 100%; }
 
 .profile-row {
@@ -215,19 +198,13 @@ body {
   border-radius: 0;
 }
 
-/* Both profile-select variants — guided (no saved profiles) and library
-   (1+ saved profiles) — share the same list treatment: a rule above the
-   list, dividers between rows, and one closing the list below, all via
-   borders directly on the rows themselves (no flex gap, no separate <hr>
-   with its own margin), so a hovered/selected row's background runs
-   flush to those rules with no whitespace. */
-#profile-guided,
+/* A rule above the list, dividers between rows, and one closing the list
+   below, all via borders directly on the rows themselves (no flex gap, no
+   separate <hr> with its own margin), so a hovered/selected row's background
+   runs flush to those rules with no whitespace. */
 #profile-library { border-top: 1px solid var(--border); gap: 0; }
-.profile-row-bordered { border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
 
 .profile-row-text { display: flex; flex-direction: column; gap: 4px; }
-
-.profile-row-name-line { display: flex; align-items: center; gap: 8px; }
 
 .profile-row-name {
   font-family: var(--font-body);
@@ -242,36 +219,6 @@ body {
 }
 
 .profile-row-name--sm { font-size: 16px; flex: 1; }
-
-/* Guided-choice (no saved profiles) state only: name weight is a static
-   per-option distinction rather than a selection-driven one — Everyday
-   Conversation always reads as the primary choice, "Create a speaking
-   profile" always reads as plain body text. */
-#profile-guided .profile-row:has(#profile-radio-recommended) .profile-row-name { font-weight: var(--weight-medium); }
-#profile-guided .profile-row:has(#profile-radio-custom) .profile-row-name { font-weight: var(--weight-light); }
-
-/* Subdued pill — deliberately quieter than the profile name, never the accent color. */
-.profile-row-badge {
-  flex-shrink: 0;
-  font-family: var(--font-body);
-  font-size: 9px;
-  font-weight: var(--weight-medium);
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--paper);
-  background: var(--text-subdued);
-  border-radius: var(--radius-pill);
-  padding: 2px 7px;
-  white-space: nowrap;
-}
-
-.profile-row-desc {
-  font-family: var(--font-body);
-  font-weight: var(--weight-light);
-  font-size: 13px;
-  line-height: 150%;
-  color: var(--text-subdued);
-}
 
 /* ── Radio (custom visual over a real, semantic radio input) ── */
 .radio-input {
@@ -311,8 +258,7 @@ body {
 /* padding-top/bottom explicitly zeroed — .profile-row-radio-label below is
    the single source of this row's vertical padding. Without this override,
    .profile-row's own inherited padding stacks with the label's, doubling
-   the row's effective vertical padding and making saved-profile rows
-   noticeably taller (mostly whitespace) than the Recommended row. */
+   the row's effective vertical padding. */
 .profile-row-saved {
   display: flex;
   align-items: center;
@@ -321,10 +267,9 @@ body {
   border-top: 1px solid var(--border);
 }
 
-/* 30px (not 18px, matching .profile-row) is deliberate: a saved profile's
-   single-line name has far less content height than Recommended's
-   name+badge line plus description, so it needs more padding to reach the
-   same total row height, not the same padding. */
+/* 30px (not 18px, matching the base .profile-row) is deliberate: a saved
+   profile's single-line name has little content height on its own, so it
+   needs more padding to reach a comfortable row height. */
 .profile-row-radio-label {
   position: relative;
   flex: 1;
@@ -336,12 +281,34 @@ body {
   padding: 30px 0 30px 18px;
 }
 
-/* Delete is visually secondary by default — invisible until the row is
-   hovered or focus reaches it, then it strengthens. Keyboard users tabbing
-   directly to the button still see it via its own :focus-visible. */
+/* Recalibrate + Delete are visually secondary by default — invisible until
+   the row is hovered or focus reaches it, then they strengthen. Keyboard
+   users tabbing directly to either button still see it via its own
+   :focus-visible. Recalibrate acts directly on this row regardless of the
+   radio selection — see docs/ux/speaking-profile-flow.md's "Recalibrate an
+   Existing Profile". */
+.profile-row-saved .profile-row-recalibrate,
 .profile-row-saved .btn-delete { opacity: 0; }
+.profile-row-saved:hover .profile-row-recalibrate,
+.profile-row-saved:focus-within .profile-row-recalibrate,
 .profile-row-saved:hover .btn-delete,
 .profile-row-saved:focus-within .btn-delete { opacity: 1; }
+
+.profile-row-recalibrate {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: var(--radius-icon-btn);
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--text-subdued);
+  transition: color 0.12s ease, opacity 0.15s ease;
+}
+
+.profile-row-recalibrate:hover,
+.profile-row-recalibrate:focus-visible { color: var(--hanko-text); }
 
 /* ── Delete control (saved custom profiles only) ── */
 .btn-delete {
@@ -359,23 +326,22 @@ body {
 .btn-delete:hover,
 .btn-delete:focus-visible { color: var(--text-default); }
 
-/* ── Create Speaking Profile (profile-library state only) ── */
-/* Not part of the list — the last saved profile is the end of the list,
-   so this only gets a top divider (separating it from the list above),
-   never a closing rule below it. */
-.profile-create-row {
-  padding: 14px 18px;
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  border-top: 1px solid var(--border);
-}
-
+/* ── Calibrate for this session (profile-library state only) ──
+   Not part of the list — the last saved profile is the end of the list, so
+   this only gets a top divider (separating it from the list above), never a
+   closing rule below it. Standalone now (no longer sharing a row with a
+   slots-remaining count — see docs/ux/speaking-profile-flow.md's "Profile
+   Limit", handled reactively via the Calibrated screen's own commit error
+   instead of a proactive count-based disable here). */
 .profile-create-link {
+  display: block;
+  width: 100%;
+  text-align: left;
   background: none;
   border: none;
   cursor: pointer;
-  padding: 0;
+  padding: 14px 18px;
+  border-top: 1px solid var(--border);
   font-family: var(--font-body);
   font-weight: var(--weight-regular);
   font-size: 13px;
@@ -387,19 +353,6 @@ body {
 .profile-create-link:hover,
 .profile-create-link:focus-visible {
   color: var(--hanko-fill);
-}
-
-.profile-slots-remaining {
-  font-family: var(--font-body);
-  font-size: 12px;
-  color: var(--text-subdued);
-}
-
-.profile-limit-message {
-  font-family: var(--font-body);
-  font-weight: var(--weight-light);
-  font-size: 13px;
-  color: var(--text-subdued);
 }
 
 /* ── Delete-profile confirmation dialog ── */
@@ -521,18 +474,45 @@ body {
   padding: 14px 28px;
 }
 
-/* ── Save-profile dialog (calibration) — overlay on top of the listening
-   screen, not a page of its own. Two steps toggled in place; see
-   #save-dialog-overlay in try-it.html and try-it.js's showSaveDialogStep(). ── */
-.dialog-save { max-width: 420px; padding: 32px 32px; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.14); }
+/* ── Calibrated checkpoint / naming (see #state-calibrated in try-it.html) ──
+   Mirrors src/mezzo-session.js's own Companion "pip-calibrated-*" screen:
+   heading, optional error line, a stacked primary/secondary actions block,
+   then Back on its own line below. ── */
+.calibrated-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
 
-.save-dialog-step .dialog-title { margin-bottom: 8px; }
-/* Text-body (not the shared, low-contrast text-subdued) — see the
-   contrast audit above the .save-dialog-* block for the reasoning; this
-   is the same fix applied consistently to every quiet-text element in
-   this dialog. */
-.save-dialog-step .dialog-body { margin-bottom: 4px; color: var(--text-body); }
+.calibrated-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin-bottom: 20px;
+}
 
+.calibrated-actions .btn-outline {
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 15px;
+  padding: 13px 28px;
+  border-color: var(--text-subdued);
+  color: var(--text-body);
+}
+
+/* Calm, not alarming — a muted warm tone rather than a red/orange "error"
+   color, consistent with "Awareness before instruction" (see CLAUDE.md):
+   a failed commit (e.g. the 5-profile limit) is informational, not a fault. */
+.calibrated-error {
+  margin: -8px 0 16px;
+  color: var(--text-body);
+}
+
+/* Naming step (Save / Back) — same modest, non-default button sizing the
+   old save dialog established for this narrower, secondary decision. */
 .save-dialog-actions {
   display: flex;
   align-items: center;
@@ -544,39 +524,24 @@ body {
 .save-dialog-actions .btn-primary,
 .save-dialog-actions .btn-outline { flex: 1; min-width: 0; }
 
-/* This dialog's outline buttons (Try Again, Back) read in normal case at the
-   same size as Save, unlike the app's other (uppercase, compact) .btn-outline
-   usages — scoped narrowly so it doesn't affect .btn-outline elsewhere.
-   border-color overrides the shared [data-surface="light"] .btn-outline
+/* border-color overrides the shared [data-surface="light"] .btn-outline
    rule's border (rgba(138,130,122,0.30), ~1.35:1) with a solid tone that
    clears the 3:1 non-text contrast minimum — button label text itself
    already passes via that same shared rule (ink, ~9.36:1), so it's left
-   alone. */
+   alone. Padding matches .btn-primary's own below so the pair reads as a
+   balanced, equal-width row despite differing intrinsic content width. */
 .save-dialog-actions .btn-outline {
   text-transform: none;
   letter-spacing: normal;
   font-size: 14px;
-  padding: 10px 18px;
+  padding: 10px 22px;
   border-color: var(--text-subdued);
 }
 
-/* Save shares this row with Try Again and reads too heavy at the app's
-   default CTA size (16px / 13px 28px) for a modal this size — smaller,
-   matching Try Again's new proportions so the pair reads balanced. */
 .save-dialog-actions .btn-primary {
   font-size: 14px;
   padding: 10px 22px;
 }
-
-/* Back reads much narrower than Save otherwise — .btn-outline's smaller
-   horizontal padding plus flexbox's implicit content-based minimum width
-   stops equal flex-basis from producing equal visual width. The prompt
-   step's Save/Try Again keep their existing proportions (that pairing
-   isn't meant to be equal-width); only Back, in the name step, needs to
-   read as a balanced pair with Save — matching Save's own (now smaller)
-   padding above, not a fixed value, so the pair stays balanced if that
-   size ever changes again. */
-#save-step-name .btn-outline { padding: 10px 22px; }
 
 /* Close Companion — a page-side recovery action (see try-it.html's
    #state-session-status comment and CLAUDE.md), not a primary CTA, so it
@@ -623,63 +588,6 @@ body {
   background: rgba(60, 59, 63, 0.12);
   transform: scale(0.98);
 }
-
-/* Lighter than the shared --border (rgba(138,130,122,0.18)) — this is a
-   quiet divider between two optional/secondary actions, not a boundary
-   that needs to hold its own visually; scoped here rather than touching
-   --border, which list dividers elsewhere still rely on at full weight. */
-.save-dialog-divider {
-  border: none;
-  border-top: 1px solid rgba(138, 130, 122, 0.10);
-  margin: 0 0 12px;
-}
-
-.save-dialog-discard-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-}
-
-.save-dialog-or {
-  font-family: var(--font-body);
-  font-size: 12px;
-  color: var(--text-quiet);
-}
-
-.save-dialog-discard {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 4px 6px;
-  border-radius: 6px;
-  font-family: var(--font-body);
-  font-size: 12px;
-  color: var(--text-body);
-  transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
-}
-
-.save-dialog-discard:hover,
-.save-dialog-discard:focus-visible {
-  background: rgba(60, 59, 63, 0.06);
-  color: var(--text-default);
-}
-
-.save-dialog-discard:active {
-  background: rgba(60, 59, 63, 0.11);
-  transform: scale(0.98);
-}
-
-/* Repositioned in markup to sit directly beneath the main supporting
-   sentence (matching the approved mockup) — margin is bottom-only now,
-   spacing it from the buttons below rather than the discard row above.
-   --text-quiet (not --text-body, which the main sentence above already
-   uses) — visibly lighter, preserving the hierarchy step between them,
-   while still clearing 4.5:1. */
-.save-dialog-privacy-note { margin: 0 0 24px; color: var(--text-quiet); }
 
 .save-dialog-hint {
   text-align: left;
