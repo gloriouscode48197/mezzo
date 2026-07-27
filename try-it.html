@@ -38,155 +38,56 @@
 
   <div class="page page-fade" data-surface="light" style="opacity: 0">
 
-    <!-- ── State A: Mic permission not granted ── -->
-    <main id="state-a" class="state-view page-content">
+    <!-- ── Home — the page's one pre-Companion state. Its only operational
+         action is "Open Mezzo Companion": no microphone permission request,
+         no profile choice, no calibration decision happens here — the
+         Companion decides all of that for itself the moment it opens (see
+         CLAUDE.md's "Companion entry behavior"). See try-it.js's
+         handleOpenCompanionClick(). ── -->
+    <main id="state-home" class="state-view page-content">
       <div class="state-col">
-        <h1 class="type-section-heading state-heading">Mezzo needs your microphone to listen for volume</h1>
-        <p class="type-hero-body state-body">Mezzo listens only to volume, never to what you say. Nothing is recorded or saved.</p>
-        <button id="btn-enable-mic" class="btn-primary btn-with-icon">
-          <img src="assets/microphone-icon.svg" alt="" class="btn-icon">
-          <span>Enable microphone</span>
-        </button>
-        <p class="type-microcopy state-micro">You can stop monitoring at any time.</p>
-        <p id="denied-help" class="type-microcopy state-micro denied-help hidden">Your browser has blocked microphone access. Click the lock icon in your address bar and change the microphone setting to "Allow", then reload this page.</p>
+        <h1 class="type-section-heading state-heading">Quiet awareness for your speaking volume</h1>
+        <p class="type-hero-body state-body">Mezzo lives in a small floating window that sits alongside your meeting, giving you gentle visual feedback when your volume rises — never recording, never judging.</p>
+        <button id="btn-open-companion" type="button" class="btn-primary btn-wide">Open Mezzo Companion</button>
+        <p class="type-microcopy state-micro">Your audio stays on this device. Nothing is recorded or transcribed.</p>
       </div>
     </main>
 
-    <!-- ── State: Calibrating — driven by the shared calibration controller
-         (src/calibration-controller.js), same one the Mezzo Companion uses.
-         Reached directly from Choose a Speaking Profile (Calibrate for this
-         session, or Recalibrate on an existing profile) — capture begins
-         immediately on entry, no separate "I'm Ready" landing step. Mode-
-         aware subheading ("Recalibrating Kitchen") but the same instructional
-         copy in both modes — never implies one objectively correct volume.
-         No manual "I'm done" control; ends only via the controller's own
-         automatic completion after the configured capture duration. Cancel
-         calls the controller's cleanup path immediately (see try-it.js). ── -->
-    <main id="state-calibrating" class="state-view page-content hidden">
+    <!-- ── Unsupported browser — shown instead of Home when this browser has
+         no Document Picture-in-Picture support. The Companion is the
+         product now, so there is no in-page fallback experience to offer
+         here instead (see CLAUDE.md's Non-Negotiable Decisions). ── -->
+    <main id="state-unsupported" class="state-view page-content hidden">
       <div class="state-col">
-        <div class="cal-content-area">
-          <div class="cal-listen-content">
-            <p id="calibrating-subheading" class="type-microcopy cal-subheading" aria-live="polite"></p>
-            <h1 class="type-section-heading state-heading">Let's learn your natural speaking volume. Speak as if you're talking with a colleague in a video meeting.</h1>
-            <canvas id="cal-ring-canvas" width="200" height="200" aria-hidden="true" style="display:block; width:200px; height:200px; margin:-60px auto var(--space-circle-to-button);"></canvas>
-            <button id="btn-calibrating-cancel" type="button" class="back-link cal-cancel-link">Cancel</button>
-          </div>
-        </div>
+        <h1 class="type-section-heading state-heading">Mezzo Companion needs a different browser</h1>
+        <p class="type-hero-body state-body">The Mezzo Companion relies on Picture-in-Picture support that isn't available in this browser. Try the latest version of Chrome or Edge on desktop.</p>
       </div>
     </main>
 
-    <!-- ── State: Calibration Failed — calm, specific copy mapped from a
-         stable controller failure code (see try-it.js's calibrationFailureMessage,
-         shared with src/mezzo-session.js so both surfaces show identical
-         copy). Try Again calls retry() (same mode/target); Back cancels and
-         returns to Choose a Speaking Profile. ── -->
-    <main id="state-calibration-failed" class="state-view page-content hidden">
+    <!-- ── Dock — the minimal, read-only status surface shown for as long as
+         the Companion stays open. Maps the Companion's own internal states
+         down to four coarse labels (Ready, Calibrating, Monitoring, Needs
+         attention — see CLAUDE.md's Dock status mapping and src/session-
+         state.js) and never shows profile names, calibration progress, or
+         any monitoring/profile control — those all live inside the
+         Companion itself. The embedded card below is static illustrative
+         imagery, not live session UI (see CLAUDE.md's Non-Negotiable
+         Decisions): it always shows the same fixed reference state,
+         abstracted into placeholder bars rather than literal readable text
+         so it can't be mistaken for a live status readout, and deliberately
+         reads as symbolic line art rather than a realistic "screenshot" —
+         user testing found a more realistic version got mistaken for a
+         second real Companion window floating on the desktop. The card is
+         aria-hidden; the figcaption already conveys its purpose to
+         assistive tech. Close Companion is this page's one lifecycle
+         exception — a recovery action for when the Companion's native ✕
+         isn't reachable, calling the exact same session.endSession() the
+         native control already triggers (see try-it.js). ── -->
+    <main id="state-dock" class="state-view page-content hidden" data-surface="light">
       <div class="state-col">
-        <p id="calibration-failed-message" class="type-hero-body state-body" aria-live="assertive"></p>
-        <div class="calibrated-actions">
-          <button id="btn-failed-try-again" type="button" class="btn-primary btn-wide">Try Again</button>
-        </div>
-        <button id="btn-failed-back" type="button" class="back-link">Back</button>
-      </div>
-    </main>
-
-    <!-- ── State: Calibrated checkpoint — one state, two steps toggled in
-         place (checkpoint / naming), same pattern the old save dialog used
-         and the Mezzo Companion's own Calibrated screen uses. Mode-aware
-         actions built in JS: session mode offers Start Monitoring / Save as
-         New Profile; recalibrate mode offers Update {name} & Start
-         Monitoring / Update {name}. Nothing is persisted merely by this
-         state rendering — only the explicit commit actions write anything. ── -->
-    <main id="state-calibrated" class="state-view page-content hidden">
-      <div class="state-col">
-        <div id="calibrated-step-checkpoint" class="calibrated-step">
-          <h1 id="calibrated-heading" class="type-section-heading state-heading"></h1>
-          <p id="calibrated-error" class="type-microcopy calibrated-error hidden" aria-live="polite"></p>
-          <div class="calibrated-actions">
-            <button id="btn-calibrated-primary" type="button" class="btn-primary btn-wide"></button>
-            <button id="btn-calibrated-secondary" type="button" class="btn-outline btn-calibrated-secondary"></button>
-          </div>
-          <button id="btn-calibrated-back" type="button" class="back-link">Back</button>
-        </div>
-        <div id="calibrated-step-name" class="calibrated-step hidden">
-          <h1 class="type-section-heading state-heading">Name your profile</h1>
-          <form id="name-form">
-            <input id="profile-name-input" class="text-input" type="text" maxlength="40" autocomplete="off" aria-label="Profile name">
-            <p class="type-microcopy save-dialog-hint">Coffee Shop &bull; Quiet Office &bull; Presentation</p>
-            <div class="save-dialog-actions">
-              <button id="btn-save-name" type="submit" class="btn-primary">Save</button>
-              <button id="btn-name-back" type="button" class="btn-outline">Back</button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </main>
-
-    <!-- ── State: Choose a Speaking Profile ──
-         Single layout, data-driven by saved-profile count — see
-         docs/ux/speaking-profile-flow.md's "No Saved Profiles" / "Saved
-         Profiles" states (this replaces the old guided-choice/profile-library
-         split). With zero saved profiles, only the primary "Calibrate" button
-         shows — no auto-triggered calibration on page load (see CLAUDE.md's
-         documented main-page/Companion asymmetry), and no separate "Calibrate
-         for this session" link, since it's the only path in already. With one
-         or more saved profiles: a "Saved Profiles" heading + count, the list
-         (each row: select + its own Recalibrate control — per-row, not the
-         Companion's single dynamic control; the wider page favors
-         discoverability here, see CLAUDE.md), a "Calibrate for this session"
-         action, and "Start Monitoring" as the primary button. Radios are
-         selection-only. See try-it.js's renderProfileSelect()/
-         handleProfilePrimaryClick(). ── -->
-    <main id="state-profile-select" class="state-view page-content hidden">
-      <div class="state-col">
-        <h1 class="type-section-heading state-heading">Choose a speaking profile</h1>
-        <p class="type-hero-body state-body">Choose the speaking range you'd like Mezzo to monitor during this session.</p>
-
-        <div id="saved-profiles-heading-row" class="saved-profiles-heading-row hidden">
-          <span class="saved-profiles-heading">Saved Profiles</span>
-          <span id="saved-profiles-count" class="saved-profiles-count"></span>
-        </div>
-
-        <div id="profile-library" class="profile-list hidden">
-          <div id="saved-profiles-list"></div>
-          <button id="btn-calibrate-session" type="button" class="profile-create-link">+ Calibrate for this session</button>
-        </div>
-
-        <button id="btn-profile-primary" class="btn-primary btn-wide">Calibrate</button>
-        <p class="type-microcopy state-micro">You can change your selection before monitoring begins.</p>
-      </div>
-    </main>
-
-    <!-- ── State: Session Status — the status/recovery surface for the two
-         sessionState values reachable while the Companion is open
-         (companionReady / monitoringActive) on a Companion-capable browser.
-         The Companion card below is static illustrative imagery, not
-         session-state UI — it always shows the same fixed reference state
-         (Monitoring, "Approaching End of Range" territory, abstracted into
-         placeholder bars rather than literal readable text so it can't be
-         mistaken for a live status readout) regardless of the real
-         session's actual profile/zone/active state. Deliberately a soft,
-         single-tone line-art diagram (see the .anchor-preview-* rules in
-         try-it.css) rather than a realistic dark-window "screenshot" — user
-         testing found the earlier, more realistic version got mistaken for
-         a second real Companion window floating on the desktop. It should
-         read as obviously symbolic ("a window exists"), never as something
-         to inspect or confuse with the real, live Companion sitting nearby.
-         Only the status pill (dot + text) above it is live — see try-it.js's
-         renderSessionStatusView(). The card is aria-hidden; the figcaption
-         already conveys its purpose to assistive tech. When the Companion
-         closes (companionClosed), Mezzo navigates away from this screen
-         back to the profile library instead of showing status copy here —
-         see try-it.js's handleSessionStateChange(). Close Companion below
-         is a page-side recovery action, not a revived End Session control —
-         it calls the exact same session.endSession() the native ✕ already
-         triggers, just reachable from the page when the floating window
-         itself isn't. See CLAUDE.md's Non-Negotiable Decisions. ── -->
-    <main id="state-session-status" class="state-view page-content state-ready hidden" data-surface="light">
-      <div class="state-col">
-        <div class="session-status-pill">
-          <span id="session-status-dot" class="session-status-dot"></span>
-          <span id="session-status-pill-text">Monitoring is active.</span>
+        <div class="dock-status-pill">
+          <span id="dock-status-dot" class="dock-status-dot"></span>
+          <span id="dock-status-text">Ready</span>
         </div>
         <h1 class="type-section-heading state-heading">Your Mezzo Companion is open</h1>
         <figure class="anchor-preview-figure">
@@ -225,28 +126,7 @@
         </figure>
         <button id="btn-close-companion" type="button" class="btn-outline btn-close-companion">Close Companion</button>
         <hr class="anchor-preview-divider">
-        <p class="type-body session-status-footer-copy">Keep this page open while using Mezzo.<br>Closing it will also close the Mezzo Companion.</p>
-      </div>
-    </main>
-
-    <!-- ── State: Fallback Monitor — reachable ONLY when the browser has no
-         Mezzo Companion support at all (or ?demo=true). Not a fallback
-         within a supported browser; a distinct, complete experience for
-         this one case, so it keeps dark/ambient styling to preserve
-         continuity with what the Companion would otherwise have looked
-         like. ── -->
-    <main id="state-fallback-monitor" class="state-view page-content hidden" data-surface="dark">
-      <div class="mon-status">
-        <div class="mon-status-dot"></div>
-        <span id="fallback-mon-heading" class="mon-heading">Monitoring</span>
-      </div>
-      <div class="mon-canvas-wrap">
-        <div id="fallback-circle-container" class="mon-circle-container"></div>
-      </div>
-      <div class="mon-controls">
-        <button id="btn-fallback-stop" class="btn-primary btn-wide">Stop Monitoring</button>
-        <p class="type-microcopy mon-micro">Nothing is recorded or saved.</p>
-        <p class="type-microcopy mon-micro">Monitoring stops when you close Mezzo.</p>
+        <p class="type-body dock-footer-copy">Keep this page open while using Mezzo.<br>Closing it will also close the Mezzo Companion.</p>
       </div>
     </main>
 
@@ -257,170 +137,6 @@
     <a href="privacy.html" class="type-footer-link">Privacy</a>
   </footer>
 
-  <div id="toast" class="toast" role="status" aria-live="polite"></div>
-
-  <!-- Delete-profile confirmation — see docs/ux/speaking-profile-flow.md's "Deleting Profiles" -->
-  <div id="delete-dialog-overlay" class="dialog-overlay hidden">
-    <div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-dialog-title" aria-describedby="delete-dialog-body">
-      <h2 id="delete-dialog-title" class="type-section-heading dialog-title">Delete "<span id="delete-dialog-name"></span>"?</h2>
-      <p id="delete-dialog-body" class="type-body dialog-body">This profile will be permanently deleted.</p>
-      <div class="dialog-actions">
-        <button id="btn-delete-cancel" type="button" class="btn-outline">Cancel</button>
-        <button id="btn-delete-confirm" type="button" class="btn-delete-confirm">Delete</button>
-      </div>
-    </div>
-  </div>
-
-  <script src="try-it.js?v=15" type="module"></script>
-  <script>
-    /* Calibration ring — ambient PiP visualization (monitoring state) */
-    (function () {
-      const canvas = document.getElementById('cal-ring-canvas');
-      if (!canvas) return;
-      const dpr = window.devicePixelRatio || 1;
-      const SIZE = 200;
-      canvas.width  = SIZE * dpr;
-      canvas.height = SIZE * dpr;
-      const ctx = canvas.getContext('2d');
-      ctx.scale(dpr, dpr);
-
-      let breathPhase = 0, mp0 = 1.1, mp1 = 2.4, last = 0;
-      let wavePool = [], lastWaveSpawn = 0;
-      // Energy tracks from 0 (silence) to 0.22 (within range) over calibration
-      // try-it.js controls the #cal-ring-canvas-energy attribute to drive the level
-      let energy = 0, targetEnergy = 0;
-
-      // Frozen, not just dimmed, once the Calibrating state itself is no
-      // longer the visible state — recording has already finished by this
-      // point (Calibrated/Failed are separate states now, not an overlay on
-      // top of a still-visible listening screen), so a still-animating
-      // canvas underneath would be misleading if it were ever visible.
-      // Checked once per frame rather than driven by an event listener so
-      // it stays correct regardless of how the state's hidden class gets
-      // toggled.
-      const calibratingStateEl = document.getElementById('state-calibrating');
-      function isPausedForModal() {
-        return !calibratingStateEl || calibratingStateEl.classList.contains('hidden');
-      }
-
-      function rgba(ct, a) {
-        // Idle-state base (ct=0) darkened from the original light tan —
-        // that read fine against the old dark background but is too close
-        // to the page's current light (Paper) background to stay legible.
-        // Still warms up to the same Hanko orange at ct=1.
-        var r = Math.round(120 + (196-120)*ct), g = Math.round(108 + (89-108)*ct), b = Math.round(94 + (58-94)*ct);
-        return 'rgba(' + r + ',' + g + ',' + b + ',' + a.toFixed(3) + ')';
-      }
-
-      function mapE(e, p0,v0, p1,v1, p2,v2, p3,v3, p4,v4) {
-        var pts = [p0,v0,p1,v1,p2,v2,p3,v3,p4,v4];
-        if (e <= pts[0]) return pts[1];
-        for (var i = 0; i < pts.length - 3; i += 2) {
-          if (e <= pts[i+2]) { var t=(e-pts[i])/(pts[i+2]-pts[i]); return pts[i+1]+(pts[i+3]-pts[i+1])*t; }
-        }
-        return pts[pts.length-1];
-      }
-
-      function contour(r, dpx, p0, p1) {
-        ctx.beginPath();
-        for (var j = 0; j <= 160; j++) {
-          var a = (j/160)*Math.PI*2;
-          var d = dpx*(0.48*Math.sin(2*a+p0)+0.30*Math.sin(3*a+p1)+0.14*Math.sin(4*a-p0*0.6+0.9)+0.08*Math.sin(5*a+p1*0.8+2.1));
-          var rr = Math.max(3, r+d);
-          var x = SIZE/2 + rr*Math.cos(a), y = SIZE/2 + rr*Math.sin(a);
-          j===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
-        }
-        ctx.closePath();
-      }
-
-      function frame(now) {
-        requestAnimationFrame(frame);
-        if (isPausedForModal()) {
-          // Keep 'last' fresh so the eventual un-pause doesn't see a huge
-          // elapsed dt (which Math.min already clamps, but this avoids
-          // relying on that clamp) — canvas is simply never touched again
-          // below, so whatever was last drawn stays exactly as-is.
-          last = now;
-          return;
-        }
-        var dt = Math.min((now - last)/1000, 0.05); last = now;
-        var nowSec = now / 1000;
-
-        // Read energy from dataset if try-it.js sets it
-        var attr = parseFloat(canvas.dataset.energy);
-        if (!isNaN(attr)) targetEnergy = attr;
-        // Fast-tracking tau (was 0.8s) — the ring should visibly catch up to
-        // actual speaking within a fraction of a second, not drift slowly
-        // behind it, so it reads as responsive rather than laggy.
-        energy += (targetEnergy - energy) * (1 - Math.exp(-dt / 0.18));
-
-        breathPhase += dt * 1.70;
-        mp0 += dt * 0.32; mp1 += dt * 0.46;
-
-        ctx.clearRect(0, 0, SIZE, SIZE);
-        var breath = Math.sin(breathPhase);
-        // Breathing amplitude — was 0.048 (barely perceptible ~5% swing),
-        // now a clearly visible ~32% peak-to-peak swing.
-        var bs = 1 + 0.16*breath;
-        var cx = SIZE/2, cy = SIZE/2;
-        var e = energy;
-
-        var ct0 = mapE(e, 0,0, 0.25,0, 0.72,0, 0.80,0.30, 1.0,1.0);
-        var ct1 = mapE(e, 0,0, 0.25,0, 0.60,0, 0.72,0.30, 1.0,1.0);
-        var ct2 = mapE(e, 0,0, 0.25,0, 0.54,0, 0.72,0.60, 1.0,1.0);
-        var ctDot = mapE(e, 0,0, 0.25,0, 0.68,0, 0.72,0.10, 1.0,1.0);
-
-        var r0 = 28*bs, r0dpx = r0*0.006;
-        var r1 = 46*bs, r1vis = mapE(e, 0,0, 0.38,0, 0.54,1.0, 1.0,1.0);
-        var r1dpx = r1*mapE(e, 0,0, 0.38,0, 0.54,0.10, 1.0,0.13)*r1vis;
-        var r2 = 66*bs, r2vis = mapE(e, 0,0, 0.62,0, 0.80,1.0, 1.0,1.0);
-        var r2dpx = r2*mapE(e, 0,0, 0.65,0, 0.82,0.095, 1.0,0.145)*r2vis;
-
-        // Active ring — the same ring the glow and outward-radiating waves
-        // both key off, matching the Companion's monitoring visualization.
-        var aR = r1vis>0.5&&r2vis>0.5 ? r2/bs*bs : r1vis>0.5 ? r1 : r0;
-        var aDpx = r1vis>0.5&&r2vis>0.5 ? r2dpx : r1vis>0.5 ? r1dpx : r0dpx;
-        var aP0 = r1vis>0.5&&r2vis<0.5 ? mp0+Math.PI*0.7 : mp0;
-        var aP1 = r1vis>0.5&&r2vis<0.5 ? mp1+Math.PI*1.1 : mp1;
-        var aCT = r1vis>0.5&&r2vis>0.5 ? ct2 : r1vis>0.5 ? ct1 : ct0;
-        var gs = mapE(e, 0,0.018, 0.22,0.028, 0.54,0.050, 0.72,0.085, 1.0,0.110);
-        var gr = ctx.createRadialGradient(cx,cy,aR*0.7, cx,cy,aR*1.55);
-        gr.addColorStop(0,rgba(aCT,0)); gr.addColorStop(0.4,rgba(aCT,gs)); gr.addColorStop(1,rgba(aCT,0));
-        ctx.beginPath(); ctx.arc(cx,cy,aR*1.55,0,Math.PI*2); ctx.fillStyle=gr; ctx.fill();
-
-        // Radiating waves — contours spawn at the active ring and expand
-        // outward, fading as they go; spawn rate and peak opacity both
-        // driven by live speaking energy, same propagating-glow treatment
-        // as the Companion's own monitoring-state visualization.
-        var wSpd = mapE(e, 0,5, 0.22,6, 0.54,9, 0.82,13, 1.0,16);
-        var wMax = Math.max(5, aR*0.28);
-        var wPk = mapE(e, 0.05,0.14, 0.22,0.20, 0.54,0.30, 0.82,0.44, 1.0,0.54);
-        var spawnInterval = e < 0.05 ? 99999 : mapE(e, 0.05,3.8, 0.22,2.8, 0.54,1.2, 0.82,0.42, 1.0,0.24);
-        if (nowSec - lastWaveSpawn > spawnInterval) { wavePool.push({ birth: nowSec }); lastWaveSpawn = nowSec; }
-        if (wavePool.length > 40) wavePool.splice(0, wavePool.length - 40);
-        wavePool = wavePool.filter(function (wave) {
-          var tr = (nowSec - wave.birth) * wSpd;
-          if (tr > wMax) return false;
-          var prog = tr / wMax, wR = aR + tr, wDpx = aDpx * (1 + tr / Math.max(1, aR) * 0.5);
-          contour(wR, wDpx, aP0, aP1);
-          ctx.strokeStyle = rgba(aCT, wPk * (1 - prog));
-          ctx.lineWidth = 1.3;
-          ctx.stroke();
-          return true;
-        });
-
-        if (r2vis>0.02) { contour(r2,r2dpx,mp0,mp1); ctx.strokeStyle=rgba(ct2,0.44*r2vis); ctx.lineWidth=2.0; ctx.stroke(); }
-        if (r1vis>0.02) { contour(r1,r1dpx,mp0+Math.PI*0.7,mp1+Math.PI*1.1); ctx.strokeStyle=rgba(ct1,0.48*r1vis); ctx.lineWidth=2.0; ctx.stroke(); }
-        contour(r0,r0dpx,mp0,mp1); ctx.strokeStyle=rgba(ct0,0.52); ctx.lineWidth=2.0; ctx.stroke();
-
-        // Center dot
-        ctx.shadowBlur=4+4*(0.5+0.5*breath); ctx.shadowColor=rgba(ctDot,0.30);
-        ctx.beginPath(); ctx.arc(cx,cy,2.6*bs,0,Math.PI*2);
-        ctx.fillStyle=rgba(ctDot,0.62+0.24*(0.5+0.5*breath)); ctx.fill();
-        ctx.shadowBlur=0;
-      }
-      requestAnimationFrame(frame);
-    })();
-  </script>
+  <script src="try-it.js?v=16" type="module"></script>
 </body>
 </html>

@@ -3,9 +3,8 @@
  * shown on the homepage hero. Reuses MezzoWaveVisualizer exactly as the
  * real Mezzo Companion does (src/mezzo-session.js); the only difference is
  * that zone numbers are hand-fed on a timer here instead of coming from
- * real audio, the same technique src/mezzo-session.js's own startDemo()
- * already uses for the same reason (MezzoWaveVisualizer is a pure renderer
- * and never reads raw audio itself).
+ * real audio — safe to do because MezzoWaveVisualizer is a pure renderer
+ * and never reads raw audio itself.
  *
  * Cycles through the product's real states — Quiet / Within Range /
  * Approaching Range / Outside Range, using the same strings

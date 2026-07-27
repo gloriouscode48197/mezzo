@@ -1,5 +1,7 @@
 # Speaking Profile Flow
 
+> **Retired.** Mezzo moved to a Picture-in-Picture–first model: the Mezzo Companion is now the sole operational surface, and there is no more page-level "Speaking Profile page" implementation — see `CLAUDE.md`'s Non-Negotiable Decisions and Product Architecture, and `docs/product-experience.md`'s "Companion States → Ready" and "Profile Model." This document is kept as a historical record of that earlier page-level design, not current-state terminology or behavior. Much of the detailed profile-library behavior below (delete confirmation copy, the 5-profile-limit copy and behavior, selection-on-delete rules) is still directly relevant reference material for building the equivalent behavior into the Companion's own Ready screen — read it as "what the profile library should do," not "what this page does," since this page no longer has one.
+
 ## Purpose
 
 The Speaking Profile page helps users choose how Mezzo should define the speaking range used during monitoring.

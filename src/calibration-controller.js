@@ -9,10 +9,9 @@
  *
  * Deliberately does NOT own: DOM construction, screen copy/labels, focus
  * behavior, window sizing, or surface-specific navigation (what happens
- * after a commit, e.g. opening the Companion into Monitoring). Both the
- * Companion and the Speaking Profile page render their own screens from
- * this same controller's state — see CLAUDE.md's "Single Source of Truth"
- * section.
+ * after a commit, e.g. returning to the Ready screen). The Companion is the
+ * sole surface that renders screens from this controller's state — see
+ * CLAUDE.md's "Single Source of Truth" section.
  *
  * Every dependency that touches the outside world (microphone I/O, profile
  * storage, the clock, capture timing) is injected, not imported and used
@@ -22,20 +21,19 @@
  * logic with its own full test coverage — testing the controller against
  * the real engine is more meaningful than testing it against a mock of it.
  *
- * INSTANCE RULE — read before wiring this into either surface: exactly one
- * controller instance should be active (i.e. capable of holding the
- * microphone) per browser tab at a time. This is enforced by convention,
- * not by the controller itself — it has no cross-instance awareness. This
- * is sufficient for the Companion + Speaking Profile page pair specifically,
- * because a Document Picture-in-Picture window shares its opener's JS realm
- * (confirmed against this codebase's own usage in src/mezzo-session.js) —
- * there is no real second "window" for a second instance to accidentally
- * exist in. It does NOT cover two separate browser tabs each running their
- * own instance of Mezzo simultaneously; nothing in this codebase currently
- * coordinates across that boundary (no BroadcastChannel, no storage-event
- * listener, no lock key). See CLAUDE.md's "Calibration Controller Instance
- * Rule" for the proposed future cross-tab coordination mechanism — not
- * implemented yet, deliberately, pending its own dedicated wiring step.
+ * INSTANCE RULE — read before wiring this in: exactly one controller
+ * instance should be active (i.e. capable of holding the microphone) per
+ * browser tab at a time. This is enforced by convention, not by the
+ * controller itself — it has no cross-instance awareness. Now that the
+ * Companion is the sole surface driving calibration, this is naturally
+ * satisfied by construction (one instance, created once per tab in
+ * src/mezzo-session.js). It does NOT cover two separate browser tabs each
+ * running their own instance of Mezzo simultaneously; nothing in this
+ * codebase currently coordinates across that boundary (no BroadcastChannel,
+ * no storage-event listener, no lock key). See CLAUDE.md's "Calibration
+ * Controller Instance Rule" for the proposed future cross-tab coordination
+ * mechanism — not implemented yet, deliberately, pending its own dedicated
+ * wiring step.
  */
 
 import { MezzoEngine } from './engine.js';
@@ -61,15 +59,6 @@ const STATUSES = Object.freeze({
 const MODES = Object.freeze({
   SESSION: 'session',
   RECALIBRATE: 'recalibrate',
-});
-
-// Which surface currently owns the in-flight (or most recently idled) run —
-// a routing signal only, not calibration measurement state (see the
-// `activeOwner`/`getOwner()` comment near its declaration below for why this
-// stays outside the frozen `state` object this module already exposes).
-export const CALIBRATION_OWNERS = Object.freeze({
-  MAIN_PAGE: 'main-page',
-  COMPANION: 'companion',
 });
 
 function idleState() {
@@ -193,29 +182,6 @@ export function createCalibrationController({
   // correctly rather than trusting a stale copy.
   let targetSnapshot = null;
 
-  // Which surface (CALIBRATION_OWNERS.MAIN_PAGE / .COMPANION) started the
-  // current run — set explicitly by startSessionCalibration()/
-  // startRecalibration()'s caller, not inferred from pipWindow/sessionState
-  // existing elsewhere. Both src/mezzo-session.js's and try-it.js's own
-  // calibrationController.subscribe() listeners live on this exact same
-  // shared instance for the tab's whole lifetime (see the INSTANCE RULE
-  // above) and use getOwner() to decide whether a given state change is
-  // theirs to render — inferring that from window/session state instead
-  // would couple two independently-evolving systems' invariants together
-  // implicitly, which is exactly what this flag exists to avoid. Kept
-  // outside the frozen `state` object (not part of getState()) since it's a
-  // routing signal, not calibration measurement state — nothing about
-  // ownership should ever gate the actual capture/commit logic, only which
-  // subscriber acts on it. Cleared by reset() alongside targetSnapshot, so
-  // it never survives into the next run's disambiguation once idle; retry()
-  // deliberately does not touch it, since a retry is owned by whichever
-  // surface owned the run that failed.
-  let activeOwner = null;
-
-  function getOwner() {
-    return activeOwner;
-  }
-
   function setState(patch) {
     state = Object.freeze({ ...state, ...patch });
     listeners.forEach((fn) => fn(state));
@@ -269,13 +235,12 @@ export function createCalibrationController({
     }
   }
 
-  function startSessionCalibration(owner = null) {
+  function startSessionCalibration() {
     assertNotCalibrating();
-    activeOwner = owner;
     return runCapture(MODES.SESSION, null);
   }
 
-  function startRecalibration(profileId, owner = null) {
+  function startRecalibration(profileId) {
     assertNotCalibrating();
     // Verified before microphone capture begins, per spec — a bad id never
     // even requests mic access.
@@ -283,7 +248,6 @@ export function createCalibrationController({
     if (!profile) {
       throw unknownProfileError(profileId);
     }
-    activeOwner = owner;
     targetSnapshot = { ...profile };
     return runCapture(MODES.RECALIBRATE, profileId);
   }
@@ -410,7 +374,6 @@ export function createCalibrationController({
       micHeld = false;
     }
     targetSnapshot = null;
-    activeOwner = null;
     setState(idleState());
   }
 
@@ -539,7 +502,6 @@ export function createCalibrationController({
     subscribe,
     subscribeToLevel,
     getTargetSnapshot,
-    getOwner,
     startSessionCalibration,
     startRecalibration,
     retry,
