@@ -42,6 +42,10 @@ import {
   setLastUsedProfile,
   clearLastUsedProfile,
   resolveActiveProfile,
+  normalizeProfileName,
+  resolveSavePromptAction,
+  commitSavePromptName,
+  SAVE_PROMPT_ACTIONS,
   MAX_SAVED_PROFILES,
 } from './profiles.js';
 
@@ -331,6 +335,300 @@ describe('promoteTemporaryProfile', () => {
     assert.strictEqual(profile.id, 'injected-1');
     assert.strictEqual(calls.length, 1);
     assert.strictEqual(getSavedProfiles().length, 0, 'the real, module-level storage must be untouched when a different addSavedProfile is injected');
+  });
+});
+
+// =============================================================================
+// resolveSavePromptAction — the single helper deciding what a save-prompt
+// name submission should do: invalid / create / update / blocked. Both the
+// live "as you type" UI preview and commitSavePromptName() (below) call
+// this same function — it is the one place name-matching and the
+// profile-limit check happen.
+// =============================================================================
+
+describe('normalizeProfileName', () => {
+  it('trims and lowercases', () => {
+    assert.strictEqual(normalizeProfileName('  Kitchen  '), 'kitchen');
+  });
+
+  it('returns an empty string for non-string input', () => {
+    assert.strictEqual(normalizeProfileName(null), '');
+    assert.strictEqual(normalizeProfileName(undefined), '');
+  });
+});
+
+describe('resolveSavePromptAction', () => {
+  it('resolves an empty or whitespace-only name to invalid', () => {
+    assert.strictEqual(resolveSavePromptAction('').kind, SAVE_PROMPT_ACTIONS.INVALID);
+    assert.strictEqual(resolveSavePromptAction('   ').kind, SAVE_PROMPT_ACTIONS.INVALID);
+    assert.strictEqual(resolveSavePromptAction(undefined).kind, SAVE_PROMPT_ACTIONS.INVALID);
+  });
+
+  it('resolves a unique name to create, with room in the library', () => {
+    addSavedProfile(makeCalibration({ name: 'Kitchen' }));
+    const resolution = resolveSavePromptAction('Coffee Shop');
+    assert.strictEqual(resolution.kind, SAVE_PROMPT_ACTIONS.CREATE);
+    assert.strictEqual(resolution.profile, null);
+  });
+
+  it('resolves a name matching an existing profile to update, carrying that exact profile', () => {
+    const kitchen = addSavedProfile(makeCalibration({ name: 'Kitchen' }));
+    const resolution = resolveSavePromptAction('Kitchen');
+    assert.strictEqual(resolution.kind, SAVE_PROMPT_ACTIONS.UPDATE);
+    assert.deepStrictEqual(resolution.profile, kitchen);
+  });
+
+  it('matching ignores case', () => {
+    const kitchen = addSavedProfile(makeCalibration({ name: 'Kitchen' }));
+    assert.strictEqual(resolveSavePromptAction('kitchen').kind, SAVE_PROMPT_ACTIONS.UPDATE);
+    assert.strictEqual(resolveSavePromptAction('KITCHEN').kind, SAVE_PROMPT_ACTIONS.UPDATE);
+    assert.strictEqual(resolveSavePromptAction('KiTcHeN').profile.id, kitchen.id);
+  });
+
+  it('matching ignores surrounding whitespace', () => {
+    addSavedProfile(makeCalibration({ name: 'Kitchen' }));
+    assert.strictEqual(resolveSavePromptAction('  Kitchen  ').kind, SAVE_PROMPT_ACTIONS.UPDATE);
+    assert.strictEqual(resolveSavePromptAction('\tKitchen\n').kind, SAVE_PROMPT_ACTIONS.UPDATE);
+  });
+
+  it('never treats an internal-whitespace difference as a match', () => {
+    addSavedProfile(makeCalibration({ name: 'Coffee Shop' }));
+    assert.strictEqual(resolveSavePromptAction('CoffeeShop').kind, SAVE_PROMPT_ACTIONS.CREATE);
+  });
+
+  it('blocks a unique name once the library is at the five-profile limit', () => {
+    fillLibrary(MAX_SAVED_PROFILES);
+    const resolution = resolveSavePromptAction('One Too Many');
+    assert.strictEqual(resolution.kind, SAVE_PROMPT_ACTIONS.BLOCKED);
+  });
+
+  it('an existing-name match still resolves to update at the five-profile limit — never blocked', () => {
+    const profiles = fillLibrary(MAX_SAVED_PROFILES);
+    const target = profiles[2];
+    const resolution = resolveSavePromptAction(target.name);
+    assert.strictEqual(resolution.kind, SAVE_PROMPT_ACTIONS.UPDATE);
+    assert.strictEqual(resolution.profile.id, target.id);
+  });
+
+  it('accepts an injected savedProfiles snapshot instead of reading storage', () => {
+    const injected = [{ id: 'x1', name: 'Injected', speakingDb: -30, spreadDb: 4, calibratedTs: 1 }];
+    assert.strictEqual(resolveSavePromptAction('Injected', { savedProfiles: injected }).kind, SAVE_PROMPT_ACTIONS.UPDATE);
+    assert.strictEqual(getSavedProfiles().length, 0, 'real storage must be untouched — nothing was ever added here');
+  });
+});
+
+// =============================================================================
+// commitSavePromptName — the save prompt's actual commit, reusing
+// promoteTemporaryProfile() (create) and updateSavedProfile() (update)
+// exactly as-is rather than duplicating persistence logic.
+// =============================================================================
+
+describe('commitSavePromptName', () => {
+  it('a unique name creates a new profile', () => {
+    const { action, profile, error } = commitSavePromptName(makeTemporary(), 'Kitchen');
+    assert.strictEqual(error, null);
+    assert.strictEqual(action, SAVE_PROMPT_ACTIONS.CREATE);
+    assert.ok(typeof profile.id === 'string' && profile.id.length > 0);
+    assert.strictEqual(profile.name, 'Kitchen');
+    assert.strictEqual(getSavedProfiles().length, 1);
+  });
+
+  it('an existing name updates the existing profile', () => {
+    const kitchen = addSavedProfile(makeCalibration({ name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 1 }));
+    const temp = makeTemporary({ speakingDb: -20, spreadDb: 6, calibratedTs: 999 });
+
+    const { action, profile, error } = commitSavePromptName(temp, 'Kitchen');
+
+    assert.strictEqual(error, null);
+    assert.strictEqual(action, SAVE_PROMPT_ACTIONS.UPDATE);
+    assert.strictEqual(profile.speakingDb, -20);
+    assert.strictEqual(profile.spreadDb, 6);
+    assert.strictEqual(profile.calibratedTs, 999);
+    assert.strictEqual(getSavedProfiles().length, 1, 'updating must never grow the library');
+    assert.notStrictEqual(kitchen.speakingDb, profile.speakingDb, 'sanity check: the calibration actually changed');
+  });
+
+  it('preserves the profile\'s id on update', () => {
+    const kitchen = addSavedProfile(makeCalibration({ name: 'Kitchen' }));
+    const { profile } = commitSavePromptName(makeTemporary(), 'Kitchen');
+    assert.strictEqual(profile.id, kitchen.id);
+  });
+
+  it('preserves the profile\'s stored display name and casing on update, regardless of how the user typed it', () => {
+    addSavedProfile(makeCalibration({ name: 'Kitchen' }));
+    const { profile } = commitSavePromptName(makeTemporary(), 'kitchen'); // typed lowercase
+    assert.strictEqual(profile.name, 'Kitchen', 'stored display casing must never change to match what was typed');
+  });
+
+  it('matching ignores case when committing, not just when resolving', () => {
+    const kitchen = addSavedProfile(makeCalibration({ name: 'Kitchen' }));
+    const { action, profile } = commitSavePromptName(makeTemporary(), 'KITCHEN');
+    assert.strictEqual(action, SAVE_PROMPT_ACTIONS.UPDATE);
+    assert.strictEqual(profile.id, kitchen.id);
+    assert.strictEqual(getSavedProfiles().length, 1);
+  });
+
+  it('matching ignores surrounding whitespace when committing', () => {
+    const kitchen = addSavedProfile(makeCalibration({ name: 'Kitchen' }));
+    const { action, profile } = commitSavePromptName(makeTemporary(), '  Kitchen  ');
+    assert.strictEqual(action, SAVE_PROMPT_ACTIONS.UPDATE);
+    assert.strictEqual(profile.id, kitchen.id);
+  });
+
+  it('an existing-name update succeeds even when the library is already at the five-profile limit', () => {
+    const profiles = fillLibrary(MAX_SAVED_PROFILES);
+    const target = profiles[1];
+    const temp = makeTemporary({ speakingDb: -19 });
+
+    const { action, profile, error } = commitSavePromptName(temp, target.name);
+
+    assert.strictEqual(error, null);
+    assert.strictEqual(action, SAVE_PROMPT_ACTIONS.UPDATE);
+    assert.strictEqual(profile.id, target.id);
+    assert.strictEqual(profile.speakingDb, -19);
+    assert.strictEqual(getSavedProfiles().length, MAX_SAVED_PROFILES, 'updating must not change the library size');
+  });
+
+  it('a unique-name create is blocked at the five-profile limit, with a stable recoverable error code', () => {
+    fillLibrary(MAX_SAVED_PROFILES);
+    const before = getSavedProfiles();
+
+    const { action, profile, error } = commitSavePromptName(makeTemporary(), 'One Too Many');
+
+    assert.strictEqual(profile, null);
+    assert.strictEqual(action, null);
+    assert.strictEqual(error.code, 'PROFILE_LIMIT_REACHED');
+    assert.deepStrictEqual(getSavedProfiles(), before, 'library must be completely unchanged on failure');
+  });
+
+  it('duplicate profile names can never be created through this flow — a matching name always updates, never adds a second entry with the same name', () => {
+    addSavedProfile(makeCalibration({ name: 'Kitchen' }));
+    commitSavePromptName(makeTemporary(), 'Kitchen');
+    commitSavePromptName(makeTemporary(), 'kitchen'); // same name again, different casing
+    commitSavePromptName(makeTemporary(), '  Kitchen  '); // same name again, with whitespace
+
+    const saved = getSavedProfiles();
+    assert.strictEqual(saved.length, 1, 'no duplicate "Kitchen" entries were ever created');
+    assert.strictEqual(saved.filter((p) => normalizeProfileName(p.name) === 'kitchen').length, 1);
+  });
+
+  it('rejects a non-temporary profile outright, same as promoteTemporaryProfile', () => {
+    const notTemporary = { name: 'Kitchen', speakingDb: -28, spreadDb: 5, calibratedTs: 999 };
+    assert.throws(() => commitSavePromptName(notTemporary, 'Kitchen'), /genuine temporary profile/);
+    assert.strictEqual(getSavedProfiles().length, 0);
+  });
+
+  it('rejects an empty or whitespace-only name without touching storage', () => {
+    assert.throws(() => commitSavePromptName(makeTemporary(), ''), /non-empty name/);
+    assert.throws(() => commitSavePromptName(makeTemporary(), '   '), /non-empty name/);
+    assert.strictEqual(getSavedProfiles().length, 0);
+  });
+
+  it('always re-reads real storage fresh by default — a profile added after an earlier preview still changes the outcome, guarding against a stale decision', () => {
+    // Simulates the save prompt's own real call pattern: no savedProfiles
+    // override is ever passed by mezzo-session.js, so every call — the live
+    // "as you type" preview and the final commit alike — independently
+    // re-reads getSavedProfiles() at the moment it runs, never trusting an
+    // earlier call's result.
+    const earlierPreview = resolveSavePromptAction('Kitchen');
+    assert.strictEqual(earlierPreview.kind, SAVE_PROMPT_ACTIONS.CREATE, 'nothing named Kitchen exists yet');
+
+    // The library changes in between (e.g. another tab, or the user
+    // recalibrating a different row) — commitSavePromptName() must not
+    // reuse the stale "create" decision computed above.
+    addSavedProfile(makeCalibration({ name: 'Kitchen' }));
+
+    const { action, profile } = commitSavePromptName(makeTemporary(), 'Kitchen');
+    assert.strictEqual(action, SAVE_PROMPT_ACTIONS.UPDATE, 'must re-resolve fresh at commit time, not reuse the earlier "create" preview');
+    assert.strictEqual(getSavedProfiles().length, 1, 'must update the profile that now exists, not create a duplicate');
+    assert.strictEqual(profile.name, 'Kitchen');
+  });
+
+  it('the updated profile\'s calibratedTs reflects the new calibration, not the original', () => {
+    const original = addSavedProfile(makeCalibration({ name: 'Kitchen', calibratedTs: 1000 }));
+    const temp = makeTemporary({ calibratedTs: 5000 });
+
+    const { profile } = commitSavePromptName(temp, 'Kitchen');
+
+    assert.strictEqual(profile.calibratedTs, 5000);
+    assert.notStrictEqual(profile.calibratedTs, original.calibratedTs, 'the timestamp must actually change on update, not just the speaking values');
+  });
+});
+
+// =============================================================================
+// commitSavePromptName's update path, end to end at the storage layer —
+// mirrors the exact sequence src/mezzo-session.js's handleSavePromptNameSubmit()
+// runs on success (commitSavePromptName -> setSelectedProfile ->
+// setLastUsedProfile), without needing a real Document Picture-in-Picture
+// window. Covers: the selected/last-used profile ends up being the updated
+// saved profile (never a temporary one), no temporary profile is left
+// behind in either storage layer, and a simulated "reopen" (resolveActiveProfile())
+// resolves straight to the updated profile.
+// =============================================================================
+
+describe('commitSavePromptName update path — selection/last-used/reopen integration', () => {
+  it('after an update, the selected profile is the updated saved profile — same id, refreshed calibration', () => {
+    const kitchen = addSavedProfile(makeCalibration({ name: 'Kitchen', speakingDb: -30, calibratedTs: 1 }));
+    const temp = makeTemporary({ speakingDb: -18, spreadDb: 7, calibratedTs: 8000 });
+
+    const { profile } = commitSavePromptName(temp, 'Kitchen');
+    setSelectedProfile(profile);
+    setLastUsedProfile(profile);
+
+    const selected = getSelectedProfile();
+    assert.strictEqual(selected.id, kitchen.id);
+    assert.strictEqual(selected.speakingDb, -18);
+    assert.strictEqual(selected.calibratedTs, 8000);
+    assert.strictEqual(selected.temporary, undefined, 'the selected profile must never carry a temporary flag after an update commit');
+  });
+
+  it('no temporary profile remains in selected-profile or last-used-profile storage after an update commit', () => {
+    addSavedProfile(makeCalibration({ name: 'Kitchen' }));
+    // Simulate the temporary profile having been the active/selected one
+    // while monitoring, exactly as it would be mid-session.
+    setSelectedProfile(makeTemporary());
+
+    const { profile } = commitSavePromptName(makeTemporary({ speakingDb: -22 }), 'Kitchen');
+    setSelectedProfile(profile);
+    setLastUsedProfile(profile);
+
+    assert.strictEqual(getSelectedProfile().temporary, undefined);
+    assert.strictEqual(getLastUsedProfile().temporary, undefined);
+    assert.strictEqual(getSelectedProfile().id, getLastUsedProfile().id, 'selected and last-used must agree on the same real profile');
+  });
+
+  it('reopening (resolveActiveProfile) resolves straight to the updated saved profile, not a stale or temporary one', () => {
+    const kitchen = addSavedProfile(makeCalibration({ name: 'Kitchen', speakingDb: -30, calibratedTs: 1 }));
+    const temp = makeTemporary({ speakingDb: -15, spreadDb: 8, calibratedTs: 9999 });
+
+    const { profile } = commitSavePromptName(temp, 'Kitchen');
+    setSelectedProfile(profile);
+    setLastUsedProfile(profile);
+
+    // "Reopen" — resolveActiveProfile() is exactly what startMonitoring()
+    // calls on every Companion open.
+    const resolved = resolveActiveProfile();
+    assert.strictEqual(resolved.id, kitchen.id);
+    assert.strictEqual(resolved.speakingDb, -15);
+    assert.strictEqual(resolved.calibratedTs, 9999);
+    assert.strictEqual(resolved.temporary, undefined);
+  });
+
+  it('the saved-profile count is unchanged by an update commit, before and after selection/last-used are set', () => {
+    addSavedProfile(makeCalibration({ name: 'Home Office' }));
+    addSavedProfile(makeCalibration({ name: 'Kitchen' }));
+    addSavedProfile(makeCalibration({ name: 'Coffee Shop' }));
+    assert.strictEqual(getSavedProfiles().length, 3);
+
+    const { profile } = commitSavePromptName(makeTemporary(), 'Kitchen');
+    setSelectedProfile(profile);
+    setLastUsedProfile(profile);
+
+    assert.strictEqual(getSavedProfiles().length, 3, 'updating must never change the saved-profile count');
+    assert.deepStrictEqual(
+      getSavedProfiles().map((p) => p.name).sort(),
+      ['Coffee Shop', 'Home Office', 'Kitchen']
+    );
   });
 });
 

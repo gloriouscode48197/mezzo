@@ -1,18 +1,31 @@
 /**
- * Mezzo — Session Ownership Module
+ * Mezzo — Session Ownership Module (PiP-First)
  *
  * Owns everything about a monitoring session: the audio/engine pipeline,
  * the Mezzo Companion (Document Picture-in-Picture) lifecycle, the
- * explicit `sessionState` (src/session-state.js — companionClosed /
- * companionReady / monitoringActive), an explicit `layoutMode` for the
- * Companion's own two supported presentations (Expanded / Compact — kept
- * as a fully separate piece of state, never inferred from window
- * dimensions), and the no-Companion-support fallback's own start/stop.
+ * explicit `sessionState` (src/session-state.js), and an explicit
+ * `layoutMode` for the Companion's own two supported presentations
+ * (Expanded / Compact — kept as a fully separate piece of state, never
+ * inferred from window dimensions).
  *
- * The Companion renders as two genuinely separate screens — Ready and
- * Monitoring — never a shared layout with elements toggled. Ready has no
- * visualization at all and is always Expanded; there is no Compact Ready
- * variant. Monitoring is the only screen with two layouts:
+ * The Mezzo Companion is the sole operational surface (see CLAUDE.md's
+ * Non-Negotiable Decisions). Home (try-it.js, before a Companion exists)
+ * has exactly one job: call startMonitoring() to open the Companion. It
+ * does not choose a profile, does not request microphone permission, and
+ * does not decide Welcome vs. Ready — the Companion decides all of that
+ * for itself, every time it opens, from src/profiles.js's own storage:
+ * zero saved profiles → Welcome, one or more → Ready. There is no more
+ * "Home already chose a profile, skip straight to Monitoring" path —
+ * every open goes through Welcome or Ready, first session of the day
+ * included. Document Picture-in-Picture support is required to use Mezzo
+ * at all now; there is no no-Companion-support fallback.
+ *
+ * The Companion renders as four genuinely separate screens — Welcome,
+ * Ready, Calibrating, and Monitoring — never a shared layout with elements
+ * toggled (Calibration Failed and the Calibrated checkpoint are two more,
+ * reached only from Calibrating). Welcome, Ready, and Calibrating share one
+ * fixed size (320×354) and are always Expanded — there is no Compact
+ * variant for any of them. Monitoring is the only screen with two layouts:
  *   - Expanded (MEZZO_COMPANION_EXPANDED_SIZE, 290×420): the live
  *     awareness-state label (Quiet / Within Range / Approaching End of
  *     Range / Outside Range — the most prominent text in the header),
@@ -20,8 +33,8 @@
  *     control bar (Stop, Compact) — never a large full-width Stop
  *     Monitoring button. No in-page title bar — the real Document
  *     Picture-in-Picture window chrome is the only title bar (see
- *     `pipDoc.title` below); Ready uses the same real window chrome too,
- *     with no in-page title bar of its own.
+ *     `pipDoc.title` below); every other state uses the same real window
+ *     chrome too, with no in-page title bar of its own.
  *   - Compact (MEZZO_COMPANION_COMPACT_SIZE, 220×220): peripheral awareness,
  *     but with the same Stop reachable as Expanded — not session management
  *     beyond that. The visualization (centered, dominant), a Stop control
@@ -39,31 +52,30 @@
  *     already treats any Companion close (native ✕ or programmatic) as
  *     "stop monitoring, keep Mezzo open, layout resets to Expanded for the
  *     next open" rather than a full endSession() teardown.
- * Profile selection happens in Mezzo (for the first session) or on the
- * Companion's own Ready screen (for subsequent same-day sessions) — never
- * both for the same session. startMonitoring(profile) opens the Companion
- * and starts monitoring in one action, with no Ready confirmation step and
- * no second "Start Monitoring" click — Mezzo already chose the profile.
- * Once monitoring starts the profile is locked and shown as plain
- * informational text (Expanded only), so there is no mid-monitoring
- * profile-switch flow to reconcile. Stopping returns the (still-open)
- * Companion to Ready, where the profile selector unlocks again for
- * starting again, switching profiles, or creating a new one.
+ *
+ * Profile selection, deletion, the 5-profile limit, calibration, and
+ * recalibration all happen on the Companion's own Ready screen now — Home
+ * never touches any of it. Once monitoring starts the profile is locked
+ * and shown as plain informational text (Expanded only), so there is no
+ * mid-monitoring profile-switch flow to reconcile. Stopping returns the
+ * (still-open) Companion to Ready, where the profile selector unlocks
+ * again for starting again, switching profiles, deleting one, or
+ * calibrating a new one.
  *
  * Extracted out of what used to be monitoring.js's page controller so that
- * try-it.js (now the single Mezzo session-owning page) can drive its own
- * status view off this module's public surface without duplicating the
- * engine/audio/PiP internals — "one source of truth," not a second copy.
+ * try-it.js (Home/Dock) can drive its own minimal status view off this
+ * module's public surface without duplicating the engine/audio/PiP
+ * internals — "one source of truth," not a second copy.
  *
- * Public surface is deliberately small: for the Companion-supported path,
- * try-it.js never calls anything for Start/Stop Monitoring, or for
- * Expanded/Compact layout, directly — those controls live *inside* the
- * Companion's own document and are wired here. try-it.js only needs: init,
- * startMonitoring, stopMonitoring (for its own "End Session" click),
- * endSession, setActiveProfile, subscribe/getSessionState,
- * calibrationController (shared with the Speaking Profile page's own
- * pre-Companion calibration screens — see its export comment below), and
- * (fallback path only) startFallbackMonitoring/startDemo. There is
+ * Public surface is deliberately small: try-it.js never calls anything for
+ * Start/Stop Monitoring, profile selection, calibration, or Expanded/
+ * Compact layout, directly — those controls live *inside* the Companion's
+ * own document and are wired here. try-it.js only needs: init,
+ * startMonitoring (no arguments — the Companion resolves its own profile
+ * and entry screen), stopMonitoring (fallback safety net, effectively
+ * unreachable from Home now that Home has no Stop control), endSession
+ * (Close Companion), subscribe/getSessionState (the Dock's status
+ * mapping), and isPipSupported (the unsupported-browser check). There is
  * deliberately no "bring to front"/"focus" export — the Companion is a
  * Document PiP window and already stays above other windows on its own, so
  * a focus/raise action would be misleading. There is also no "Close
@@ -78,16 +90,23 @@
 import { AudioProcessor } from './audio.js?v=2';
 import { MezzoEngine } from './engine.js?v=5';
 import { MezzoWaveVisualizer } from './wave-visualizer.js';
-import { createCalibrationController, CALIBRATION_OWNERS } from './calibration-controller.js';
+import { createCalibrationController } from './calibration-controller.js';
 import { createCalibrationLock } from './calibration-lock.js';
-import { trackMonitoringStarted, trackMonitoringSession } from './analytics.js';
+import { trackMonitoringStarted, trackMonitoringSession, trackCalibrationCompleted } from './analytics.js';
 import { markClassification, markPipUpdate } from './_timing-debug.js';
 import { SESSION_STATES, createSessionState } from './session-state.js';
 import {
   getSavedProfiles,
+  saveSavedProfiles,
+  getSelectedProfile,
   setSelectedProfile,
+  getLastUsedProfile,
   setLastUsedProfile,
-  promoteTemporaryProfile,
+  clearLastUsedProfile,
+  resolveActiveProfile,
+  resolveSavePromptAction,
+  commitSavePromptName,
+  SAVE_PROMPT_ACTIONS,
 } from './profiles.js';
 
 // Calibration failure codes (src/calibration-controller.js) mapped to calm,
@@ -121,6 +140,44 @@ export const CALIBRATION_FAILURE_COPY = {
 // browser environment, which this module otherwise requires end to end.
 export function calibrationFailureMessage(failure) {
   return CALIBRATION_FAILURE_COPY[failure?.code] || CALIBRATION_FAILURE_COPY.UNKNOWN;
+}
+
+/**
+ * Pure copy for the save prompt's naming step, given a
+ * resolveSavePromptAction() (src/profiles.js) resolution — the single place
+ * this step's terminology-sensitive text lives, so it's unit-testable
+ * directly (see src/mezzo-session.test.js) without a Document PiP-capable
+ * browser, and so renderSavePromptNameState() below only renders it rather
+ * than composing strings inline.
+ *
+ * Terminology (see CLAUDE.md): "calibration" names the measurement being
+ * applied; "profile" is always the saved, selectable object it's applied
+ * to — never the reverse. A calibration is never "chosen," "saved," or
+ * referred to as if it were itself the persistent thing.
+ */
+export function savePromptNameCopy(resolution) {
+  switch (resolution?.kind) {
+    case SAVE_PROMPT_ACTIONS.UPDATE:
+      return {
+        helperText: `This calibration will update your existing "${resolution.profile.name}" profile.`,
+        buttonLabel: `Update ${resolution.profile.name}`,
+        disabled: false,
+      };
+    case SAVE_PROMPT_ACTIONS.BLOCKED:
+      return {
+        helperText: "You've reached the limit of five saved profiles. Delete a profile to save a new one.",
+        buttonLabel: 'Save Profile',
+        disabled: true,
+      };
+    case SAVE_PROMPT_ACTIONS.CREATE:
+      return {
+        helperText: 'This calibration will be saved as a new profile.',
+        buttonLabel: 'Save Profile',
+        disabled: false,
+      };
+    default: // INVALID — nothing typed yet
+      return { helperText: '', buttonLabel: 'Save Profile', disabled: true };
+  }
 }
 
 // The one and only signal for "this profile is a runtime-only calibration
@@ -196,20 +253,18 @@ export function profileMetaText(profile) {
 
 export function createMezzoSession({
   baseUrl,
-  onSessionStateChange,          // (state) => void — drives the host's 3-state status view.
-  onFallbackHeadingChange,       // (text) => void — fallback/demo path's own zone-label heading
-  onFallbackMonitoringStop,      // () => void — fallback path: host switches back to its own Ready view
+  onSessionStateChange,          // (state) => void — drives the Dock's status mapping.
 } = {}) {
   const pipSupported = 'documentPictureInPicture' in window;
   const sessionState = createSessionState();
 
   const audio = new AudioProcessor();
   const engine = new MezzoEngine();
-  // One instance for this tab's whole session — shared by the Companion's
-  // own Calibrating/Calibrated/Calibration-Failed screens (this module,
-  // reachable from the Companion's Ready screen) and, via the `calibrationController`
-  // export below, the Speaking Profile page's own pre-Companion calibration
-  // entry points (try-it.js). Reuses this module's own `audio` (AudioProcessor) rather than a second,
+  // One instance for this tab's whole session — used exclusively by this
+  // module's own Welcome/Calibrating/Calibrated/Calibration-Failed screens
+  // now (Home has no calibration UI of its own to share it with — see
+  // CLAUDE.md's Engineering Notes on the retired dual-surface model).
+  // Reuses this module's own `audio` (AudioProcessor) rather than a second,
   // redundant mic pipeline — calibration and monitoring are always
   // sequential, never concurrent, so one shared instance is safe: by the
   // time any commit method resolves, the controller has already fully
@@ -222,9 +277,9 @@ export function createMezzoSession({
   // Cross-tab lease (src/calibration-lock.js) — a DIFFERENT browser tab
   // running its own Mezzo session can't hold the microphone or race this
   // tab's profile-storage writes during a calibration attempt. One instance
-  // per tab, exposed alongside calibrationController below for try-it.js to
-  // share — see calibration-lock.js's own header for why this is a
-  // localStorage lease, not a second controller, and why it's kept
+  // per tab, used only internally now that Home has no calibration UI of its
+  // own to share it with — see calibration-lock.js's own header for why this
+  // is a localStorage lease, not a second controller, and why it's kept
   // structurally separate from calibration measurement logic entirely.
   const calibrationLock = createCalibrationLock();
 
@@ -252,32 +307,21 @@ export function createMezzoSession({
   // next screens depending on context (Ready, or navigating elsewhere
   // entirely) that a single generic handler couldn't infer safely.
   //
-  // Gated on calibrationController.getOwner() === COMPANION: try-it.js
-  // registers its own subscriber on this exact same shared instance (see
-  // CLAUDE.md's "Calibration Controller Instance Rule") for calibration runs
-  // it starts itself, pre-Companion. Without this guard, a main-page-driven
-  // calibration would also reach this listener and try to render Companion
-  // screens — today that happens to be a safe no-op whenever pipWindow is
-  // null (every DOM ref below is null, resizeCompanionTo()/showOnlyScreen()
-  // both short-circuit), but that safety is an accident of pipWindow's
-  // current lifecycle, not a guarantee — inferring "who owns this run" from
-  // window/session state elsewhere would silently couple two independently-
-  // evolving systems' invariants together. getOwner() makes the actual rule
-  // explicit instead: only render here when this surface is the one that
-  // started the run. Every real start call site below passes
-  // CALIBRATION_OWNERS.COMPANION explicitly (beginCalibrationFlow); retry()
-  // doesn't need to re-pass it — ownership survives a failed→retry cycle on
-  // its own (see calibration-controller.js).
+  // Ungated: this module is the calibration controller's one and only
+  // subscriber for rendering purposes now — Home (try-it.js) never starts a
+  // calibration run and has no screens of its own to render, so there is no
+  // second surface's state changes to filter out here anymore. (The earlier
+  // dual-surface model's CALIBRATION_OWNERS-gated version of this listener
+  // is retired along with that model — see CLAUDE.md's Engineering Notes.)
   calibrationController.subscribe((state) => {
-    if (calibrationController.getOwner() !== CALIBRATION_OWNERS.COMPANION) return;
     if (state.status === 'failed') {
       showFailedScreen(state.failure);
     } else if (state.status === 'calibrated') {
+      trackCalibrationCompleted();
       showCalibratedScreen(state);
     }
   });
 
-  let mainCircle = null;
   let pipCircle = null;
   let activeCircle = null;
   let pipWindow = null;
@@ -286,22 +330,37 @@ export function createMezzoSession({
   let activeProfile = null;
   let isMonitoringActive = false;
   let isPageUnloading = false;
-  let demoInterval = null;
 
   // Explicit, Companion-internal — never inferred from pipWindow's actual
   // dimensions. Only meaningful while sessionState is monitoringActive;
-  // Ready is unconditionally Expanded regardless of this value.
+  // every other state is unconditionally Expanded regardless of this value.
   let layoutMode = LAYOUT_MODES.EXPANDED;
+
+  // Welcome-screen DOM refs — reached exactly once, the first time the
+  // Companion ever opens with zero saved profiles (see showWelcomeScreen()/
+  // enterPipReadyMode()).
+  let welcomeScreenEl = null;
 
   // Ready-screen DOM refs, (re)assigned each time startMonitoring() builds the
   // document. Option B: rows are selection-only (a native radiogroup, inside
   // its own bounded-scroll region — see the CSS below); Recalibrate is a
   // single action below the list, its label kept in sync with the current
-  // selection.
+  // selection. Delete lives per-row (see renderReadyScreen()) — profile
+  // management moved here from the old Speaking Profile page's own list.
   let readyScreenEl = null;
   let readyListEl = null; // the scrollable radiogroup container itself
   let readyStartBtn = null;
   let readyRecalibrateBtn = null;
+
+  // Delete-profile confirmation — a modal overlay on top of Ready, same
+  // "centered card over the current screen" pattern as the Save Prompt
+  // below (see .pip-modal-backdrop/.pip-modal-card). Moved here from the
+  // old Speaking Profile page's own #delete-dialog-overlay.
+  let deleteDialogBackdropEl = null;
+  let deleteDialogNameEl = null;
+  let btnDeleteConfirmEl = null;
+  let pendingDeleteProfileId = null;
+  let pendingDeleteTriggerBtn = null;
 
   // Monitoring-screen DOM refs
   let monitoringScreenEl = null;
@@ -338,9 +397,16 @@ export function createMezzoSession({
   let savePromptBackdropEl = null;
   let savePromptStepEl = null;
   let savePromptNameStepEl = null;
-  let savePromptErrorEl = null;
+  let savePromptNameHelperEl = null;
   let savePromptNameInput = null;
   let savePromptNameForm = null;
+  let savePromptSubmitBtn = null;
+  // Reentrancy guard for handleSavePromptNameSubmit() — the commit itself
+  // is fully synchronous (no await), so nothing can genuinely interleave
+  // mid-handler, but this still stops a rapid double Enter/click from
+  // re-entering the handler a second time before the first call's own
+  // closeSavePrompt() has cleared pendingTemporaryProfile.
+  let savePromptSubmitting = false;
 
   // The profile a save-prompt/calibrated-naming step would persist under —
   // held only as long as that one step is on screen, not part of any
@@ -354,7 +420,6 @@ export function createMezzoSession({
   let sustainedTimer = null;
 
   let monitoringStartTime = null;
-  let sessionUsedPip = false;
   let sessionAlertTriggered = false;
 
   function clearSustained() {
@@ -364,7 +429,6 @@ export function createMezzoSession({
 
   function updateHeading(zone) {
     const text = zoneLabel(zone);
-    onFallbackHeadingChange?.(text);
     if (pipStatusHeadingEl && sessionState.get() === SESSION_STATES.MONITORING_ACTIVE) {
       pipStatusHeadingEl.textContent = text;
       // Presentational only — drives the status label's per-zone color (see
@@ -414,8 +478,18 @@ export function createMezzoSession({
   async function beginMonitoringSession(profile) {
     activeProfile = profile;
     // setLastUsedProfile() silently refuses a temporary profile on its own
-    // (src/profiles.js) — no branch needed here to keep that guarantee.
-    setSelectedProfile(profile);
+    // (src/profiles.js) — but setSelectedProfile() has no such guard (it
+    // stores whatever it's given), so it needs the check here: without this,
+    // starting monitoring from a never-saved session-mode calibration would
+    // overwrite this tab's real remembered selection (sessionStorage) with a
+    // temporary profile object. That stale entry would then outlive the
+    // temporary profile itself — discarded on Stop/close everywhere else,
+    // but still sitting in storage — and resolveActiveProfile() would hand
+    // it back as this tab's "own session choice" on the next Companion open,
+    // silently masking whatever real saved profile the user had selected
+    // before. Only a genuine saved profile should ever become this tab's
+    // remembered selection.
+    if (!isTemporaryProfile(profile)) setSelectedProfile(profile);
     setLastUsedProfile(profile);
 
     baselineRMS = Math.pow(10, profile.speakingDb / 20);
@@ -456,7 +530,7 @@ export function createMezzoSession({
       const durationSeconds = Math.round((Date.now() - monitoringStartTime) / 1000);
       trackMonitoringSession({
         durationSeconds,
-        usedPip: sessionUsedPip,
+        usedPip: true, // always true now — there is no no-Companion-support fallback path anymore
         alertTriggered: sessionAlertTriggered,
       });
       monitoringStartTime = null;
@@ -464,20 +538,16 @@ export function createMezzoSession({
 
     isMonitoringActive = false;
     engine.stopMonitoring();
-    if (demoInterval) { clearInterval(demoInterval); demoInterval = null; }
     audio.stopMonitoring();
     audio.release();
 
     clearSustained();
     currentZone = 0;
-
-    if (mainCircle) {
-      mainCircle.destroy();
-      mainCircle = null;
-    }
   }
 
   function stopMonitoring() {
+    if (!pipWindow) return; // defensive — Stop only ever exists inside the Companion now
+
     // Captured before teardown/enterPipReadyMode() can touch activeProfile —
     // isTemporaryProfile() depends only on the explicit `temporary: true`
     // marker (never inferred from name, a missing id, calibratedTs recency,
@@ -488,29 +558,19 @@ export function createMezzoSession({
 
     teardownMonitoringEngine();
 
-    if (pipWindow) {
-      // The Companion stays open — Document PiP does not survive its opener
-      // navigating away, so doing so would silently kill the window.
-      if (wasTemporary) {
-        // showReadyScreen(), not enterPipReadyMode(): the raw renderer,
-        // deliberately skipping the "zero saved profiles -> auto-calibrate"
-        // redirect — that redirect would otherwise fire here (this may be
-        // the user's very first session, with nothing saved yet) and show
-        // Calibrating underneath the Save Prompt about to open, instead of
-        // Ready.
-        showReadyScreen();
-        sessionState.set(SESSION_STATES.COMPANION_READY);
-        openSavePrompt(stoppedProfile);
-      } else {
-        enterPipReadyMode();
-        sessionState.set(SESSION_STATES.COMPANION_READY);
-      }
-      return;
+    // The Companion stays open — Document PiP does not survive its opener
+    // navigating away, so doing so would silently kill the window.
+    if (wasTemporary) {
+      // showReadyScreen(), not enterPipReadyMode(): the raw renderer,
+      // deliberately skipping the "zero saved profiles -> Welcome" redirect
+      // — that redirect would otherwise fire here (this may be the user's
+      // very first session, with nothing saved yet) and show Welcome
+      // underneath the Save Prompt about to open, instead of Ready.
+      showReadyScreen();
+      openSavePrompt(stoppedProfile);
+    } else {
+      enterPipReadyMode();
     }
-
-    // No-Companion-support fallback path.
-    activeCircle = null;
-    if (!isPageUnloading) onFallbackMonitoringStop?.();
   }
 
   /**
@@ -554,24 +614,30 @@ export function createMezzoSession({
   }
 
   /**
-   * Opens the Mezzo Companion and starts monitoring immediately with the
-   * given profile — Mezzo (not the Companion) already chose the profile for
-   * this first session, so there is no Ready confirmation step here and no
-   * second "Start Monitoring" click. Falls back to the Ready screen only if
-   * mic acquisition fails, so the user isn't left with a broken window.
-   * Call directly from a real click (this is what satisfies Document PiP's
+   * Opens the Mezzo Companion — Home's one and only action, with no
+   * arguments: Home never chooses a profile, never requests microphone
+   * permission, and never decides what screen the Companion opens to. Once
+   * the window and its document exist, the Companion resolves its own
+   * entry state from src/profiles.js's storage (see enterPipReadyMode()
+   * near the bottom of this function) — Welcome for zero saved profiles,
+   * Ready for one or more — never straight into Monitoring. Call directly
+   * from a real click (this is what satisfies Document PiP's
    * fresh-user-gesture requirement now that the caller is try-it.html's own
    * page, not a separate window relaying the gesture).
    * @returns {Promise<boolean>} whether the Companion actually opened
    */
-  async function startMonitoring(profile) {
+  async function startMonitoring() {
     if (!pipSupported) {
       console.warn('[Session] Document PiP API not supported');
       return false;
     }
 
     try {
-      pipWindow = await documentPictureInPicture.requestWindow(MEZZO_COMPANION_EXPANDED_SIZE); // first open always goes straight to Monitoring
+      // Ready's size, not Monitoring's Expanded size — every open now lands
+      // on Welcome or Ready first (both 320×354), never straight into
+      // Monitoring, so requesting the window at that size avoids a visible
+      // resize flash immediately after opening.
+      pipWindow = await documentPictureInPicture.requestWindow(MEZZO_COMPANION_READY_SIZE);
     } catch (err) {
       console.error('[Session] Failed to open the Mezzo Companion:', err.message);
       return false;
@@ -684,6 +750,42 @@ export function createMezzoSession({
         min-width: 240px;
       }
 
+      /* ── Welcome — reached exactly once, before any saved profile exists.
+         Shares the Ready/Calibrating fixed size; a taller stack of text
+         than any other screen (heading, two body paragraphs, a privacy
+         line, then two actions), so its own type scale runs a step smaller
+         than Calibrating's single-heading treatment to fit comfortably. ── */
+      .pip-screen-welcome {
+        justify-content: center;
+        padding: 28px 24px;
+        box-sizing: border-box;
+        gap: 12px;
+        text-align: center;
+      }
+      .pip-welcome-heading {
+        font-family: var(--font-display);
+        font-weight: var(--weight-light);
+        font-size: 17px;
+        color: rgba(222, 210, 194, 0.92);
+        margin: 0;
+      }
+      .pip-welcome-body {
+        font-family: var(--font-body);
+        font-size: 12px;
+        line-height: 1.5;
+        color: rgba(222, 210, 194, 0.80);
+        margin: 0;
+        max-width: 250px;
+      }
+      .pip-welcome-privacy {
+        font-family: var(--font-body);
+        font-size: 10.5px;
+        line-height: 1.4;
+        color: rgba(172, 158, 136, 0.70);
+        margin: 2px 0 4px;
+        max-width: 240px;
+      }
+
       /* ── Ready screen — Option B (see design/prototypes/companion-ready-
          recalibrate-comparison.html for the measured comparison this
          layout was chosen from). No visualization, always Expanded. No
@@ -769,6 +871,70 @@ export function createMezzoSession({
         overflow: hidden;
         text-overflow: ellipsis;
       }
+
+      /* Delete — profile management moved here from the old Speaking
+         Profile page's own list. Secondary by default (dim, icon-only),
+         strengthens on row hover/focus, same restrained treatment as the
+         Monitoring control bar's own icon buttons. */
+      .pip-ready-row-delete {
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 26px;
+        height: 26px;
+        background: none;
+        border: none;
+        border-radius: 6px;
+        padding: 0;
+        color: rgba(172, 158, 136, 0.55);
+        cursor: pointer;
+        opacity: 0;
+        transition: opacity 0.15s ease, color 0.12s ease, background 0.12s ease;
+      }
+      .pip-ready-row:hover .pip-ready-row-delete,
+      .pip-ready-row-delete:focus-visible {
+        opacity: 1;
+      }
+      .pip-ready-row-delete:hover,
+      .pip-ready-row-delete:focus-visible {
+        color: rgba(222, 210, 194, 0.92);
+        background: rgba(255, 255, 255, 0.06);
+      }
+
+      /* ── Delete-profile confirmation — reuses .pip-modal-backdrop/
+         .pip-modal-card (see below); its own content styling only. ── */
+      .pip-delete-dialog-title {
+        font-family: var(--font-display);
+        font-weight: var(--weight-light);
+        font-size: 15px;
+        line-height: 1.4;
+        color: rgba(222, 210, 194, 0.92);
+        text-align: center;
+        margin: 0 0 8px;
+      }
+      .pip-delete-dialog-body {
+        font-family: var(--font-body);
+        font-size: 12px;
+        line-height: 1.5;
+        color: rgba(222, 210, 194, 0.75);
+        text-align: center;
+        margin: 0 0 18px;
+      }
+      .pip-delete-dialog-actions { display: flex; gap: 10px; width: 100%; }
+      .pip-delete-dialog-actions .pip-calibrated-secondary-btn,
+      .pip-delete-dialog-actions .pip-delete-confirm-btn { flex: 1; }
+      .pip-delete-confirm-btn {
+        background: rgba(210, 155, 75, 0.16);
+        border: 1px solid rgba(210, 155, 75, 0.35);
+        border-radius: 50px;
+        padding: 10px 14px;
+        font-family: var(--font-body);
+        font-size: 12.5px;
+        color: rgba(230, 195, 140, 0.95);
+        cursor: pointer;
+      }
+      .pip-delete-confirm-btn:hover { background: rgba(210, 155, 75, 0.26); }
 
       .pip-calibrate-session-row {
         display: flex;
@@ -1006,6 +1172,23 @@ export function createMezzoSession({
         color: rgba(222, 210, 194, 0.95);
       }
       .pip-name-input:focus-visible { outline: 2px solid var(--border-outline); outline-offset: 1px; }
+
+      /* Live save-prompt helper text — deliberately calmer than
+         .pip-calibrated-error's amber "something went wrong" tone (a name
+         matching an existing profile is an expected, natural outcome here,
+         not a validation failure). Empty when nothing useful to say yet
+         (no name typed), so it never visibly pops in/out with a layout
+         shift — reserves its own line height instead. */
+      .pip-name-helper {
+        min-height: 15px;
+        font-family: var(--font-body);
+        font-size: 11.5px;
+        line-height: 1.4;
+        color: rgba(222, 210, 194, 0.65);
+        text-align: center;
+        margin: 0;
+        max-width: 240px;
+      }
 
       /* ── Generic centered modal overlay — reused by the Save Prompt
          (Stop-time, temporary profile only). Same "centered card, dimmed
@@ -1316,6 +1499,57 @@ export function createMezzoSession({
     const layout = pipDoc.createElement('div');
     layout.className = 'pip-layout';
 
+    // ── Welcome — reached exactly once, the first time the Companion opens
+    //    with zero saved profiles (see enterPipReadyMode()). A deliberate
+    //    first moment, not an instant redirect into Calibrating: explains
+    //    what's about to happen and that microphone access is requested
+    //    next, before it actually is. Not now closes the Companion outright
+    //    (same as endSession()) — it must never request microphone
+    //    permission or create a profile/temporary calibration. Reuses
+    //    Ready's fixed size; no Compact variant. ──
+    const welcomeScreen = pipDoc.createElement('div');
+    welcomeScreen.className = 'pip-screen pip-screen-welcome hidden';
+
+    const welcomeHeading = pipDoc.createElement('h1');
+    welcomeHeading.className = 'pip-welcome-heading';
+    welcomeHeading.textContent = 'Welcome to Mezzo';
+    welcomeScreen.appendChild(welcomeHeading);
+
+    const welcomeBody1 = pipDoc.createElement('p');
+    welcomeBody1.className = 'pip-welcome-body';
+    welcomeBody1.textContent = 'Mezzo gives you quiet visual feedback when your speaking volume rises, so you can adjust without interrupting the moment.';
+    welcomeScreen.appendChild(welcomeBody1);
+
+    const welcomeBody2 = pipDoc.createElement('p');
+    welcomeBody2.className = 'pip-welcome-body';
+    welcomeBody2.textContent = 'To get started, speak normally for a few seconds so Mezzo can learn your comfortable range.';
+    welcomeScreen.appendChild(welcomeBody2);
+
+    const welcomePrivacy = pipDoc.createElement('p');
+    welcomePrivacy.className = 'pip-welcome-privacy';
+    welcomePrivacy.textContent = 'Your audio stays on this device. Nothing is recorded or transcribed.';
+    welcomeScreen.appendChild(welcomePrivacy);
+
+    const welcomeActions = pipDoc.createElement('div');
+    welcomeActions.className = 'pip-calibrated-actions';
+    const welcomePrimaryBtn = pipDoc.createElement('button');
+    welcomePrimaryBtn.type = 'button';
+    welcomePrimaryBtn.className = 'pip-calibrated-primary-btn';
+    welcomePrimaryBtn.textContent = 'Calibrate my voice';
+    welcomePrimaryBtn.addEventListener('click', handleWelcomeCalibrateClick);
+    welcomeActions.appendChild(welcomePrimaryBtn);
+    welcomeScreen.appendChild(welcomeActions);
+
+    const welcomeNotNowBtn = pipDoc.createElement('button');
+    welcomeNotNowBtn.type = 'button';
+    welcomeNotNowBtn.className = 'pip-text-btn';
+    welcomeNotNowBtn.textContent = 'Not now';
+    welcomeNotNowBtn.addEventListener('click', handleWelcomeNotNowClick);
+    welcomeScreen.appendChild(welcomeNotNowBtn);
+
+    layout.appendChild(welcomeScreen);
+    welcomeScreenEl = welcomeScreen;
+
     // ── Ready screen — Option B. A compact heading, a bounded/scrollable
     //    radiogroup of saved profiles, Calibrate for this session, then the
     //    always-visible actions (Start Monitoring, Recalibrate {name}).
@@ -1389,6 +1623,55 @@ export function createMezzoSession({
     readyScreen.appendChild(savePromptBackdrop);
     savePromptBackdropEl = savePromptBackdrop;
     buildSavePromptSteps(pipDoc, savePromptCard);
+
+    // Delete-profile confirmation — another modal overlay on top of Ready,
+    // same pattern as the Save Prompt above. Moved here from the old
+    // Speaking Profile page's own #delete-dialog-overlay — see
+    // handleDeleteClick()/handleDeleteConfirm() below.
+    const deleteDialogBackdrop = pipDoc.createElement('div');
+    deleteDialogBackdrop.className = 'pip-modal-backdrop hidden';
+    deleteDialogBackdrop.addEventListener('click', (event) => {
+      if (event.target === deleteDialogBackdrop) handleDeleteCancel();
+    });
+    const deleteDialogCard = pipDoc.createElement('div');
+    deleteDialogCard.className = 'pip-modal-card';
+
+    const deleteDialogTitle = pipDoc.createElement('p');
+    deleteDialogTitle.className = 'pip-delete-dialog-title';
+    const deleteDialogNameSpan = pipDoc.createElement('span');
+    deleteDialogTitle.append('Delete "');
+    deleteDialogTitle.append(deleteDialogNameSpan);
+    deleteDialogTitle.append('"?');
+    deleteDialogCard.appendChild(deleteDialogTitle);
+    deleteDialogNameEl = deleteDialogNameSpan;
+
+    const deleteDialogBody = pipDoc.createElement('p');
+    deleteDialogBody.className = 'pip-delete-dialog-body';
+    deleteDialogBody.textContent = 'This profile will be permanently deleted.';
+    deleteDialogCard.appendChild(deleteDialogBody);
+
+    const deleteDialogActions = pipDoc.createElement('div');
+    deleteDialogActions.className = 'pip-delete-dialog-actions';
+
+    const deleteDialogCancelBtn = pipDoc.createElement('button');
+    deleteDialogCancelBtn.type = 'button';
+    deleteDialogCancelBtn.className = 'pip-calibrated-secondary-btn';
+    deleteDialogCancelBtn.textContent = 'Cancel';
+    deleteDialogCancelBtn.addEventListener('click', handleDeleteCancel);
+    deleteDialogActions.appendChild(deleteDialogCancelBtn);
+
+    const deleteDialogConfirmBtn = pipDoc.createElement('button');
+    deleteDialogConfirmBtn.type = 'button';
+    deleteDialogConfirmBtn.className = 'pip-delete-confirm-btn';
+    deleteDialogConfirmBtn.textContent = 'Delete';
+    deleteDialogConfirmBtn.addEventListener('click', handleDeleteConfirm);
+    deleteDialogActions.appendChild(deleteDialogConfirmBtn);
+    btnDeleteConfirmEl = deleteDialogConfirmBtn;
+
+    deleteDialogCard.appendChild(deleteDialogActions);
+    deleteDialogBackdrop.appendChild(deleteDialogCard);
+    readyScreen.appendChild(deleteDialogBackdrop);
+    deleteDialogBackdropEl = deleteDialogBackdrop;
 
     layout.appendChild(readyScreen);
     readyScreenEl = readyScreen;
@@ -1562,26 +1845,18 @@ export function createMezzoSession({
 
     pipDoc.body.appendChild(layout);
 
-    if (mainCircle) {
-      mainCircle.destroy();
-      mainCircle = null;
-    }
-
     pipWindow.addEventListener('pagehide', handlePipClose);
 
-    // Go straight to Monitoring — Mezzo already chose this profile, so there
-    // is no Ready confirmation step on first open. If mic acquisition fails,
-    // fall back to Ready so the user can retry Start Monitoring from inside
-    // the Companion instead of being left with a broken window. Subsequent
-    // same-day sessions reuse this same open window via enterPipReadyMode()
-    // (on Stop) and resumeMonitoringFromPipReady() (on its own Start
-    // Monitoring button) instead of this path.
-    activeProfile = profile;
-    const started = await resumeMonitoringFromPipReady();
-    if (!started) {
-      enterPipReadyMode();
-      sessionState.set(SESSION_STATES.COMPANION_READY);
-    }
+    // Resolve the active profile from storage — this tab's own selection if
+    // any, else whichever saved profile was last used anywhere (see
+    // src/profiles.js's resolveActiveProfile()) — rather than requiring the
+    // caller to have already chosen one. Home doesn't choose profiles
+    // anymore, so this is the only place that resolution now happens.
+    // enterPipReadyMode() then decides Welcome vs. Ready from the saved-
+    // profile count itself; every open lands there, never straight into
+    // Monitoring.
+    activeProfile = resolveActiveProfile();
+    enterPipReadyMode();
 
     return true;
   }
@@ -1625,7 +1900,6 @@ export function createMezzoSession({
       pipCircle = new MezzoWaveVisualizer(pipCircleWrapperEl);
     }
     activeCircle = pipCircle;
-    sessionUsedPip = true;
 
     // Starting monitoring always begins Expanded — never auto-switches to
     // Compact, even if a previous monitoring session earlier in this same
@@ -1646,7 +1920,7 @@ export function createMezzoSession({
    *  from it — the one chokepoint every screen transition passes through,
    *  so that cleanup can't be missed by a handler that forgets to do it. */
   function showOnlyScreen(screenEl) {
-    [readyScreenEl, calibratingScreenEl, failedScreenEl, calibratedScreenEl, monitoringScreenEl].forEach((el) => {
+    [welcomeScreenEl, readyScreenEl, calibratingScreenEl, failedScreenEl, calibratedScreenEl, monitoringScreenEl].forEach((el) => {
       if (el) el.classList.toggle('hidden', el !== screenEl);
     });
     if (screenEl !== calibratingScreenEl && unsubscribeCalibrationLevel) {
@@ -1655,13 +1929,44 @@ export function createMezzoSession({
     }
   }
 
+  /** Reached exactly once per Companion lifetime — the very first open with
+   *  zero saved profiles (see enterPipReadyMode()). Maps to the Dock's
+   *  "Ready" status, same as the real Ready screen — the Dock doesn't
+   *  distinguish Welcome from Ready (see CLAUDE.md's Dock status mapping). */
+  function showWelcomeScreen() {
+    if (!pipWindow) return;
+    layoutMode = LAYOUT_MODES.EXPANDED;
+    if (pipDocument?.body) pipDocument.body.setAttribute('data-layout', LAYOUT_MODES.EXPANDED);
+    resizeCompanionTo(MEZZO_COMPANION_READY_SIZE);
+    activeCircle = null;
+    showOnlyScreen(welcomeScreenEl);
+    sessionState.set(SESSION_STATES.COMPANION_READY);
+  }
+
+  /** "Calibrate my voice" — begins session-mode calibration directly; this
+   *  is also the first moment microphone permission is ever requested (see
+   *  beginCalibrationFlow() -> calibrationController.startSessionCalibration()
+   *  -> audio.acquire()). Never reached automatically. */
+  function handleWelcomeCalibrateClick() {
+    beginCalibrationFlow('session', null);
+  }
+
+  /** "Not now" — closes the Companion outright, exactly like endSession()
+   *  (native ✕ / Close Companion). Must never touch the microphone or
+   *  create a profile/temporary calibration — calibrationController is still
+   *  idle at this point (nothing was ever started), so endSession()'s own
+   *  calibrationController.cancel() is a pure no-op here, not a real cancel. */
+  function handleWelcomeNotNowClick() {
+    endSession();
+  }
+
   /** Raw Ready renderer — always shows Ready, never auto-redirects, even if
    *  the saved-profile library happens to be empty (that "list is empty"
    *  case is a normal, valid Ready presentation: just Calibrate for this
    *  session, no rows). Used by every path that must not risk re-triggering
-   *  the auto-calibrate redirect below — Cancel/Back from Calibrating,
-   *  Calibration Failed, and the Calibrated checkpoint, and Discard from the
-   *  Save Prompt. See enterPipReadyMode() for the "smart" entry point. */
+   *  the Welcome redirect below — Cancel/Back from Calibrating, Calibration
+   *  Failed, and the Calibrated checkpoint, and Discard from the Save
+   *  Prompt. See enterPipReadyMode() for the "smart" entry point. */
   function showReadyScreen() {
     if (!pipWindow) return;
     layoutMode = LAYOUT_MODES.EXPANDED;
@@ -1670,18 +1975,20 @@ export function createMezzoSession({
     activeCircle = null;
     showOnlyScreen(readyScreenEl);
     renderReadyScreen();
+    sessionState.set(SESSION_STATES.COMPANION_READY);
   }
 
-  /** Smart Ready entry point — used by the two real "we no longer have an
-   *  active session, show Ready" moments (Stop, and startMonitoring()'s
-   *  mic-acquisition-failure fallback). Skips straight into a session
-   *  calibration instead of rendering a profile list with nothing in it,
+  /** Smart Ready entry point — used by every real "we no longer have an
+   *  active session, show the next screen" moment: startMonitoring()'s
+   *  first (and every) open, and Stop. Zero saved profiles shows Welcome —
+   *  a deliberate first moment, never an instant auto-calibrate redirect —
    *  per the product model: there is no built-in, uncalibrated default
-   *  profile, so a user with zero saved profiles has exactly one path in. */
+   *  profile, so a user with zero saved profiles has exactly one path in,
+   *  but they choose to take it. */
   function enterPipReadyMode() {
     if (!pipWindow) return;
     if (getSavedProfiles().length === 0) {
-      beginCalibrationFlow('session', null);
+      showWelcomeScreen();
       return;
     }
     showReadyScreen();
@@ -1725,10 +2032,73 @@ export function createMezzoSession({
       label.title = profile.name;
       row.appendChild(label);
 
+      // Delete — moved here from the old Speaking Profile page's own list;
+      // acts directly on this row regardless of the radio selection, same
+      // as Recalibrate. See docs/ux/speaking-profile-flow.md's retired
+      // "Deleting Profiles" section for the confirmation copy this mirrors.
+      const deleteBtn = pipDocument.createElement('button');
+      deleteBtn.type = 'button';
+      deleteBtn.className = 'pip-ready-row-delete';
+      deleteBtn.setAttribute('aria-label', `Delete ${profile.name} profile`);
+      deleteBtn.innerHTML = '<svg width="13" height="14" viewBox="0 0 13 14" fill="none" aria-hidden="true"><path d="M1 3.5h11M4.5 3.5V2h4v1.5M5.5 6.5v4M7.5 6.5v4M2 3.5l.8 8.5h7.4l.8-8.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      deleteBtn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        event.preventDefault();
+        handleDeleteClick(profile, deleteBtn);
+      });
+      row.appendChild(deleteBtn);
+
       readyListEl.appendChild(row);
     });
 
     updateReadyActionsState();
+  }
+
+  function openDeleteDialog(profile, triggerBtn) {
+    pendingDeleteProfileId = profile.id;
+    pendingDeleteTriggerBtn = triggerBtn;
+    if (deleteDialogNameEl) deleteDialogNameEl.textContent = profile.name;
+    deleteDialogBackdropEl?.classList.remove('hidden');
+    btnDeleteConfirmEl?.focus();
+  }
+
+  function closeDeleteDialog() {
+    deleteDialogBackdropEl?.classList.add('hidden');
+    pendingDeleteTriggerBtn?.focus();
+    pendingDeleteProfileId = null;
+    pendingDeleteTriggerBtn = null;
+  }
+
+  function handleDeleteClick(profile, triggerBtn) {
+    openDeleteDialog(profile, triggerBtn);
+  }
+
+  function handleDeleteCancel() {
+    closeDeleteDialog();
+  }
+
+  /** Confirm — removes the profile from storage, repairs any stored
+   *  reference that pointed at it (this tab's selection, the cross-tab
+   *  last-used profile — see CLAUDE.md's Profile Model: no stored reference
+   *  should ever point at a missing profile), and re-renders. Deleting the
+   *  final saved profile returns to Welcome, exactly like a genuinely new
+   *  user — see docs/ux/speaking-profile-flow.md's retired "Deleting the
+   *  Final Profile" section. */
+  function handleDeleteConfirm() {
+    if (!pendingDeleteProfileId) return;
+    const deletedId = pendingDeleteProfileId;
+    const remaining = getSavedProfiles().filter((p) => p.id !== deletedId);
+    saveSavedProfiles(remaining);
+
+    if (getSelectedProfile()?.id === deletedId) setSelectedProfile(null);
+    if (getLastUsedProfile()?.id === deletedId) clearLastUsedProfile();
+    if (activeProfile?.id === deletedId) activeProfile = null;
+
+    deleteDialogBackdropEl?.classList.add('hidden');
+    pendingDeleteProfileId = null;
+    pendingDeleteTriggerBtn = null;
+
+    enterPipReadyMode(); // re-resolves fresh: Welcome if that was the last one, Ready (re-rendered) otherwise
   }
 
   // Profile selection only ever happens while Ready — monitoring locks it —
@@ -1820,12 +2190,13 @@ export function createMezzoSession({
     if (calibratingMeterFillEl) calibratingMeterFillEl.style.width = '0%';
     showOnlyScreen(calibratingScreenEl);
     unsubscribeCalibrationLevel = calibrationController.subscribeToLevel(handleCalibrationLevelSample);
+    sessionState.set(SESSION_STATES.COMPANION_CALIBRATING);
 
     try {
       if (mode === 'recalibrate') {
-        calibrationController.startRecalibration(targetProfileId, CALIBRATION_OWNERS.COMPANION);
+        calibrationController.startRecalibration(targetProfileId);
       } else {
-        calibrationController.startSessionCalibration(CALIBRATION_OWNERS.COMPANION);
+        calibrationController.startSessionCalibration();
       }
     } catch (err) {
       console.error('[Session] Could not start calibration:', err.message);
@@ -1849,6 +2220,7 @@ export function createMezzoSession({
   function showFailedScreen(failure) {
     if (failedMessageEl) failedMessageEl.textContent = calibrationFailureMessage(failure);
     showOnlyScreen(failedScreenEl);
+    sessionState.set(SESSION_STATES.COMPANION_NEEDS_ATTENTION);
   }
 
   /** Try Again — retry() re-enters the same mode and, in recalibrate mode,
@@ -1910,6 +2282,9 @@ export function createMezzoSession({
     resizeCompanionTo(MEZZO_COMPANION_READY_SIZE);
     activeCircle = null;
     showOnlyScreen(calibratedScreenEl);
+    // Maps to the Dock's "Ready" status, not a status of its own — see
+    // CLAUDE.md's Dock status mapping ("Calibrated checkpoint → Ready").
+    sessionState.set(SESSION_STATES.COMPANION_READY);
   }
 
   function showCalibratedCommitError() {
@@ -2070,10 +2445,15 @@ export function createMezzoSession({
   // ===========================================================================
   // Save Prompt — Stop-time modal, temporary profiles only. Shares the
   // "checkpoint/naming, two steps toggled in place" pattern with the
-  // Calibrated screen above and try-it.js's own save dialog, and shares the
-  // actual promotion operation (profiles.js's promoteTemporaryProfile())
-  // with the Calibrated screen's own "Save as New Profile" — the two paths
-  // must never implement slightly different storage semantics.
+  // Calibrated screen above and try-it.js's own save dialog. The naming
+  // step's outcome — create a new profile, or explicitly update an existing
+  // one — is entirely decided by profiles.js's resolveSavePromptAction(),
+  // never re-implemented here: renderSavePromptNameState() below only
+  // renders whatever that function resolves to (live, on every keystroke),
+  // and handleSavePromptNameSubmit() only commits it (via
+  // commitSavePromptName(), which itself re-resolves fresh rather than
+  // trusting the last render). This UI never matches names or checks the
+  // profile limit on its own.
   // ===========================================================================
 
   function showSavePromptStep(step) {
@@ -2083,7 +2463,6 @@ export function createMezzoSession({
 
   function openSavePrompt(temporaryProfile) {
     pendingTemporaryProfile = temporaryProfile;
-    if (savePromptErrorEl) { savePromptErrorEl.classList.add('hidden'); savePromptErrorEl.textContent = ''; }
     showSavePromptStep('prompt');
     savePromptBackdropEl?.classList.remove('hidden');
   }
@@ -2093,46 +2472,83 @@ export function createMezzoSession({
     pendingTemporaryProfile = null;
   }
 
+  /**
+   * Renders the naming step purely from resolveSavePromptAction(name)'s
+   * current outcome — the one place the name step's helper text, primary
+   * button label, and enabled/disabled state are decided. Called on every
+   * keystroke (live preview) and once when the step first opens (so an
+   * empty input immediately shows the disabled, un-typed state rather than
+   * a stale "Save Profile" left over from a previous open).
+   */
+  function renderSavePromptNameState() {
+    if (!savePromptNameInput) return;
+    const resolution = resolveSavePromptAction(savePromptNameInput.value);
+    const copy = savePromptNameCopy(resolution);
+
+    if (savePromptSubmitBtn) {
+      savePromptSubmitBtn.disabled = copy.disabled;
+      savePromptSubmitBtn.textContent = copy.buttonLabel;
+    }
+    if (savePromptNameHelperEl) savePromptNameHelperEl.textContent = copy.helperText;
+  }
+
   function handleSavePromptSaveClick() {
     if (savePromptNameInput) savePromptNameInput.value = '';
     showSavePromptStep('name');
+    renderSavePromptNameState();
     requestAnimationFrame(() => savePromptNameInput?.focus());
   }
 
   /** Discard — drops the temporary calibration entirely; nothing was ever
    *  written to storage for it (setLastUsedProfile() already refuses a
    *  temporary profile on its own — see src/profiles.js), so there is
-   *  nothing to undo, only the in-memory reference to forget. */
+   *  nothing to undo, only the in-memory reference to forget. Never
+   *  modifies a saved profile, regardless of what's typed in the (now
+   *  discarded) name field. */
   function handleSavePromptDiscard() {
     closeSavePrompt();
     activeProfile = null;
     renderReadyScreen();
   }
 
+  /**
+   * Commits the naming step — creates a new profile for a unique name, or
+   * explicitly updates the matching existing profile for a name that
+   * already exists (see commitSavePromptName() in profiles.js, which
+   * re-resolves the outcome fresh rather than trusting whatever
+   * renderSavePromptNameState() last rendered, guarding against the
+   * library having changed — e.g. in another tab — while this prompt sat
+   * open). savePromptSubmitting guards against a double Enter/click
+   * re-entering this handler before pendingTemporaryProfile is cleared.
+   */
   function handleSavePromptNameSubmit(event) {
     event.preventDefault();
-    const name = savePromptNameInput?.value.trim();
-    if (!name || !pendingTemporaryProfile) return;
+    if (savePromptSubmitting) return;
+    const name = savePromptNameInput?.value ?? '';
+    if (!name.trim() || !pendingTemporaryProfile) return;
 
-    const { profile, error } = promoteTemporaryProfile(pendingTemporaryProfile, name);
-    if (!profile) {
-      // 5-profile limit — stays recoverable: back to the prompt step with
-      // the temporary calibration still intact (pendingTemporaryProfile is
-      // untouched), so the user can free a slot elsewhere and retry, or
-      // Discard.
-      showSavePromptStep('prompt');
-      if (savePromptErrorEl) {
-        savePromptErrorEl.textContent = error?.message || 'Something went wrong — please try again.';
-        savePromptErrorEl.classList.remove('hidden');
+    savePromptSubmitting = true;
+    try {
+      const { action, profile, error } = commitSavePromptName(pendingTemporaryProfile, name);
+
+      if (!profile) {
+        // Blocked (limit reached) or, vanishingly rarely, a same-instant
+        // deletion race — either way, re-render the live state so the UI
+        // self-corrects to match reality (e.g. the button re-disables)
+        // instead of silently doing nothing.
+        renderSavePromptNameState();
+        if (savePromptNameHelperEl && error?.message) savePromptNameHelperEl.textContent = error.message;
+        return;
       }
-      return;
-    }
 
-    setSelectedProfile(profile);
-    setLastUsedProfile(profile);
-    activeProfile = profile;
-    closeSavePrompt();
-    renderReadyScreen();
+      setSelectedProfile(profile);
+      setLastUsedProfile(profile);
+      activeProfile = profile;
+      closeSavePrompt();
+      renderReadyScreen();
+    } finally {
+      savePromptSubmitting = false;
+    }
   }
 
   function buildSavePromptSteps(doc, container) {
@@ -2141,14 +2557,12 @@ export function createMezzoSession({
 
     const promptHeading = doc.createElement('p');
     promptHeading.className = 'pip-calibrated-heading';
-    promptHeading.textContent = 'Save this speaking range for next time?';
+    // Frames the decision as saving a speaking profile (the persistent,
+    // selectable object), not saving "a calibration" as if the raw
+    // measurement itself were the thing being kept — see CLAUDE.md's
+    // terminology rule.
+    promptHeading.textContent = 'Save this as a speaking profile?';
     promptStep.appendChild(promptHeading);
-
-    const promptError = doc.createElement('p');
-    promptError.className = 'pip-calibrated-error hidden';
-    promptError.setAttribute('aria-live', 'polite');
-    promptStep.appendChild(promptError);
-    savePromptErrorEl = promptError;
 
     const promptActions = doc.createElement('div');
     promptActions.className = 'pip-calibrated-actions';
@@ -2188,17 +2602,31 @@ export function createMezzoSession({
     input.maxLength = 40;
     input.placeholder = 'e.g. Kitchen';
     input.setAttribute('aria-label', 'Profile name');
+    input.addEventListener('input', renderSavePromptNameState);
     form.appendChild(input);
     savePromptNameInput = input;
+
+    // Live, non-error helper text — reflects whichever of
+    // resolveSavePromptAction()'s four outcomes the current input matches
+    // (nothing yet / new profile / update an existing one / limit reached).
+    // Deliberately not `.pip-calibrated-error`'s amber tone: a name that
+    // matches an existing profile is an expected, natural outcome of this
+    // flow, not a validation failure.
+    const nameHelper = doc.createElement('p');
+    nameHelper.className = 'pip-name-helper';
+    nameHelper.setAttribute('aria-live', 'polite');
+    form.appendChild(nameHelper);
+    savePromptNameHelperEl = nameHelper;
 
     const submitBtn = doc.createElement('button');
     submitBtn.type = 'submit';
     submitBtn.className = 'pip-calibrated-primary-btn';
-    submitBtn.textContent = 'Save';
+    submitBtn.textContent = 'Save Profile';
     form.appendChild(submitBtn);
     form.addEventListener('submit', handleSavePromptNameSubmit);
     nameStep.appendChild(form);
     savePromptNameForm = form;
+    savePromptSubmitBtn = submitBtn;
 
     const backBtn = doc.createElement('button');
     backBtn.type = 'button';
@@ -2231,10 +2659,16 @@ export function createMezzoSession({
     }
     pipWindow = null;
     pipDocument = null;
+    welcomeScreenEl = null;
     readyScreenEl = null;
     readyListEl = null;
     readyStartBtn = null;
     readyRecalibrateBtn = null;
+    deleteDialogBackdropEl = null;
+    deleteDialogNameEl = null;
+    btnDeleteConfirmEl = null;
+    pendingDeleteProfileId = null;
+    pendingDeleteTriggerBtn = null;
     monitoringScreenEl = null;
     pipStatusHeadingEl = null;
     monitoringProfileNameEl = null;
@@ -2256,9 +2690,11 @@ export function createMezzoSession({
     savePromptBackdropEl = null;
     savePromptStepEl = null;
     savePromptNameStepEl = null;
-    savePromptErrorEl = null;
+    savePromptNameHelperEl = null;
     savePromptNameInput = null;
     savePromptNameForm = null;
+    savePromptSubmitBtn = null;
+    savePromptSubmitting = false;
     pendingTemporaryProfile = null;
     if (unsubscribeCalibrationLevel) { unsubscribeCalibrationLevel(); unsubscribeCalibrationLevel = null; }
     layoutMode = LAYOUT_MODES.EXPANDED; // a fresh open always starts Expanded
@@ -2283,9 +2719,8 @@ export function createMezzoSession({
     // continue without the Companion open, so if it was still active
     // reaching here, tear it down now — not "silently keep running" — and
     // reflect the closed Companion (not a full endSession) in session
-    // state, so Mezzo (try-it.html) returns to the profile library instead
-    // of a full endSession() teardown — see try-it.js's
-    // handleSessionStateChange().
+    // state, so Mezzo (try-it.html) returns to Home instead of a full
+    // endSession() teardown — see try-it.js's handleSessionStateChange().
     if (wasActive) {
       teardownMonitoringEngine();
       activeCircle = null;
@@ -2295,62 +2730,10 @@ export function createMezzoSession({
   }
 
   // =============================================================================
-  // No-Companion-support fallback + demo mode
-  // =============================================================================
-
-  /** @returns {Promise<boolean>} whether monitoring actually started */
-  async function startFallbackMonitoring(container) {
-    if (!activeProfile) return false;
-    const ok = await beginMonitoringSession(activeProfile);
-    if (!ok) return false;
-
-    mainCircle = new MezzoWaveVisualizer(container);
-    activeCircle = mainCircle;
-    sessionUsedPip = false;
-    return true;
-  }
-
-  function startDemo(container) {
-    baselineRMS = 0.05;
-    const samples = new Array(100).fill(baselineRMS);
-    engine.calibrate(samples);
-    engine.startMonitoring();
-    engine.graceRemainingMs = 0; // skip grace period so zone changes trigger immediately
-
-    mainCircle = new MezzoWaveVisualizer(container);
-    activeCircle = mainCircle;
-
-    const CYCLE_MS = 12000;
-    const INTERVAL_MS = 50;
-    const baseline = baselineRMS;
-
-    demoInterval = setInterval(() => {
-      const t = Date.now() % CYCLE_MS;
-      let targetRMS;
-
-      if (t < 2000) {
-        targetRMS = baseline * 0.1; // 0-2s: silence — Quiet
-      } else if (t < 4000) {
-        targetRMS = baseline * 1.0; // 2-4s: Within Range
-      } else if (t < 6000) {
-        targetRMS = baseline * 1.5; // 4-6s: Approaching End of Range
-      } else if (t < 10000) {
-        targetRMS = baseline * 2.3; // 6-10s: Outside Range
-      } else {
-        targetRMS = baseline * 0.1; // 10-12s: back to silence
-      }
-
-      onAudioFrame({ rms: targetRMS });
-    }, INTERVAL_MS);
-  }
-
-  // =============================================================================
   // Public interface
   // =============================================================================
 
-  function init(resolvedProfile) {
-    activeProfile = resolvedProfile;
-
+  function init() {
     // This page is the runtime owner of the session — closing it stops
     // monitoring and the Companion (see the pagehide handler below).
     // beforeunload asks for confirmation only: Chrome hasn't allowed custom
@@ -2382,27 +2765,11 @@ export function createMezzoSession({
     SESSION_STATES,
     getSessionState: sessionState.get,
     subscribe: sessionState.subscribe,
-    getActiveProfile: () => activeProfile,
-    setActiveProfile: (profile) => { activeProfile = profile; },
     isPipSupported: () => pipSupported,
-
-    // Exposed so the Speaking Profile page can drive its own pre-Companion
-    // Calibrating/Calibration Failed/Calibrated screens through this exact
-    // same instance — see calibration-controller.js's INSTANCE RULE and
-    // CLAUDE.md's "Calibration Controller Instance Rule": calibration and
-    // monitoring are always sequential, never concurrent, within one tab,
-    // so one shared instance (rather than a second, competing one) is what
-    // actually satisfies "one instance holding the mic per tab," not just a
-    // convention two separate instances happen to honor.
-    calibrationController,
-    calibrationLock,
 
     init,
     startMonitoring,
     stopMonitoring,
     endSession,
-
-    startFallbackMonitoring,
-    startDemo,
   };
 }

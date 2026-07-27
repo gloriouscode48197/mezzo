@@ -31,6 +31,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
+import { SAVE_PROMPT_ACTIONS } from './profiles.js';
 
 globalThis.window = globalThis.window || { location: { search: '' }, addEventListener: () => {} };
 
@@ -40,6 +41,7 @@ const {
   profileMetaText,
   calibrationFailureMessage,
   CALIBRATION_FAILURE_COPY,
+  savePromptNameCopy,
 } = await import('./mezzo-session.js');
 
 // =============================================================================
@@ -112,6 +114,74 @@ describe('calibrationFailureMessage', () => {
 });
 
 // =============================================================================
+// savePromptNameCopy — the save prompt naming step's terminology-sensitive
+// copy (helper text + primary button label), pure and DOM-free so it's
+// tested directly here rather than only through a real PiP window. See
+// CLAUDE.md's terminology rule: "calibration" names the measurement being
+// applied; "profile" is always the saved, selectable object — a calibration
+// is never described as something that gets "chosen," "saved," or
+// "selected" in its own right.
+// =============================================================================
+
+describe('savePromptNameCopy', () => {
+  it('invalid (nothing typed yet): disabled, default label, no helper text', () => {
+    const copy = savePromptNameCopy({ kind: SAVE_PROMPT_ACTIONS.INVALID, profile: null });
+    assert.strictEqual(copy.disabled, true);
+    assert.strictEqual(copy.buttonLabel, 'Save Profile');
+    assert.strictEqual(copy.helperText, '');
+  });
+
+  it('create (unique name): enabled, "Save Profile", and describes creating a profile — never "save a calibration"', () => {
+    const copy = savePromptNameCopy({ kind: SAVE_PROMPT_ACTIONS.CREATE, profile: null });
+    assert.strictEqual(copy.disabled, false);
+    assert.strictEqual(copy.buttonLabel, 'Save Profile');
+    assert.match(copy.helperText, /profile/i);
+    assert.doesNotMatch(copy.helperText, /save (a |this )?calibration\b/i, 'must never phrase it as saving "a calibration" — calibration is the process, profile is the saved object');
+  });
+
+  it('update (matching name): enabled, "Update {name}", and names the profile being updated, not a "calibration profile"', () => {
+    const copy = savePromptNameCopy({ kind: SAVE_PROMPT_ACTIONS.UPDATE, profile: { id: 'p1', name: 'Kitchen' } });
+    assert.strictEqual(copy.disabled, false);
+    assert.strictEqual(copy.buttonLabel, 'Update Kitchen');
+    assert.strictEqual(copy.helperText, 'This calibration will update your existing "Kitchen" profile.');
+    assert.doesNotMatch(copy.helperText, /calibration profile/i);
+  });
+
+  it('update helper text uses the profile\'s actual stored name, not whatever the user typed', () => {
+    // resolveSavePromptAction() already guarantees resolution.profile is the
+    // real stored object — this just confirms savePromptNameCopy renders
+    // that name verbatim, casing included, rather than the raw input.
+    const copy = savePromptNameCopy({ kind: SAVE_PROMPT_ACTIONS.UPDATE, profile: { id: 'p1', name: 'Coffee Shop' } });
+    assert.match(copy.helperText, /"Coffee Shop"/);
+    assert.strictEqual(copy.buttonLabel, 'Update Coffee Shop');
+  });
+
+  it('blocked (five-profile limit): disabled, "Save Profile", explains the limit — never blames a "calibration"', () => {
+    const copy = savePromptNameCopy({ kind: SAVE_PROMPT_ACTIONS.BLOCKED, profile: null });
+    assert.strictEqual(copy.disabled, true);
+    assert.strictEqual(copy.buttonLabel, 'Save Profile');
+    assert.strictEqual(copy.helperText, "You've reached the limit of five saved profiles. Delete a profile to save a new one.");
+  });
+
+  it('never phrases any outcome as choosing, saving, or selecting "a calibration" as if it were the persistent object', () => {
+    const cases = [
+      { kind: SAVE_PROMPT_ACTIONS.INVALID, profile: null },
+      { kind: SAVE_PROMPT_ACTIONS.CREATE, profile: null },
+      { kind: SAVE_PROMPT_ACTIONS.UPDATE, profile: { id: 'p1', name: 'Kitchen' } },
+      { kind: SAVE_PROMPT_ACTIONS.BLOCKED, profile: null },
+    ];
+    cases.forEach((resolution) => {
+      const copy = savePromptNameCopy(resolution);
+      [copy.helperText, copy.buttonLabel].forEach((text) => {
+        assert.doesNotMatch(text, /choose a calibration/i);
+        assert.doesNotMatch(text, /saved calibration/i);
+        assert.doesNotMatch(text, /calibration profile/i);
+      });
+    });
+  });
+});
+
+// =============================================================================
 // profileMetaText — the Monitoring screen's read-only profile line
 // =============================================================================
 
@@ -159,34 +229,23 @@ describe('createMezzoSession construction', () => {
     assert.strictEqual(session.isPipSupported(), false);
   });
 
-  it('starts with no active profile and a closed session state', () => {
+  it('starts with a closed session state', () => {
     const session = createMezzoSession({ baseUrl: '/' });
-    assert.strictEqual(session.getActiveProfile(), null);
     assert.strictEqual(session.getSessionState(), session.SESSION_STATES.COMPANION_CLOSED);
   });
 
-  it('setActiveProfile/getActiveProfile round-trip, including a temporary profile', () => {
-    const session = createMezzoSession({ baseUrl: '/' });
-    const temp = { name: 'Current speaking range', speakingDb: -30, spreadDb: 4, savedProfileId: null, temporary: true };
-    session.setActiveProfile(temp);
-    assert.deepStrictEqual(session.getActiveProfile(), temp);
-  });
-
-  it('exposes exactly the documented public surface, no more, no less', () => {
+  it('exposes exactly the documented public surface, no more, no less — Home no longer resolves/holds a profile or shares the calibration controller/lock, since the Companion owns all of that internally now', () => {
     const session = createMezzoSession({ baseUrl: '/' });
     const expectedKeys = [
-      'SESSION_STATES', 'getSessionState', 'subscribe',
-      'getActiveProfile', 'setActiveProfile', 'isPipSupported',
-      'calibrationController', 'calibrationLock',
+      'SESSION_STATES', 'getSessionState', 'subscribe', 'isPipSupported',
       'init', 'startMonitoring', 'stopMonitoring', 'endSession',
-      'startFallbackMonitoring', 'startDemo',
     ];
     assert.deepStrictEqual(Object.keys(session).sort(), expectedKeys.sort());
   });
 
   it('startMonitoring() resolves to false, safely, when Document PiP is unsupported', async () => {
     const session = createMezzoSession({ baseUrl: '/' });
-    const started = await session.startMonitoring({ id: 'p1', name: 'Kitchen', speakingDb: -30, spreadDb: 4 });
+    const started = await session.startMonitoring();
     assert.strictEqual(started, false);
   });
 });

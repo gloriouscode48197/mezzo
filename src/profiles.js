@@ -185,6 +185,136 @@ export function updateSavedProfile(id, calibrationFields) {
 }
 
 // =============================================================================
+// Save Prompt Name Resolution — the single source of truth for what typing a
+// given name into the post-session save prompt (src/mezzo-session.js's
+// openSavePrompt()/handleSavePromptNameSubmit()) should do. Both the live
+// "as you type" helper text/button label and the actual submit handler call
+// this same function — the UI never re-implements name matching or the
+// profile-limit check itself, it only renders whichever of the four
+// outcomes this resolves to. See CLAUDE.md's Non-Negotiable Decisions for
+// why an explicit name match is allowed to update an existing profile here
+// (never silently — the changing helper text and button label are what
+// make it explicit) while still never overwriting anything without the
+// user visibly choosing to.
+// =============================================================================
+
+export const SAVE_PROMPT_ACTIONS = Object.freeze({
+  INVALID: 'invalid',   // empty or whitespace-only — nothing to resolve yet
+  CREATE: 'create',     // unique name, room in the library — becomes a new profile
+  UPDATE: 'update',     // matches an existing profile's name — updates it in place
+  BLOCKED: 'blocked',   // unique name, but the library is already at MAX_SAVED_PROFILES
+});
+
+/**
+ * Normalizes a profile name for matching only — trims surrounding
+ * whitespace and lowercases. Never used to decide what gets *stored*: a
+ * newly created profile keeps exactly the name the user typed (trimmed,
+ * not lowercased), and updating an existing profile never touches its
+ * stored display name/casing at all (see resolveSavePromptAction below).
+ */
+export function normalizeProfileName(name) {
+  return typeof name === 'string' ? name.trim().toLowerCase() : '';
+}
+
+/**
+ * Resolves what submitting `name` in the save prompt should do, against
+ * `savedProfiles` (defaults to the real library). Pure and synchronous —
+ * safe to call on every keystroke for a live preview, and again,
+ * immediately before committing, to guard against a stale decision (e.g.
+ * another tab changed the library while this prompt was open — see
+ * commitSavePromptName() below, which always re-resolves rather than
+ * trusting whatever was last rendered).
+ *
+ * Matching existing names always wins over the profile limit: updating an
+ * existing profile never grows the library, so it must never be blocked by
+ * MAX_SAVED_PROFILES the way creating a new one can be.
+ *
+ * @param {string} name
+ * @param {{ savedProfiles?: object[], maxProfiles?: number }} [options]
+ * @returns {{ kind: string, profile: object|null }} `profile` is the
+ *   matched saved profile for `update`, otherwise null.
+ */
+export function resolveSavePromptAction(name, { savedProfiles = getSavedProfiles(), maxProfiles = MAX_SAVED_PROFILES } = {}) {
+  const trimmed = typeof name === 'string' ? name.trim() : '';
+  if (!trimmed) {
+    return { kind: SAVE_PROMPT_ACTIONS.INVALID, profile: null };
+  }
+
+  const normalized = normalizeProfileName(trimmed);
+  const match = savedProfiles.find((p) => normalizeProfileName(p.name) === normalized) ?? null;
+  if (match) {
+    return { kind: SAVE_PROMPT_ACTIONS.UPDATE, profile: match };
+  }
+
+  if (savedProfiles.length >= maxProfiles) {
+    return { kind: SAVE_PROMPT_ACTIONS.BLOCKED, profile: null };
+  }
+
+  return { kind: SAVE_PROMPT_ACTIONS.CREATE, profile: null };
+}
+
+/**
+ * Commits a save-prompt submission for `name`: creates a new saved profile
+ * for a unique name, or explicitly updates the matching existing profile's
+ * calibration in place for a name that already exists — re-resolving fresh
+ * via resolveSavePromptAction() rather than trusting a `kind` the caller
+ * already computed, so a submit always reflects the current library, not
+ * whatever was last rendered. Reuses promoteTemporaryProfile() (create) and
+ * updateSavedProfile() (update) exactly as-is — this function only decides
+ * which one to call and normalizes both outcomes into one return shape;
+ * it duplicates no persistence logic of its own.
+ *
+ * The `update` path preserves id, name, and library position — behaviorally
+ * identical to Recalibrate for that same profile, just reached by typing a
+ * matching name here instead of choosing Recalibrate from Ready.
+ *
+ * @param {object} temporaryProfile - must carry `temporary: true`.
+ * @param {string} name
+ * @param {{ savedProfiles?: object[], maxProfiles?: number,
+ *   addSavedProfile?: typeof addSavedProfile,
+ *   updateSavedProfile?: typeof updateSavedProfile }} [deps]
+ * @returns {{ action: 'create'|'update', profile: object, error: null } |
+ *           { action: null, profile: null, error: { code: string, message: string } }}
+ */
+export function commitSavePromptName(temporaryProfile, name, deps = {}) {
+  if (!temporaryProfile?.temporary) {
+    throw new Error('commitSavePromptName requires a genuine temporary profile (temporary: true)');
+  }
+
+  const resolution = resolveSavePromptAction(name, deps);
+
+  if (resolution.kind === SAVE_PROMPT_ACTIONS.INVALID) {
+    throw new Error('commitSavePromptName requires a non-empty name');
+  }
+
+  if (resolution.kind === SAVE_PROMPT_ACTIONS.BLOCKED) {
+    return { action: null, profile: null, error: { code: 'PROFILE_LIMIT_REACHED', message: 'Delete a profile to save a new one.' } };
+  }
+
+  if (resolution.kind === SAVE_PROMPT_ACTIONS.UPDATE) {
+    const { speakingDb, spreadDb, calibratedTs } = temporaryProfile;
+    const updateFn = deps.updateSavedProfile ?? updateSavedProfile;
+    const updated = updateFn(resolution.profile.id, { speakingDb, spreadDb, calibratedTs });
+    if (!updated) {
+      // Only reachable if the matched profile was deleted in the instant
+      // between resolution and this write — deps.savedProfiles (if the
+      // caller injected a stale snapshot) is the one way that gap can
+      // actually open up, since resolveSavePromptAction() and this write
+      // otherwise run back-to-back with nothing else able to interleave.
+      return { action: null, profile: null, error: { code: 'PROFILE_MISSING', message: 'That profile no longer exists — please try again.' } };
+    }
+    return { action: SAVE_PROMPT_ACTIONS.UPDATE, profile: updated, error: null };
+  }
+
+  // CREATE
+  const { profile, error } = promoteTemporaryProfile(temporaryProfile, name, deps);
+  if (!profile) {
+    return { action: null, profile: null, error };
+  }
+  return { action: SAVE_PROMPT_ACTIONS.CREATE, profile, error: null };
+}
+
+// =============================================================================
 // Selected Profile (sessionStorage, this tab only)
 // =============================================================================
 
