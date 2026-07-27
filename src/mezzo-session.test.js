@@ -42,6 +42,7 @@ const {
   calibrationFailureMessage,
   CALIBRATION_FAILURE_COPY,
   savePromptNameCopy,
+  calibratedCheckpointCopy,
 } = await import('./mezzo-session.js');
 
 // =============================================================================
@@ -176,6 +177,51 @@ describe('savePromptNameCopy', () => {
         assert.doesNotMatch(text, /choose a calibration/i);
         assert.doesNotMatch(text, /saved calibration/i);
         assert.doesNotMatch(text, /calibration profile/i);
+      });
+    });
+  });
+});
+
+// =============================================================================
+// calibratedCheckpointCopy — the Calibrated checkpoint's terminology-
+// sensitive copy (heading + both action labels), pure and DOM-free for the
+// same reason savePromptNameCopy is: unit-tested directly rather than only
+// through a real PiP window.
+// =============================================================================
+
+describe('calibratedCheckpointCopy', () => {
+  it('session mode: names no profile at all — the create/update decision has not been made yet at this checkpoint', () => {
+    const copy = calibratedCheckpointCopy({ mode: 'session' });
+    assert.strictEqual(copy.heading, 'Your speaking range is ready.');
+    assert.strictEqual(copy.primaryLabel, 'Start Monitoring');
+    assert.strictEqual(copy.secondaryLabel, 'Save as New Profile');
+    assert.doesNotMatch(copy.heading, /profile/i, 'session mode must not name any profile — nothing has been decided yet');
+  });
+
+  it('recalibrate mode: names the target profile, phrasing the calibration as updating it — never as being the saved object itself', () => {
+    const copy = calibratedCheckpointCopy({ mode: 'recalibrate', targetName: 'Kitchen' });
+    assert.strictEqual(copy.heading, 'This calibration is ready to update Kitchen.');
+    assert.strictEqual(copy.primaryLabel, 'Update Kitchen & Start Monitoring');
+    assert.strictEqual(copy.secondaryLabel, 'Update Kitchen');
+  });
+
+  it('recalibrate mode falls back to a neutral name if the target snapshot is somehow missing', () => {
+    const copy = calibratedCheckpointCopy({ mode: 'recalibrate', targetName: undefined });
+    assert.strictEqual(copy.heading, 'This calibration is ready to update this profile.');
+  });
+
+  it('never phrases either mode as saving, choosing, or selecting "a calibration" as if it were the persistent object', () => {
+    const cases = [
+      { mode: 'session' },
+      { mode: 'recalibrate', targetName: 'Kitchen' },
+    ];
+    cases.forEach((input) => {
+      const copy = calibratedCheckpointCopy(input);
+      [copy.heading, copy.primaryLabel, copy.secondaryLabel].forEach((text) => {
+        assert.doesNotMatch(text, /choose a calibration/i);
+        assert.doesNotMatch(text, /saved calibration/i);
+        assert.doesNotMatch(text, /calibration profile/i);
+        assert.doesNotMatch(text, /save calibration/i);
       });
     });
   });
