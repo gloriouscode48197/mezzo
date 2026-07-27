@@ -9,8 +9,9 @@
  * inferred from window dimensions).
  *
  * The Mezzo Companion is the sole operational surface (see CLAUDE.md's
- * Non-Negotiable Decisions). Home (try-it.js, before a Companion exists)
- * has exactly one job: call startMonitoring() to open the Companion. It
+ * Non-Negotiable Decisions). Home (index.html/landing.js, via
+ * src/home-dock.js, before a Companion exists) has exactly one job: call
+ * startMonitoring() to open the Companion. It
  * does not choose a profile, does not request microphone permission, and
  * does not decide Welcome vs. Ready — the Companion decides all of that
  * for itself, every time it opens, from src/profiles.js's own storage:
@@ -63,14 +64,14 @@
  * calibrating a new one.
  *
  * Extracted out of what used to be monitoring.js's page controller so that
- * try-it.js (Home/Dock) can drive its own minimal status view off this
- * module's public surface without duplicating the engine/audio/PiP
- * internals — "one source of truth," not a second copy.
+ * Home/Dock (src/home-dock.js, called from landing.js) can drive its own
+ * minimal status view off this module's public surface without duplicating
+ * the engine/audio/PiP internals — "one source of truth," not a second copy.
  *
- * Public surface is deliberately small: try-it.js never calls anything for
- * Start/Stop Monitoring, profile selection, calibration, or Expanded/
- * Compact layout, directly — those controls live *inside* the Companion's
- * own document and are wired here. try-it.js only needs: init,
+ * Public surface is deliberately small: src/home-dock.js never calls
+ * anything for Start/Stop Monitoring, profile selection, calibration, or
+ * Expanded/Compact layout, directly — those controls live *inside* the
+ * Companion's own document and are wired here. src/home-dock.js only needs: init,
  * startMonitoring (no arguments — the Companion resolves its own profile
  * and entry screen), stopMonitoring (fallback safety net, effectively
  * unreachable from Home now that Home has no Stop control), endSession
@@ -180,6 +181,38 @@ export function savePromptNameCopy(resolution) {
   }
 }
 
+/**
+ * Pure copy for the Calibrated checkpoint (reached right after a capture
+ * completes, before Stop — see showCalibratedScreen() below, which only
+ * renders whichever of these two modes applies). Mode-aware:
+ *
+ * - `recalibrate`: a specific saved profile (`targetName`) was the target
+ *   from the start — "This calibration" (the measurement) is ready to
+ *   update that named, saved profile. Never phrased as if the calibration
+ *   itself were the saved object (see CLAUDE.md's terminology rule) — the
+ *   Stop-time save prompt's savePromptNameCopy() above uses the identical
+ *   "This calibration will/is..." framing for the same reason.
+ * - `session`: no target profile exists yet — the create-vs-update
+ *   decision hasn't been made, and won't be until the Stop-time save
+ *   prompt resolves it by name — so this heading describes only the
+ *   measurement itself ("speaking range"), naming no profile at all.
+ */
+export function calibratedCheckpointCopy({ mode, targetName }) {
+  if (mode === 'recalibrate') {
+    const name = targetName ?? 'this profile';
+    return {
+      heading: `This calibration is ready to update ${name}.`,
+      primaryLabel: `Update ${name} & Start Monitoring`,
+      secondaryLabel: `Update ${name}`,
+    };
+  }
+  return {
+    heading: 'Your speaking range is ready.',
+    primaryLabel: 'Start Monitoring',
+    secondaryLabel: 'Save as New Profile',
+  };
+}
+
 // The one and only signal for "this profile is a runtime-only calibration
 // that hasn't been saved" — never inferred from name, a missing id,
 // calibratedTs recency, or which screen produced it. See CLAUDE.md's
@@ -211,10 +244,11 @@ const LAYOUT_MODES = Object.freeze({ EXPANDED: 'expanded', COMPACT: 'compact' })
 const OUTSIDE_ZONE = 3; // "Outside Range" — there's no higher volume tier
 const SUSTAINED_DRIFT_MS = 1000; // continuous time outside range before drift escalates
 
-// Calibrating screen's live meter — same dB-to-0..1 mapping try-it.js's own
-// calibration ring already uses (ENERGY_DB_MIN/MAX there), duplicated here
-// rather than imported since try-it.js is a page script, not a module this
-// file can import from.
+// Calibrating screen's live meter dB-to-0..1 mapping. (Predates the
+// PiP-first model: a page-level calibration ring on the old dual-surface
+// try-it.js once used the same ENERGY_DB_MIN/MAX naming — that page-level
+// screen is long retired, calibration is Companion-only now, but the
+// mapping itself is unchanged.)
 const CALIBRATION_METER_DB_MIN = -50;
 const CALIBRATION_METER_DB_MAX = -10;
 
@@ -308,8 +342,8 @@ export function createMezzoSession({
   // entirely) that a single generic handler couldn't infer safely.
   //
   // Ungated: this module is the calibration controller's one and only
-  // subscriber for rendering purposes now — Home (try-it.js) never starts a
-  // calibration run and has no screens of its own to render, so there is no
+  // subscriber for rendering purposes now — Home (landing.js/src/home-dock.js)
+  // never starts a calibration run and has no screens of its own to render, so there is no
   // second surface's state changes to filter out here anymore. (The earlier
   // dual-surface model's CALIBRATION_OWNERS-gated version of this listener
   // is retired along with that model — see CLAUDE.md's Engineering Notes.)
@@ -378,8 +412,8 @@ export function createMezzoSession({
   let failedMessageEl = null;
 
   // Calibrated-checkpoint DOM refs — one screen, two internal steps
-  // (checkpoint / naming), same "single modal, steps toggled in place"
-  // pattern try-it.js's own save dialog already established, not two
+  // (checkpoint / naming), the same "single modal, steps toggled in place"
+  // pattern this module's own Save Prompt below also uses, not two
   // separate screens.
   let calibratedScreenEl = null;
   let calibratedCheckpointStepEl = null;
@@ -622,7 +656,7 @@ export function createMezzoSession({
    * near the bottom of this function) — Welcome for zero saved profiles,
    * Ready for one or more — never straight into Monitoring. Call directly
    * from a real click (this is what satisfies Document PiP's
-   * fresh-user-gesture requirement now that the caller is try-it.html's own
+   * fresh-user-gesture requirement now that the caller is index.html's own
    * page, not a separate window relaying the gesture).
    * @returns {Promise<boolean>} whether the Companion actually opened
    */
@@ -1098,8 +1132,8 @@ export function createMezzoSession({
       }
 
       /* ── Calibrated checkpoint — one screen, two steps toggled in place
-         (checkpoint / naming), the same pattern try-it.js's own save
-         dialog already established, not a second modal or a separate
+         (checkpoint / naming), the same pattern this module's own Save
+         Prompt below also uses, not a second modal or a separate
          screen. Mode-aware actions built in JS — session mode offers Start
          Monitoring / Save as New Profile; recalibrate mode offers
          Update {name} & Start Monitoring / Update {name}. Reused as-is for
@@ -2266,16 +2300,11 @@ export function createMezzoSession({
     if (calibratedErrorEl) { calibratedErrorEl.classList.add('hidden'); calibratedErrorEl.textContent = ''; }
     showCalibratedStep('checkpoint');
 
-    if (mode === 'recalibrate') {
-      const name = calibrationController.getTargetSnapshot()?.name ?? 'this profile';
-      if (calibratedCheckpointHeadingEl) calibratedCheckpointHeadingEl.textContent = `New calibration ready for ${name}.`;
-      if (calibratedPrimaryBtn) calibratedPrimaryBtn.textContent = `Update ${name} & Start Monitoring`;
-      if (calibratedSecondaryBtn) calibratedSecondaryBtn.textContent = `Update ${name}`;
-    } else {
-      if (calibratedCheckpointHeadingEl) calibratedCheckpointHeadingEl.textContent = 'Your speaking range is ready.';
-      if (calibratedPrimaryBtn) calibratedPrimaryBtn.textContent = 'Start Monitoring';
-      if (calibratedSecondaryBtn) calibratedSecondaryBtn.textContent = 'Save as New Profile';
-    }
+    const targetName = mode === 'recalibrate' ? calibrationController.getTargetSnapshot()?.name : undefined;
+    const copy = calibratedCheckpointCopy({ mode, targetName });
+    if (calibratedCheckpointHeadingEl) calibratedCheckpointHeadingEl.textContent = copy.heading;
+    if (calibratedPrimaryBtn) calibratedPrimaryBtn.textContent = copy.primaryLabel;
+    if (calibratedSecondaryBtn) calibratedSecondaryBtn.textContent = copy.secondaryLabel;
 
     layoutMode = LAYOUT_MODES.EXPANDED;
     if (pipDocument?.body) pipDocument.body.setAttribute('data-layout', LAYOUT_MODES.EXPANDED);
@@ -2336,8 +2365,8 @@ export function createMezzoSession({
   }
 
   /** Existing naming conventions: trim, require non-empty, maxlength=40 on
-   *  the input itself (see buildCalibratedNameStep) — same as try-it.js's
-   *  own handleNameFormSubmit(). */
+   *  the input itself (see buildCalibratedNameStep) — same as this
+   *  module's own handleSavePromptNameSubmit() below. */
   function handleCalibratedNameSubmit(event) {
     event.preventDefault();
     const name = calibratedNameInput?.value.trim();
@@ -2445,7 +2474,7 @@ export function createMezzoSession({
   // ===========================================================================
   // Save Prompt — Stop-time modal, temporary profiles only. Shares the
   // "checkpoint/naming, two steps toggled in place" pattern with the
-  // Calibrated screen above and try-it.js's own save dialog. The naming
+  // Calibrated screen above. The naming
   // step's outcome — create a new profile, or explicitly update an existing
   // one — is entirely decided by profiles.js's resolveSavePromptAction(),
   // never re-implemented here: renderSavePromptNameState() below only
@@ -2719,8 +2748,8 @@ export function createMezzoSession({
     // continue without the Companion open, so if it was still active
     // reaching here, tear it down now — not "silently keep running" — and
     // reflect the closed Companion (not a full endSession) in session
-    // state, so Mezzo (try-it.html) returns to Home instead of a full
-    // endSession() teardown — see try-it.js's handleSessionStateChange().
+    // state, so Mezzo (index.html) returns to Home instead of a full
+    // endSession() teardown — see src/home-dock.js's handleSessionStateChange().
     if (wasActive) {
       teardownMonitoringEngine();
       activeCircle = null;

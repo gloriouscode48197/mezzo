@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;400&family=Sora:wght@300;400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="design-tokens/mezzo-tokens.css?v=10">
-  <link rel="stylesheet" href="landing.css?v=12">
+  <link rel="stylesheet" href="landing.css?v=13">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" sizes="16x16" href="icons/icon-16.svg">
   <link rel="icon" type="image/svg+xml" sizes="32x32" href="icons/icon-32.svg">
@@ -32,88 +32,175 @@
     <div class="nav-links">
       <span class="nav-link nav-link-active" aria-current="page">Home</span>
       <a href="privacy.html" class="nav-link nav-link-quiet">Privacy</a>
-      <a href="try-it.html" class="nav-link nav-link-quiet">Try Mezzo</a>
     </div>
   </nav>
 
-  <main id="view-landing" class="page page-fade">
+  <div class="page page-fade">
 
-    <!-- ── Hero ── -->
-    <section class="hero reveal" data-surface="light">
-      <div class="hero-columns">
-        <div class="hero-content">
-          <h1 class="type-hero-heading">Know when you're getting loud.</h1>
-          <p class="type-hero-body hero-body">Mezzo gives you quiet, visual feedback when your speaking volume rises — so you can adjust without anyone else noticing.</p>
-          <a href="try-it.html" class="btn-primary">Try Mezzo</a>
-          <p class="type-microcopy microcopy-cta">You can stop anytime. Nothing is saved.</p>
-          <p class="type-microcopy hero-privacy-line">No recording. No transcription. Just volume.</p>
+    <!-- ── Home — the page's one pre-Companion state: the public marketing
+         homepage. Its only operational action is "Open Mezzo Companion":
+         no microphone permission request, no profile choice, no
+         calibration decision happens here — the Companion decides all of
+         that for itself the moment it opens (see CLAUDE.md's "Companion
+         entry behavior"). See landing.js / src/home-dock.js's
+         handleOpenCompanionClick(). ── -->
+    <main id="state-home">
+
+      <!-- ── Hero ── -->
+      <section class="hero reveal" data-surface="light">
+        <div class="hero-columns">
+          <div class="hero-content">
+            <h1 class="type-hero-heading">Know when you're getting loud.</h1>
+            <p class="type-hero-body hero-body">Mezzo gives you quiet, visual feedback when your speaking volume rises — so you can adjust without anyone else noticing.</p>
+            <button id="btn-open-companion" type="button" class="btn-primary">Open Mezzo Companion</button>
+            <p class="type-microcopy microcopy-cta">You can stop anytime. Nothing is saved.</p>
+            <p class="type-microcopy hero-privacy-line">No recording. No transcription. Just volume.</p>
+          </div>
+          <div class="hero-visual">
+            <div id="hero-companion-preview" class="hero-companion-preview-wrap"></div>
+          </div>
         </div>
-        <div class="hero-visual">
-          <div id="hero-companion-preview" class="hero-companion-preview-wrap"></div>
+      </section>
+
+      <!-- ── Editorial: How it works / Philosophy / Trust ── -->
+      <section class="editorial reveal" data-surface="light">
+        <div class="editorial-grid">
+
+          <div class="editorial-col">
+            <h2 class="type-section-heading editorial-heading">How it works</h2>
+            <ol class="steps">
+              <li class="step">
+                <span class="type-step-number">1</span>
+                <div>
+                  <h3 class="type-step-heading">Calibrate</h3>
+                  <p class="type-body">Speak normally for a few seconds. Mezzo sets your baseline.</p>
+                </div>
+              </li>
+              <li class="step">
+                <span class="type-step-number">2</span>
+                <div>
+                  <h3 class="type-step-heading">Talk</h3>
+                  <p class="type-body">When you're in range, Mezzo stays invisible.</p>
+                </div>
+              </li>
+              <li class="step">
+                <span class="type-step-number">3</span>
+                <div>
+                  <h3 class="type-step-heading">Notice</h3>
+                  <p class="type-body">If you get louder, the feedback gradually appears. Ease up? It fades away.</p>
+                </div>
+              </li>
+            </ol>
+          </div>
+
+          <div class="editorial-col editorial-col-statement">
+            <h2 class="type-section-heading editorial-heading">Designed to stay out of your way.</h2>
+            <p class="type-body">Most meeting tools compete for your attention. Mezzo does the opposite. It stays quiet while you're speaking naturally and only becomes more noticeable as your voice drifts outside your preferred range.</p>
+          </div>
+
+          <div class="editorial-col">
+            <h2 class="type-section-heading editorial-heading-sub">What it's good for</h2>
+            <ul class="type-body good-for-list">
+              <li>Open office huddles</li>
+              <li>Calls from a shared desk</li>
+              <li>Cafés, lobbies, and common areas</li>
+            </ul>
+            <p class="type-microcopy good-for-note">Works in a browser tab or in the Mezzo Companion.</p>
+
+            <h2 class="type-section-heading editorial-heading-sub editorial-subheading-spaced">What it doesn't do</h2>
+            <p class="type-body">Mezzo doesn't record audio, transcribe speech, or send anything anywhere. Your mic data stays in your browser and disappears when you close the tab.</p>
+          </div>
+
         </div>
+      </section>
+
+    </main>
+
+    <!-- ── Unsupported browser — shown instead of Home when this browser has
+         no Document Picture-in-Picture support. The Companion is the
+         product now, so there is no in-page fallback experience to offer
+         here instead (see CLAUDE.md's Non-Negotiable Decisions). ── -->
+    <main id="state-unsupported" class="state-view page-content hidden" data-surface="light">
+      <div class="state-col">
+        <h1 class="type-section-heading state-heading">Mezzo Companion needs a different browser</h1>
+        <p class="type-hero-body state-body">The Mezzo Companion relies on Picture-in-Picture support that isn't available in this browser. Try the latest version of Chrome or Edge on desktop.</p>
       </div>
-    </section>
+    </main>
 
-    <!-- ── Editorial: How it works / Philosophy / Trust ── -->
-    <section class="editorial reveal" data-surface="light">
-      <div class="editorial-grid">
-
-        <div class="editorial-col">
-          <h2 class="type-section-heading editorial-heading">How it works</h2>
-          <ol class="steps">
-            <li class="step">
-              <span class="type-step-number">1</span>
-              <div>
-                <h3 class="type-step-heading">Calibrate</h3>
-                <p class="type-body">Speak normally for a few seconds. Mezzo sets your baseline.</p>
-              </div>
-            </li>
-            <li class="step">
-              <span class="type-step-number">2</span>
-              <div>
-                <h3 class="type-step-heading">Talk</h3>
-                <p class="type-body">When you're in range, Mezzo stays invisible.</p>
-              </div>
-            </li>
-            <li class="step">
-              <span class="type-step-number">3</span>
-              <div>
-                <h3 class="type-step-heading">Notice</h3>
-                <p class="type-body">If you get louder, the feedback gradually appears. Ease up? It fades away.</p>
-              </div>
-            </li>
-          </ol>
+    <!-- ── Dock — the minimal, read-only status surface shown for as long as
+         the Companion stays open. Maps the Companion's own internal states
+         down to four coarse labels (Ready, Calibrating, Monitoring, Needs
+         attention — see CLAUDE.md's Dock status mapping and src/session-
+         state.js) and never shows profile names, calibration progress, or
+         any monitoring/profile control — those all live inside the
+         Companion itself. The embedded card below is static illustrative
+         imagery, not live session UI (see CLAUDE.md's Non-Negotiable
+         Decisions): it always shows the same fixed reference state,
+         abstracted into placeholder bars rather than literal readable text
+         so it can't be mistaken for a live status readout, and deliberately
+         reads as symbolic line art rather than a realistic "screenshot" —
+         user testing found a more realistic version got mistaken for a
+         second real Companion window floating on the desktop. The card is
+         aria-hidden; the figcaption already conveys its purpose to
+         assistive tech. Close Companion is this page's one lifecycle
+         exception — a recovery action for when the Companion's native ✕
+         isn't reachable, calling the exact same session.endSession() the
+         native control already triggers (see src/home-dock.js). ── -->
+    <main id="state-dock" class="state-view page-content hidden" data-surface="light">
+      <div class="state-col">
+        <div class="dock-status-pill">
+          <span id="dock-status-dot" class="dock-status-dot"></span>
+          <span id="dock-status-text">Ready</span>
         </div>
-
-        <div class="editorial-col editorial-col-statement">
-          <h2 class="type-section-heading editorial-heading">Designed to stay out of your way.</h2>
-          <p class="type-body">Most meeting tools compete for your attention. Mezzo does the opposite. It stays quiet while you're speaking naturally and only becomes more noticeable as your voice drifts outside your preferred range.</p>
-        </div>
-
-        <div class="editorial-col">
-          <h2 class="type-section-heading editorial-heading-sub">What it's good for</h2>
-          <ul class="type-body good-for-list">
-            <li>Open office huddles</li>
-            <li>Calls from a shared desk</li>
-            <li>Cafés, lobbies, and common areas</li>
-          </ul>
-          <p class="type-microcopy good-for-note">Works in a browser tab or in the Mezzo Companion.</p>
-
-          <h2 class="type-section-heading editorial-heading-sub editorial-subheading-spaced">What it doesn't do</h2>
-          <p class="type-body">Mezzo doesn't record audio, transcribe speech, or send anything anywhere. Your mic data stays in your browser and disappears when you close the tab.</p>
-        </div>
-
+        <h1 class="type-section-heading state-heading">Your Mezzo Companion is open</h1>
+        <figure class="anchor-preview-figure">
+          <div class="anchor-preview-wrap" aria-hidden="true">
+            <div class="anchor-preview-card">
+              <div class="anchor-preview-titlebar">
+                <span class="anchor-preview-dots">
+                  <span class="anchor-preview-dot"></span>
+                  <span class="anchor-preview-dot"></span>
+                  <span class="anchor-preview-dot"></span>
+                </span>
+                <span class="anchor-preview-titlebar-label"></span>
+                <span class="anchor-preview-accent"></span>
+              </div>
+              <div class="anchor-preview-status" aria-hidden="true">
+                <span class="anchor-preview-status-bar anchor-preview-status-bar-zone"></span>
+                <span class="anchor-preview-status-bar anchor-preview-status-bar-profile"></span>
+              </div>
+              <div class="anchor-preview-viz">
+                <span class="anchor-preview-viz-ring anchor-preview-viz-ring-outer"></span>
+                <span class="anchor-preview-viz-ring anchor-preview-viz-ring-inner"></span>
+                <span class="anchor-preview-viz-dot"></span>
+                <span class="anchor-preview-viz-edge-dot"></span>
+              </div>
+              <div class="anchor-preview-footer">
+                <span class="anchor-preview-footer-item">
+                  <span class="anchor-preview-footer-icon-stop"></span>
+                </span>
+                <span class="anchor-preview-footer-item">
+                  <span class="anchor-preview-footer-icon-compact"></span>
+                </span>
+              </div>
+            </div>
+          </div>
+          <figcaption class="anchor-preview-caption">The Mezzo Companion is the floating window you'll use while monitoring.</figcaption>
+        </figure>
+        <button id="btn-close-companion" type="button" class="btn-outline btn-close-companion">Close Companion</button>
+        <hr class="anchor-preview-divider">
+        <p class="type-body dock-footer-copy">Keep this page open while using Mezzo.<br>Closing it will also close the Mezzo Companion.</p>
       </div>
-    </section>
+    </main>
 
-  </main>
+  </div>
 
   <footer class="site-footer" data-surface="light">
     <span class="type-footer-brand">© Mezzo</span>
     <a href="privacy.html" class="type-footer-link">Privacy</a>
   </footer>
 
-  <script src="landing.js" type="module"></script>
+  <script src="landing.js?v=2" type="module"></script>
   <script type="module">
     import { initHeroCompanionPreview } from './src/hero-companion-preview.js';
     initHeroCompanionPreview(document.getElementById('hero-companion-preview'));

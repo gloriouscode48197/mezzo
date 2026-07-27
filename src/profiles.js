@@ -1,10 +1,13 @@
 /**
  * Mezzo — Profile Storage
  *
- * Used by try-it.js (creates/selects profiles, and resolves which profile
- * to use — including for a freshly-opened tab that never went through
- * onboarding, e.g. launched by the browser extension) and
- * src/mezzo-session.js (the session-ownership module try-it.js uses).
+ * Used by src/mezzo-session.js (creates/selects/deletes profiles and
+ * resolves which one to use — including for a freshly-opened tab that
+ * never went through onboarding, e.g. launched by the browser extension) —
+ * profile creation/selection/deletion is Companion-only, per CLAUDE.md's
+ * Non-Negotiable Decisions. landing.js (index.html's Home/Dock controller)
+ * only ever reads getSavedProfiles() for its own returning-user analytics
+ * flag; it never creates, selects, updates, or deletes a profile itself.
  *
  * Three storage layers, each with a different lifetime:
  *   - mezzoProfiles (localStorage, persists indefinitely) — the saved-profile
@@ -401,9 +404,9 @@ export function clearLastUsedProfile() {
 /**
  * Resolve which profile this tab should use: this tab's own session choice
  * first, then whichever profile was last used anywhere (what lets a fresh
- * tab launched by the browser extension, or a fresh visit to try-it.html,
- * skip straight to Ready instead of Choose a Profile), then null
- * (genuinely first-time — caller should send them to Choose a Profile).
+ * tab launched by the browser extension, or a fresh visit to index.html,
+ * skip straight to Ready instead of Welcome), then null (genuinely
+ * first-time — caller should send them to Welcome).
  */
 export function resolveActiveProfile() {
   let profile = getSelectedProfile();

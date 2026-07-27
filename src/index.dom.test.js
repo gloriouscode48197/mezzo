@@ -1,23 +1,26 @@
 /**
- * Mezzo — Home / Dock Page DOM Wiring Tests
+ * Mezzo — Home / Dock Page DOM Wiring Tests (index.html)
  *
- * Run with: node --test src/try-it.dom.test.js
+ * Run with: node --test src/index.dom.test.js
  * (requires the `linkedom` devDependency — see package.json)
  *
- * try-it.js has no exports and does all of its work as side effects against
- * the global `document`/`window` at import time (real page-script style),
- * so this file builds a fresh linkedom DOM from the REAL try-it.html for
- * each scenario, points the global `document`/`window`/`localStorage`/
- * `sessionStorage`/`navigator` at it, and dynamically imports try-it.js
+ * index.html is now the canonical Home/Dock page and direct Companion
+ * launcher — see CLAUDE.md's Product Architecture. landing.js has no
+ * exports and does all of its work as side effects against the global
+ * `document`/`window` at import time (real page-script style), so this
+ * file builds a fresh linkedom DOM from the REAL index.html for each
+ * scenario, points the global `document`/`window`/`localStorage`/
+ * `sessionStorage`/`navigator` at it, and dynamically imports landing.js
  * with a cache-busting query string so each scenario gets its own fresh
  * module-level state (its own `session` instance, DOM listeners) rather
  * than sharing one across scenarios in this same process.
  *
- * Scope: Home/Dock's own two-state routing is the only business logic left
- * in this file (see CLAUDE.md's Product Architecture) — every calibration,
- * profile-selection, and monitoring screen now lives inside the Mezzo
- * Companion, built inline by src/mezzo-session.js's startMonitoring() the
- * moment a real Document Picture-in-Picture window opens. This file mocks
+ * Scope: Home/Dock's own three-state routing (home / unsupported / dock) —
+ * now shared, reusable logic in src/home-dock.js — is the only business
+ * logic this file covers. Every calibration, profile-selection, and
+ * monitoring screen lives inside the Mezzo Companion, built inline by
+ * src/mezzo-session.js's startMonitoring() the moment a real Document
+ * Picture-in-Picture window opens. This file mocks
  * `documentPictureInPicture.requestWindow()` with a second linkedom
  * document standing in for that PiP window/document pair — enough for
  * mezzo-session.js to build its Welcome/Ready screens and flip session
@@ -28,6 +31,9 @@
  * Companion's own commit/save/delete flows) is instead covered by
  * real-browser Playwright smoke tests with a fake media device — see the
  * implementation report for what ran there.
+ *
+ * try-it.html itself is now just a static redirect (see monitoring.html's
+ * same pattern) — it has no script of its own left to test here.
  */
 
 import { describe, it } from 'node:test';
@@ -36,8 +42,8 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { parseHTML } from 'linkedom';
 
-const TRY_IT_HTML_PATH = fileURLToPath(new URL('../try-it.html', import.meta.url));
-const TRY_IT_JS_URL = new URL('../try-it.js', import.meta.url);
+const INDEX_HTML_PATH = fileURLToPath(new URL('../index.html', import.meta.url));
+const LANDING_JS_URL = new URL('../landing.js', import.meta.url);
 
 function createMemoryStorage() {
   const store = new Map();
@@ -49,13 +55,24 @@ function createMemoryStorage() {
   };
 }
 
+/** No-op stand-in — nothing in this file exercises scroll-triggered
+ *  reveals, only Home/Dock routing, but landing.js constructs one
+ *  unconditionally at import time and linkedom doesn't implement the real
+ *  IntersectionObserver API at all. */
+class FakeIntersectionObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
 /**
  * Waits for a real screen transition to finish, not just for pending
- * promises to settle. try-it.js's transitionToState() defers its actual
- * classList('hidden') swap behind real setTimeout calls (a 300ms fade-out,
- * then a 350ms fade-in, matching FADE_OUT_MS/FADE_IN_MS) rather than
- * toggling immediately — genuine wall-clock time has to pass for a state
- * change to actually take effect, exactly like it would in a real browser.
+ * promises to settle. src/home-dock.js's transitionToState() defers its
+ * actual classList('hidden') swap behind real setTimeout calls (a 300ms
+ * fade-out, then a 350ms fade-in, matching FADE_OUT_MS/FADE_IN_MS) rather
+ * than toggling immediately — genuine wall-clock time has to pass for a
+ * state change to actually take effect, exactly like it would in a real
+ * browser.
  */
 function tick(rounds = 1) {
   return new Promise((resolve) => setTimeout(resolve, 900 * rounds));
@@ -100,8 +117,8 @@ function createFakePipWindow() {
 let importCounter = 0;
 
 /**
- * Builds a fresh DOM from the real try-it.html, wires it up as the global
- * document/window, and imports a fresh instance of try-it.js against it.
+ * Builds a fresh DOM from the real index.html, wires it up as the global
+ * document/window, and imports a fresh instance of landing.js against it.
  * @param {object} [opts]
  * @param {object} [opts.localStorage] - defaults to a fresh empty mock
  * @param {object} [opts.sessionStorage] - defaults to a fresh empty mock
@@ -113,10 +130,11 @@ async function setupPage({
   sessionStorage = createMemoryStorage(),
   pipSupported = true,
 } = {}) {
-  const html = readFileSync(TRY_IT_HTML_PATH, 'utf8');
+  const html = readFileSync(INDEX_HTML_PATH, 'utf8');
   const { window, document } = parseHTML(html);
-  window.location = new URL('http://localhost/try-it.html');
+  window.location = new URL('http://localhost/index.html');
   window.requestAnimationFrame = (fn) => setTimeout(fn, 0);
+  window.IntersectionObserver = FakeIntersectionObserver;
 
   // linkedom's `window` objects share an underlying global prototype across
   // separate parseHTML() calls in the same process — assigning
@@ -135,6 +153,7 @@ async function setupPage({
   globalThis.window = window;
   globalThis.document = document;
   globalThis.requestAnimationFrame = window.requestAnimationFrame;
+  globalThis.IntersectionObserver = FakeIntersectionObserver;
   globalThis.localStorage = localStorage;
   globalThis.sessionStorage = sessionStorage;
   // Node 21+ defines a built-in global `navigator` as a getter-only
@@ -151,7 +170,7 @@ async function setupPage({
   });
 
   importCounter++;
-  await import(`${TRY_IT_JS_URL.href}?t=${importCounter}`);
+  await import(`${LANDING_JS_URL.href}?t=${importCounter}`);
   await tick();
 
   return { window, document, localStorage, sessionStorage };
@@ -163,14 +182,22 @@ function visibleStateId(document) {
 }
 
 // =============================================================================
-// Home — no operational control besides Open Mezzo Companion
+// Home — the public homepage; no operational control besides Open Mezzo
+// Companion
 // =============================================================================
 
 describe('Home', () => {
-  it('shows only the Open Mezzo Companion action, in a PiP-capable browser', async () => {
+  it('shows the homepage with the Open Mezzo Companion primary CTA, in a PiP-capable browser', async () => {
     const { document } = await setupPage();
     assert.strictEqual(visibleStateId(document), 'state-home');
     assert.strictEqual(document.getElementById('btn-open-companion').textContent, 'Open Mezzo Companion');
+  });
+
+  it('the CTA is a button, not a link to try-it.html — clicking it must never navigate', async () => {
+    const { document } = await setupPage();
+    const btn = document.getElementById('btn-open-companion');
+    assert.strictEqual(btn.tagName.toLowerCase(), 'button');
+    assert.strictEqual(btn.hasAttribute('href'), false);
   });
 
   it('never requests microphone permission on load', async () => {
@@ -189,8 +216,8 @@ describe('Home', () => {
 
   it('has no calibration, profile-selection, or monitoring controls anywhere in the page', async () => {
     const { document } = await setupPage();
-    // Every control from the retired dual-surface model — none of these
-    // ids/classes should exist anywhere in try-it.html anymore.
+    // Every control from the retired dual-surface / two-page model — none
+    // of these ids/classes should exist anywhere in index.html.
     const retiredIds = [
       'state-calibrating', 'state-calibration-failed', 'state-calibrated',
       'state-profile-select', 'state-fallback-monitor', 'state-a',
@@ -200,6 +227,12 @@ describe('Home', () => {
     retiredIds.forEach((id) => {
       assert.strictEqual(document.getElementById(id), null, `#${id} should not exist on Home/Dock`);
     });
+  });
+
+  it('the global navigation contains no "Try Mezzo" item', async () => {
+    const { document } = await setupPage();
+    const nav = document.querySelector('.nav');
+    assert.doesNotMatch(nav.textContent, /Try Mezzo/);
   });
 });
 
@@ -229,16 +262,18 @@ describe('Unsupported browser', () => {
 });
 
 // =============================================================================
-// Open Mezzo Companion — Home -> Dock, and the Dock status mapping
+// Open Mezzo Companion — Home -> Dock, directly, and the Dock status mapping
 // =============================================================================
 
 describe('Opening the Mezzo Companion', () => {
-  it('transitions Home to Dock, reporting Ready with zero saved profiles (Welcome, collapsed to Ready in the Dock)', async () => {
-    const { document } = await setupPage();
+  it('transitions Home to Dock directly, with no navigation to try-it.html, reporting Ready with zero saved profiles', async () => {
+    const { document, window } = await setupPage();
+    const locationBefore = window.location.href;
     document.getElementById('btn-open-companion').click();
     await tick(2);
     assert.strictEqual(visibleStateId(document), 'state-dock');
     assert.strictEqual(document.getElementById('dock-status-text').textContent, 'Ready');
+    assert.strictEqual(window.location.href, locationBefore, 'opening the Companion must never navigate this page anywhere');
   });
 
   it('transitions Home to Dock, reporting Ready with one or more saved profiles', async () => {
@@ -279,5 +314,39 @@ describe('Close Companion', () => {
     document.getElementById('btn-close-companion').click();
     await tick(2);
     assert.strictEqual(visibleStateId(document), 'state-home');
+  });
+
+  it('reopening after closing resolves to Ready again with the saved profile intact', async () => {
+    const localStorage = createMemoryStorage();
+    seedSavedProfiles(localStorage, [{ id: 'p1', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 1 }]);
+    const { document } = await setupPage({ localStorage });
+
+    document.getElementById('btn-open-companion').click();
+    await tick(2);
+    document.getElementById('btn-close-companion').click();
+    await tick(2);
+    assert.strictEqual(visibleStateId(document), 'state-home');
+
+    document.getElementById('btn-open-companion').click();
+    await tick(2);
+    assert.strictEqual(visibleStateId(document), 'state-dock');
+    assert.strictEqual(document.getElementById('dock-status-text').textContent, 'Ready');
+    assert.strictEqual(JSON.parse(localStorage.getItem('mezzoProfiles')).length, 1, 'reopening must never duplicate or lose the saved profile');
+  });
+});
+
+// =============================================================================
+// Single source of truth — no second Home/Dock implementation
+// =============================================================================
+
+describe('Single source of truth for Home/Dock state', () => {
+  it('landing.js has no state-machine logic of its own — it only calls src/home-dock.js', async () => {
+    const landingSource = readFileSync(fileURLToPath(LANDING_JS_URL), 'utf8');
+    assert.match(landingSource, /from '\.\/src\/home-dock\.js'/);
+    assert.doesNotMatch(landingSource, /function transitionToState/, 'the state machine must live in src/home-dock.js, not be duplicated in landing.js');
+  });
+
+  it('try-it.js no longer exists as a second launcher implementation', () => {
+    assert.throws(() => readFileSync(fileURLToPath(new URL('../try-it.js', import.meta.url))), /ENOENT/);
   });
 });
