@@ -14,8 +14,7 @@
  * Requires: nothing beyond its own injected CSS — colors are drawn directly
  * in the canvas 2D context (not readable mid-gradient-interpolation from CSS
  * custom properties), so the palette below is a literal, calibrated
- * constant, same precedent as src/hero-ring.js and try-it.html's calibration
- * canvas.
+ * constant, same precedent as src/hero-ring.js.
  */
 
 const ZONE_TARGETS = [0, 0.22, 0.54, 0.82];

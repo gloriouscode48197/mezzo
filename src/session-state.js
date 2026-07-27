@@ -2,8 +2,8 @@
  * Mezzo — Session State
  *
  * One explicit, centralized model for src/mezzo-session.js (the module
- * try-it.js, Home/Dock, uses to own the session) to hold a single enum of
- * what the Companion is currently doing. Deliberately not inferred from
+ * landing.js, via src/home-dock.js, uses to own the session) to hold a
+ * single enum of what the Companion is currently doing. Deliberately not inferred from
  * `pipWindow`'s truthiness — that alone can't distinguish "Companion open,
  * Ready" from "Companion open, Monitoring," which is exactly the bug this
  * replaces.

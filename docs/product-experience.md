@@ -94,9 +94,11 @@ Those distinctions exist only within the implementation.
 
 These experiences support Mezzo but are not separate products.
 
-## Marketing
+## Marketing / Onboarding
 
-Purpose:
+One page, one implementation (`index.html`) — not two separate experiences handing off to each other. Before the Companion exists, this page is doing both jobs at once:
+
+Marketing purpose:
 
 * introduce Mezzo
 * explain its purpose
@@ -104,7 +106,11 @@ Purpose:
 * communicate privacy
 * encourage users to try the product
 
-The marketing experience should feel:
+Onboarding purpose: reduce uncertainty about *what Mezzo is*, then hand off to the Mezzo Companion. Nothing more. It no longer explains microphone access, introduces Speaking Profiles, or supports calibration — none of that happens here anymore. It happens inside the Companion, the moment it's relevant (see "Companion States → Welcome" and "Calibration").
+
+The one interactive element that actually starts anything is **Open Mezzo Companion** — the hero's primary CTA. Clicking it opens the Companion directly; it does not navigate to a second page first. There is no separate "Try Mezzo" step or intermediate launcher screen between the marketing content and the Companion opening.
+
+The experience should feel:
 
 * warm
 * editorial
@@ -115,19 +121,9 @@ The product itself should remain the visual hero.
 
 ---
 
-## Onboarding
-
-Purpose: introduce Mezzo, then hand off to the Mezzo Companion. Nothing more.
-
-Onboarding no longer explains microphone access, introduces Speaking Profiles, or supports calibration — none of that happens here anymore. It happens inside the Companion, the moment it's relevant (see "Companion States → Welcome" and "Calibration").
-
-Onboarding should reduce uncertainty about *what Mezzo is* before handing off. It is one short moment, not a multi-step preparation sequence — its only interactive element is **Open Mezzo Companion**.
-
----
-
 ## Dock
 
-Internal term only (retired name: Anchor page) — see Canonical Terminology in `CLAUDE.md`. It is the same browser page as Onboarding, before a Companion exists; once a Companion is open, it becomes a minimal status surface that must stay open to keep the Companion running.
+Internal term only (retired name: Anchor page) — see Canonical Terminology in `CLAUDE.md`. It is the same browser page as Marketing/Onboarding, before a Companion exists; once a Companion is open, it becomes a minimal status surface that must stay open to keep the Companion running.
 
 The Dock:
 
@@ -171,19 +167,11 @@ The interface should describe the current situation rather than instructing user
 
 The intended first-run experience is:
 
-Marketing Website
+Marketing Website — introduces Mezzo and doubles as Onboarding; there is no separate "Try Mezzo" step or second page to click through to first (see "Marketing / Onboarding")
 
 ↓
 
-Try Mezzo
-
-↓
-
-Learn what Mezzo does
-
-↓
-
-Open Mezzo Companion — the one action on this page; it does not request microphone permission and does not choose anything on the user's behalf
+Open Mezzo Companion — the one action on this page; it does not request microphone permission and does not choose anything on the user's behalf, and opens the Companion directly rather than navigating anywhere
 
 ↓
 

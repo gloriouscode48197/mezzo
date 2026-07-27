@@ -3,11 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <title>Mezzo</title>
-  <!-- monitoring.html is retired — try-it.html is now the single Mezzo
+  <!-- monitoring.html is retired — index.html is now the single Mezzo
        page. This redirect exists only for stale bookmarks, cached
        service-worker entries, or old extension installs still pointing
-       here. Preserves the query string. -->
-  <script>location.replace('/try-it.html' + location.search);</script>
+       here. Preserves the query string. Points straight at index.html
+       rather than through try-it.html (itself now just a redirect) to
+       avoid chaining two redirects for the same stale link. -->
+  <script>location.replace('/index.html' + location.search);</script>
 </head>
 <body></body>
 </html>

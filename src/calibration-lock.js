@@ -29,9 +29,9 @@
  * tab," by which point the first tab has very likely already released it.
  *
  * Lifecycle: acquire() is called once, right before a calibration attempt
- * would otherwise start (see try-it.js's and src/mezzo-session.js's
- * beginCalibrationFlow()). Release is driven centrally, not scattered across
- * every cancel/commit/failure call site — see createMezzoSession()'s own
+ * would otherwise start (see src/mezzo-session.js's beginCalibrationFlow()
+ * — the Companion is the only caller now). Release is driven centrally,
+ * not scattered across every cancel/commit/failure call site — see createMezzoSession()'s own
  * `calibrationController.subscribe()` wiring, which releases the lock
  * whenever the shared controller's status returns to 'idle' (covers every
  * commit, cancel, and close — reset() always lands there) or reaches

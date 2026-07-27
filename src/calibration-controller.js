@@ -44,9 +44,7 @@ import {
   promoteTemporaryProfile,
 } from './profiles.js';
 
-// Default calibration capture window — matches try-it.js's existing
-// COUNTDOWN_SECONDS (6s) so both surfaces feel the same to a user regardless
-// of which one they calibrate from.
+// Default calibration capture window.
 const DEFAULT_CAPTURE_DURATION_MS = 6000;
 
 const STATUSES = Object.freeze({

@@ -13,7 +13,7 @@
  *
  * Opt-in only (?timing=true) so it doesn't affect normal use or any other
  * testing. Usage:
- *   http://localhost:8899/try-it.html?timing=true
+ *   http://localhost:8899/index.html?timing=true
  * Then, after a real session (visibility changes and all), open DevTools
  * and run:
  *   copy(JSON.stringify(window.__mezzoTiming.export()))

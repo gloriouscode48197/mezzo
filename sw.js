@@ -3,15 +3,13 @@
  * Enables offline support and PWA installation
  */
 
-const CACHE_NAME = 'mezzo-v9';
+const CACHE_NAME = 'mezzo-v10';
 const ASSETS = [
   '/',
   '/index.html',
   '/landing.css',
   '/landing.js',
   '/try-it.html',
-  '/try-it.css',
-  '/try-it.js',
   '/monitoring.html',
   '/calibration.css',
   '/privacy.html',
@@ -25,6 +23,7 @@ const ASSETS = [
   '/src/mezzo-session.js',
   '/src/session-state.js',
   '/src/profiles.js',
+  '/src/home-dock.js',
   '/manifest.webmanifest'
 ];
 

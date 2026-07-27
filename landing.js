@@ -1,12 +1,35 @@
 /**
- * Mezzo — Landing Page Controller
+ * Mezzo — Home / Dock Controller (index.html)
  *
- * Static marketing page — no permission or calibration logic.
- * Handles scroll-triggered reveals and nav transparency only.
+ * index.html is Mezzo, PiP-first: the marketing homepage doubles as Home
+ * (before a Companion exists) and the Dock (once one is open) — the same
+ * two-state model try-it.html used to own on its own page, now consolidated
+ * here so there is exactly one Home/Dock implementation, not two. See
+ * src/home-dock.js for the actual state machine (session creation, direct
+ * Companion launch, Dock status mapping); this file owns only what's
+ * specific to this page's own marketing presentation — scroll-triggered
+ * reveals and the initial page fade-in.
  */
 
 import { trackAppOpened } from './src/analytics.js';
 import { pageEnter } from './src/page-transition.js';
+import { initHomeDock } from './src/home-dock.js';
+import { getSavedProfiles } from './src/profiles.js';
+
+// =============================================================================
+// Home / Dock
+// =============================================================================
+
+initHomeDock({
+  stateHome: document.getElementById('state-home'),
+  stateUnsupported: document.getElementById('state-unsupported'),
+  stateDock: document.getElementById('state-dock'),
+  btnOpenCompanion: document.getElementById('btn-open-companion'),
+  btnCloseCompanion: document.getElementById('btn-close-companion'),
+  dockStatusDot: document.getElementById('dock-status-dot'),
+  dockStatusText: document.getElementById('dock-status-text'),
+  baseUrl: new URL('.', window.location.href).href,
+});
 
 // =============================================================================
 // Scroll-triggered Reveal
@@ -47,4 +70,4 @@ requestAnimationFrame(() => {
   });
 });
 
-trackAppOpened(false);
+trackAppOpened(getSavedProfiles().length > 0);

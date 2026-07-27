@@ -82,8 +82,6 @@ body {
 .microcopy-cta { margin-top: 24px; }
 .hero-privacy-line { margin-top: 6px; }
 
-a.btn-primary { text-decoration: none; }
-
 /* ── Hero visual — the Mezzo Companion preview is the visual focal point of
    the page, so it gets generous breathing room rather than sitting flush
    against the copy column.
@@ -230,6 +228,379 @@ a.btn-primary { text-decoration: none; }
    shared rule's default (--surface, which privacy/try-it use since their
    footer sits directly after Paper-background content). */
 .site-footer { background: var(--washi); }
+
+/* ═══════════════════════════════════════════
+   Home/Dock — Unsupported browser + Dock states
+   Ported from the retired try-it.css when try-it.html became a
+   compatibility redirect and index.html took over as the canonical
+   Home/Dock page — see CLAUDE.md's Product Architecture. Only what
+   #state-unsupported and #state-dock actually use; #state-home reuses the
+   hero/editorial styles above, unchanged.
+   ═══════════════════════════════════════════ */
+
+.state-view { transition: opacity 300ms ease; }
+
+.state-col { width: 100%; max-width: 520px; margin-inline: auto; }
+
+.page-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 10vh 32px 32px;
+}
+
+.state-heading {
+  max-width: 560px;
+  margin-left: auto;
+  margin-right: auto;
+  margin-bottom: var(--space-heading-to-content);
+}
+
+.state-body {
+  max-width: 460px;
+  margin-left: auto;
+  margin-right: auto;
+  margin-bottom: var(--space-circle-to-button);
+}
+
+/* ── Close Companion (Dock's one lifecycle exception — see index.html's
+   #state-dock comment and CLAUDE.md) — reads at normal case/weight like
+   this page's other outline buttons rather than the app's compact
+   uppercase default. var(--text-subdued) border clears the 3:1 non-text
+   minimum; var(--text-body) label clears 4.5:1. ── */
+.btn-close-companion {
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 14px;
+  padding: 12px 28px;
+  border-color: var(--text-subdued);
+  color: var(--text-body);
+  margin-bottom: 32px;
+}
+
+/* Only ever reaches .btn-close-companion on this page today — index.html
+   has no other .btn-outline usage — but scoped generically to match how
+   try-it.css originally established it, in case a second outline button
+   is ever added here. */
+.btn-outline:hover {
+  border-color: var(--text-body);
+  background: rgba(60, 59, 63, 0.06);
+}
+.btn-outline:active {
+  border-color: var(--ink);
+  background: rgba(60, 59, 63, 0.12);
+  transform: scale(0.98);
+}
+
+/* ── Dock status pill — a small dot + text above the Dock's heading, the
+   one live element in this state (see src/home-dock.js's renderDockStatus()).
+   Four modifiers map to the four Dock statuses (CLAUDE.md's Dock status
+   mapping): ready (hollow, calm), calibrating and attention (solid, warm
+   accent), monitoring (solid green with a slow breathing pulse — livelier
+   than the others, but never urgent). ── */
+.dock-status-pill {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 14px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--text-body);
+}
+
+.dock-status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: transparent;
+  border: 1.5px solid var(--text-ghost);
+}
+
+.dock-status-dot-ready {
+  width: 9px;
+  height: 9px;
+  background: transparent;
+  border: 1.5px solid var(--text-ghost);
+}
+
+.dock-status-dot-calibrating,
+.dock-status-dot-attention {
+  width: 7px;
+  height: 7px;
+  border: none;
+  background: var(--hanko-fill);
+}
+
+.dock-status-dot-monitoring {
+  width: 7px;
+  height: 7px;
+  border: none;
+  background: #5a8a5a;
+  animation: mezzo-dock-pulse 3.3s ease-in-out infinite;
+}
+
+@keyframes mezzo-dock-pulse {
+  0%, 100% { opacity: 0.54; transform: scale(1); }
+  50%       { opacity: 0.85; transform: scale(1.22); }
+}
+
+/* ── Dock's embedded Companion preview — static illustrative imagery, not
+   live session UI (see index.html's #state-dock comment and CLAUDE.md's
+   Non-Negotiable Decisions). Distinct from — and never wired to — this
+   page's own #hero-companion-preview widget above, which is a marketing
+   decoration shown only in the Home state, not a status readout. ── */
+.anchor-preview-figure {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 0 0 28px;
+}
+
+/* Sized to the same aspect ratio as the real Monitoring Companion
+   (380×420) so this reads as a symbolic stand-in for that window's
+   proportions, not an arbitrarily-shaped icon. 199px wide is the settled,
+   approved size — the illustration is deliberately secondary, not the
+   focal point. Every internal metric below (rings, dots, bars, padding)
+   is scaled to match. */
+.anchor-preview-wrap {
+  width: 199px;
+  aspect-ratio: 380 / 420;
+  margin-bottom: 16px;
+}
+
+/* Deliberately a soft line diagram, not a realistic window — user testing
+   found a realistic, dark, screenshot-like card got mistaken for a second,
+   real Companion window floating on the desktop. Everything in this
+   illustration (through the footer icons below) is a single warm accent
+   tone at varying opacity — rgba(139,90,60,*) — on a near-paper
+   background. */
+.anchor-preview-card {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow: hidden;
+  border-radius: 10px;
+  border: 1.5px solid rgba(139, 90, 60, 0.38);
+  box-shadow: 0 6px 20px rgba(139, 90, 60, 0.12);
+  background: rgba(196, 89, 58, 0.08);
+}
+
+.anchor-preview-titlebar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  border-bottom: 1px solid rgba(139, 90, 60, 0.30);
+  flex-shrink: 0;
+}
+
+.anchor-preview-dots { grid-column: 1; justify-self: start; display: flex; align-items: center; gap: 4px; }
+/* Unfilled, single-tone circles — not realistic red/yellow/green traffic
+   lights. Still reads as "this is a window" at a glance without inviting
+   the closer look a recognizable macOS control would. */
+.anchor-preview-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.1px solid rgba(139, 90, 60, 0.55);
+  flex-shrink: 0;
+}
+
+/* An empty placeholder bar, not a literal "Mezzo Companion" label —
+   readable window-title text was one more detail that made this look like
+   a real, inspectable window rather than a symbolic stand-in for one. */
+.anchor-preview-titlebar-label {
+  grid-column: 2;
+  justify-self: center;
+  width: 42px;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(139, 90, 60, 0.36);
+}
+
+.anchor-preview-accent {
+  grid-column: 3;
+  justify-self: end;
+  width: 9px;
+  height: 2px;
+  border-radius: 1px;
+  background: rgba(139, 90, 60, 0.42);
+}
+
+.anchor-preview-status {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 11px 0;
+  text-align: left;
+}
+
+/* Abstracted into placeholder bars rather than literal readable text
+   ("Approaching End of Range" / "Profile: Coffee Shop") — this card sits
+   directly under the real, live Dock status pill above it, and
+   literal-looking status text here read too much like a second,
+   conflicting live readout. A plain bar still evokes "there's a status
+   line and a profile line" without anything a user could mistake for
+   real data. */
+.anchor-preview-status-bar {
+  display: block;
+  height: 5px;
+  border-radius: 2.5px;
+  background: rgba(139, 90, 60, 0.38);
+}
+
+.anchor-preview-status-bar-zone { width: 64px; height: 6px; background: rgba(139, 90, 60, 0.40); }
+.anchor-preview-status-bar-profile { width: 43px; height: 5px; background: rgba(139, 90, 60, 0.30); }
+
+.anchor-preview-viz {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+/* A fixed, non-animated illustration of two concentric rings + a drift dot
+   — evoking the real visualization's "Approaching End of Range" look
+   without instantiating or driving the real (animated, live) component. */
+.anchor-preview-viz-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  border-radius: 50%;
+  border: 1.3px solid rgba(139, 90, 60, 0.46);
+  transform: translate(-50%, -50%);
+}
+.anchor-preview-viz-ring-outer { width: 82px; height: 82px; }
+/* Inner ring reads slightly more present than the outer one, same as the
+   reference — closer to the center dot, not a brighter "active" cue. */
+.anchor-preview-viz-ring-inner { width: 47px; height: 47px; border-color: rgba(139, 90, 60, 0.68); }
+
+.anchor-preview-viz-dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(139, 90, 60, 0.68);
+  transform: translate(-50%, -50%);
+}
+
+/* Same single tone as the rest of the illustration, no glow — a glowing
+   accent-colored dot read too much like a live status indicator, which is
+   exactly the impression this illustration needs to avoid. */
+.anchor-preview-viz-edge-dot {
+  position: absolute;
+  top: 50%;
+  left: calc(50% + 41px);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(139, 90, 60, 0.63);
+  transform: translate(-50%, -50%);
+}
+
+.anchor-preview-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 5px 9px 7px;
+  border-top: 1px solid rgba(139, 90, 60, 0.30);
+  flex-shrink: 0;
+}
+
+.anchor-preview-footer-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-body);
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(139, 90, 60, 0.48);
+}
+
+.anchor-preview-footer-icon-stop {
+  width: 4px;
+  height: 4px;
+  background: currentColor;
+  border-radius: 1px;
+  flex-shrink: 0;
+}
+
+.anchor-preview-footer-icon-compact {
+  width: 7px;
+  height: 5px;
+  border: 1px solid currentColor;
+  border-radius: 1.5px;
+  flex-shrink: 0;
+}
+
+/* var(--text-ghost) (~1.52:1) failed WCAG AA outright here — this is real,
+   non-decorative body text (the figure's aria-hidden scope stops at the
+   illustration itself; the figcaption is what conveys its purpose to
+   assistive tech). var(--text-quiet) (~4.91:1) is the "lighter than body,
+   still passes 4.5:1" tier established for this kind of supporting/
+   tertiary copy. */
+.anchor-preview-caption {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--text-quiet);
+  line-height: 1.5;
+  max-width: 300px;
+  text-align: center;
+}
+
+/* Close Companion owns the boundary above the divider; the divider owns
+   only the space below itself, down to the footer message. 300px
+   independent of the illustration's own width (199px) — matches the
+   button/copy column above and below it instead. */
+.anchor-preview-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  width: 300px;
+  margin: 0 auto 32px;
+}
+
+/* Same var(--text-quiet) tier as the caption above — this is a closing,
+   tertiary note, not a second status readout, so it reads quieter than the
+   live status pill at the top. */
+.dock-footer-copy {
+  max-width: 340px;
+  margin: 0 auto;
+  line-height: 1.65;
+  color: var(--text-quiet);
+}
+
+/* Dock heading — fixed 30px/300 (not the shared .type-section-heading
+   clamp(29px, 3.6vw, 42px), which grows up to 42px and then plateaus past
+   ~1167px). Meant to stay a fixed, quieter size at any width, reading
+   correctly next to the illustration below it rather than competing for
+   the "biggest thing on the page" role. font-weight already matches
+   --weight-light (300). */
+#state-dock .state-heading { font-size: 30px; }
+
+/* Prevents an awkward mid-word wrap at wider widths, once there's room for
+   it to comfortably fit on one line — mobile widths still wrap normally. */
+@media (min-width: 480px) {
+  #state-dock .state-heading { white-space: nowrap; }
+}
 
 /* ═══════════════════════════════════════════
    Scroll-triggered Reveal

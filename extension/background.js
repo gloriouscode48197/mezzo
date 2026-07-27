@@ -25,16 +25,19 @@
 import { MezzoWindowManager } from './lib/window-manager.js';
 
 const MEZZO_BASE_URL = 'https://mezzo-one.vercel.app';
-const MEZZO_ENTRY_URL = `${MEZZO_BASE_URL}/try-it.html`;
+// index.html is the canonical Home/Dock page and direct Companion launcher
+// (try-it.html still works — it's a compatibility redirect straight back to
+// this same URL — but pointing here directly skips that extra hop).
+const MEZZO_ENTRY_URL = `${MEZZO_BASE_URL}/index.html`;
 
 const BADGE_TEXT = '●'; // ● — an ambient "something's here" cue, not an alarm
 const BADGE_COLOR = '#C4593A'; // Mezzo's hanko accent
 
 /**
  * Open Mezzo, or refocus/restore the existing window. It always lands on
- * the pre-session Ready screen (or the session-status view, if a session
- * from an earlier launch is still running) — monitoring never auto-starts,
- * so there's no launch-mode distinction to make here. `focused: false` is
+ * Home (or the Dock, if a session from an earlier launch is still running)
+ * — monitoring never auto-starts, so there's no launch-mode distinction to
+ * make here. `focused: false` is
  * best-effort (Chrome/OS do not guarantee unfocused window creation) —
  * used for meeting-prompt launches so the meeting stays undisturbed
  * whenever possible.

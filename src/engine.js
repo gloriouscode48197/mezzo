@@ -375,7 +375,7 @@ export class MezzoEngine {
 
   /**
    * Get calibration values (for debugging/testing, and for callers — e.g.
-   * try-it.js's calibration flow — that persist a profile from them).
+   * src/mezzo-session.js's calibration flow — that persist a profile from them).
    *
    * @returns {{ baselineRMS: number|null, spreadDb: number|null }}
    */
