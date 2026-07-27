@@ -2,6 +2,12 @@
  * Mezzo — Try It Page Styles
  * Uses design token custom properties exclusively. Nav is the shared solid
  * light (Paper) chrome used across the marketing pages.
+ *
+ * Only three states live here now: Home, the unsupported-browser message,
+ * and the Dock (the minimal, read-only status view shown while the
+ * Companion is open) — every calibration, profile-selection, and
+ * monitoring screen moved into the Mezzo Companion itself (built inline by
+ * src/mezzo-session.js), so their styles are no longer needed on this page.
  */
 
 /* ── Reset ── */
@@ -40,20 +46,6 @@ body {
   padding: 10vh 32px 32px;
 }
 
-/* Choose a Speaking Profile and Calibration (landing "Create your speaking
-   profile" and listening "Talk at your desired speaking level" share this
-   same container) — a calm, focused single-column layout: content is
-   centered both horizontally and vertically in the viewport, with
-   generous, symmetric padding so it never crowds the edges at shorter
-   viewport heights. Scoped to just these two screens rather than the
-   shared .page-content base, so the other screens' current top-anchored
-   positioning is unaffected. */
-#state-profile-select,
-#state-b {
-  justify-content: center;
-  padding: 80px 32px;
-}
-
 .state-view { transition: opacity 300ms ease; }
 
 .state-col { width: 100%; max-width: 520px; }
@@ -73,425 +65,17 @@ body {
   margin-bottom: var(--space-circle-to-button);
 }
 
-/* Narrower than the shared .state-body cap — matches the approved
-   two-line wrap ("...you'd like Mezzo" / "to monitor during this
-   session.") specifically on this screen, without narrowing body text
-   on the other screens that also use .state-body. */
-#state-profile-select .state-body { max-width: 360px; }
-
 .state-micro { margin-top: var(--space-button-to-micro); }
 
-.denied-help {
-  margin-top: var(--space-heading-to-content);
-  color: var(--text-subdued);
-  max-width: 420px;
-  margin-left: auto;
-  margin-right: auto;
-}
-
-/* ── Calibration Crossfade ── */
-.cal-content-area {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  /* Each phase now carries its own heading (see try-it.html), so this must be
-     tall enough for the taller of the two absolutely-positioned phases. */
-  min-height: 480px;
-  width: 100%;
-}
-
-.cal-pre-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  position: absolute;
-  top: 0;
-  width: 100%;
-  transition: opacity 0.5s ease, transform 0.5s ease;
-}
-
-.back-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-  margin-bottom: 20px;
-  font-family: var(--font-body);
-  font-size: 13px;
-  color: var(--text-subdued);
-  transition: color 0.15s ease;
-}
-
-.back-link:hover,
-.back-link:focus-visible { color: var(--text-default); }
-
-.cal-pre-content .state-body { margin-bottom: 40px; }
-
-.cal-listen-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  position: absolute;
-  top: 0;
-  width: 100%;
-  opacity: 0;
-  transform: translateY(8px);
-  transition: opacity 0.5s ease 0.3s, transform 0.5s ease 0.3s;
-  pointer-events: none;
-}
-
-#state-b.state-listening .cal-pre-content {
-  opacity: 0; transform: translateY(-8px); pointer-events: none;
-}
-
-#state-b.state-listening .cal-listen-content {
-  opacity: 1; transform: translateY(0); pointer-events: auto;
-}
-
-.cal-countdown {
-  font-family: var(--font-body);
-  font-weight: var(--weight-light);
-  font-size: 17px;
-  color: var(--hanko-text);
-  letter-spacing: 0.2px;
-  margin-bottom: 24px;
-}
-
 /* ── Buttons ── */
-.btn-with-icon { display: inline-flex; align-items: center; gap: 10px; }
-.btn-icon { width: 14px; height: 19px; flex-shrink: 0; }
 .btn-wide { padding: 16px 64px; min-width: 240px; }
 
-/* ── Calibration Ring Canvas ── */
-/* #cal-ring-canvas is sized inline (200×200px) by the visualization script */
-
-/* ── Recalibrate ── */
-.btn-recalibrate {
-  background: none; border: none;
-  color: var(--hanko-text);
-  font-family: var(--font-body);
-  font-weight: var(--weight-regular);
-  font-size: 14px;
-  cursor: pointer;
-  padding: 8px 16px;
-  margin-top: var(--space-heading-to-content);
-  transition: var(--transition-hover);
-}
-
-.btn-recalibrate:hover { opacity: 0.7; }
-
-/* ── Profile List ──
-   Selected/hover treatment is a consistent ink-tinted overlay system (not
-   token-based like the rest of the page) so every row — built-in or saved —
-   reads identically at each state: rgba(--ink-rgb, 0.035) when selected,
-   rgba(--ink-rgb, 0.04) on hover (deliberately weaker than selected),
-   transparent when idle. No outline/stroke on the selected row — the
-   background tint and square corners are the only selected treatment. ── */
-.profile-list { display: flex; flex-direction: column; gap: 4px; text-align: left; margin-bottom: 36px; width: 100%; }
-
-.profile-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  width: 100%;
-  background: none;
-  border: none;
-  border-radius: var(--radius-card);
-  padding: 18px;
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
-  transition: background 0.15s ease;
-}
-
-.profile-row:hover { background: rgba(60, 59, 63, 0.04); }
-
-.profile-row:has(.radio-input:checked) {
-  background: rgba(60, 59, 63, 0.035);
-  border-radius: 0;
-}
-
-/* Both profile-select variants — guided (no saved profiles) and library
-   (1+ saved profiles) — share the same list treatment: a rule above the
-   list, dividers between rows, and one closing the list below, all via
-   borders directly on the rows themselves (no flex gap, no separate <hr>
-   with its own margin), so a hovered/selected row's background runs
-   flush to those rules with no whitespace. */
-#profile-guided,
-#profile-library { border-top: 1px solid var(--border); gap: 0; }
-.profile-row-bordered { border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
-
-.profile-row-text { display: flex; flex-direction: column; gap: 4px; }
-
-.profile-row-name-line { display: flex; align-items: center; gap: 8px; }
-
-.profile-row-name {
-  font-family: var(--font-body);
-  font-weight: var(--weight-light);
-  font-size: 16px;
-  color: var(--text-default);
-  transition: font-weight 0.15s ease;
-}
-
-.profile-row:has(.radio-input:checked) .profile-row-name {
-  font-weight: var(--weight-regular);
-}
-
-.profile-row-name--sm { font-size: 16px; flex: 1; }
-
-/* Guided-choice (no saved profiles) state only: name weight is a static
-   per-option distinction rather than a selection-driven one — Everyday
-   Conversation always reads as the primary choice, "Create a speaking
-   profile" always reads as plain body text. */
-#profile-guided .profile-row:has(#profile-radio-recommended) .profile-row-name { font-weight: var(--weight-medium); }
-#profile-guided .profile-row:has(#profile-radio-custom) .profile-row-name { font-weight: var(--weight-light); }
-
-/* Subdued pill — deliberately quieter than the profile name, never the accent color. */
-.profile-row-badge {
-  flex-shrink: 0;
-  font-family: var(--font-body);
-  font-size: 9px;
-  font-weight: var(--weight-medium);
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--paper);
-  background: var(--text-subdued);
-  border-radius: var(--radius-pill);
-  padding: 2px 7px;
-  white-space: nowrap;
-}
-
-.profile-row-desc {
-  font-family: var(--font-body);
-  font-weight: var(--weight-light);
-  font-size: 13px;
-  line-height: 150%;
-  color: var(--text-subdued);
-}
-
-/* ── Radio (custom visual over a real, semantic radio input) ── */
-.radio-input {
-  position: absolute;
-  top: 16px;
-  left: 18px;
-  width: 16px;
-  height: 16px;
-  margin: 0;
-  opacity: 0;
-  cursor: pointer;
-}
-
-.radio-visual {
-  flex-shrink: 0;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  border: 1.5px solid rgba(60, 59, 63, 0.25);
-  background: transparent;
-  transition: border-color 0.15s ease;
-}
-
-.radio-input:checked + .radio-visual {
-  border-color: var(--hanko-fill);
-  background: radial-gradient(circle, var(--hanko-fill) 42%, transparent 43%);
-}
-
-.radio-input:focus-visible + .radio-visual {
-  outline: 2px solid var(--hanko-fill);
-  outline-offset: 2px;
-}
-
-.profile-row-radio { position: relative; }
-.profile-row-radio .radio-visual { margin-top: 2px; }
-
-/* padding-top/bottom explicitly zeroed — .profile-row-radio-label below is
-   the single source of this row's vertical padding. Without this override,
-   .profile-row's own inherited padding stacks with the label's, doubling
-   the row's effective vertical padding and making saved-profile rows
-   noticeably taller (mostly whitespace) than the Recommended row. */
-.profile-row-saved {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 8px 0 0;
-  border-top: 1px solid var(--border);
-}
-
-/* 30px (not 18px, matching .profile-row) is deliberate: a saved profile's
-   single-line name has far less content height than Recommended's
-   name+badge line plus description, so it needs more padding to reach the
-   same total row height, not the same padding. */
-.profile-row-radio-label {
-  position: relative;
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  cursor: pointer;
-  padding: 30px 0 30px 18px;
-}
-
-/* Delete is visually secondary by default — invisible until the row is
-   hovered or focus reaches it, then it strengthens. Keyboard users tabbing
-   directly to the button still see it via its own :focus-visible. */
-.profile-row-saved .btn-delete { opacity: 0; }
-.profile-row-saved:hover .btn-delete,
-.profile-row-saved:focus-within .btn-delete { opacity: 1; }
-
-/* ── Delete control (saved custom profiles only) ── */
-.btn-delete {
-  flex-shrink: 0;
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 6px;
-  border-radius: var(--radius-icon-btn);
-  color: var(--text-subdued);
-  line-height: 1;
-  transition: color 0.12s ease, opacity 0.15s ease;
-}
-
-.btn-delete:hover,
-.btn-delete:focus-visible { color: var(--text-default); }
-
-/* ── Create Speaking Profile (profile-library state only) ── */
-/* Not part of the list — the last saved profile is the end of the list,
-   so this only gets a top divider (separating it from the list above),
-   never a closing rule below it. */
-.profile-create-row {
-  padding: 14px 18px;
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  border-top: 1px solid var(--border);
-}
-
-.profile-create-link {
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-  font-family: var(--font-body);
-  font-weight: var(--weight-regular);
-  font-size: 13px;
-  color: var(--text-default);
-  letter-spacing: 0.01em;
-  transition: color 0.15s ease;
-}
-
-.profile-create-link:hover,
-.profile-create-link:focus-visible {
-  color: var(--hanko-fill);
-}
-
-.profile-slots-remaining {
-  font-family: var(--font-body);
-  font-size: 12px;
-  color: var(--text-subdued);
-}
-
-.profile-limit-message {
-  font-family: var(--font-body);
-  font-weight: var(--weight-light);
-  font-size: 13px;
-  color: var(--text-subdued);
-}
-
-/* ── Delete-profile confirmation dialog ── */
-/* Warm tint (not the cool, ink-based rgba(60,59,63,...) this used before),
-   higher opacity, and a blur so the page behind genuinely recedes — the
-   modal should read as the clear focal point, with whatever's behind it
-   (calibration or profile-select) reading as paused/inactive rather than
-   just dimmed-but-sharp. Shared by both dialogs (save + delete) for a
-   consistent overlay treatment. */
-.dialog-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(58, 48, 38, 0.45);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  z-index: 100;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-}
-
-.dialog {
-  background: var(--paper);
-  border-radius: 20px;
-  padding: 32px 28px;
-  max-width: 360px;
-  width: 100%;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
-  text-align: center;
-}
-
-.dialog-title {
-  font-size: 24px;
-  line-height: 130%;
-  margin-bottom: 12px;
-  color: var(--text-primary);
-}
-
-.dialog-body {
-  color: var(--text-subdued);
-  margin-bottom: 28px;
-}
-
-.dialog-actions {
-  display: flex;
-  flex-direction: row;
-  gap: 12px;
-}
-
-.dialog-actions .btn-delete-confirm,
-.dialog-actions .btn-outline { flex: 1; min-width: 0; }
-
-/* Requested fill is #8A827A with rgba(245,240,232,0.92) text, but that
-   pairing only reaches ~3.1:1 — no text color on #8A827A clears 4.5:1,
-   the background itself doesn't have the contrast headroom. Darkened to
-   ~75% (still a clearly medium warm gray, nowhere near --ink) so the same
-   light cream text reaches ~4.8:1 instead. */
-.btn-delete-confirm {
-  background: #68625C;
-  color: rgba(245, 240, 232, 0.92);
-  font-family: var(--font-body);
-  font-weight: var(--weight-regular);
-  font-size: 15px;
-  padding: 14px 28px;
-  border: none;
-  border-radius: var(--radius-cta);
-  cursor: pointer;
-  transition: opacity 0.15s ease, transform 0.15s ease;
-}
-
-.btn-delete-confirm:hover { opacity: 0.85; }
-.btn-delete-confirm:active { opacity: 0.72; transform: scale(0.98); }
-
-/* Requested border rgba(42,32,23,0.22) only reaches ~1.55:1 against the
-   page — well under the 3:1 non-text minimum other outline buttons on
-   this page were already fixed to clear (see the .btn-outline audit
-   above) — var(--text-subdued) solid instead, same resolution used
-   there. "Muted text" similarly lands on var(--text-body) (~7.14:1)
-   rather than the faint literal alternative, so the label stays legible. */
-.dialog-actions .btn-outline {
-  border-color: var(--text-subdued);
-  color: var(--text-body);
-}
-
-/* Orange primary buttons on this page (Save, Start Monitoring, Set Up
-   Profile, I'm Ready) — flat color-only hover (no lift/shadow), a
-   press-only scale-down, same interaction shape as the outline/ghost
-   buttons above. Overrides the shared .btn-primary:hover (which uses
-   --hanko-hover, #AE4D31, plus a translateY lift + shadow) for this page
-   only — try-it.css isn't loaded by the marketing pages, so this doesn't
-   touch their buttons. */
+/* Orange primary buttons on this page (Open Mezzo Companion) — flat
+   color-only hover (no lift/shadow), a press-only scale-down, same
+   interaction shape as the outline/ghost buttons below. Overrides the
+   shared .btn-primary:hover (which uses --hanko-hover, #AE4D31, plus a
+   translateY lift + shadow) for this page only — try-it.css isn't loaded
+   by the marketing pages, so this doesn't touch their buttons. */
 .btn-primary:hover {
   background: #A8472D;
   transform: none;
@@ -506,114 +90,6 @@ body {
   transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease, transform 0.15s ease;
 }
 
-/* This dialog's Cancel reads in normal case, unlike the app's other
-   (uppercase) .btn-outline usages — scoped narrowly so it doesn't affect
-   .btn-outline elsewhere. No width:100% here anymore — Cancel/Delete are
-   a side-by-side flex:1 row now, not a stacked column. Padding matches
-   Delete's explicitly (14px 28px, not .btn-outline's own smaller base
-   padding) — equal flex-grow with flex-basis:0 doesn't reliably produce
-   equal rendered widths when the two items' own padding differs this
-   much, so matching it directly is the robust fix. */
-.dialog-actions .btn-outline {
-  text-transform: none;
-  letter-spacing: normal;
-  font-size: 15px;
-  padding: 14px 28px;
-}
-
-/* ── Save-profile dialog (calibration) — overlay on top of the listening
-   screen, not a page of its own. Two steps toggled in place; see
-   #save-dialog-overlay in try-it.html and try-it.js's showSaveDialogStep(). ── */
-.dialog-save { max-width: 420px; padding: 32px 32px; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.14); }
-
-.save-dialog-step .dialog-title { margin-bottom: 8px; }
-/* Text-body (not the shared, low-contrast text-subdued) — see the
-   contrast audit above the .save-dialog-* block for the reasoning; this
-   is the same fix applied consistently to every quiet-text element in
-   this dialog. */
-.save-dialog-step .dialog-body { margin-bottom: 4px; color: var(--text-body); }
-
-.save-dialog-actions {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  margin-bottom: 14px;
-}
-
-.save-dialog-actions .btn-primary,
-.save-dialog-actions .btn-outline { flex: 1; min-width: 0; }
-
-/* This dialog's outline buttons (Try Again, Back) read in normal case at the
-   same size as Save, unlike the app's other (uppercase, compact) .btn-outline
-   usages — scoped narrowly so it doesn't affect .btn-outline elsewhere.
-   border-color overrides the shared [data-surface="light"] .btn-outline
-   rule's border (rgba(138,130,122,0.30), ~1.35:1) with a solid tone that
-   clears the 3:1 non-text contrast minimum — button label text itself
-   already passes via that same shared rule (ink, ~9.36:1), so it's left
-   alone. */
-.save-dialog-actions .btn-outline {
-  text-transform: none;
-  letter-spacing: normal;
-  font-size: 14px;
-  padding: 10px 18px;
-  border-color: var(--text-subdued);
-}
-
-/* Save shares this row with Try Again and reads too heavy at the app's
-   default CTA size (16px / 13px 28px) for a modal this size — smaller,
-   matching Try Again's new proportions so the pair reads balanced. */
-.save-dialog-actions .btn-primary {
-  font-size: 14px;
-  padding: 10px 22px;
-}
-
-/* Back reads much narrower than Save otherwise — .btn-outline's smaller
-   horizontal padding plus flexbox's implicit content-based minimum width
-   stops equal flex-basis from producing equal visual width. The prompt
-   step's Save/Try Again keep their existing proportions (that pairing
-   isn't meant to be equal-width); only Back, in the name step, needs to
-   read as a balanced pair with Save — matching Save's own (now smaller)
-   padding above, not a fixed value, so the pair stays balanced if that
-   size ever changes again. */
-#save-step-name .btn-outline { padding: 10px 22px; }
-
-/* Close Companion — a page-side recovery action (see try-it.html's
-   #state-session-status comment and CLAUDE.md), not a primary CTA, so it
-   reads at normal case/weight like this page's other outline buttons
-   rather than the app's compact uppercase default. Sized between the
-   dialog's compact (10px/14px) and regular (14px/28px) variants — big
-   enough to stay easy to find since it may be the only obvious way to
-   close the Companion without the native control, small enough to still
-   read as secondary to Start Monitoring/Save elsewhere on this page.
-   var(--text-subdued) border clears the 3:1 non-text minimum;
-   var(--text-body) label clears 4.5:1 — same resolution as every other
-   outline button on this page. Scoped by class, not #id — an id selector
-   would outrank .btn-outline:hover's specificity outright regardless of
-   source order, silently breaking the hover border-color change (caught
-   live: hover updated the background but not the border until this was
-   fixed to match the other .btn-outline overrides' specificity tier). */
-.btn-close-companion {
-  text-transform: none;
-  letter-spacing: normal;
-  font-size: 14px;
-  padding: 12px 28px;
-  border-color: var(--text-subdued);
-  color: var(--text-body);
-  margin-bottom: 32px;
-}
-
-/* Interaction states, declared after the border-color overrides above so
-   they win on hover/active despite equal selector specificity (source
-   order is the tiebreaker) — default border is var(--text-subdued)
-   (~3.18:1), not the reference's literal rgba(ink,0.18–0.28) (~1.4–1.6:1),
-   since the border is this control's primary boundary and needs to clear
-   the 3:1 non-text contrast minimum; hover/active step up through solid,
-   already-passing tones (text-body, ink) rather than translating the
-   reference's 0.45/0.65 ink-alpha values, which would still fall short
-   (~2.3:1) at the hover step. Background tints and the press-state scale
-   are taken directly from the reference — those aren't text/boundary
-   colors, so contrast doesn't apply the same way. */
 .btn-outline:hover {
   border-color: var(--text-body);
   background: rgba(60, 59, 63, 0.06);
@@ -624,121 +100,28 @@ body {
   transform: scale(0.98);
 }
 
-/* Lighter than the shared --border (rgba(138,130,122,0.18)) — this is a
-   quiet divider between two optional/secondary actions, not a boundary
-   that needs to hold its own visually; scoped here rather than touching
-   --border, which list dividers elsewhere still rely on at full weight. */
-.save-dialog-divider {
-  border: none;
-  border-top: 1px solid rgba(138, 130, 122, 0.10);
-  margin: 0 0 12px;
-}
-
-.save-dialog-discard-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-}
-
-.save-dialog-or {
-  font-family: var(--font-body);
-  font-size: 12px;
-  color: var(--text-quiet);
-}
-
-.save-dialog-discard {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 4px 6px;
-  border-radius: 6px;
-  font-family: var(--font-body);
-  font-size: 12px;
+/* ── Close Companion (Dock's one lifecycle exception — see try-it.html's
+   #state-dock comment and CLAUDE.md) — reads at normal case/weight like
+   this page's other outline buttons rather than the app's compact
+   uppercase default. var(--text-subdued) border clears the 3:1 non-text
+   minimum; var(--text-body) label clears 4.5:1. ── */
+.btn-close-companion {
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 14px;
+  padding: 12px 28px;
+  border-color: var(--text-subdued);
   color: var(--text-body);
-  transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+  margin-bottom: 32px;
 }
 
-.save-dialog-discard:hover,
-.save-dialog-discard:focus-visible {
-  background: rgba(60, 59, 63, 0.06);
-  color: var(--text-default);
-}
-
-.save-dialog-discard:active {
-  background: rgba(60, 59, 63, 0.11);
-  transform: scale(0.98);
-}
-
-/* Repositioned in markup to sit directly beneath the main supporting
-   sentence (matching the approved mockup) — margin is bottom-only now,
-   spacing it from the buttons below rather than the discard row above.
-   --text-quiet (not --text-body, which the main sentence above already
-   uses) — visibly lighter, preserving the hierarchy step between them,
-   while still clearing 4.5:1. */
-.save-dialog-privacy-note { margin: 0 0 24px; color: var(--text-quiet); }
-
-.save-dialog-hint {
-  text-align: left;
-  width: 100%;
-  color: var(--text-body);
-}
-
-/* ── Toast (transient confirmation, e.g. after saving a profile) ── */
-.toast {
-  position: fixed;
-  left: 50%;
-  bottom: 32px;
-  transform: translateX(-50%) translateY(8px);
-  background: var(--ink);
-  color: var(--paper);
-  font-family: var(--font-body);
-  font-weight: var(--weight-regular);
-  font-size: 13px;
-  padding: 12px 22px;
-  border-radius: var(--radius-pill);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.18);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.25s ease, transform 0.25s ease;
-  z-index: 50;
-}
-
-.toast.toast-visible {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
-}
-
-/* ── Session Status (companionReady / monitoringActive only — companionClosed
-   renders no dedicated view here; it routes back to the profile library) ── */
-.mon-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.mon-status-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--hanko-fill);
-  flex-shrink: 0;
-  animation: mezzo-pulse 3.3s ease-in-out infinite;
-}
-
-@keyframes mezzo-pulse {
-  0%, 100% { opacity: 0.26; transform: scale(1); }
-  50%       { opacity: 0.54; transform: scale(1.22); }
-}
-
-/* Status pill above the heading — a small dot + text, not the old icon/
-   button/microcopy stack. Active: small filled green dot. Inactive: a
-   slightly larger hollow dot, same treatment the Companion's own Ready
-   state implies (open, but not monitoring). */
-.session-status-pill {
+/* ── Dock status pill — a small dot + text above the Dock's heading, the
+   one live element on this page (see try-it.js's renderDockStatus()). Four
+   modifiers map to the four Dock statuses (CLAUDE.md's Dock status
+   mapping): ready (hollow, calm), calibrating and attention (solid, warm
+   accent), monitoring (solid green with a slow breathing pulse — livelier
+   than the others, but never urgent). ── */
+.dock-status-pill {
   display: flex;
   align-items: center;
   gap: 7px;
@@ -750,21 +133,46 @@ body {
   color: var(--text-body);
 }
 
-.session-status-dot {
-  width: 7px;
-  height: 7px;
+.dock-status-dot {
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
   flex-shrink: 0;
-  background: #5a8a5a;
+  background: transparent;
+  border: 1.5px solid var(--text-ghost);
 }
 
-.session-status-dot.session-status-dot-inactive {
+.dock-status-dot-ready {
   width: 9px;
   height: 9px;
   background: transparent;
   border: 1.5px solid var(--text-ghost);
 }
 
+.dock-status-dot-calibrating,
+.dock-status-dot-attention {
+  width: 7px;
+  height: 7px;
+  border: none;
+  background: var(--hanko-fill);
+}
+
+.dock-status-dot-monitoring {
+  width: 7px;
+  height: 7px;
+  border: none;
+  background: #5a8a5a;
+  animation: mezzo-dock-pulse 3.3s ease-in-out infinite;
+}
+
+@keyframes mezzo-dock-pulse {
+  0%, 100% { opacity: 0.54; transform: scale(1); }
+  50%       { opacity: 0.85; transform: scale(1.22); }
+}
+
+/* ── Dock's embedded Companion preview — static illustrative imagery, not
+   live session UI (see try-it.html's #state-dock comment and CLAUDE.md's
+   Non-Negotiable Decisions). ── */
 .anchor-preview-figure {
   display: flex;
   flex-direction: column;
@@ -774,14 +182,10 @@ body {
 
 /* Sized to the same aspect ratio as the real Monitoring Companion
    (380×420) so this reads as a symbolic stand-in for that window's
-   proportions, not an arbitrarily-shaped icon. 199px wide — this went
-   260 → 300 → 199 across three rounds: 260 read as too slight to anchor
-   the page, 300 swung the other way and started dominating it (and paired
-   with the more realistic styling at the time, contributed to it reading
-   as a second real window rather than an illustration). 199px is the
-   settled, approved size — the illustration is deliberately secondary,
-   not the focal point. Every internal metric below (rings, dots, bars,
-   padding) is scaled to match rather than left at 300px-tuned sizes. */
+   proportions, not an arbitrarily-shaped icon. 199px wide is the settled,
+   approved size — the illustration is deliberately secondary, not the
+   focal point. Every internal metric below (rings, dots, bars, padding)
+   is scaled to match. */
 .anchor-preview-wrap {
   width: 199px;
   aspect-ratio: 380 / 420;
@@ -789,16 +193,11 @@ body {
 }
 
 /* Deliberately a soft line diagram, not a realistic window — user testing
-   found the previous dark, screenshot-like card got mistaken for a second,
+   found a realistic, dark, screenshot-like card got mistaken for a second,
    real Companion window floating on the desktop. Everything in this
-   illustration (through the footer icons below) is now a single warm
-   accent tone at varying opacity — rgba(139,90,60,*) — on a near-paper
-   background, the same treatment as the approved reference mockup, rather
-   than a dark surface with its own realistic depth/elevation. */
-/* Contrast bumped a step up from the first abstract pass — at 0.045 the
-   fill nearly disappeared into --paper and the card lost definition.
-   Still a single warm accent tone throughout, just a "slightly darker
-   peach" per the approved direction, not a return to a realistic surface. */
+   illustration (through the footer icons below) is a single warm accent
+   tone at varying opacity — rgba(139,90,60,*) — on a near-paper
+   background. */
 .anchor-preview-card {
   position: relative;
   width: 100%;
@@ -837,7 +236,7 @@ body {
   flex-shrink: 0;
 }
 
-/* An empty placeholder bar, not the literal "Mezzo Companion" label —
+/* An empty placeholder bar, not a literal "Mezzo Companion" label —
    readable window-title text was one more detail that made this look like
    a real, inspectable window rather than a symbolic stand-in for one. */
 .anchor-preview-titlebar-label {
@@ -870,10 +269,11 @@ body {
 
 /* Abstracted into placeholder bars rather than literal readable text
    ("Approaching End of Range" / "Profile: Coffee Shop") — this card sits
-   directly under the real, live status pill above it, and literal-looking
-   status text here read too much like a second, conflicting live readout.
-   A plain bar still evokes "there's a status line and a profile line"
-   without anything a user could mistake for real data. */
+   directly under the real, live Dock status pill above it, and
+   literal-looking status text here read too much like a second,
+   conflicting live readout. A plain bar still evokes "there's a status
+   line and a profile line" without anything a user could mistake for
+   real data. */
 .anchor-preview-status-bar {
   display: block;
   height: 5px;
@@ -975,9 +375,8 @@ body {
    non-decorative body text (the figure's aria-hidden scope stops at the
    illustration itself; the figcaption is what conveys its purpose to
    assistive tech). var(--text-quiet) (~4.91:1) is the "lighter than body,
-   still passes 4.5:1" tier already established for this kind of
-   supporting/tertiary copy elsewhere on this page (see the save-dialog
-   privacy note). */
+   still passes 4.5:1" tier established for this kind of supporting/
+   tertiary copy. */
 .anchor-preview-caption {
   font-family: var(--font-body);
   font-size: 13px;
@@ -987,14 +386,12 @@ body {
   text-align: center;
 }
 
-/* Close Companion (see #btn-close-companion below) now owns the boundary
-   above the divider; the divider owns only the space below itself, down
-   to the footer message. 300px independent of the illustration's own
-   width (199px) — matches the button/copy column above and below it
-   instead. margin-left/right must be auto, not 0 — .state-col isn't a
-   flex container, so a fixed-width block child needs explicit auto
-   margins to center itself; margin:0 left it flush against the column's
-   left edge instead of centered under the button, caught live. */
+/* Close Companion owns the boundary above the divider; the divider owns
+   only the space below itself, down to the footer message. 300px
+   independent of the illustration's own width (199px) — matches the
+   button/copy column above and below it instead. margin-left/right must be
+   auto, not 0 — .state-col isn't a flex container, so a fixed-width block
+   child needs explicit auto margins to center itself. */
 .anchor-preview-divider {
   border: none;
   border-top: 1px solid var(--border);
@@ -1003,88 +400,13 @@ body {
 }
 
 /* Same var(--text-quiet) tier as the caption above — this is a closing,
-   tertiary note, not a second status readout, so it reads quieter than
-   the live status pill at the top rather than sharing its exact weight
-   (both previously used var(--text-body), making the top and bottom of
-   this page read as the same visual loudness). */
-.session-status-footer-copy {
+   tertiary note, not a second status readout, so it reads quieter than the
+   live status pill at the top. */
+.dock-footer-copy {
   max-width: 340px;
   margin: 0 auto;
   line-height: 1.65;
   color: var(--text-quiet);
-}
-
-/* ── No-Companion-support fallback monitoring view ── */
-#state-fallback-monitor {
-  justify-content: center;
-}
-
-#state-fallback-monitor .mon-status {
-  margin-bottom: 40px;
-}
-
-.mon-heading {
-  font-family: var(--font-display);
-  font-weight: var(--weight-light);
-  font-size: 15px;
-  color: var(--text-subdued);
-  letter-spacing: 0.04em;
-}
-
-.mon-canvas-wrap {
-  width: 280px;
-  height: 280px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.mon-circle-container { width: 100%; height: 100%; }
-
-.mon-controls {
-  margin-top: 48px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 14px;
-  width: 100%;
-  max-width: 320px;
-}
-
-.mon-micro { text-align: center; color: var(--text-ghost); }
-
-/* ── Text Input ── */
-#name-form { display: flex; flex-direction: column; align-items: center; gap: 20px; }
-
-.text-input {
-  width: 100%; max-width: 360px;
-  font-family: var(--font-body);
-  font-weight: var(--weight-regular);
-  font-size: 16px;
-  color: var(--text-default);
-  background: var(--surface-card);
-  /* Solid text-subdued (~3.18:1), not the shared, near-invisible --border
-     (~1.19:1) — a form input's border is its primary affordance, not a
-     decorative divider, so it needs to actually read as a boundary. */
-  border: 1px solid var(--text-subdued);
-  border-radius: var(--radius-card);
-  padding: 14px 18px;
-  text-align: left;
-  transition: var(--transition-hover);
-}
-
-.text-input::placeholder { color: var(--text-ghost); }
-
-/* No more permanent-looking orange border on focus (this input auto-focuses
-   the instant the name step appears, so a border recolor reads as its
-   permanent state, not a transient one) — a standard, clearly visible
-   focus ring instead, same treatment as .radio-input:focus-visible
-   elsewhere in this file. Border itself stays the same neutral tone. */
-.text-input:focus { outline: none; }
-.text-input:focus-visible {
-  outline: 2px solid var(--hanko-fill);
-  outline-offset: 2px;
 }
 
 /* ── Responsive ── */
@@ -1092,44 +414,22 @@ body {
   .state-col { max-width: calc((100vw - 240px) / 2); }
   .state-heading { max-width: 700px; }
 
-  /* Choose a Speaking Profile only — the calc() above creates a "valley"
-     (as narrow as 330px right at 900px, not climbing back to 520px until
-     1280px), which is exactly what was making the heading, the Everyday
-     Conversation name/badge row, and the Create Profile row wrap at
-     desktop widths that have plenty of room. This page's column just
-     stays at the base .state-col's flat 520px through this whole range
-     instead — mic-permission and calibration still get the calc() above;
-     the Anchor page gets the same flat-column treatment separately below. */
-  #state-profile-select .state-col { max-width: 520px; }
-
-  /* Anchor page (#state-session-status) — same "valley" as above (as
-     narrow as ~392px at 1024px, the low end of this task's own
-     1024–1600px test range), and the same fix: stay at the flat 520px
-     .state-col base instead of the calc() shrink. The page's actual
-     content (280px caption, 340px footer copy, 260px illustration) never
-     needed the extra room the valley was taking away — the one real,
-     visible effect was the heading wrapping to two lines at ~1024–1150px
-     when it renders on one line at 1440/1600px, which is exactly the kind
-     of "awkward breakpoint shift" this task asked to avoid. Paired with
-     the nowrap override right below so the heading is consistently
-     one line across the whole tested range, not just less-often wrapped. */
-  #state-session-status .state-col { max-width: 520px; }
-  #state-session-status .state-heading { max-width: none; white-space: nowrap; }
+  /* Dock — the calc() above creates a "valley" (as narrow as ~392px at
+     1024px) that this page's actual content (280px caption, 340px footer
+     copy, 199px illustration) never needed the extra room for — the one
+     real, visible effect was the heading wrapping to two lines at
+     ~1024–1150px when it renders on one line at 1440/1600px. Stays at the
+     flat 520px .state-col base instead, paired with the nowrap override
+     right below so the heading is consistently one line across the whole
+     tested range. */
+  #state-dock .state-col { max-width: 520px; }
+  #state-dock .state-heading { max-width: none; white-space: nowrap; }
 }
 
-/* Anchor page heading — fixed 30px/300 (not the shared
-   .type-section-heading clamp(29px, 3.6vw, 42px), which grows up to 42px
-   and then plateaus past ~1167px). This heading is meant to stay a fixed,
-   quieter size at any width, not scale with the viewport the way the
-   Speaking Profile / calibration headings do — a smaller, non-scaling
-   heading also reads correctly next to the now-larger illustration below
-   it, rather than both competing for the same "biggest thing on the
-   page" role. font-weight already matches --weight-light (300). */
-#state-session-status .state-heading { font-size: 30px; }
-
-/* True mobile only — everything above (600px and up) already keeps the
-   full 520px desktop column; this is the one deliberate narrower layout,
-   not an accident of running out of space mid-range. */
-@media (max-width: 599px) {
-  #state-profile-select.page-content { padding: 64px 20px; }
-}
+/* Dock heading — fixed 30px/300 (not the shared .type-section-heading
+   clamp(29px, 3.6vw, 42px), which grows up to 42px and then plateaus past
+   ~1167px). Meant to stay a fixed, quieter size at any width, reading
+   correctly next to the illustration below it rather than competing for
+   the "biggest thing on the page" role. font-weight already matches
+   --weight-light (300). */
+#state-dock .state-heading { font-size: 30px; }

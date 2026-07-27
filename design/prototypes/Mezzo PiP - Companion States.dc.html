@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500&amp;display=swap" rel="stylesheet">
+  <style>
+    body { margin: 0; background: #0a0908; }
+    select { appearance: none; -webkit-appearance: none; }
+    select option { background: #252219; color: rgba(222,210,194,0.88); }
+  </style>
+</helmet>
+
+<div style="min-height: 100vh; background: #0a0908; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 56px 40px; gap: 48px; box-sizing: border-box;">
+
+  <!-- State switcher -->
+  <div style="display: flex; gap: 2px; background: rgba(255,255,255,0.04); border-radius: 8px; padding: 3px;">
+    <button onClick="{{ showMonitoring }}" style="{{ tabMonitor }}">Monitoring</button>
+    <button onClick="{{ showCompact }}" style="{{ tabCompact }}">Compact</button>
+    <button onClick="{{ showReady }}" style="{{ tabReady }}">Ready</button>
+  </div>
+
+  <!-- ── READY STATE ──────────────────────────────────────────────── -->
+  <sc-if value="{{ isReady }}" hint-placeholder-val="{{ true }}">
+  <div>
+
+    <div style="width: 320px; height: 300px; background: #3c3b3f; border-radius: 14px; border: 1px solid rgba(255,255,255,0.05); box-shadow: 0 24px 56px rgba(0,0,0,0.55), inset 0 0 40px rgba(0,0,0,0.16); display: flex; flex-direction: column; align-items: center; padding: 0 0 18px; box-sizing: border-box; gap: 0; overflow: hidden; position: relative;">
+
+      <!-- Title bar -->
+      <div style="width: 100%; display: flex; align-items: center; padding: 10px 14px; box-sizing: border-box; position: relative; flex-shrink: 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+        <div style="display: flex; gap: 6px; align-items: center; z-index: 1;">
+          <div style="width: 11px; height: 11px; border-radius: 50%; background: #ec6a5e;"></div>
+          <div style="width: 11px; height: 11px; border-radius: 50%; background: #f4bf4f;"></div>
+          <div style="width: 11px; height: 11px; border-radius: 50%; background: #61c554;"></div>
+        </div>
+        <div style="position: absolute; left: 0; right: 0; text-align: center; font-family: 'Sora', sans-serif; font-size: 9px; font-weight: 500; letter-spacing: 0.06em; color: rgba(172,158,136,0.90); letter-spacing: 0.18em; text-transform: uppercase; pointer-events: none;">Mezzo Companion</div>
+        <div style="margin-left: auto; width: 14px; height: 2px; background: rgba(172,158,136,0.35); border-radius: 1px; z-index: 1;"></div>
+      </div>
+
+      <!-- Poster area — heading with background -->
+      <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; position: relative; padding: 8px 20px 8px;">
+
+        <div style="padding: 22px 24px; display: flex; flex-direction: column; align-items: center; position: relative; width: 80%;">
+          <div style="font-family: 'Noto Serif JP', serif; font-size: 22px; font-weight: 300; color: rgba(222,210,194,0.82); letter-spacing: 0.01em; line-height: 1.4; text-align: center; max-width: 240px;">{{ readyHeading }}</div>
+
+        </div>
+      </div>
+
+      <!-- Action card — no background, wider -->
+      <div style="width: calc(100% - 48px); margin: 0 24px 0; padding: 8px 16px 28px; box-sizing: border-box; flex-shrink: 0; position: relative; z-index: 60; border-radius: 0 0 14px 14px; display: flex; flex-direction: column; align-items: center;">
+        <div onClick="{{ toggleDropdown }}" style="{{ dropdownTriggerStyle }}">
+          <span>{{ selectedProfileLabel }}</span>
+          <span style="font-size: 14px; color: rgba(172,158,136,0.80);">{{ dropdownChevron }}</span>
+        </div>
+        <div style="height: 16px; width: 100%;"></div>
+        <button onClick="{{ showMonitoring }}" style="width: 90%; background: #C4593A; border: none; border-radius: 50px; padding: 12px; font-family: 'Sora', sans-serif; font-size: 13px; font-weight: 500; color: rgba(255,255,255,0.92); letter-spacing: 0.04em; cursor: pointer; transition: opacity 0.15s ease;" style-hover="opacity: 0.88;" style-active="opacity: 0.75;">Start Monitoring</button>
+      </div>
+      <!-- Centered profile picker overlay -->
+      <sc-if value="{{ dropdownOpen }}" hint-placeholder-val="{{ false }}">
+      <div onClick="{{ toggleDropdown }}" style="position: absolute; inset: 0; background: rgba(0,0,0,0.55); z-index: 200; display: flex; align-items: center; justify-content: center; border-radius: 14px; padding: 20px;">
+        <div onClick="{{ stopPropagation }}" style="background: #3c3b3f; border-radius: 12px; width: 100%; overflow: hidden; box-shadow: 0 16px 48px rgba(0,0,0,0.72); border: 1px solid rgba(255,255,255,0.08);">
+          <div style="font-family: 'Sora', sans-serif; font-size: 9px; font-weight: 500; letter-spacing: 0.18em; color: rgba(172,158,136,0.50); text-transform: uppercase; padding: 12px 16px 8px;">Select Profile</div>
+          <sc-for list="{{ profileOptions }}" as="opt" hint-placeholder-count="2">
+            <div onClick="{{ opt.select }}" onMouseEnter="{{ opt.hover }}" onMouseLeave="{{ opt.unhover }}" style="{{ opt.style }}">{{ opt.label }}</div>
+          </sc-for>
+          <div style="height: 1px; background: rgba(255,255,255,0.08); margin: 4px 14px;"></div>
+          <div onClick="{{ goCreateProfile }}" onMouseEnter="{{ hoverCreate }}" onMouseLeave="{{ hoverNone }}" style="{{ optCreate }}">+ Create New Profile…</div>
+        </div>
+      </div>
+      </sc-if>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ── MONITORING STATE ─────────────────────────────────────────── -->
+  <sc-if value="{{ isMonitoring }}" hint-placeholder-val="{{ false }}">
+  <div>
+    <p style="font-family: 'Sora', sans-serif; font-size: 10px; color: rgba(172,158,136,0.58); letter-spacing: 0.14em; text-align: center; margin: 0 0 14px; text-transform: uppercase;"><br></p>
+    <div style="width: 380px; height: 420px; background: #3c3b3f; border-radius: 14px; border: 1px solid rgba(255,255,255,0.05); box-shadow: 0 24px 56px rgba(0,0,0,0.55), inset 0 0 40px rgba(0,0,0,0.16); display: flex; flex-direction: column; padding: 18px 20px 14px; box-sizing: border-box;">
+
+      <!-- Title bar -->
+      <div style="display: flex; align-items: center; justify-content: space-between; margin: -18px -20px 12px; padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,0.06); position: relative;">
+        <div style="display: flex; gap: 6px; align-items: center;">
+          <div style="width: 11px; height: 11px; border-radius: 50%; background: #ec6a5e;"></div>
+          <div style="width: 11px; height: 11px; border-radius: 50%; background: #f4bf4f;"></div>
+          <div style="width: 11px; height: 11px; border-radius: 50%; background: #61c554;"></div>
+        </div>
+        <div style="position: absolute; left: 50%; transform: translateX(-50%); font-family: 'Sora', sans-serif; font-size: 9px; font-weight: 500; letter-spacing: 0.22em; color: rgba(172,158,136,0.90); text-transform: uppercase;">Mezzo Companion</div>
+        <div style="width: 14px; height: 2px; background: rgba(172,158,136,0.40); border-radius: 1px;"></div>
+      </div>
+      <!-- Status + profile -->
+      <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 4px; margin-bottom: 0;">
+        <div style="font-family: 'Sora', sans-serif; font-size: 11px; font-weight: 500; color: {{ statusLabelColor }}; letter-spacing: 0.02em; line-height: 1.1; -webkit-font-smoothing: antialiased;">{{ statusLabel }}</div>
+        <div style="font-family: 'Sora', sans-serif; font-size: 9px; font-weight: 300; color: rgba(222,210,194,0.58); letter-spacing: 0.06em;"><span>Profile:</span> <span>Coffee Shop</span></div>
+      </div>
+
+      <!-- Visualization — fills remaining space, canvas sized to match -->
+      <div style="flex: 1; display: flex; align-items: center; justify-content: center; min-height: 0; overflow: hidden;">
+        <canvas ref="{{ canvasRef }}" style="display: block; width: 210px; height: 210px;"></canvas>
+      </div>
+
+      <!-- Controls -->
+      <div style="padding-top: 12px; padding-bottom: 4px; display: flex; align-items: center; justify-content: space-between;">
+        <button onClick="{{ stopMonitoring }}" onMouseEnter="{{ hoverStop }}" onMouseLeave="{{ unhoverStop }}" style="background: {{ stopBg }}; border: none; cursor: pointer; padding: 7px 12px; margin: -7px -12px; border-radius: 6px; display: flex; align-items: center; gap: 7px; transition: background 0.15s ease;" style-active="background: rgba(255,255,255,0.12);">
+          <div style="width: 7px; height: 7px; background: rgba(172,158,136,0.50); border-radius: 1px; flex-shrink: 0;"></div>
+          <span style="font-family: 'Sora', sans-serif; font-size: 10px; color: rgba(222,210,194,0.82); letter-spacing: 0.10em; text-transform: uppercase;">Stop</span>
+        </button>
+        <button onMouseEnter="{{ hoverCompact }}" onMouseLeave="{{ unhoverCompact }}" onClick="{{ showCompact }}" style="font-family: 'Sora', sans-serif; font-size: 10px; color: rgba(222,210,194,0.82); background: {{ compactBg }}; border: none; cursor: pointer; letter-spacing: 0.10em; text-transform: uppercase; display: flex; align-items: center; gap: 5px; padding: 7px 12px; margin: -7px -12px; border-radius: 6px; transition: background 0.15s ease;">
+          <svg width="14" height="12" viewBox="0 0 14 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="0.75" y="0.75" width="12.5" height="10.5" rx="1.5" fill="none" stroke="rgba(172,158,136,0.50)" stroke-width="1.5"></rect>
+            <rect x="7" y="5.5" width="5.25" height="4" rx="1" fill="rgba(172,158,136,0.50)"></rect>
+          </svg>
+          <span style="color: rgba(222,210,194,0.82);">Compact</span>
+        </button>
+      </div>
+
+    </div>
+    <!-- Auto-cycle demo label -->
+    <p style="font-family: 'Sora', sans-serif; font-size: 10px; color: rgba(172,158,136,0.80); letter-spacing: 0.08em; text-align: center; margin: 12px 0 0;">Auto-cycling through states</p>
+  </div>
+  </sc-if>
+
+  <!-- ── COMPACT STATE ─────────────────────────────────────────────── -->
+  <sc-if value="{{ isCompact }}" hint-placeholder-val="{{ false }}">
+  <div>
+    <p style="font-family: 'Sora', sans-serif; font-size: 10px; color: rgba(172,158,136,0.58); letter-spacing: 0.14em; text-align: center; margin: 0 0 14px; text-transform: uppercase;"><br></p>
+    <div style="width: 220px; height: 260px; background: #3c3b3f; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05); box-shadow: 0 16px 40px rgba(0,0,0,0.52); display: flex; flex-direction: column; overflow: hidden; position: relative;">
+
+      <!-- Title bar -->
+      <div style="display: flex; align-items: center; padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,0.06); flex-shrink: 0; position: relative;">
+        <div style="display: flex; gap: 5px; align-items: center; z-index: 1;">
+          <div style="width: 9px; height: 9px; border-radius: 50%; background: #ec6a5e;"></div>
+          <div style="width: 9px; height: 9px; border-radius: 50%; background: #f4bf4f;"></div>
+          <div style="width: 9px; height: 9px; border-radius: 50%; background: #61c554;"></div>
+        </div>
+        <div style="position: absolute; left: 0; right: 0; text-align: center; font-family: 'Sora', sans-serif; font-size: 8px; font-weight: 500; letter-spacing: 0.20em; color: rgba(172,158,136,0.90); text-transform: uppercase; pointer-events: none;">Mezzo</div>
+      </div>
+
+      <!-- Full visualization -->
+      <div style="flex: 1; position: relative; min-height: 0;">
+        <canvas ref="{{ canvasRefCompact }}" style="display: block; position: absolute; inset: 0; width: 100%; height: 100%;"></canvas>
+        <!-- Bottom controls bar — overlaid -->
+        <div style="position: absolute; bottom: 0; left: 0; right: 0; display: flex; align-items: center; justify-content: space-between; padding: 6px 6px; z-index: 1;">
+        <button title="Stop" onMouseEnter="{{ hoverCStop }}" onMouseLeave="{{ unhoverCStop }}" style="background: {{ cStopBg }}; border: none; cursor: pointer; padding: 8px; border-radius: 6px; display: flex; align-items: center; justify-content: center; transition: background 0.15s ease;">
+          <div style="width: 12px; height: 12px; background: rgba(172,158,136,0.82); border-radius: 2px;"></div>
+        </button>
+        <button title="Expand" onMouseEnter="{{ hoverCExpand }}" onMouseLeave="{{ unhoverCExpand }}" style="background: {{ cExpandBg }}; border: none; cursor: pointer; padding: 8px; border-radius: 6px; display: flex; align-items: center; justify-content: center; transition: background 0.15s ease;">
+          <svg width="14" height="14" viewBox="0 0 12 12" fill="none">
+            <path d="M7.5 1.5H10.5V4.5M4.5 10.5H1.5V7.5M10.5 1.5L6.5 5.5M1.5 10.5L5.5 6.5" stroke="rgba(172,158,136,0.82)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+          </svg>
+        </button>
+        </div><!-- /controls overlay -->
+      </div><!-- /viz wrapper -->
+    </div><!-- /compact window -->
+    <p style="font-family: 'Sora', sans-serif; font-size: 10px; color: rgba(172,158,136,0.80); letter-spacing: 0.08em; text-align: center; margin: 12px 0 0;">Recommended minimum size</p>
+  </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 520, &quot;height&quot;: 600}}">
+class Component extends DCLogic {
+  state = { view: 'monitoring', dropdownOpen: false, selectedProfile: 'general', returnedFromMonitoring: true, thanksMsgIndex: 0 };
+
+  THANKS_HEADINGS = [
+    'Your consideration speaks volumes.',
+    'Thanks for making space for others.',
+    'Every thoughtful conversation starts with awareness.',
+    'Small adjustments can make a big difference.',
+    'Listening is part of every great conversation.',
+    'Awareness creates room for connection.',
+    'Ready for the next conversation.',
+    'One conversation at a time.',
+    'Keep the conversation flowing.',
+  ];
+
+  profiles = {
+    general:    { label: 'Everyday Conversation', tag: null },
+    coffeeshop: { label: 'Coffee Shop', tag: 'CUSTOM' },
+    gloria:     { label: 'Gloria', tag: 'CUSTOM' },
+    profile3:   { label: 'Profile 3', tag: 'CUSTOM' },
+  };
+
+  optStyle(key) {
+    const sel = this.state.selectedProfile === key;
+    const hov = this.state.hoveredOption === key && !sel;
+    return 'padding: 13px 14px 13px 10px; font-family: \'Sora\', sans-serif; font-size: 13px; letter-spacing: 0.02em; display: flex; align-items: center; justify-content: space-between; border-left: 3px solid ' + (sel ? '#C4593A' : 'transparent') + '; color: ' + (sel ? 'rgba(222,210,194,0.45)' : hov ? 'rgba(222,210,194,0.95)' : 'rgba(222,210,194,0.75)') + '; background: ' + (sel ? 'rgba(0,0,0,0.12)' : hov ? 'rgba(0,0,0,0.18)' : 'transparent') + '; font-weight: 400; cursor: ' + (sel ? 'default' : 'pointer') + '; transition: background 0.10s ease;';
+  }
+
+  selectProfile(key) {
+    this.setState({ selectedProfile: key, dropdownOpen: false });
+  }
+
+  // Shared animation state
+  energy = 0; targetEnergy = 0.22;
+  sustainedTime = 0; sessionTime = 0;
+  breathPhase = 0; mp0 = 1.1; mp1 = 2.4;
+  r1smooth = 0; r2smooth = 0;
+  r1rad = 0; r2rad = 0;
+  dr1 = 1.3; dr2 = 2.7; orbitPhase = 0;
+  wavePool = []; lastWaveSpawn = 0; lastTime = 0;
+  autoTime = 0; autoLast = 'within-range';
+
+  // Ring-activation hysteresis + emergence state — see drawOnCanvas(). The
+  // activate edge matches r1vis/r2vis's own visibility ramp start exactly,
+  // so a ring starts emerging the instant it would first become visible at
+  // all, not partway through its fade-in. The deactivate edge sits a little
+  // below that purely to stop energy hovering right at the boundary from
+  // flickering ownership back and forth — it doesn't change the visible
+  // fade, since r1vis/r2vis are already 0 throughout that narrow band.
+  R1_ACTIVATE_E = 0.38; R1_DEACTIVATE_E = 0.35;
+  R2_ACTIVATE_E = 0.62; R2_DEACTIVATE_E = 0.59;
+  EMERGE_TAU = 0.4; // seconds — how quickly an emerging ring eases to its resting radius
+  r1Active = false; r2Active = false;
+  r1DisplayRadius = null; r2DisplayRadius = null;
+
+  STATES  = ['monitoring','within-range','approaching','outside'];
+  TARGETS = { monitoring: 0, 'within-range': 0.22, approaching: 0.54, outside: 0.82 };
+  LABELS  = { monitoring: 'Quiet', 'within-range': 'Within Range', approaching: 'Approaching\nEnd of Range', outside: 'Outside of Range' };
+  DURS    = { monitoring: 7, 'within-range': 8, approaching: 8, outside: 9 };
+
+  canvasRef        = React.createRef();
+  canvasRefCompact = React.createRef();
+  rafId = null;
+
+  me(e, ...p) {
+    if (e <= p[0]) return p[1];
+    for (let i = 0; i < p.length - 3; i += 2) {
+      if (e <= p[i+2]) { const t=(e-p[i])/(p[i+2]-p[i]); return p[i+1]+(p[i+3]-p[i+1])*t; }
+    }
+    return p[p.length-1];
+  }
+
+  rgba(ct, a) {
+    return `rgba(${Math.round(172+(196-172)*ct)},${Math.round(158+(89-158)*ct)},${Math.round(136+(58-136)*ct)},${a.toFixed(3)})`;
+  }
+
+  // Exponential, frame-rate-independent ease toward `target` — same idiom
+  // the energy/mp0/mp1 smoothing above already uses, now also used per-ring
+  // for the emergence animation below.
+  easeToward(current, target, dt, tau) {
+    return current + (target - current) * (1 - Math.exp(-dt / tau));
+  }
+
+  // Canvas safety: every radius that feeds a stroke/arc/gradient call passes
+  // through this first, so a NaN or non-positive value (e.g. a container not
+  // yet laid out) can never reach the canvas API — that's what previously
+  // blanked the canvas (an invalid radius reaching createRadialGradient()
+  // throws synchronously; since the next frame is already scheduled before
+  // the draw call runs, the canvas gets cleared and never redrawn on every
+  // subsequent frame).
+  clampRadius(value) {
+    return Number.isFinite(value) && value > 0 ? value : 0.001;
+  }
+
+  cp(ctx, cx, cy, dx, dy, r, dpx, p0, p1) {
+    ctx.beginPath();
+    for (let j = 0; j <= 160; j++) {
+      const a=(j/160)*Math.PI*2;
+      const d=dpx*(0.48*Math.sin(2*a+p0)+0.30*Math.sin(3*a+p1)+0.14*Math.sin(4*a-p0*0.6+0.9)+0.08*Math.sin(5*a+p1*0.8+2.1));
+      const rr=Math.max(3,r+d);
+      j===0?ctx.moveTo(cx+dx+rr*Math.cos(a),cy+dy+rr*Math.sin(a)):ctx.lineTo(cx+dx+rr*Math.cos(a),cy+dy+rr*Math.sin(a));
+    }
+    ctx.closePath();
+  }
+
+  canvasInited = {};
+
+  setupCanvas(ref, W, H) {
+    const c = ref.current; if (!c) return null;
+    const key = W + 'x' + H;
+    if (!this.canvasInited[key]) {
+      const dpr = window.devicePixelRatio || 1;
+      c.width = W*dpr; c.height = H*dpr;
+      c.style.width = W+'px'; c.style.height = H+'px';
+      c.getContext('2d').scale(dpr, dpr);
+      this.canvasInited[key] = true;
+    }
+    return c.getContext('2d');
+  }
+
+  totalDur() { return this.STATES.reduce((s,k) => s + this.DURS[k], 0); }
+
+  componentDidMount() {
+    // Load saved profiles from setup flow
+    try {
+      const saved = JSON.parse(localStorage.getItem('mezzo_profiles') || '[]');
+      if (saved.length) {
+        const custom = {};
+        saved.forEach(p => { custom[p.id] = { label: p.name, tag: 'CUSTOM' }; });
+        this.profiles = { general: { label: 'Everyday Conversation', tag: null }, ...custom };
+        this.customProfileIds = saved.map(p => p.id);
+        // Ensure selectedProfile is valid
+        if (!this.profiles[this.state.selectedProfile]) {
+          this.setState({ selectedProfile: 'general' });
+        } else {
+          this.forceUpdate();
+        }
+      }
+    } catch(e) {}
+    this.lastTime = performance.now();
+
+    const loop = (now) => {
+      this.rafId = requestAnimationFrame(loop);
+      const dt = Math.min((now - this.lastTime)/1000, 0.05);
+      this.lastTime = now;
+
+      // Auto-cycle
+      this.autoTime += dt;
+      const t = this.autoTime % this.totalDur();
+      let elapsed = 0, cur = this.STATES[0];
+      for (let i = 0; i < this.STATES.length; i++) {
+        const d = this.DURS[this.STATES[i]];
+        if (t < elapsed + d) { cur = this.STATES[i]; break; }
+        elapsed += d;
+      }
+      if (cur !== this.autoLast) {
+        this.autoLast = cur;
+        this.targetEnergy = this.TARGETS[cur];
+        this.setState({ statusKey: cur });
+      }
+
+      const tau = this.energy > this.targetEnergy ? 1.4 : 2.0;
+      this.energy += (this.targetEnergy - this.energy) * (1 - Math.exp(-dt/tau));
+
+      if (this.energy >= 0.72) {
+        this.sustainedTime = Math.min(1, this.sustainedTime + dt);
+        this.sessionTime   = Math.min(1, this.sessionTime   + dt*0.28);
+      } else {
+        this.sustainedTime = Math.max(0, this.sustainedTime - dt*2);
+        this.sessionTime   = Math.max(0, this.sessionTime   - dt*1.2);
+      }
+
+      this.breathPhase += dt*2.60;
+      const ds = 1 + this.sustainedTime*0.22 + this.sessionTime*0.35;
+      this.mp0 += dt*0.32*ds; this.mp1 += dt*0.46*ds;
+      this.dr1 += dt*0.048; this.dr2 += dt*0.061;
+
+      const e = Math.min(1, this.energy + this.sustainedTime*0.18);
+      this.orbitPhase += dt * this.me(e, 0,0.18, 0.25,0.30, 0.55,0.55, 0.82,1.10, 1.0,1.40);
+
+      const si = e < 0.05 ? 99999 : this.me(e, 0.05,3.8, 0.22,2.8, 0.54,1.2, 0.82,0.42, 1.0,0.24);
+      const nowSec = now/1000;
+      if (nowSec - this.lastWaveSpawn > si) { this.wavePool.push({birth:nowSec}); this.lastWaveSpawn=nowSec; }
+      if (this.wavePool.length > 60) this.wavePool.splice(0, this.wavePool.length-60);
+
+      const view = this.state.view;
+      // Guarded, not left to throw uncaught — see clampRadius() above for
+      // why an unguarded throw here would otherwise blank the canvas on
+      // every subsequent frame, not just the one that triggered it.
+      try {
+        if (view === 'monitoring' && this.canvasRef.current) this.drawOnCanvas(this.canvasRef, 356, 356, e, this.sessionTime, nowSec, dt);
+        if (view === 'compact'    && this.canvasRefCompact.current) this.drawOnCanvas(this.canvasRefCompact, 220, 220, e, this.sessionTime, nowSec, dt); // fixed size
+      } catch (err) {
+        console.error('[Companion] draw failed — canvas will stay blank until this clears:', err, {
+          energy: this.energy, r1Active: this.r1Active, r2Active: this.r2Active,
+          r1DisplayRadius: this.r1DisplayRadius, r2DisplayRadius: this.r2DisplayRadius,
+        });
+      }
+    };
+    this.rafId = requestAnimationFrame(loop);
+  }
+
+  componentWillUnmount() { cancelAnimationFrame(this.rafId); }
+
+  drawOnCanvas(ref, W, H, energy, sess, nowSec, dt) {
+    const canvas = ref.current; if (!canvas) return;
+    this.setupCanvas(ref, W, H);
+    const ctx = canvas.getContext('2d');
+    const cx=W/2, cy=H/2, sc=Math.min(W,H)/280;
+    ctx.clearRect(0,0,W,H);
+    const br=Math.sin(this.breathPhase), bs=1+0.048*br;
+
+    const c0=this.me(energy,0.72,0,1.0,1.0), c1=this.me(energy,0.60,0,0.72,0.30,1.0,1.0), c2=this.me(energy,0.54,0,0.65,0.18,0.72,0.60,1.0,1.0), cd=this.me(energy,0.68,0,0.72,0.10,1.0,1.0);
+
+    const r0 = this.clampRadius(34*sc*bs);
+    const r0d = r0*this.me(energy,0,0.004,0.25,0.006,0.72,0.012,1.0,0.030);
+
+    // r1/r2 visibility ramps — raw energy thresholds, unchanged; still drive
+    // each ring's own stroke alpha and deformation-amplitude scaling exactly
+    // as before.
+    const r1base=54*sc, r1target=this.clampRadius(r1base*bs);
+    const r1vis = this.me(energy,0.38,0,0.54,1.0);
+    const r1a = this.me(energy,0.54,0,0.60,4.0,0.72,5.0,1.0,6.0)*r1vis*sc;
+    const r1x = Math.sin(this.dr1)*r1a, r1y = Math.cos(this.dr1*0.73+0.9)*r1a;
+
+    const r2base=76*sc, r2target=this.clampRadius(r2base*bs);
+    const r2vis = this.me(energy,0.62,0,0.80,1.0);
+    const r2a = this.me(energy,0.65,0,0.72,0,1.0,4.5)*r2vis*sc;
+    const r2x = Math.sin(this.dr2)*r2a, r2y = Math.cos(this.dr2*0.73+1.8)*r2a;
+
+    // Ring activation, with hysteresis. This (not r1vis/r2vis) is what now
+    // decides both whether a ring is drawn at all and which ring radiates.
+    const r1WasActive = this.r1Active;
+    this.r1Active = this.r1Active ? energy > this.R1_DEACTIVATE_E : energy > this.R1_ACTIVATE_E;
+    const r2WasActive = this.r2Active;
+    this.r2Active = this.r2Active ? energy > this.R2_DEACTIVATE_E : energy > this.R2_ACTIVATE_E;
+
+    // Emergence: on activation, start from whatever the previously-active
+    // ring's current on-screen radius is (r0's live value for r1; r1's own
+    // just-updated live value for r2 — falling back to r1's resting target
+    // only if r1 isn't currently active, e.g. energy jumped straight past
+    // r1's whole range in one step) and ease toward the ring's own resting
+    // radius. On deactivation the ring is removed immediately — no shrink
+    // animation — and its stored radius is cleared so the next activation
+    // always starts fresh rather than resuming a stale value.
+    if (this.r1Active) {
+      if (!r1WasActive) this.r1DisplayRadius = r0;
+      this.r1DisplayRadius = this.easeToward(this.r1DisplayRadius ?? r0, r1target, dt, this.EMERGE_TAU);
+    } else {
+      this.r1DisplayRadius = null;
+    }
+    const r1 = this.r1Active ? this.clampRadius(this.r1DisplayRadius) : r1target;
+    const r1d = r1*this.me(energy,0.38,0,0.54,0.10,0.72,0.13,1.0,0.13)*r1vis;
+
+    if (this.r2Active) {
+      if (!r2WasActive) this.r2DisplayRadius = this.r1Active ? r1 : r1target;
+      this.r2DisplayRadius = this.easeToward(this.r2DisplayRadius ?? r1target, r2target, dt, this.EMERGE_TAU);
+    } else {
+      this.r2DisplayRadius = null;
+    }
+    const r2 = this.r2Active ? this.clampRadius(this.r2DisplayRadius) : r2target;
+    const r2d = r2*this.me(energy,0.65,0,0.72,0.095,0.82,0.095,1.0,0.145)*r2vis;
+
+    // Active (radiating) ring — by activation state, not a 0.5 visibility
+    // cutoff, so ownership transfers the instant a ring starts emerging
+    // rather than partway through its fade-in.
+    const aR=this.r2Active?r2:this.r1Active?r1:r0, aDpx=this.r2Active?r2d:this.r1Active?r1d:r0d;
+    const aDx=this.r2Active?r2x:this.r1Active?r1x:0, aDy=this.r2Active?r2y:this.r1Active?r1y:0;
+    const aCT=this.r2Active?c2:this.r1Active?c1:c0;
+    const aP0 = this.r1Active && !this.r2Active ? this.mp0+Math.PI*0.7 : this.mp0;
+    const aP1 = this.r1Active && !this.r2Active ? this.mp1+Math.PI*1.1 : this.mp1;
+
+    // Glow — inner/outer radii both guarded finite/positive, outer forced
+    // strictly greater than inner, so createRadialGradient() can never throw.
+    const gs=this.me(energy,0,0.018,0.22,0.028,0.54,0.050,0.72,0.085,1.0,0.110);
+    const glowInner = this.clampRadius(aR*0.7);
+    const glowOuter = Math.max(glowInner+0.001, this.clampRadius(aR*1.55));
+    const gr = ctx.createRadialGradient(cx+aDx,cy+aDy,glowInner, cx+aDx,cy+aDy,glowOuter);
+    gr.addColorStop(0,this.rgba(aCT,0)); gr.addColorStop(0.4,this.rgba(aCT,gs)); gr.addColorStop(1,this.rgba(aCT,0));
+    ctx.beginPath(); ctx.arc(cx,cy,aR*1.55,0,Math.PI*2); ctx.fillStyle=gr; ctx.fill();
+
+    const wS=this.me(energy,0,5,0.22,6,0.54,9,0.82,13,1.0,16)*sc, wM=Math.max(5,aR*0.28), wP=this.me(energy,0.05,0.14,0.22,0.20,0.54,0.30,0.82,0.44,1.0,0.54);
+    this.wavePool = this.wavePool.filter(wave => {
+      const tr=(nowSec-wave.birth)*wS; if(tr>wM)return false;
+      const prog=tr/wM, wR=aR+tr, wD=aDpx*(1+tr/Math.max(1,aR)*0.5);
+      this.cp(ctx,cx,cy,aDx,aDy,wR,wD,aP0,aP1); ctx.strokeStyle=this.rgba(aCT,wP*(1-prog)); ctx.lineWidth=1.3; ctx.stroke();
+      return true;
+    });
+
+    // Drawn while active — removed immediately (no shrink tween) the frame
+    // activation clears; r1vis/r2vis (unchanged) still drive each ring's own
+    // fade-in alpha and are already ~0 through the short hysteresis window,
+    // so this reads identically to before during ordinary rising energy.
+    const sw=2.0+sess*0.7;
+    if(this.r2Active){this.cp(ctx,cx,cy,r2x,r2y,r2,r2d,this.mp0,this.mp1); ctx.strokeStyle=this.rgba(c2,0.72*r2vis); ctx.lineWidth=sw; ctx.stroke();}
+    if(this.r1Active){this.cp(ctx,cx,cy,r1x,r1y,r1,r1d,this.mp0+Math.PI*0.7,this.mp1+Math.PI*1.1); ctx.strokeStyle=this.rgba(c1,0.76*r1vis); ctx.lineWidth=sw; ctx.stroke();}
+    this.cp(ctx,cx,cy,0,0,r0,r0d,this.mp0,this.mp1); ctx.strokeStyle=this.rgba(c0,0.72); ctx.lineWidth=sw; ctx.stroke();
+
+    const hlV=this.me(energy,0.05,0.14,0.22,0.70,0.54,0.70,0.82,0.85,1.0,1.0);
+    if(hlV>0.01){
+      const a=this.orbitPhase, dH=aDpx*(0.48*Math.sin(2*a+aP0)+0.30*Math.sin(3*a+aP1)+0.14*Math.sin(4*a-aP0*0.6+0.9)+0.08*Math.sin(5*a+aP1*0.8+2.1));
+      const rrH=Math.max(3,aR+dH), hx=cx+aDx+rrH*Math.cos(a), hy=cy+aDy+rrH*Math.sin(a);
+      const hG=ctx.createRadialGradient(hx,hy,0,hx,hy,16*sc);
+      hG.addColorStop(0,this.rgba(aCT,0.22*hlV)); hG.addColorStop(1,this.rgba(aCT,0));
+      ctx.beginPath(); ctx.arc(hx,hy,16*sc,0,Math.PI*2); ctx.fillStyle=hG; ctx.fill();
+      ctx.beginPath(); ctx.arc(hx,hy,3.2*sc,0,Math.PI*2); ctx.fillStyle=this.rgba(aCT,0.85*hlV); ctx.fill();
+    }
+
+    ctx.shadowBlur=(5+4*(0.5+0.5*br))*sc; ctx.shadowColor=this.rgba(cd,0.30);
+    ctx.beginPath(); ctx.arc(cx,cy,3.2*bs*sc,0,Math.PI*2); ctx.fillStyle=this.rgba(cd,0.62+0.24*(0.5+0.5*br)); ctx.fill();
+    ctx.shadowBlur=0;
+  }
+
+  renderVals() {
+    const v = this.state.view;
+    const sk = this.state.statusKey || 'within-range';
+    const tab = (active) => ({
+      fontFamily: "'Sora',sans-serif", fontSize: '10px', fontWeight: active ? '500' : '300',
+      color: active ? 'rgba(222,210,194,0.80)' : 'rgba(172,158,136,0.62)',
+      background: active ? 'rgba(255,255,255,0.14)' : 'none',
+      border: 'none', cursor: 'pointer', padding: '6px 16px', borderRadius: '6px',
+      letterSpacing: '0.10em', textTransform: 'uppercase', transition: 'all 0.2s ease',
+    });
+    return {
+      isReady:      v === 'ready',
+      isMonitoring: v === 'monitoring',
+      isCompact:    v === 'compact',
+      statusLabel:        this.LABELS[sk] || 'Quiet',
+      statusLabelColor:   sk === 'outside' ? 'rgba(220,100,65,1.0)' : sk === 'approaching' ? 'rgba(222,210,194,0.85)' : 'rgba(222,210,194,0.58)',
+      compactStatusLabel: { monitoring: 'Quiet', 'within-range': 'Within Range', approaching: 'Approaching End of Range', outside: 'Outside of Range' }[sk] || 'Quiet',
+      canvasRef:        this.canvasRef,
+      canvasRefCompact: this.canvasRefCompact,
+      dropdownOpen:       this.state.dropdownOpen,
+      dimWhenOpen:        this.state.dropdownOpen ? { opacity: 0.04, pointerEvents: 'none', filter: 'blur(1px)' } : { opacity: 1, filter: 'none' },
+      optGeneral:    this.optStyle('general'),
+      optCoffeeShop: this.optStyle('coffeeshop'),
+      optGloria:     this.optStyle('gloria'),
+      optProfile3:   this.optStyle('profile3'),
+      optCreate: (() => { const hov = this.state.hoveredOption === 'create'; return 'padding: 13px 14px 13px 12px; font-family: \'Sora\', sans-serif; font-size: 13px; cursor: pointer; letter-spacing: 0.02em; display: flex; align-items: center; border-left: 2px solid transparent; color: ' + (hov ? 'rgba(196,89,58,0.85)' : 'rgba(222,210,194,0.75)') + '; background: none; transition: color 0.10s ease;'; })(),
+      hoverCreate:     () => this.setState({ hoveredOption: 'create' }),
+      goCreateProfile: () => { try { localStorage.setItem('mezzo_goto', 'intro'); } catch(e) {} window.open('Mezzo Setup Flow.dc.html', '_blank'); this.setState({ dropdownOpen: false }); },
+      hoverGeneral:    () => this.setState({ hoveredOption: 'general' }),
+      hoverCoffeeShop: () => this.setState({ hoveredOption: 'coffeeshop' }),
+      hoverGloria:     () => this.setState({ hoveredOption: 'gloria' }),
+      hoverProfile3:   () => this.setState({ hoveredOption: 'profile3' }),
+      hoverNone:       () => this.setState({ hoveredOption: null }),
+      dropdownTriggerStyle: 'padding: 11px 14px; width: 100%; box-sizing: border-box; border-radius: ' + (this.state.dropdownOpen ? '0 0 8px 8px' : '8px') + '; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.10); font-family: \'Sora\', sans-serif; font-size: 13px; color: rgba(222,210,194,0.92); cursor: pointer; letter-spacing: 0.02em; display: flex; align-items: center; justify-content: space-between;',
+      dropdownChevron:    this.state.dropdownOpen ? '▴' : '▾',
+      selectedProfileLabel: (this.profiles[this.state.selectedProfile] || this.profiles['general']).label,
+      toggleDropdown: () => this.setState({ dropdownOpen: !this.state.dropdownOpen }),
+      stopPropagation: (e) => { if (e && e.stopPropagation) e.stopPropagation(); },
+      selectGeneral:    () => this.selectProfile('general'),
+      selectCoffeeShop: () => this.selectProfile('coffeeshop'),
+      selectGloria:     () => this.selectProfile('gloria'),
+      selectProfile3:   () => this.selectProfile('profile3'),
+      profileOptions: Object.entries(this.profiles).map(([id, p]) => ({
+        id,
+        label: p.label,
+        tag: p.tag,
+        select: () => this.selectProfile(id),
+        hover: () => this.setState({ hoveredOption: id }),
+        unhover: () => this.setState({ hoveredOption: null }),
+        style: this.optStyle(id),
+      })),
+      tabReady:    tab(v === 'ready'),
+      tabMonitor:  tab(v === 'monitoring'),
+      tabCompact:  tab(v === 'compact'),
+      showReady:      () => this.setState({ view: 'ready' }),
+      showMonitoring: () => this.setState({ view: 'monitoring' }),
+      hoverStop:    () => this.setState({ hovStop: true }),
+      unhoverStop:  () => this.setState({ hovStop: false }),
+      hoverCompact: () => this.setState({ hovCompact: true }),
+      unhoverCompact: () => this.setState({ hovCompact: false }),
+      hoverCStop:   () => this.setState({ hovCStop: true }),
+      unhoverCStop: () => this.setState({ hovCStop: false }),
+      hoverCExpand: () => this.setState({ hovCExpand: true }),
+      unhoverCExpand: () => this.setState({ hovCExpand: false }),
+      stopColor:    this.state.hovStop    ? 'rgba(196,89,58,0.90)' : 'rgba(222,210,194,0.82)',
+      compactColor: this.state.hovCompact ? 'rgba(196,89,58,0.90)' : 'rgba(222,210,194,0.82)',
+      stopBg:     this.state.hovStop    ? 'rgba(0,0,0,0.18)' : 'transparent',
+      compactBg:  this.state.hovCompact ? 'rgba(0,0,0,0.18)' : 'transparent',
+      hovStop:    this.state.hovStop,
+      hovCompact: this.state.hovCompact,
+      hovCStop:   this.state.hovCStop,
+      hovCExpand: this.state.hovCExpand,
+      cStopBg:   this.state.hovCStop   ? 'rgba(0,0,0,0.18)' : 'transparent',
+      cExpandBg: this.state.hovCExpand ? 'rgba(0,0,0,0.18)' : 'transparent',
+      stopMonitoring: () => this.setState(st => ({ view: 'ready', returnedFromMonitoring: true, thanksMsgIndex: (st.thanksMsgIndex + 1) % this.THANKS_HEADINGS.length })),
+      rotateMsg: () => this.setState(st => ({ returnedFromMonitoring: true, thanksMsgIndex: (st.thanksMsgIndex + 1) % this.THANKS_HEADINGS.length })),
+      returnedFromMonitoring: this.state.returnedFromMonitoring,
+      readyHeading: 'Ready for the next conversation.',
+      readySubtext: this.state.returnedFromMonitoring ? 'Your consideration speaks volumes.' : null,
+      showCompact:    () => this.setState({ view: 'compact' }),
+    };
+  }
+}
+</script>
+</body>
+</html>
