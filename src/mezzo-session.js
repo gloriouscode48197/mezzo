@@ -1911,8 +1911,16 @@ export function createMezzoSession({
     if (monitoringProfileNameEl) {
       monitoringProfileNameEl.textContent = profileMetaText(activeProfile);
     }
-    if (readyScreenEl) readyScreenEl.classList.add('hidden');
-    if (monitoringScreenEl) monitoringScreenEl.classList.remove('hidden');
+    // showOnlyScreen(), not a hardcoded "hide Ready, show Monitoring" pair
+    // — resumeMonitoringFromPipReady() (which calls this) is reached from
+    // both the Ready screen's own Start Monitoring AND the Calibrated
+    // checkpoint's Start Monitoring / Update {name} & Start Monitoring.
+    // Hardcoding only readyScreenEl left calibratedScreenEl un-hidden in
+    // that second case — both screens un-hidden at once inside the fixed-
+    // size, overflow:hidden Companion window pushes Monitoring out of the
+    // visible area, reading as "stuck on the calibrated checkpoint screen,
+    // visualization not visible" (found via a real production report).
+    showOnlyScreen(monitoringScreenEl);
     updateHeading(currentZone);
   }
 
