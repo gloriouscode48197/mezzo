@@ -271,6 +271,8 @@ Use: Quiet, Within Range, Approaching End of Range, Outside Range. Never: Too Lo
 * Favor explicitness over cleverness. Document architectural decisions.
 * If implementation appears to conflict with product intent: stop, and clarify the intended experience before changing architecture.
 
+**Running tests.** `npm test` runs the fast Node unit test suite (`node --test src/*.test.js`) — pure-logic tests, no browser. `npm run test:pip` runs the Chromium Document Picture-in-Picture regression tests (Playwright, `tests/`) — these use fake media (`--use-fake-device-for-media-stream`/`--use-fake-ui-for-media-stream`) and cover the real Companion screens the unit suite can't reach. Run `npm run test:pip` after any change to Companion screen flow (transitions between Welcome/Ready/Calibrating/Calibrated/Monitoring), not just `npm test`.
+
 ---
 
 # Engineering Notes
