@@ -147,6 +147,8 @@ Nothing about the profile — its calibration, its name, its position in the lis
 
 The Companion is validating a per-row control against a select-then-"Recalibrate Kitchen" pattern at its real 320px width (see `docs/product-experience.md`'s "Companion States → Ready") — a select-first pattern is the likely stronger default there. This page is under no obligation to match whatever the Companion settles on: it shares terminology, state transitions, storage semantics, and calibration logic with the Companion, not literal control placement, and its available width and interaction model are different. A visible Recalibrate action per row remains a reasonable default here regardless of what the Companion chooses.
 
+*Historical note: the Companion went on to choose the select-first pattern described above ("Option B"), not per-row — see `docs/product-experience.md`'s "Companion States → Ready" for the current behavior. This page's own comparison above is left as written, since it documents the retired page-level design's own reasoning, not the Companion's.*
+
 ---
 
 ## Calibrate for this Session

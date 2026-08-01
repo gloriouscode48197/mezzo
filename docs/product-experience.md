@@ -295,7 +295,7 @@ When the Companion is in its Ready state, show:
 * "Ready for the next conversation." (or, the very first time, Welcome — see "Companion States → Welcome")
 * selected profile (the previously used one, still selected)
 * profile selector, offering any saved profiles and Calibrate for this session
-* a Recalibrate action, reachable for a saved profile — whether that's a control on every row or a single action for whichever profile is currently selected (e.g. "Recalibrate Kitchen," appearing once a profile is selected) is not yet settled; compare both at the Companion's real 320px width before building either.
+* a Recalibrate action, reachable for a saved profile — Option B was chosen and implemented: a single dynamic action for whichever profile is currently selected (e.g. "Recalibrate Kitchen"), not a control on every row. Chosen from the measured comparison in `design/prototypes/companion-ready-recalibrate-comparison.html`, at the Companion's real width.
 * Start Monitoring
 
 Selecting Start Monitoring should:
@@ -500,7 +500,7 @@ The Companion has four distinct states. They should never feel like one screen w
 
 Purpose: the first thing a genuinely new user sees inside the Companion — a deliberate moment, not an instant redirect into calibration.
 
-Target size: 320×354, the same fixed size as Ready — it does not get its own dedicated size.
+Target size: 380×344, the same fixed baseline size as Ready — it does not get its own dedicated size.
 
 Reached exactly once: the very first time the Companion opens with zero saved profiles. Explains, briefly, what's about to happen — that Mezzo needs to learn the user's natural speaking volume before it can monitor, and that microphone access will be requested next. Its one action begins calibration (Calibrate for this session) — this is also the first moment microphone permission is ever requested (see "Calibration").
 
@@ -510,7 +510,7 @@ Once a saved profile exists — from finishing this first calibration, or from a
 
 Purpose: preparation.
 
-Target size: 320×354 — its own fixed size, not shared with Monitoring's Expanded size.
+Target size: 380px wide, fixed; height is dynamic — a 344px baseline plus up to 122px more depending on the saved-profile count (see `computeReadyContentHeight()` in `src/mezzo-session.js`) — not shared with Monitoring's Expanded size.
 
 Reached whenever the Companion opens with one or more saved profiles already existing, and by stopping monitoring thereafter. Every session, first included, goes through Ready or Welcome — never straight to Monitoring; there is no more special case that skips this checkpoint.
 
@@ -518,7 +518,7 @@ Ready shows:
 
 * "Ready for the next conversation."
 * a profile selector, offering any saved profiles and Calibrate for this session
-* a Recalibrate action for a saved profile — per-row vs. select-then-Recalibrate placement is a still-open question, pending a real-width comparison; a select-first pattern (choose a profile, then see "Recalibrate Kitchen") is the likely stronger default at 320px, but not yet confirmed
+* a Recalibrate action for a saved profile — select-first, confirmed and implemented: choose a profile, then see "Recalibrate Kitchen," not a control on every row (Option B, chosen from the measured comparison in `design/prototypes/companion-ready-recalibrate-comparison.html`)
 * Start Monitoring
 * profile deletion and the 5-profile limit — see "Profile Model"
 
@@ -538,7 +538,7 @@ Ready has no in-page title bar either — the real Document Picture-in-Picture w
 
 Purpose: measurement — either a fresh, session-only calibration, or a recalibration of one specific saved profile. See "Calibration" above for the full behavior and the two modes' distinct commit actions; this section only covers what's specific to the Companion.
 
-Target size: 320×354, the same fixed size as Ready — it does not get its own dedicated size.
+Target size: 380×344, the same fixed baseline size as Ready — it does not get its own dedicated size.
 
 Reached from Welcome or Ready by selecting Calibrate for this session or Recalibrate on a saved profile. Shows a live, speaking-driven meter and short countdown, a brief automatic completion, and then the mode-appropriate Calibrated decision (see "Calibration" above) as a modal overlay on this same screen — not a navigation to a different one. On failure, Calibration Failed offers Try Again in the same mode, per "Calibration" above; it never fails silently.
 
