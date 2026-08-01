@@ -7,9 +7,11 @@
  * and never reads raw audio itself.
  *
  * Cycles through the product's real states — Quiet / Within Range /
- * Approaching Range / Outside Range, using the same strings
+ * Approaching End of Range / Outside Range, using the same strings
  * src/mezzo-session.js's zoneLabel() returns — so this never shows a state
- * that doesn't exist in the product.
+ * that doesn't exist in the product. The status label also carries the
+ * same data-zone attribute the real Companion's .pip-status-heading does,
+ * so landing.css can key its color off the same per-zone rule set.
  */
 
 import { MezzoWaveVisualizer } from './wave-visualizer.js';
@@ -27,7 +29,7 @@ const SUSTAINED_DELAY_MS = 1000;
 function zoneLabel(zone) {
   if (zone === 0) return 'Quiet';
   if (zone === 1) return 'Within Range';
-  if (zone === 2) return 'Approaching Range';
+  if (zone === 2) return 'Approaching End of Range';
   return 'Outside Range';
 }
 
@@ -58,6 +60,7 @@ export function initHeroCompanionPreview(container) {
 
   if (reduceMotion) {
     heading.textContent = zoneLabel(1);
+    heading.dataset.zone = '1';
     circle.update(1, false);
     return;
   }
@@ -69,6 +72,7 @@ export function initHeroCompanionPreview(container) {
   function runStep() {
     const { zone, holdMs } = CYCLE[step];
     heading.textContent = zoneLabel(zone);
+    heading.dataset.zone = String(zone);
     circle.update(zone, false);
 
     if (zone === 3) {

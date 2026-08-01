@@ -46,6 +46,17 @@
   --border-outline: rgba(196, 89, 58, 0.4);
   --border-pip: rgba(240, 235, 226, 0.10);
 
+  /* Monitoring awareness-state colors — single source of truth for the
+     Companion's own .pip-status-heading[data-zone] (src/mezzo-session.js)
+     and the homepage hero preview's .hero-companion-label[data-zone]
+     (landing.css), so the two can never drift apart again. Quiet and
+     Within Range intentionally share one value — see mezzo-session.js's
+     colorProgressFromEnergy() for why the product treats them as visually
+     identical. */
+  --zone-quiet-color: rgba(222, 210, 194, 0.58);
+  --zone-approaching-color: rgba(210, 155, 75, 0.85);
+  --zone-outside-color: rgba(248, 130, 65, 0.80);
+
   --grain-opacity: 0.018;
 }
 

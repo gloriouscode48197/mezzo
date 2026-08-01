@@ -43,6 +43,9 @@ const {
   CALIBRATION_FAILURE_COPY,
   savePromptNameCopy,
   calibratedCheckpointCopy,
+  computeReadyContentHeight,
+  MEZZO_COMPANION_READY_WIDTH,
+  MEZZO_COMPANION_READY_BASE_HEIGHT,
 } = await import('./mezzo-session.js');
 
 // =============================================================================
@@ -293,5 +296,54 @@ describe('createMezzoSession construction', () => {
     const session = createMezzoSession({ baseUrl: '/' });
     const started = await session.startMonitoring();
     assert.strictEqual(started, false);
+  });
+});
+
+// =============================================================================
+// computeReadyContentHeight — deterministic Ready-window height, grown by
+// saved-profile count rather than assumed. See its own doc comment in
+// mezzo-session.js for what each term represents; this test locks the
+// resulting numbers in, not just the shape of the formula, so a future
+// change to any one term is a deliberate, visible edit here too.
+// =============================================================================
+
+describe('computeReadyContentHeight', () => {
+  it('returns exactly the documented baseline at zero saved profiles (Cancel/Back before ever saving one)', () => {
+    assert.strictEqual(computeReadyContentHeight(0), MEZZO_COMPANION_READY_BASE_HEIGHT);
+    assert.strictEqual(computeReadyContentHeight(0), 344);
+  });
+
+  it('grows by exactly one profile row (40px) per saved profile, below the list cap', () => {
+    assert.strictEqual(computeReadyContentHeight(1), 384);
+    assert.strictEqual(computeReadyContentHeight(2), 424);
+    assert.strictEqual(computeReadyContentHeight(3), 464);
+  });
+
+  it('caps the list contribution at 122px (the list\'s own CSS max-height) regardless of how many more profiles exist beyond that — never grows unbounded, never hardcoded around one specific count', () => {
+    // 3 profiles already reach 3*40=120, just under the 122px cap.
+    assert.strictEqual(computeReadyContentHeight(4), MEZZO_COMPANION_READY_BASE_HEIGHT + 122);
+    assert.strictEqual(computeReadyContentHeight(4), computeReadyContentHeight(10));
+    assert.strictEqual(computeReadyContentHeight(50), computeReadyContentHeight(4));
+  });
+
+  it('never returns a height shorter than the baseline, for any non-negative profile count', () => {
+    for (const count of [0, 1, 2, 3, 4, 5, 10, 100]) {
+      assert.ok(computeReadyContentHeight(count) >= MEZZO_COMPANION_READY_BASE_HEIGHT);
+    }
+  });
+});
+
+// =============================================================================
+// MEZZO_COMPANION_READY_WIDTH — locks in the 320 (button) + 2x20 (existing
+// .pip-screen-ready padding) + 2x10 (centering slack) = 380 decomposition
+// documented alongside the constant itself, so a future change to any one
+// of those inputs is caught here rather than silently drifting.
+// =============================================================================
+
+describe('MEZZO_COMPANION_READY_WIDTH', () => {
+  it('is exactly 380 — the button cap (320) plus 30px clearance on each side', () => {
+    const BUTTON_MAX_WIDTH = 320;
+    const EXPECTED_CLEARANCE_PER_SIDE = 30;
+    assert.strictEqual(MEZZO_COMPANION_READY_WIDTH, BUTTON_MAX_WIDTH + EXPECTED_CLEARANCE_PER_SIDE * 2);
   });
 });

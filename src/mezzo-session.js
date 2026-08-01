@@ -229,7 +229,65 @@ export function isTemporaryProfile(profile) {
 // Ready is its own fixed size, distinct from Monitoring's Expanded size —
 // the two used to share one constant, but the Ready and Monitoring cards
 // have different target dimensions.
-const MEZZO_COMPANION_READY_SIZE = { width: 320, height: 354 };
+//
+// Width — wide enough that a max-width:320px action button (see
+// .pip-ready-start-btn etc. below) sits with ~30px clear on each side:
+// .pip-screen-ready's own existing 20px side padding is unchanged, so once
+// a button hits its 320px cap inside a wider column, centering (margin-
+// inline:auto) splits the remaining slack evenly — 320 (button) + 2x20
+// (existing padding) + 2x10 (that centering slack) = 380. No internal
+// padding/spacing value on the screen itself changed to get here.
+export const MEZZO_COMPANION_READY_WIDTH = 380;
+
+// Baseline height — shared by Welcome and Calibrating (their content is
+// fixed, never profile-count-dependent) and the floor Ready itself starts
+// from at zero saved profiles. See computeReadyContentHeight() below for
+// how Ready's own height grows past this baseline.
+export const MEZZO_COMPANION_READY_BASE_HEIGHT = 344;
+
+const MEZZO_COMPANION_READY_SIZE = { width: MEZZO_COMPANION_READY_WIDTH, height: MEZZO_COMPANION_READY_BASE_HEIGHT };
+
+/**
+ * Deterministic Ready-screen height, derived from the actual rendered
+ * layout below (.pip-screen-ready/.pip-ready-* rules) rather than a flat
+ * guess — grows with the saved-profile count so the window is never too
+ * short to show Start Monitoring/Recalibrate without scrolling, and is
+ * never hardcoded around any particular profile count.
+ *
+ * Every term below is read directly off the CSS the Ready screen is
+ * actually built with:
+ *   36  - .pip-screen-ready's own top+bottom padding (18px each), unchanged
+ *   26  - .pip-ready-heading, one line
+ *   30  - 3x the screen's own 10px gap — heading/list/calibrate-row/actions
+ *         are always exactly 4 direct children, present or not
+ *   40  - .pip-calibrate-session-row, always present regardless of profile
+ *         count (never conditionally hidden — see renderReadyScreen())
+ *   88  - .pip-ready-actions: Start Monitoring (40) + its 8px gap +
+ *         Recalibrate (40) — Recalibrate is always rendered too, just
+ *         disabled with no selection (see updateReadyActionsState())
+ *   24  - safety buffer for Recalibrate wrapping to a second line on a long
+ *         profile name (its label is never truncated — see its own CSS
+ *         comment). Applied as a flat buffer rather than measuring text
+ *         width, since that's far less fragile than predicting text wrap
+ *         from script.
+ *  100  - requested breathing room: ~50px visible above the heading, ~50px
+ *         below the last button. .pip-screen-ready uses
+ *         justify-content:center specifically so unused height shows up as
+ *         space at both ends instead of only pushing the bottom down — see
+ *         that rule below. No change to the screen's own padding/gap
+ *         values, only how leftover space distributes.
+ * Plus, only when profileCount > 0:
+ *  N*40, capped at 122 - .pip-ready-list: one row per saved profile at a
+ *         fixed 40px each (.pip-ready-row's min-height; row text never
+ *         wraps, see its white-space:nowrap), capped at the list's own
+ *         122px max-height. Deliberately not grown past that cap — internal
+ *         scrolling within the list is the existing, intended overflow
+ *         behavior for 4+ profiles, not an ever-taller window.
+ */
+export function computeReadyContentHeight(profileCount) {
+  const listHeight = profileCount > 0 ? Math.min(profileCount * 40, 122) : 0;
+  return MEZZO_COMPANION_READY_BASE_HEIGHT + listHeight;
+}
 const MEZZO_COMPANION_EXPANDED_SIZE = { width: 290, height: 420 };
 // 220×220 — the intentional Compact footprint: a small, square window built
 // for peripheral awareness, not a shrunk-down Expanded window (was
@@ -668,10 +726,24 @@ export function createMezzoSession({
 
     try {
       // Ready's size, not Monitoring's Expanded size — every open now lands
-      // on Welcome or Ready first (both 320×354), never straight into
-      // Monitoring, so requesting the window at that size avoids a visible
-      // resize flash immediately after opening.
-      pipWindow = await documentPictureInPicture.requestWindow(MEZZO_COMPANION_READY_SIZE);
+      // on Welcome or Ready first, never straight into Monitoring, so
+      // requesting the window at the size it'll actually need avoids a
+      // visible resize flash immediately after opening. Computed from the
+      // real saved-profile count up front (not just the flat baseline) so
+      // even the very first paint is already correctly sized for Ready —
+      // Welcome (zero profiles) has fixed content and keeps the baseline.
+      const initialProfileCount = getSavedProfiles().length;
+      const initialSize = initialProfileCount > 0
+        ? { width: MEZZO_COMPANION_READY_WIDTH, height: computeReadyContentHeight(initialProfileCount) }
+        : MEZZO_COMPANION_READY_SIZE;
+      pipWindow = await documentPictureInPicture.requestWindow(initialSize);
+      // Belt-and-suspenders, not a poll/loop: requestWindow()'s size argument
+      // isn't guaranteed to be honored by every browser (the same caveat
+      // resizeCompanionTo() below already carries) — a returning user's
+      // previously-honored manual resize is the documented case this
+      // guards against. One corrective call right after open, never
+      // repeated/watched afterward.
+      resizeCompanionTo(initialSize);
     } catch (err) {
       console.error('[Session] Failed to open the Mezzo Companion:', err.message);
       return false;
@@ -784,6 +856,25 @@ export function createMezzoSession({
         min-width: 240px;
       }
 
+      /* Shared cap for every full-width, single-column pill action in the
+         Companion — Start Monitoring, Recalibrate {profile}, Save as New
+         Profile, Save Profile, Save, and Discard all use one of the two
+         classes below. One rule, not a duplicated max-width on each of
+         them: at the default Companion width these buttons already sit
+         well under 320px, so this only matters once a user manually
+         resizes the window wider — see MEZZO_COMPANION_READY_WIDTH's own
+         comment above for how 320 (button) + 30 + 30 (this centering
+         slack, on top of each screen's own unchanged side padding) adds up.
+         Compact controls, profile rows, radio options, and the native
+         window-close control are untouched — they don't use this pattern. */
+      .pip-ready-start-btn,
+      .pip-ready-recalibrate-btn,
+      .pip-calibrated-primary-btn,
+      .pip-calibrated-secondary-btn {
+        max-width: 320px;
+        margin-inline: auto;
+      }
+
       /* ── Welcome — reached exactly once, before any saved profile exists.
          Shares the Ready/Calibrating fixed size; a taller stack of text
          than any other screen (heading, two body paragraphs, a privacy
@@ -831,8 +922,16 @@ export function createMezzoSession({
          dynamic Recalibrate action always visible below it, outside the
          scroll region. There is no footer — the native Picture-in-Picture
          window close control is the only way to close the Companion. ── */
+      /* justify-content:center, not flex-start — matches the convention
+         .pip-screen-welcome/.pip-screen-calibrating already use. The
+         window height requested for this screen (see
+         computeReadyContentHeight()) intentionally includes ~50px of
+         breathing room above and below the tightly-packed content;
+         centering is what turns that into visible space at both ends
+         rather than only pushing empty space below the last button.
+         Content padding/gaps themselves are unchanged. */
       .pip-screen-ready {
-        justify-content: flex-start;
+        justify-content: center;
         padding: 18px 20px 18px;
         box-sizing: border-box;
         gap: 10px;
@@ -1291,9 +1390,9 @@ export function createMezzoSession({
         color: var(--text-primary);
       }
       .pip-status-heading[data-zone="0"],
-      .pip-status-heading[data-zone="1"] { color: rgba(222, 210, 194, 0.58); }
-      .pip-status-heading[data-zone="2"] { color: rgba(210, 155, 75, 0.85); }
-      .pip-status-heading[data-zone="3"] { color: rgba(248, 130, 65, 0.80); }
+      .pip-status-heading[data-zone="1"] { color: var(--zone-quiet-color); }
+      .pip-status-heading[data-zone="2"] { color: var(--zone-approaching-color); }
+      .pip-status-heading[data-zone="3"] { color: var(--zone-outside-color); }
       .pip-profile-info {
         font-family: var(--font-body);
         font-size: 9px;
@@ -2013,7 +2112,12 @@ export function createMezzoSession({
     if (!pipWindow) return;
     layoutMode = LAYOUT_MODES.EXPANDED;
     if (pipDocument?.body) pipDocument.body.setAttribute('data-layout', LAYOUT_MODES.EXPANDED);
-    resizeCompanionTo(MEZZO_COMPANION_READY_SIZE);
+    // Re-read fresh, same as renderReadyScreen() below — the saved-profile
+    // count may have changed since the last time Ready was shown (a
+    // profile deleted, or saved for the first time), so the requested
+    // height always matches what's actually about to render, never a
+    // stale count from an earlier entry.
+    resizeCompanionTo({ width: MEZZO_COMPANION_READY_WIDTH, height: computeReadyContentHeight(getSavedProfiles().length) });
     activeCircle = null;
     showOnlyScreen(readyScreenEl);
     renderReadyScreen();

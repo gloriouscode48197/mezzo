@@ -129,14 +129,23 @@ body {
   letter-spacing: 0.04em;
 }
 
+/* Typography and per-zone color intentionally match the real Companion's
+   own .pip-status-heading[data-zone] exactly (src/mezzo-session.js) — this
+   demo never invents a look the product doesn't actually have. Zone colors
+   come from the same shared tokens Companion CSS itself now reads (see
+   design-tokens/mezzo-tokens.css), not duplicated raw values. */
 .hero-companion-label {
-  font-family: var(--font-display);
-  font-weight: var(--weight-light);
-  font-size: 14px;
-  color: var(--text-subdued);
+  font-family: var(--font-body);
+  font-weight: var(--weight-medium);
+  font-size: 11px;
+  color: var(--zone-quiet-color);
   margin-top: 2px;
   max-width: 100%;
 }
+.hero-companion-label[data-zone="0"],
+.hero-companion-label[data-zone="1"] { color: var(--zone-quiet-color); }
+.hero-companion-label[data-zone="2"] { color: var(--zone-approaching-color); }
+.hero-companion-label[data-zone="3"] { color: var(--zone-outside-color); }
 
 .hero-companion-circle-wrap {
   flex: 1;
@@ -223,11 +232,20 @@ body {
 
 /* Footer is now shared, canonical CSS — see design-tokens/mezzo-tokens.css.
    Do not redefine .site-footer's structure here. Background is the one
-   intentional exception: the homepage's footer follows directly after the
-   Washi editorial section, so it keeps matching Washi here rather than the
-   shared rule's default (--surface, which privacy/try-it use since their
-   footer sits directly after Paper-background content). */
+   intentional exception, and now genuinely state-scoped rather than one
+   flat rule: Home's footer follows directly after the Washi editorial
+   section, so it keeps matching Washi there. Dock and the unsupported
+   state have no Washi section above them — their footer sits directly on
+   the page's own Paper background (body's --surface, set via
+   data-surface="light"), so it uses that same token instead, exactly
+   matching the shared rule's own default (the one privacy/try-it use).
+   body[data-page-state] is set by src/home-dock.js's transitionToState()
+   — the base rule below is the pre-JS fallback (index.html's #state-home
+   is the only state visible by default before any script runs), and the
+   attribute-scoped rule overrides it once Dock or unsupported is shown. */
 .site-footer { background: var(--washi); }
+body[data-page-state="dock"] .site-footer,
+body[data-page-state="unsupported"] .site-footer { background: var(--surface); }
 
 /* ═══════════════════════════════════════════
    Home/Dock — Unsupported browser + Dock states

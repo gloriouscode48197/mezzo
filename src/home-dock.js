@@ -99,6 +99,11 @@ export function initHomeDock({
     const nextEl = allStates[name];
     if (!nextEl) return;
 
+    // Presentational only — lets CSS (see landing.css's .site-footer rules)
+    // key a page-level treatment off which state is showing, e.g. the
+    // footer background, without this module owning any styling itself.
+    document.body.dataset.pageState = name;
+
     // Nothing shown yet (initial load) — render directly, no fade.
     if (!visibleEl) {
       Object.entries(allStates).forEach(([k, el]) => el.classList.toggle('hidden', k !== name));
