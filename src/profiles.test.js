@@ -41,6 +41,8 @@ import {
   getLastUsedProfile,
   setLastUsedProfile,
   clearLastUsedProfile,
+  getHasStartedMonitoring,
+  setHasStartedMonitoring,
   resolveActiveProfile,
   normalizeProfileName,
   resolveSavePromptAction,
@@ -729,5 +731,62 @@ describe('resolveActiveProfile', () => {
 
   it('returns null when nothing is selected or last-used anywhere', () => {
     assert.strictEqual(resolveActiveProfile(), null);
+  });
+});
+
+// =============================================================================
+// getHasStartedMonitoring / setHasStartedMonitoring — the Ready-screen PRD's
+// first-conversation flag. Storage-only at this phase: not yet called from
+// beginMonitoringSession() (src/mezzo-session.js), so these tests exercise
+// the two functions directly rather than through any monitoring flow.
+// =============================================================================
+
+describe('getHasStartedMonitoring / setHasStartedMonitoring', () => {
+  it('returns false when nothing has been stored yet', () => {
+    assert.strictEqual(getHasStartedMonitoring(), false);
+  });
+
+  it('setHasStartedMonitoring() persists the flag, read back as true', () => {
+    setHasStartedMonitoring();
+    assert.strictEqual(getHasStartedMonitoring(), true);
+  });
+
+  it('a previously-set flag still reads true on a later, independent call', () => {
+    setHasStartedMonitoring();
+    // Two independent reads — getHasStartedMonitoring() has no in-memory
+    // cache, so this also guards against a future accidental one.
+    assert.strictEqual(getHasStartedMonitoring(), true);
+    assert.strictEqual(getHasStartedMonitoring(), true);
+  });
+
+  it('getHasStartedMonitoring() fails safe (returns false, does not throw) when storage access throws', () => {
+    const real = globalThis.localStorage;
+    globalThis.localStorage = {
+      getItem: () => { throw new Error('storage unavailable'); },
+      setItem: real.setItem.bind(real),
+      removeItem: real.removeItem.bind(real),
+      clear: real.clear.bind(real),
+    };
+    try {
+      assert.doesNotThrow(() => getHasStartedMonitoring());
+      assert.strictEqual(getHasStartedMonitoring(), false);
+    } finally {
+      globalThis.localStorage = real;
+    }
+  });
+
+  it('setHasStartedMonitoring() fails safe (does not throw) when storage access throws', () => {
+    const real = globalThis.localStorage;
+    globalThis.localStorage = {
+      getItem: real.getItem.bind(real),
+      setItem: () => { throw new Error('storage unavailable'); },
+      removeItem: real.removeItem.bind(real),
+      clear: real.clear.bind(real),
+    };
+    try {
+      assert.doesNotThrow(() => setHasStartedMonitoring());
+    } finally {
+      globalThis.localStorage = real;
+    }
   });
 });

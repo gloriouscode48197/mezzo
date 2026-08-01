@@ -495,6 +495,35 @@ export function createCalibrationController({
     return updated;
   }
 
+  /**
+   * "Keep as unsaved" (recalibrate mode) — the Ready-screen PRD's M1 state's
+   * other outcome, alongside commitUpdateProfile()/
+   * commitUpdateProfileAndStartMonitoring() above. The newly completed
+   * calibration becomes a fresh temporary profile instead of overwriting the
+   * saved profile this attempt targeted; that saved profile is left
+   * completely untouched — commitUpdate() (the only function in this file
+   * that ever calls profileOps.updateSavedProfile()) is never invoked here.
+   * Same result shape commitStartMonitoring() returns, including its
+   * placeholder `name` — this is the same "temporary profile" concept
+   * either way, only reached from a different mode. Never touches profile
+   * storage, so nothing here needs a commitError path the way commitUpdate()
+   * does: there is no write that could fail.
+   */
+  function commitKeepAsUnsaved() {
+    assertCalibratedInMode(MODES.RECALIBRATE);
+    const { speakingDb, spreadDb, calibratedTs } = state.result;
+    const temporaryProfile = {
+      name: 'Current speaking range',
+      speakingDb,
+      spreadDb,
+      calibratedTs,
+      savedProfileId: null,
+      temporary: true,
+    };
+    reset();
+    return temporaryProfile;
+  }
+
   return {
     getState,
     subscribe,
@@ -509,5 +538,6 @@ export function createCalibrationController({
     commitSaveAsNewProfile,
     commitUpdateProfile,
     commitUpdateProfileAndStartMonitoring,
+    commitKeepAsUnsaved,
   };
 }

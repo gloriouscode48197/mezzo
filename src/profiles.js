@@ -9,7 +9,7 @@
  * only ever reads getSavedProfiles() for its own returning-user analytics
  * flag; it never creates, selects, updates, or deletes a profile itself.
  *
- * Three storage layers, each with a different lifetime:
+ * Four storage layers, each with a different lifetime:
  *   - mezzoProfiles (localStorage, persists indefinitely) — the saved-profile
  *     library. A saved profile is a persistent, reusable identity
  *     (id, name, library position) — written via addSavedProfile() when the
@@ -28,6 +28,12 @@
  *     monitoring instead of Choose a Profile. Never a temporary calibration —
  *     see setLastUsedProfile() below; a session that was never saved has
  *     nothing appropriate to resume into on a later, unrelated visit.
+ *   - mezzoHasStartedMonitoring (localStorage, persists indefinitely) — a
+ *     one-way flag: whether a monitoring session has ever *started* in this
+ *     browser, not whether one completed. Drives the Ready screen's
+ *     first-conversation copy (see the Ready-screen PRD,
+ *     docs/prd/ready-screen-speaking-profiles-mvp.md) — not yet wired into
+ *     beginMonitoringSession() as of this addition.
  *
  * `temporary: true` is a runtime-only marker on the in-session calibration
  * object (see src/engine.js's calibrate()/getCalibrationValues() for where
@@ -39,6 +45,7 @@
 const PROFILES_STORAGE_KEY = 'mezzoProfiles';
 const SELECTED_PROFILE_KEY = 'mezzoSelectedProfile';
 const LAST_USED_PROFILE_KEY = 'mezzoLastUsedProfile';
+const HAS_STARTED_MONITORING_KEY = 'mezzoHasStartedMonitoring';
 
 // Saved-profile library cap — enforced here (the storage layer), not only as
 // a UI-level disabled-button affordance, so a bug in a calling surface can
@@ -419,4 +426,45 @@ export function resolveActiveProfile() {
   }
 
   return null;
+}
+
+// =============================================================================
+// First-Time Monitoring Flag (localStorage, indefinite) — see the Ready-
+// screen PRD's "First-conversation rule": the Ready heading reads "Ready for
+// your first conversation" until monitoring has started once, ever, then
+// "Ready for your next conversation" from then on, persisting across
+// Companion restarts. Storage-only for now — see this function's own doc
+// comment for what's not yet wired up.
+// =============================================================================
+
+/**
+ * Whether a monitoring session has ever *started* in this browser — not
+ * whether one completed (a session that starts and is immediately stopped
+ * still counts). Read fresh on every call, same as every other getter in
+ * this file — no in-memory cache to keep in sync.
+ *
+ * @returns {boolean}
+ */
+export function getHasStartedMonitoring() {
+  try {
+    return localStorage.getItem(HAS_STARTED_MONITORING_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Records that a monitoring session has started. One-way — there is no
+ * corresponding "unset," since nothing in the product ever needs this to
+ * become false again once it's true.
+ *
+ * Not yet called from beginMonitoringSession() (src/mezzo-session.js) —
+ * this phase adds and tests the storage capability only.
+ */
+export function setHasStartedMonitoring() {
+  try {
+    localStorage.setItem(HAS_STARTED_MONITORING_KEY, 'true');
+  } catch (e) {
+    console.error('[Profiles] Failed to persist has-started-monitoring flag:', e);
+  }
 }

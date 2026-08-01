@@ -1058,5 +1058,142 @@ describe('commit method / mode mismatch guards', () => {
     await done;
     assert.throws(() => controller.commitSaveAsNewProfile('Kitchen 2'), /session.*mode/);
   });
+
+  it('commitKeepAsUnsaved throws when the current attempt is session mode', async () => {
+    const { controller, audio, scheduler } = setup();
+    const done = controller.startSessionCalibration();
+    await runToCalibrated(controller, audio, scheduler);
+    await done;
+    assert.throws(() => controller.commitKeepAsUnsaved(), /recalibrate.*mode/);
+  });
+
+  it('commitKeepAsUnsaved throws when nothing has been calibrated yet (still idle)', () => {
+    const { controller } = setup();
+    assert.throws(() => controller.commitKeepAsUnsaved(), /must be "calibrated"/);
+  });
+
+  it('commitKeepAsUnsaved throws mid-capture, before a result exists', async () => {
+    const original = { id: 'p1', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 1 };
+    const { controller, audio } = setup([original]);
+    controller.startRecalibration('p1');
+    audio.resolveAcquire();
+    await tick();
+    assert.strictEqual(controller.getState().status, 'calibrating');
+    assert.throws(() => controller.commitKeepAsUnsaved(), /must be "calibrated"/);
+  });
+});
+
+// =============================================================================
+// commitKeepAsUnsaved — Ready-screen PRD's M1 "Keep as unsaved" outcome:
+// the completed recalibration becomes a new temporary profile instead of
+// overwriting the saved profile it was measured against.
+// =============================================================================
+
+describe('commitKeepAsUnsaved', () => {
+  async function recalibrateToCalibrated(original) {
+    const { controller, audio, scheduler, profileOps } = setup([original]);
+    const done = controller.startRecalibration(original.id);
+    await runToCalibrated(controller, audio, scheduler, { rms: dbToRms(-18), count: 100 });
+    await done;
+    return { controller, audio, scheduler, profileOps };
+  }
+
+  it('returns the newly calibrated values, not the original profile\'s', async () => {
+    const original = { id: 'p1', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 1 };
+    const { controller } = await recalibrateToCalibrated(original);
+    const { result } = controller.getState();
+
+    const returned = controller.commitKeepAsUnsaved();
+
+    assert.strictEqual(returned.speakingDb, result.speakingDb);
+    assert.strictEqual(returned.spreadDb, result.spreadDb);
+    assert.strictEqual(returned.calibratedTs, result.calibratedTs);
+    assert.notStrictEqual(returned.speakingDb, original.speakingDb, 'sanity check: the new capture must actually differ from the original');
+  });
+
+  it('returns a valid temporary-profile-shaped object, matching commitStartMonitoring()\'s own shape', async () => {
+    const original = { id: 'p1', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 1 };
+    const { controller } = await recalibrateToCalibrated(original);
+
+    const returned = controller.commitKeepAsUnsaved();
+
+    assert.strictEqual(returned.temporary, true);
+    assert.strictEqual(returned.savedProfileId, null);
+    assert.strictEqual(typeof returned.name, 'string');
+    assert.strictEqual(typeof returned.speakingDb, 'number');
+    assert.strictEqual(typeof returned.spreadDb, 'number');
+    assert.strictEqual(typeof returned.calibratedTs, 'number');
+    // No `id` — a temporary profile is never a saved-profile reference.
+    assert.strictEqual('id' in returned, false);
+  });
+
+  it('never calls updateSavedProfile', async () => {
+    const original = { id: 'p1', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 1 };
+    const { controller, profileOps } = await recalibrateToCalibrated(original);
+
+    controller.commitKeepAsUnsaved();
+
+    assert.strictEqual(profileOps.calls.updateSavedProfile, 0);
+    assert.strictEqual(profileOps.calls.addSavedProfile, 0);
+  });
+
+  it('leaves the target saved profile byte-for-byte unchanged', async () => {
+    const original = { id: 'p1', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 1 };
+    const { controller, profileOps } = await recalibrateToCalibrated(original);
+
+    controller.commitKeepAsUnsaved();
+
+    assert.deepStrictEqual(profileOps.snapshot(), [original]);
+  });
+
+  it('leaves an unrelated saved profile untouched too', async () => {
+    const original = { id: 'p1', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 1 };
+    const other = { id: 'p2', name: 'Coffee Shop', speakingDb: -28, spreadDb: 5, calibratedTs: 2 };
+    const { controller, audio, scheduler, profileOps } = setup([original, other]);
+    const done = controller.startRecalibration('p1');
+    await runToCalibrated(controller, audio, scheduler);
+    await done;
+
+    controller.commitKeepAsUnsaved();
+
+    assert.deepStrictEqual(profileOps.snapshot(), [original, other]);
+  });
+
+  it('resets to idle, same as the other successful recalibrate-mode commits', async () => {
+    const original = { id: 'p1', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 1 };
+    const { controller } = await recalibrateToCalibrated(original);
+
+    controller.commitKeepAsUnsaved();
+
+    const state = controller.getState();
+    assert.strictEqual(state.status, 'idle');
+    assert.strictEqual(state.mode, null);
+    assert.strictEqual(state.targetProfileId, null);
+    assert.strictEqual(state.result, null);
+    assert.strictEqual(state.failure, null);
+    assert.strictEqual(state.commitError, null);
+  });
+
+  it('releases the microphone, same as every other exit path', async () => {
+    const original = { id: 'p1', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 1 };
+    const { controller, audio } = await recalibrateToCalibrated(original);
+    const releasesBefore = audio.calls.release;
+
+    controller.commitKeepAsUnsaved();
+
+    // The mic was already released at the end of capture (before status
+    // even reached 'calibrated') — this just confirms commit doesn't
+    // somehow re-acquire or otherwise leave it in an unexpected state.
+    assert.strictEqual(audio.calls.release, releasesBefore);
+  });
+
+  it('getTargetSnapshot() is cleared after commit, same as the other recalibrate-mode commits', async () => {
+    const original = { id: 'p1', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 1 };
+    const { controller } = await recalibrateToCalibrated(original);
+
+    controller.commitKeepAsUnsaved();
+
+    assert.strictEqual(controller.getTargetSnapshot(), null);
+  });
 });
 
