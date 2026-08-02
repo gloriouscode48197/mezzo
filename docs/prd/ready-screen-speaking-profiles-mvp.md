@@ -3,7 +3,9 @@
 ## Product Requirements Document
 
 **Status:** Approved for implementation<br>
-**Implementation status:** Not yet implemented<br>
+**Implementation status:** Implemented in `a7b8b80` ("Implement Ready screen and speaking profile flows"), with a follow-up copy/routing correction in `bb3cbab` ("Align calibration copy and routing")<br>
+**Implementation verification:** 273/273 unit tests (`npm test`) and 15/15 serial Playwright tests (`npx playwright test --workers=1`) passing as of `bb3cbab`<br>
+**Documentation reconciled:** 2026-08-02 — see "Implementation Notes" at the end of this document for where the shipped behavior departs from what's written below, and see `docs/product-experience.md` for the canonical, current-state description this PRD's settled behavior was promoted into<br>
 **Product:** Mezzo<br>
 **Feature area:** Calibration, Ready screen, speaking-profile selection, saving, replacement, deletion, and the five-profile cap
 
@@ -1109,11 +1111,15 @@ Confirm whether **Recalibrate** opens:
 
 Use one consistent rule for saved and unsaved profiles unless there is a documented reason to differ.
 
+**Resolved during implementation (see "Implementation Notes" below):** Recalibrate (saved or unsaved) opens C2 directly, for both alike — it's a faster, repeat action for someone who's already been through calibration once. Create speaking profile (Welcome, first-time) and Create new profile (Ready, from a saved-profile selection) both open C1 first, since either one is creating a profile from scratch.
+
 ### Replacement completion
 
 Confirm whether M1 replacement should also show a toast and, if so, whether the message is:
 
 **Profile “[Name]” replaced**
+
+**Resolved during implementation:** No — M1's Replace and Keep as unsaved both return silently to Ready, no toast. Only the naming-screen (M2/M2a) Save and Replace actions show a toast, per §11's own M2/M2a content above.
 
 ---
 
@@ -1130,3 +1136,25 @@ The Ready screen uses one stable layout centered on the selected speaking profil
 - Consequential changes require clear confirmation.
 - Post-session acknowledgment messages are deferred to a later enhancement.
 - Mezzo does not record audio or transcribe speech.
+
+---
+
+## 21. Implementation Notes
+
+Added after implementation (`a7b8b80`, `bb3cbab`) and documentation reconciliation (2026-08-02). This section records where the shipped product intentionally departs from the text above, or adds something this document didn't specify — it does not change the original requirements or decision history recorded in §1–20.
+
+### Departures from this document's literal text
+
+- **C0's body copy** ends "…then try again," not "…then reload this page" (§6, State C0). The shipped C0 screen has its own in-app **Try again** action that re-attempts calibration directly — this document's original wording assumed no such action existed and a manual page reload was the only recovery path.
+
+### Additions beyond this document's scope
+
+- **A Back text link on C1**, beneath "I'm ready," approved directly during implementation rather than specified in §6's State C1 content. Returns to wherever C1 was opened from (Welcome, or the same Ready state — selection and any existing unsaved profile untouched) without starting calibration or changing any profile. Tracked via an explicit entry-source variable in the implementation, not inferred from profile counts or other state.
+
+### Resolved open items
+
+See §19's own "Recalibration entry" and "Replacement completion" subsections above for the resolutions reached during implementation, noted inline where each open item was originally recorded.
+
+### Known implementation gap (informational only, not a documentation issue)
+
+`src/calibration-controller.js`'s `commitSaveAsNewProfile()` — the commit method the pre-implementation "Calibrated checkpoint" screen's own "Save as New Profile" action used to call — is unreachable from any UI path in the shipped implementation (naming a new profile now happens only from Ready's own Save profile action, via a different code path). It remains exported and covered by its own tests; nothing is broken, but it isn't load-bearing. See `CLAUDE.md`'s Engineering Notes for the same finding, recorded there for anyone working on `src/calibration-controller.js` directly.
