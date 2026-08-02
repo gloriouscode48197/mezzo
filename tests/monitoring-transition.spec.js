@@ -1,25 +1,17 @@
 /**
- * Regression test — Companion transition into the Monitoring view.
+ * Regression test — Companion transition into the Monitoring view, and back.
  *
- * Bug: enterPipMonitoringMode() (src/mezzo-session.js) used to hide only
- * readyScreenEl and show monitoringScreenEl, hardcoding the assumption that
- * Start Monitoring is always clicked from the Ready screen. It's also
- * reached from the Calibrated checkpoint's "Start Monitoring" (session
- * mode) and "Update {name} & Start Monitoring" (recalibrate mode) —
- * calibratedScreenEl was never hidden in that case, so both screens ended
- * up un-hidden at once inside the fixed-size, overflow:hidden Companion
- * window: the still-visible Calibrated screen occupied the viewport and
- * the Monitoring screen (now second in normal document flow) was clipped
- * out of view. Reported in production as "the UI remains stuck on the
- * calibrated checkpoint screen; the visualization is not visible."
- *
- * Fix: enterPipMonitoringMode() now calls showOnlyScreen(monitoringScreenEl)
- * — the same chokepoint every other screen transition in this file already
- * uses — instead of the two hardcoded lines.
- *
- * This file covers both real paths into that fix: session-mode calibration
- * and recalibrate-mode calibration, both landing on the Calibrated
- * checkpoint and then Start Monitoring.
+ * Historical bug (see CLAUDE.md's Engineering Notes): enterPipMonitoringMode()
+ * (src/mezzo-session.js) used to hide only readyScreenEl and show
+ * monitoringScreenEl, hardcoding the assumption that Start Monitoring is
+ * always clicked from the Ready screen — a second pre-monitoring screen
+ * (then: the Calibrated checkpoint) could stay un-hidden underneath it. The
+ * fix (showOnlyScreen(monitoringScreenEl), the same chokepoint every screen
+ * transition uses) generalizes to every pre-monitoring screen this module
+ * has today, not just the one that originally exposed the bug — this file
+ * exercises the two real paths into Monitoring under the current Ready-
+ * screen/calibration flow (see docs/prd/ready-screen-speaking-profiles-mvp.md):
+ * a freshly-calibrated unsaved profile, and a freshly-recalibrated saved one.
  */
 
 import { test, expect } from '@playwright/test';
@@ -29,8 +21,8 @@ async function waitForCapture(pipPage) {
   await pipPage.waitForTimeout(7200);
 }
 
-test.describe('Companion: Calibrated checkpoint -> Monitoring transition', () => {
-  test('session calibration -> Start Monitoring reaches the live Monitoring screen', async ({ page, context }) => {
+test.describe('Companion: calibration -> Ready -> Monitoring -> Ready', () => {
+  test('session calibration lands on Ready with the unsaved profile selected, then Start monitoring reaches the live Monitoring screen', async ({ page, context }) => {
     await page.goto('/index.html');
 
     const pipWindowPromise = context.waitForEvent('page');
@@ -38,19 +30,27 @@ test.describe('Companion: Calibrated checkpoint -> Monitoring transition', () =>
     const pipPage = await pipWindowPromise;
     await pipPage.waitForLoadState('domcontentloaded');
 
-    // Welcome (zero saved profiles) -> Calibrate my voice -> real capture.
-    await pipPage.locator('button:has-text("Calibrate my voice")').first().click();
+    // Welcome (zero saved profiles) -> I'm ready -> C1 -> Start calibration -> real capture.
+    await expect(pipPage.locator('.pip-screen-welcome')).toBeVisible();
+    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await expect(pipPage.locator('.pip-screen-c1')).toBeVisible();
+    await pipPage.locator('button:has-text("Start calibration")').click();
     await waitForCapture(pipPage);
 
-    const calibratedScreen = pipPage.locator('.pip-screen-calibrated');
-    const startBtn = calibratedScreen.locator('.pip-calibrated-primary-btn', { hasText: 'Start Monitoring' });
-    await expect(startBtn).toBeVisible({ timeout: 15000 });
-    await expect(calibratedScreen.locator('.pip-calibrated-heading').first()).toHaveText('Your speaking range is ready.');
+    // No Calibrated checkpoint anymore — session-mode calibration lands
+    // directly on Ready with the freshly-calibrated unsaved profile selected.
+    const readyScreen = pipPage.locator('.pip-screen-ready');
+    await expect(readyScreen).toBeVisible({ timeout: 15000 });
+    await expect(readyScreen.locator('.pip-ready-heading')).toHaveText('Ready for your first conversation.');
+    await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Unsaved profile');
+    await expect(readyScreen.locator('.pip-ready-contextual-actions')).toContainText('Save profile');
 
+    const startBtn = readyScreen.locator('.pip-ready-start-btn');
+    await expect(startBtn).toBeEnabled();
     await startBtn.click();
 
-    // The actual regression: Calibrated must hide, Monitoring must show.
-    await expect(calibratedScreen).toBeHidden();
+    // The actual regression under test: Ready must hide, Monitoring must show.
+    await expect(readyScreen).toBeHidden();
     const monitoringScreen = pipPage.locator('.pip-screen-monitoring');
     await expect(monitoringScreen).toBeVisible();
     await expect(monitoringScreen.locator('canvas').first()).toBeVisible();
@@ -61,18 +61,17 @@ test.describe('Companion: Calibrated checkpoint -> Monitoring transition', () =>
     const statusHeading = pipPage.locator('.pip-status-heading').first();
     await expect(statusHeading).toHaveText(/Quiet|Within Range|Approaching End of Range|Outside Range/, { timeout: 5000 });
 
-    // Stop -> expected next screen: the Save Prompt (temporary profile),
-    // not a stale Calibrated/Monitoring screen left showing underneath.
+    // Stop -> straight back to Ready (no forced save prompt) — the unsaved
+    // profile stays selected, and the heading is now "next conversation"
+    // since monitoring has now actually started once.
     await pipPage.locator('button:has-text("Stop")').first().click();
-    const savePrompt = pipPage.locator('.pip-modal-backdrop:not(.hidden) .pip-modal-card');
-    await expect(savePrompt).toBeVisible();
-    await expect(savePrompt).toContainText('Save this as a speaking profile?');
-    await expect(calibratedScreen).toBeHidden();
     await expect(monitoringScreen).toBeHidden();
-    await expect(pipPage.locator('.pip-screen-ready')).toBeVisible();
+    await expect(readyScreen).toBeVisible();
+    await expect(readyScreen.locator('.pip-ready-heading')).toHaveText('Ready for your next conversation.');
+    await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Unsaved profile');
   });
 
-  test('recalibrate existing profile -> Update {name} & Start Monitoring reaches the live Monitoring screen', async ({ page, context }) => {
+  test('recalibrating a saved profile -> Replace (M1) -> Start monitoring reaches the live Monitoring screen', async ({ page, context }) => {
     await page.addInitScript(() => {
       localStorage.setItem('mezzoProfiles', JSON.stringify([
         { id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 200 },
@@ -85,17 +84,30 @@ test.describe('Companion: Calibrated checkpoint -> Monitoring transition', () =>
     const pipPage = await pipWindowPromise;
     await pipPage.waitForLoadState('domcontentloaded');
 
-    await pipPage.locator('#ready-profile-p-kitchen').check();
-    await pipPage.locator('.pip-ready-recalibrate-btn').click();
+    const readyScreen = pipPage.locator('.pip-screen-ready');
+    await expect(readyScreen).toBeVisible();
+    await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Kitchen');
+
+    await readyScreen.locator('button:has-text("Recalibrate")').click();
     await waitForCapture(pipPage);
 
-    const calibratedScreen = pipPage.locator('.pip-screen-calibrated');
-    const startBtn = calibratedScreen.locator('.pip-calibrated-primary-btn', { hasText: 'Update Kitchen & Start Monitoring' });
-    await expect(startBtn).toBeVisible({ timeout: 15000 });
+    const m1Screen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Replace existing' });
+    await expect(m1Screen).toBeVisible({ timeout: 15000 });
+    await expect(m1Screen.locator('.pip-decision-heading')).toHaveText('Replace existing "Kitchen" profile?');
 
+    await m1Screen.locator('.pip-decision-primary-btn', { hasText: 'Replace' }).click();
+
+    // Replace only writes the recalibration — it never starts monitoring by
+    // itself (see the PRD's M1 state, distinct from the retired Calibrated
+    // checkpoint's "Update {name} & Start Monitoring").
+    await expect(m1Screen).toBeHidden();
+    await expect(readyScreen).toBeVisible();
+    await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Kitchen');
+
+    const startBtn = readyScreen.locator('.pip-ready-start-btn');
     await startBtn.click();
 
-    await expect(calibratedScreen).toBeHidden();
+    await expect(readyScreen).toBeHidden();
     const monitoringScreen = pipPage.locator('.pip-screen-monitoring');
     await expect(monitoringScreen).toBeVisible();
     await expect(monitoringScreen.locator('canvas').first()).toBeVisible();
@@ -104,11 +116,10 @@ test.describe('Companion: Calibrated checkpoint -> Monitoring transition', () =>
     const statusHeading = pipPage.locator('.pip-status-heading').first();
     await expect(statusHeading).toHaveText(/Quiet|Within Range|Approaching End of Range|Outside Range/, { timeout: 5000 });
 
-    // Recalibrate mode has an active (saved, non-temporary) profile — Stop
-    // goes straight back to Ready, no Save Prompt.
+    // Stop -> straight back to Ready with the same saved profile selected.
     await pipPage.locator('button:has-text("Stop")').first().click();
-    await expect(calibratedScreen).toBeHidden();
     await expect(monitoringScreen).toBeHidden();
-    await expect(pipPage.locator('.pip-screen-ready')).toBeVisible();
+    await expect(readyScreen).toBeVisible();
+    await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Kitchen');
   });
 });

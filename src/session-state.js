@@ -14,12 +14,12 @@
  * COMPANION_CALIBRATING and COMPANION_NEEDS_ATTENTION exist purely so the
  * Dock can render "Calibrating…" / "Needs attention." without reaching into
  * the Companion's own internal screen state. This mapping deliberately
- * collapses detail the Companion itself still tracks precisely: Welcome and
- * Ready both report COMPANION_READY here (the Dock doesn't distinguish
- * them), and the Calibrated checkpoint also reports COMPANION_READY, not a
- * state of its own — see src/mezzo-session.js's showWelcomeScreen()/
- * showReadyScreen()/showCalibratedScreen() for exactly where each of these
- * is set.
+ * collapses detail the Companion itself still tracks precisely: Welcome,
+ * Ready, C1, and every full-screen decision state (M1/M2/M2a/M3/06b) all
+ * report COMPANION_READY here (the Dock doesn't distinguish any of them) —
+ * see src/mezzo-session.js's showWelcomeScreen()/showC1Screen()/
+ * showReadyScreen()/showM1Screen()/showM2Screen()/showM3Screen()/
+ * openDeleteScreen() for exactly where each of those is set.
  *
  * `pipWindow` itself, `activeProfile`, and `isMonitoringActive` stay as
  * their own module-level facts in mezzo-session.js — this store only tracks

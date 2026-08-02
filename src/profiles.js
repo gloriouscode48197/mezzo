@@ -196,16 +196,16 @@ export function updateSavedProfile(id, calibrationFields) {
 
 // =============================================================================
 // Save Prompt Name Resolution — the single source of truth for what typing a
-// given name into the post-session save prompt (src/mezzo-session.js's
-// openSavePrompt()/handleSavePromptNameSubmit()) should do. Both the live
-// "as you type" helper text/button label and the actual submit handler call
-// this same function — the UI never re-implements name matching or the
-// profile-limit check itself, it only renders whichever of the four
-// outcomes this resolves to. See CLAUDE.md's Non-Negotiable Decisions for
-// why an explicit name match is allowed to update an existing profile here
-// (never silently — the changing helper text and button label are what
-// make it explicit) while still never overwriting anything without the
-// user visibly choosing to.
+// given name into the Ready-screen's M2/M2a "Save profile" naming state
+// (src/mezzo-session.js's showM2Screen()/handleM2Submit()) should do. Both
+// the live "as you type" warning text/button label (renderM2State()) and the
+// actual submit handler call this same function — the UI never re-implements
+// name matching or the profile-limit check itself, it only renders whichever
+// of the four outcomes this resolves to. See CLAUDE.md's Non-Negotiable
+// Decisions for why an explicit name match is allowed to update an existing
+// profile here (never silently — the changing warning text and button label
+// are what make it explicit) while still never overwriting anything without
+// the user visibly choosing to.
 // =============================================================================
 
 export const SAVE_PROMPT_ACTIONS = Object.freeze({

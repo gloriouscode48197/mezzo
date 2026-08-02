@@ -41,8 +41,8 @@ const {
   profileMetaText,
   calibrationFailureMessage,
   CALIBRATION_FAILURE_COPY,
-  savePromptNameCopy,
-  calibratedCheckpointCopy,
+  saveProfileNameCopy,
+  replaceProfileCopy,
   computeReadyContentHeight,
   MEZZO_COMPANION_READY_WIDTH,
   MEZZO_COMPANION_READY_BASE_HEIGHT,
@@ -118,53 +118,50 @@ describe('calibrationFailureMessage', () => {
 });
 
 // =============================================================================
-// savePromptNameCopy — the save prompt naming step's terminology-sensitive
-// copy (helper text + primary button label), pure and DOM-free so it's
-// tested directly here rather than only through a real PiP window. See
-// CLAUDE.md's terminology rule: "calibration" names the measurement being
-// applied; "profile" is always the saved, selectable object — a calibration
-// is never described as something that gets "chosen," "saved," or
-// "selected" in its own right.
+// saveProfileNameCopy — M2/M2a's terminology-sensitive copy (warning text +
+// primary button label), pure and DOM-free so it's tested directly here
+// rather than only through a real PiP window. See CLAUDE.md's terminology
+// rule: "calibration" names the measurement being applied; "profile" is
+// always the saved, selectable object — a calibration is never described as
+// something that gets "chosen," "saved," or "selected" in its own right.
 // =============================================================================
 
-describe('savePromptNameCopy', () => {
-  it('invalid (nothing typed yet): disabled, default label, no helper text', () => {
-    const copy = savePromptNameCopy({ kind: SAVE_PROMPT_ACTIONS.INVALID, profile: null });
+describe('saveProfileNameCopy', () => {
+  it('invalid (nothing typed yet): disabled, "Save", no warning text', () => {
+    const copy = saveProfileNameCopy({ kind: SAVE_PROMPT_ACTIONS.INVALID, profile: null });
     assert.strictEqual(copy.disabled, true);
-    assert.strictEqual(copy.buttonLabel, 'Save Profile');
-    assert.strictEqual(copy.helperText, '');
+    assert.strictEqual(copy.buttonLabel, 'Save');
+    assert.strictEqual(copy.warningText, '');
   });
 
-  it('create (unique name): enabled, "Save Profile", and describes creating a profile — never "save a calibration"', () => {
-    const copy = savePromptNameCopy({ kind: SAVE_PROMPT_ACTIONS.CREATE, profile: null });
+  it('create (unique name): enabled, "Save", no warning text', () => {
+    const copy = saveProfileNameCopy({ kind: SAVE_PROMPT_ACTIONS.CREATE, profile: null });
     assert.strictEqual(copy.disabled, false);
-    assert.strictEqual(copy.buttonLabel, 'Save Profile');
-    assert.match(copy.helperText, /profile/i);
-    assert.doesNotMatch(copy.helperText, /save (a |this )?calibration\b/i, 'must never phrase it as saving "a calibration" — calibration is the process, profile is the saved object');
+    assert.strictEqual(copy.buttonLabel, 'Save');
+    assert.strictEqual(copy.warningText, '');
   });
 
-  it('update (matching name): enabled, "Update {name}", and names the profile being updated, not a "calibration profile"', () => {
-    const copy = savePromptNameCopy({ kind: SAVE_PROMPT_ACTIONS.UPDATE, profile: { id: 'p1', name: 'Kitchen' } });
+  it('update (matching name): enabled, "Replace", and warns that a profile with this name already exists', () => {
+    const copy = saveProfileNameCopy({ kind: SAVE_PROMPT_ACTIONS.UPDATE, profile: { id: 'p1', name: 'Kitchen' } });
     assert.strictEqual(copy.disabled, false);
-    assert.strictEqual(copy.buttonLabel, 'Update Kitchen');
-    assert.strictEqual(copy.helperText, 'This calibration will update your existing "Kitchen" profile.');
-    assert.doesNotMatch(copy.helperText, /calibration profile/i);
+    assert.strictEqual(copy.buttonLabel, 'Replace');
+    assert.strictEqual(copy.warningText, 'A profile named "Kitchen" already exists.');
   });
 
-  it('update helper text uses the profile\'s actual stored name, not whatever the user typed', () => {
+  it('update warning text uses the profile\'s actual stored name, not whatever the user typed', () => {
     // resolveSavePromptAction() already guarantees resolution.profile is the
-    // real stored object — this just confirms savePromptNameCopy renders
+    // real stored object — this just confirms saveProfileNameCopy renders
     // that name verbatim, casing included, rather than the raw input.
-    const copy = savePromptNameCopy({ kind: SAVE_PROMPT_ACTIONS.UPDATE, profile: { id: 'p1', name: 'Coffee Shop' } });
-    assert.match(copy.helperText, /"Coffee Shop"/);
-    assert.strictEqual(copy.buttonLabel, 'Update Coffee Shop');
+    const copy = saveProfileNameCopy({ kind: SAVE_PROMPT_ACTIONS.UPDATE, profile: { id: 'p1', name: 'Coffee Shop' } });
+    assert.match(copy.warningText, /"Coffee Shop"/);
+    assert.strictEqual(copy.buttonLabel, 'Replace');
   });
 
-  it('blocked (five-profile limit): disabled, "Save Profile", explains the limit — never blames a "calibration"', () => {
-    const copy = savePromptNameCopy({ kind: SAVE_PROMPT_ACTIONS.BLOCKED, profile: null });
+  it('blocked (five-profile limit, defensive — M2 is never opened at the cap): disabled, "Save", explains the limit', () => {
+    const copy = saveProfileNameCopy({ kind: SAVE_PROMPT_ACTIONS.BLOCKED, profile: null });
     assert.strictEqual(copy.disabled, true);
-    assert.strictEqual(copy.buttonLabel, 'Save Profile');
-    assert.strictEqual(copy.helperText, "You've reached the limit of five saved profiles. Delete a profile to save a new one.");
+    assert.strictEqual(copy.buttonLabel, 'Save');
+    assert.strictEqual(copy.warningText, 'Delete a saved profile before saving this one.');
   });
 
   it('never phrases any outcome as choosing, saving, or selecting "a calibration" as if it were the persistent object', () => {
@@ -175,8 +172,8 @@ describe('savePromptNameCopy', () => {
       { kind: SAVE_PROMPT_ACTIONS.BLOCKED, profile: null },
     ];
     cases.forEach((resolution) => {
-      const copy = savePromptNameCopy(resolution);
-      [copy.helperText, copy.buttonLabel].forEach((text) => {
+      const copy = saveProfileNameCopy(resolution);
+      [copy.warningText, copy.buttonLabel].forEach((text) => {
         assert.doesNotMatch(text, /choose a calibration/i);
         assert.doesNotMatch(text, /saved calibration/i);
         assert.doesNotMatch(text, /calibration profile/i);
@@ -186,43 +183,29 @@ describe('savePromptNameCopy', () => {
 });
 
 // =============================================================================
-// calibratedCheckpointCopy — the Calibrated checkpoint's terminology-
-// sensitive copy (heading + both action labels), pure and DOM-free for the
-// same reason savePromptNameCopy is: unit-tested directly rather than only
-// through a real PiP window.
+// replaceProfileCopy — M1's terminology-sensitive copy (heading + body),
+// pure and DOM-free for the same reason saveProfileNameCopy is: unit-tested
+// directly rather than only through a real PiP window. M1 is only ever
+// reached from a saved-profile recalibration, so there is no session-mode
+// variant to test here (unlike the old, retired calibratedCheckpointCopy).
 // =============================================================================
 
-describe('calibratedCheckpointCopy', () => {
-  it('session mode: names no profile at all — the create/update decision has not been made yet at this checkpoint', () => {
-    const copy = calibratedCheckpointCopy({ mode: 'session' });
-    assert.strictEqual(copy.heading, 'Your speaking range is ready.');
-    assert.strictEqual(copy.primaryLabel, 'Start Monitoring');
-    assert.strictEqual(copy.secondaryLabel, 'Save as New Profile');
-    assert.doesNotMatch(copy.heading, /profile/i, 'session mode must not name any profile — nothing has been decided yet');
+describe('replaceProfileCopy', () => {
+  it('names the target profile in the heading', () => {
+    const copy = replaceProfileCopy('Kitchen');
+    assert.strictEqual(copy.heading, 'Replace existing "Kitchen" profile?');
+    assert.strictEqual(copy.body, 'Replace the saved calibration with the one you just created?');
   });
 
-  it('recalibrate mode: names the target profile, phrasing the calibration as updating it — never as being the saved object itself', () => {
-    const copy = calibratedCheckpointCopy({ mode: 'recalibrate', targetName: 'Kitchen' });
-    assert.strictEqual(copy.heading, 'This calibration is ready to update Kitchen.');
-    assert.strictEqual(copy.primaryLabel, 'Update Kitchen & Start Monitoring');
-    assert.strictEqual(copy.secondaryLabel, 'Update Kitchen');
+  it('falls back to a neutral heading if the target snapshot is somehow missing', () => {
+    const copy = replaceProfileCopy(undefined);
+    assert.strictEqual(copy.heading, 'Replace this saved profile?');
   });
 
-  it('recalibrate mode falls back to a neutral name if the target snapshot is somehow missing', () => {
-    const copy = calibratedCheckpointCopy({ mode: 'recalibrate', targetName: undefined });
-    assert.strictEqual(copy.heading, 'This calibration is ready to update this profile.');
-  });
-
-  it('never phrases either mode as saving, choosing, or selecting "a calibration" as if it were the persistent object', () => {
-    const cases = [
-      { mode: 'session' },
-      { mode: 'recalibrate', targetName: 'Kitchen' },
-    ];
-    cases.forEach((input) => {
-      const copy = calibratedCheckpointCopy(input);
-      [copy.heading, copy.primaryLabel, copy.secondaryLabel].forEach((text) => {
+  it('never phrases the decision as saving, choosing, or selecting "a calibration" as if it were the persistent object', () => {
+    [replaceProfileCopy('Kitchen'), replaceProfileCopy(undefined)].forEach((copy) => {
+      [copy.heading, copy.body].forEach((text) => {
         assert.doesNotMatch(text, /choose a calibration/i);
-        assert.doesNotMatch(text, /saved calibration/i);
         assert.doesNotMatch(text, /calibration profile/i);
         assert.doesNotMatch(text, /save calibration/i);
       });
@@ -300,36 +283,24 @@ describe('createMezzoSession construction', () => {
 });
 
 // =============================================================================
-// computeReadyContentHeight — deterministic Ready-window height, grown by
-// saved-profile count rather than assumed. See its own doc comment in
-// mezzo-session.js for what each term represents; this test locks the
-// resulting numbers in, not just the shape of the formula, so a future
-// change to any one term is a deliberate, visible edit here too.
+// computeReadyContentHeight — deterministic Ready-window height. No longer a
+// function of saved-profile count (see its own doc comment in
+// mezzo-session.js): the approved selector is an overlay dropdown that
+// expands within the existing card bounds, not an always-visible growing
+// list, so every pre-monitoring screen shares one fixed height regardless of
+// how many profiles exist.
 // =============================================================================
 
 describe('computeReadyContentHeight', () => {
-  it('returns exactly the documented baseline at zero saved profiles (Cancel/Back before ever saving one)', () => {
+  it('returns exactly the documented baseline, unconditionally', () => {
+    assert.strictEqual(computeReadyContentHeight(), MEZZO_COMPANION_READY_BASE_HEIGHT);
+    assert.strictEqual(computeReadyContentHeight(), 364);
+  });
+
+  it('ignores any argument passed to it — never profile-count-dependent again', () => {
     assert.strictEqual(computeReadyContentHeight(0), MEZZO_COMPANION_READY_BASE_HEIGHT);
-    assert.strictEqual(computeReadyContentHeight(0), 344);
-  });
-
-  it('grows by exactly one profile row (40px) per saved profile, below the list cap', () => {
-    assert.strictEqual(computeReadyContentHeight(1), 384);
-    assert.strictEqual(computeReadyContentHeight(2), 424);
-    assert.strictEqual(computeReadyContentHeight(3), 464);
-  });
-
-  it('caps the list contribution at 122px (the list\'s own CSS max-height) regardless of how many more profiles exist beyond that — never grows unbounded, never hardcoded around one specific count', () => {
-    // 3 profiles already reach 3*40=120, just under the 122px cap.
-    assert.strictEqual(computeReadyContentHeight(4), MEZZO_COMPANION_READY_BASE_HEIGHT + 122);
-    assert.strictEqual(computeReadyContentHeight(4), computeReadyContentHeight(10));
-    assert.strictEqual(computeReadyContentHeight(50), computeReadyContentHeight(4));
-  });
-
-  it('never returns a height shorter than the baseline, for any non-negative profile count', () => {
-    for (const count of [0, 1, 2, 3, 4, 5, 10, 100]) {
-      assert.ok(computeReadyContentHeight(count) >= MEZZO_COMPANION_READY_BASE_HEIGHT);
-    }
+    assert.strictEqual(computeReadyContentHeight(5), MEZZO_COMPANION_READY_BASE_HEIGHT);
+    assert.strictEqual(computeReadyContentHeight(100), MEZZO_COMPANION_READY_BASE_HEIGHT);
   });
 });
 

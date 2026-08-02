@@ -559,13 +559,14 @@ describe('commitSavePromptName', () => {
 
 // =============================================================================
 // commitSavePromptName's update path, end to end at the storage layer —
-// mirrors the exact sequence src/mezzo-session.js's handleSavePromptNameSubmit()
-// runs on success (commitSavePromptName -> setSelectedProfile ->
-// setLastUsedProfile), without needing a real Document Picture-in-Picture
-// window. Covers: the selected/last-used profile ends up being the updated
-// saved profile (never a temporary one), no temporary profile is left
-// behind in either storage layer, and a simulated "reopen" (resolveActiveProfile())
-// resolves straight to the updated profile.
+// mirrors the exact sequence src/mezzo-session.js's handleM2Submit() (the
+// Ready-screen M2/M2a "Save profile" naming state) runs on success
+// (commitSavePromptName -> setSelectedProfile -> setLastUsedProfile),
+// without needing a real Document Picture-in-Picture window. Covers: the
+// selected/last-used profile ends up being the updated saved profile (never
+// a temporary one), no temporary profile is left behind in either storage
+// layer, and a simulated "reopen" (resolveActiveProfile()) resolves straight
+// to the updated profile.
 // =============================================================================
 
 describe('commitSavePromptName update path — selection/last-used/reopen integration', () => {
