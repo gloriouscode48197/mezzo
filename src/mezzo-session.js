@@ -461,12 +461,25 @@ export function createMezzoSession({
   // Companion ever opens with zero saved profiles (see showWelcomeScreen()).
   let welcomeScreenEl = null;
 
-  // C1 — calibration-introduction interstitial, reached only from Welcome's
-  // own primary action (see handleWelcomeCalibrateClick()). Ready's own
-  // Recalibrate/Create new profile/Save profile actions go straight to
-  // Calibrating — there is no second, page-level implementation of this
-  // interstitial to keep in sync.
+  // C1 — calibration-introduction interstitial, shown before every
+  // session-mode calibration: Welcome's own primary action
+  // (handleWelcomeCalibrateClick()) and Ready's Create new profile
+  // (handleCreateNewProfileClick()) both route through it. Recalibrate
+  // (saved or unsaved profile) is the one calibration entry that skips it,
+  // going straight to Calibrating instead — see beginCalibrationFlow()'s own
+  // callers below for the resolved rule (this PRD's own §19 flagged the
+  // recalibrate case as an open item; "Create new profile" was not — see
+  // docs/prd/ready-screen-speaking-profiles-mvp.md's §12 State Transitions).
   let c1ScreenEl = null;
+  let c1BackBtn = null;
+
+  // Which screen opened C1 — 'welcome' or 'ready' — tracked explicitly
+  // (never inferred from saved-profile count or any other mutable state,
+  // both of which can legitimately be ambiguous: a zero-saved-profile
+  // Companion can still reach C1 via Create new profile if an unsaved
+  // profile is already selected on Ready). Read only by handleC1BackClick()
+  // below to decide where Back returns to.
+  let c1EntrySource = null;
 
   // C0 — dedicated microphone-blocked screen, reached instead of the
   // generic Calibration Failed screen specifically for
@@ -1779,68 +1792,75 @@ export function createMezzoSession({
     //    deliberate first moment, not an instant redirect into Calibrating.
     //    Its own primary action goes to C1 (the calibration-introduction
     //    interstitial) — microphone access isn't requested until C1's own
-    //    primary action actually starts a calibration. Not now closes the
-    //    Companion outright (same as endSession()) — it must never request
-    //    microphone permission or create a profile/temporary calibration.
-    //    Reuses Ready's fixed size; no Compact variant. ──
+    //    primary action actually starts a calibration. No secondary dismiss
+    //    action here (see the PRD's State 01 — it lists none) — closing the
+    //    Companion remains available through the native window control
+    //    regardless of screen. Reuses Ready's fixed size; no Compact
+    //    variant. Copy matches docs/prd/ready-screen-speaking-profiles-mvp.md
+    //    and design/prototypes/ready-screen-states.html exactly. ──
     const welcomeScreen = pipDoc.createElement('div');
     welcomeScreen.className = 'pip-screen pip-screen-welcome hidden';
 
     const welcomeHeading = pipDoc.createElement('h1');
     welcomeHeading.className = 'pip-intro-heading';
-    welcomeHeading.textContent = 'Welcome to Mezzo';
+    welcomeHeading.textContent = 'Welcome';
     welcomeScreen.appendChild(welcomeHeading);
 
     const welcomeBody = pipDoc.createElement('p');
     welcomeBody.className = 'pip-intro-body';
-    welcomeBody.textContent = 'Mezzo gives you quiet visual feedback when your speaking volume rises, so you can adjust without interrupting the moment.';
+    welcomeBody.textContent = "Mezzo listens in the background and gently lets you know if you're talking louder than you'd like. We'll start with a quick voice calibration.";
     welcomeScreen.appendChild(welcomeBody);
 
     const welcomeDisclaimer = pipDoc.createElement('p');
     welcomeDisclaimer.className = 'pip-intro-disclaimer';
-    welcomeDisclaimer.textContent = 'Your audio stays on this device. Mezzo never records or transcribes it.';
+    welcomeDisclaimer.textContent = "Mezzo doesn't record audio or transcribe speech.";
     welcomeScreen.appendChild(welcomeDisclaimer);
 
     const welcomePrimaryBtn = pipDoc.createElement('button');
     welcomePrimaryBtn.type = 'button';
     welcomePrimaryBtn.className = 'pip-intro-primary-btn';
-    welcomePrimaryBtn.innerHTML = `${MIC_ICON_SVG}<span>I'm ready</span>`;
+    welcomePrimaryBtn.innerHTML = `${MIC_ICON_SVG}<span>Create speaking profile</span>`;
     welcomePrimaryBtn.addEventListener('click', handleWelcomeCalibrateClick);
     welcomeScreen.appendChild(welcomePrimaryBtn);
-
-    const welcomeNotNowBtn = pipDoc.createElement('button');
-    welcomeNotNowBtn.type = 'button';
-    welcomeNotNowBtn.className = 'pip-text-btn';
-    welcomeNotNowBtn.textContent = 'Not now';
-    welcomeNotNowBtn.addEventListener('click', handleWelcomeNotNowClick);
-    welcomeScreen.appendChild(welcomeNotNowBtn);
 
     layout.appendChild(welcomeScreen);
     welcomeScreenEl = welcomeScreen;
 
-    // ── C1 — calibration-introduction interstitial, reached only from
-    //    Welcome's own primary action (see the module doc comment on
-    //    c1ScreenEl above for why Ready's own calibration actions skip
-    //    straight to Calibrating instead). ──
+    // ── C1 — calibration-introduction interstitial, shown before every
+    //    session-mode calibration (see the module doc comment on c1ScreenEl
+    //    above for the resolved routing rule). Copy matches
+    //    docs/prd/ready-screen-speaking-profiles-mvp.md and
+    //    design/prototypes/ready-screen-states.html exactly. ──
     const c1Screen = pipDoc.createElement('div');
     c1Screen.className = 'pip-screen pip-screen-c1 hidden';
 
     const c1Heading = pipDoc.createElement('h1');
     c1Heading.className = 'pip-intro-heading';
-    c1Heading.textContent = "Let's find your natural speaking volume";
+    c1Heading.textContent = 'Create speaking profile';
     c1Screen.appendChild(c1Heading);
 
     const c1Body = pipDoc.createElement('p');
     c1Body.className = 'pip-intro-body';
-    c1Body.textContent = "Speak normally for about six seconds, the way you would in a video call. Mezzo listens locally on this device — nothing is recorded or transcribed.";
+    c1Body.textContent = "Talk for a few seconds so Mezzo can learn the speaking level you'd like to maintain.";
     c1Screen.appendChild(c1Body);
 
     const c1PrimaryBtn = pipDoc.createElement('button');
     c1PrimaryBtn.type = 'button';
     c1PrimaryBtn.className = 'pip-intro-primary-btn';
-    c1PrimaryBtn.innerHTML = `${MIC_ICON_SVG}<span>Start calibration</span>`;
+    c1PrimaryBtn.innerHTML = `${MIC_ICON_SVG}<span>I'm ready</span>`;
     c1PrimaryBtn.addEventListener('click', handleC1StartClick);
     c1Screen.appendChild(c1PrimaryBtn);
+
+    // Low-emphasis text link, beneath the primary action — reuses
+    // .pip-text-btn, the same established treatment Cancel/Back already use
+    // on every other screen (Calibrating, Calibration Failed, C0).
+    const c1BackButton = pipDoc.createElement('button');
+    c1BackButton.type = 'button';
+    c1BackButton.className = 'pip-text-btn';
+    c1BackButton.textContent = 'Back';
+    c1BackButton.addEventListener('click', handleC1BackClick);
+    c1Screen.appendChild(c1BackButton);
+    c1BackBtn = c1BackButton;
 
     layout.appendChild(c1Screen);
     c1ScreenEl = c1Screen;
@@ -1849,13 +1869,18 @@ export function createMezzoSession({
     //    generic Calibration Failed screen specifically for
     //    MIC_PERMISSION_DENIED (see showFailedScreen()). Reuses Failed's own
     //    Try Again/Back handlers — the underlying recovery is identical,
-    //    only the explanatory copy/illustration differs. ──
+    //    only the explanatory copy/illustration differs. Heading/body match
+    //    the PRD/design artifact exactly, with one deliberate change: "then
+    //    try again" rather than the PRD's "then reload this page" — this
+    //    screen's own in-app Try again action (see below) makes a manual
+    //    page reload unnecessary; the PRD's own wording assumed no such
+    //    action existed. ──
     const c0Screen = pipDoc.createElement('div');
     c0Screen.className = 'pip-screen pip-screen-c0 hidden';
 
     const c0Heading = pipDoc.createElement('h1');
     c0Heading.className = 'pip-intro-heading';
-    c0Heading.textContent = 'Mezzo needs microphone access';
+    c0Heading.textContent = 'Your browser has blocked microphone access.';
     c0Screen.appendChild(c0Heading);
 
     const c0Illustration = pipDoc.createElement('div');
@@ -1865,7 +1890,7 @@ export function createMezzoSession({
 
     const c0Body = pipDoc.createElement('p');
     c0Body.className = 'pip-intro-body';
-    c0Body.textContent = "Check the microphone icon in your browser's address bar and allow access for this site, then try again.";
+    c0Body.textContent = 'Click the icon in your address bar and change the microphone setting to "Allow," then try again.';
     c0Screen.appendChild(c0Body);
 
     const c0PrimaryBtn = pipDoc.createElement('button');
@@ -1955,7 +1980,7 @@ export function createMezzoSession({
 
     const readyDisclaimer = pipDoc.createElement('p');
     readyDisclaimer.className = 'pip-ready-disclaimer';
-    readyDisclaimer.textContent = "Mezzo listens locally on this device. It doesn't record audio or transcribe speech.";
+    readyDisclaimer.textContent = "Mezzo doesn't record audio or transcribe speech.";
     readyScreen.appendChild(readyDisclaimer);
     readyDisclaimerEl = readyDisclaimer;
 
@@ -1974,7 +1999,7 @@ export function createMezzoSession({
 
     const calibratingHeading = pipDoc.createElement('p');
     calibratingHeading.className = 'pip-calibrating-heading';
-    calibratingHeading.textContent = "Speak as if you're talking with a colleague in a video meeting.";
+    calibratingHeading.textContent = 'Keep speaking at the level you want to maintain';
     calibratingScreen.appendChild(calibratingHeading);
 
     // Live, non-disruptive countdown — text, not just the bar below, so
@@ -2434,26 +2459,24 @@ export function createMezzoSession({
     sessionState.set(SESSION_STATES.COMPANION_READY);
   }
 
-  /** "I'm ready" — navigates to C1, the calibration-introduction
-   *  interstitial. Microphone permission isn't requested until C1's own
-   *  primary action actually starts a calibration (see handleC1StartClick()
-   *  -> beginCalibrationFlow() -> calibrationController.startSessionCalibration()
-   *  -> audio.acquire()). Never reached automatically. */
+  /** "Create speaking profile" — navigates to C1, the calibration-
+   *  introduction interstitial. Microphone permission isn't requested until
+   *  C1's own primary action actually starts a calibration (see
+   *  handleC1StartClick() -> beginCalibrationFlow() ->
+   *  calibrationController.startSessionCalibration() -> audio.acquire()).
+   *  Never reached automatically. */
   function handleWelcomeCalibrateClick() {
-    showC1Screen();
+    showC1Screen('welcome');
   }
 
-  /** "Not now" — closes the Companion outright, exactly like endSession()
-   *  (native ✕ / Close Companion). Must never touch the microphone or
-   *  create a profile/temporary calibration — calibrationController is still
-   *  idle at this point (nothing was ever started), so endSession()'s own
-   *  calibrationController.cancel() is a pure no-op here, not a real cancel. */
-  function handleWelcomeNotNowClick() {
-    endSession();
-  }
-
-  function showC1Screen() {
+  /** @param {'welcome'|'ready'} source - recorded in c1EntrySource so
+   *  handleC1BackClick() below knows where to return to. Explicit, not
+   *  inferred from saved-profile count or any other mutable state — both
+   *  Welcome and Ready can reach C1 while, say, zero saved profiles exist
+   *  (Ready can too, if an unsaved profile is already selected there). */
+  function showC1Screen(source) {
     if (!pipWindow) return;
+    c1EntrySource = source;
     activeCircle = null; // defensive, matching every other screen-show function — never actually non-null here, since C1 is only ever reached before monitoring starts
     showOnlyScreen(c1ScreenEl);
     sessionState.set(SESSION_STATES.COMPANION_READY);
@@ -2461,6 +2484,22 @@ export function createMezzoSession({
 
   function handleC1StartClick() {
     beginCalibrationFlow('session', null);
+  }
+
+  /** Back — pure navigation, never starts calibration and never touches
+   *  activeProfile/unsavedProfile/saved-profile storage/the
+   *  first-monitoring flag: C1 itself doesn't mutate any of that (only
+   *  beginCalibrationFlow(), never called here, does), so simply not
+   *  calling it is what preserves everything. Returns to wherever C1 was
+   *  actually opened from (see c1EntrySource) — Welcome, or the same Ready
+   *  state (selection and any existing unsaved profile untouched). */
+  function handleC1BackClick() {
+    if (c1EntrySource === 'welcome') {
+      showWelcomeScreen();
+    } else {
+      showReadyScreen();
+    }
+    c1EntrySource = null;
   }
 
   /** Dedicated microphone-blocked screen — reused Try Again/Back handlers
@@ -2838,8 +2877,13 @@ export function createMezzoSession({
     beginCalibrationFlow('session', null);
   }
 
+  /** Create new profile — routes through C1 first, same as Welcome's own
+   *  first-time entry (see the PRD's §12 State Transitions: "02 → C1 → C2 →
+   *  04"). Unlike Recalibrate, this is creating a brand-new profile from
+   *  scratch, so it keeps the instructional interstitial rather than
+   *  skipping straight to Calibrating. */
   function handleCreateNewProfileClick() {
-    beginCalibrationFlow('session', null);
+    showC1Screen('ready');
   }
 
   /** Save profile — below cap opens M2; at cap goes straight to M3, never
@@ -3270,6 +3314,8 @@ export function createMezzoSession({
     pipDocument = null;
     welcomeScreenEl = null;
     c1ScreenEl = null;
+    c1BackBtn = null;
+    c1EntrySource = null;
     c0ScreenEl = null;
     readyScreenEl = null;
     readyHeadingEl = null;

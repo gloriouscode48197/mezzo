@@ -31,7 +31,10 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
     await expect(readyScreen).toBeVisible();
     await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Kitchen');
 
+    // Create new profile routes through C1 first (see
+    // tests/first-time-copy-and-routing.spec.js for dedicated coverage).
     await readyScreen.locator('button:has-text("Create new profile")').click();
+    await pipPage.locator('button:has-text("I\'m ready")').click();
     await waitForCapture(pipPage);
     await expect(readyScreen).toBeVisible({ timeout: 15000 });
     await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Unsaved profile');
@@ -56,8 +59,8 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
     const pipPage = await pipWindowPromise;
     await pipPage.waitForLoadState('domcontentloaded');
 
+    await pipPage.locator('button:has-text("Create speaking profile")').click();
     await pipPage.locator('button:has-text("I\'m ready")').click();
-    await pipPage.locator('button:has-text("Start calibration")').click();
     await waitForCapture(pipPage);
 
     const readyScreen = pipPage.locator('.pip-screen-ready');
@@ -91,6 +94,7 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
     const readyScreen = pipPage.locator('.pip-screen-ready');
     await expect(readyScreen).toBeVisible();
     await readyScreen.locator('button:has-text("Create new profile")').click();
+    await pipPage.locator('button:has-text("I\'m ready")').click();
     await waitForCapture(pipPage);
     await expect(readyScreen).toBeVisible({ timeout: 15000 });
 

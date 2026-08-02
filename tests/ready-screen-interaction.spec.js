@@ -68,8 +68,8 @@ test.describe('Companion: selector open/close and decision-state focus', () => {
     // the original trigger isn't a real, focusable target anymore. See its
     // own doc comment in src/mezzo-session.js.
     const pipPage = await openCompanion(page, context);
+    await pipPage.locator('button:has-text("Create speaking profile")').click();
     await pipPage.locator('button:has-text("I\'m ready")').click();
-    await pipPage.locator('button:has-text("Start calibration")').click();
     await pipPage.waitForTimeout(7200);
 
     const readyScreen = pipPage.locator('.pip-screen-ready');
@@ -95,8 +95,8 @@ test.describe('Companion: selector open/close and decision-state focus', () => {
     page.on('pageerror', (err) => errors.push(err));
     const pipPage = await openCompanion(page, context);
 
+    await pipPage.locator('button:has-text("Create speaking profile")').click();
     await pipPage.locator('button:has-text("I\'m ready")').click();
-    await pipPage.locator('button:has-text("Start calibration")').click();
     await pipPage.waitForTimeout(7200);
 
     const readyScreen = pipPage.locator('.pip-screen-ready');

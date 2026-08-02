@@ -30,11 +30,11 @@ test.describe('Companion: calibration -> Ready -> Monitoring -> Ready', () => {
     const pipPage = await pipWindowPromise;
     await pipPage.waitForLoadState('domcontentloaded');
 
-    // Welcome (zero saved profiles) -> I'm ready -> C1 -> Start calibration -> real capture.
+    // Welcome (zero saved profiles) -> Create speaking profile -> C1 -> I'm ready -> real capture.
     await expect(pipPage.locator('.pip-screen-welcome')).toBeVisible();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await pipPage.locator('button:has-text("Create speaking profile")').click();
     await expect(pipPage.locator('.pip-screen-c1')).toBeVisible();
-    await pipPage.locator('button:has-text("Start calibration")').click();
+    await pipPage.locator('button:has-text("I\'m ready")').click();
     await waitForCapture(pipPage);
 
     // No Calibrated checkpoint anymore — session-mode calibration lands
