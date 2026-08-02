@@ -1155,6 +1155,6 @@ Added after implementation (`a7b8b80`, `bb3cbab`) and documentation reconciliati
 
 See §19's own "Recalibration entry" and "Replacement completion" subsections above for the resolutions reached during implementation, noted inline where each open item was originally recorded.
 
-### Known implementation gap (informational only, not a documentation issue)
+### Dead code found and removed (2026-08-02)
 
-`src/calibration-controller.js`'s `commitSaveAsNewProfile()` — the commit method the pre-implementation "Calibrated checkpoint" screen's own "Save as New Profile" action used to call — is unreachable from any UI path in the shipped implementation (naming a new profile now happens only from Ready's own Save profile action, via a different code path). It remains exported and covered by its own tests; nothing is broken, but it isn't load-bearing. See `CLAUDE.md`'s Engineering Notes for the same finding, recorded there for anyone working on `src/calibration-controller.js` directly.
+`src/calibration-controller.js`'s `commitSaveAsNewProfile()` — the commit method the pre-implementation "Calibrated checkpoint" screen's own "Save as New Profile" action used to call — had become unreachable from any UI path in the shipped implementation (naming a new profile now happens only from Ready's own Save profile action, via a different code path: `src/profiles.js`'s `commitSavePromptName()`). Confirmed via a full-repo reference search and git history, then removed, along with the tests that existed only to cover it. See `CLAUDE.md`'s Engineering Notes for the full removal record.

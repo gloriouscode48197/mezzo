@@ -41,7 +41,6 @@ import {
   addSavedProfile as defaultAddSavedProfile,
   updateSavedProfile as defaultUpdateSavedProfile,
   getSavedProfiles as defaultGetSavedProfiles,
-  promoteTemporaryProfile,
 } from './profiles.js';
 
 // Default calibration capture window.
@@ -420,37 +419,6 @@ export function createCalibrationController({
     return temporaryProfile;
   }
 
-  /**
-   * "Save as New Profile" from a session-mode Calibrated screen. On
-   * success, returns the new saved profile and returns to idle. On
-   * failure — the 5-profile limit — the result is NOT discarded and status
-   * stays CALIBRATED: `commitError` is set and the caller can retry (e.g.
-   * after the user deletes another profile) or fall back to
-   * commitStartMonitoring() with the still-intact result.
-   *
-   * Delegates to profiles.js's promoteTemporaryProfile() — the same shared
-   * operation the Stop-time "save this for next time?" prompt uses — rather
-   * than reimplementing this here, so the two paths can never quietly drift
-   * apart. `state.result` is wrapped in the same shape
-   * commitStartMonitoring() returns purely to satisfy that shared function's
-   * "genuine temporary profile" contract; it's discarded immediately after.
-   */
-  function commitSaveAsNewProfile(name) {
-    assertCalibratedInMode(MODES.SESSION);
-
-    const { speakingDb, spreadDb, calibratedTs } = state.result;
-    const asTemporary = { name: 'Current speaking range', speakingDb, spreadDb, calibratedTs, savedProfileId: null, temporary: true };
-    const { profile, error } = promoteTemporaryProfile(asTemporary, name, { addSavedProfile: profileOps.addSavedProfile });
-
-    if (error) {
-      setState({ commitError: error });
-      return null;
-    }
-
-    reset();
-    return profile;
-  }
-
   // ===========================================================================
   // Commit — recalibrate mode
   // ===========================================================================
@@ -535,7 +503,6 @@ export function createCalibrationController({
     cancel,
     close,
     commitStartMonitoring,
-    commitSaveAsNewProfile,
     commitUpdateProfile,
     commitUpdateProfileAndStartMonitoring,
     commitKeepAsUnsaved,

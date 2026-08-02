@@ -654,67 +654,6 @@ describe('target profile deleted before commit', () => {
 });
 
 // =============================================================================
-// Save-new-profile failure at the five-profile limit, with result retained
-// =============================================================================
-
-describe('save-as-new-profile at the five-profile limit', () => {
-  function fullLibrary() {
-    return Array.from({ length: 5 }, (_, i) => ({
-      id: `existing-${i}`, name: `Profile ${i}`, speakingDb: -30, spreadDb: 4, calibratedTs: i,
-    }));
-  }
-
-  it('fails cleanly, exposes a recoverable commitError, and keeps the result intact', async () => {
-    const { controller, audio, scheduler, profileOps } = setup(fullLibrary());
-    const done = controller.startSessionCalibration();
-    await runToCalibrated(controller, audio, scheduler);
-    await done;
-    const resultBefore = controller.getState().result;
-
-    const saved = controller.commitSaveAsNewProfile('One Too Many');
-
-    assert.strictEqual(saved, null);
-    const state = controller.getState();
-    assert.strictEqual(state.status, 'calibrated', 'must remain at the calibrated checkpoint');
-    assert.deepStrictEqual(state.result, resultBefore, 'the calibration result must not be discarded or altered');
-    assert.strictEqual(state.commitError.code, 'PROFILE_LIMIT_REACHED');
-    assert.strictEqual(profileOps.snapshot().length, 5, 'library must not have grown');
-  });
-
-  it('does not convert the retained result to a temporary profile merely because saving failed', async () => {
-    const { controller, audio, scheduler } = setup(fullLibrary());
-    const done = controller.startSessionCalibration();
-    await runToCalibrated(controller, audio, scheduler);
-    await done;
-
-    controller.commitSaveAsNewProfile('One Too Many');
-    const stateAfterFailure = controller.getState();
-
-    // The result is still usable via the OTHER commit path — proves it was
-    // never silently discarded or reclassified.
-    const temp = controller.commitStartMonitoring();
-    assert.strictEqual(temp.temporary, true);
-    assert.strictEqual(temp.speakingDb, stateAfterFailure.result.speakingDb);
-  });
-
-  it('a retry of commitSaveAsNewProfile after freeing a slot succeeds', async () => {
-    const { controller, audio, scheduler, profileOps } = setup(fullLibrary());
-    const done = controller.startSessionCalibration();
-    await runToCalibrated(controller, audio, scheduler);
-    await done;
-
-    assert.strictEqual(controller.commitSaveAsNewProfile('One Too Many'), null);
-
-    // Free a slot, as if the user deleted a profile elsewhere.
-    profileOps._deleteById('existing-0');
-
-    const saved = controller.commitSaveAsNewProfile('Now It Fits');
-    assert.ok(saved);
-    assert.strictEqual(controller.getState().status, 'idle');
-  });
-});
-
-// =============================================================================
 // Double start / double commit / stale completions
 // =============================================================================
 
@@ -741,18 +680,6 @@ describe('concurrency guards', () => {
 
     controller.commitStartMonitoring();
     assert.throws(() => controller.commitStartMonitoring(), /Cannot commit from status "idle"/);
-  });
-
-  it('double commit: rapid repeated clicks only ever produce one saved profile', async () => {
-    const { controller, audio, scheduler, profileOps } = setup();
-    const done = controller.startSessionCalibration();
-    await runToCalibrated(controller, audio, scheduler);
-    await done;
-
-    const first = controller.commitSaveAsNewProfile('Kitchen');
-    assert.ok(first);
-    assert.throws(() => controller.commitSaveAsNewProfile('Kitchen'), /Cannot commit from status "idle"/);
-    assert.strictEqual(profileOps.snapshot().length, 1);
   });
 
   it('stale async completion: an old run\'s acquire resolving after a new run has started does not corrupt the new run', async () => {
@@ -1016,25 +943,6 @@ describe('commit writes only calibration fields, using storage-authoritative ide
     assert.deepStrictEqual(Object.keys(capturedArgs.fields).sort(), ['calibratedTs', 'speakingDb', 'spreadDb']);
   });
 
-  it('addSavedProfile receives the name passed to commitSaveAsNewProfile, trimmed', async () => {
-    const { controller, audio, scheduler, profileOps } = setup();
-    const done = controller.startSessionCalibration();
-    await runToCalibrated(controller, audio, scheduler);
-    await done;
-
-    const saved = controller.commitSaveAsNewProfile('  Kitchen  ');
-    assert.strictEqual(saved.name, 'Kitchen');
-  });
-
-  it('commitSaveAsNewProfile rejects an empty name without touching storage', async () => {
-    const { controller, audio, scheduler, profileOps } = setup();
-    const done = controller.startSessionCalibration();
-    await runToCalibrated(controller, audio, scheduler);
-    await done;
-
-    assert.throws(() => controller.commitSaveAsNewProfile(''), /non-empty name/);
-    assert.strictEqual(profileOps.calls.addSavedProfile, 0);
-  });
 });
 
 // =============================================================================
@@ -1048,15 +956,6 @@ describe('commit method / mode mismatch guards', () => {
     await runToCalibrated(controller, audio, scheduler);
     await done;
     assert.throws(() => controller.commitUpdateProfile(), /recalibrate.*mode/);
-  });
-
-  it('commitSaveAsNewProfile throws when the current attempt is recalibrate mode', async () => {
-    const original = { id: 'p1', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 1 };
-    const { controller, audio, scheduler } = setup([original]);
-    const done = controller.startRecalibration('p1');
-    await runToCalibrated(controller, audio, scheduler);
-    await done;
-    assert.throws(() => controller.commitSaveAsNewProfile('Kitchen 2'), /session.*mode/);
   });
 
   it('commitKeepAsUnsaved throws when the current attempt is session mode', async () => {

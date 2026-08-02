@@ -237,7 +237,8 @@ describe('updateSavedProfile', () => {
 });
 
 // =============================================================================
-// promoteTemporaryProfile — the shared Stop-time-save / pre-monitoring-save operation
+// promoteTemporaryProfile — the create-path operation behind Ready's own
+// Save profile naming screen (via commitSavePromptName() below)
 // =============================================================================
 
 function makeTemporary(overrides = {}) {

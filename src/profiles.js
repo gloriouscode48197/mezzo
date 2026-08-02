@@ -112,15 +112,12 @@ export function addSavedProfile({ name, speakingDb, spreadDb, calibratedTs }) {
 
 /**
  * Promote a runtime-only temporary calibration into a brand-new saved
- * profile — the single shared operation behind both "Save as New Profile"
- * on a session-mode Calibrated screen (src/calibration-controller.js's
- * commitSaveAsNewProfile()) and the "save this for next time?" prompt a
- * user sees at Stop, after monitoring with an unsaved temporary profile
- * (src/mezzo-session.js). Both call sites must produce identical storage
- * behavior; routing both through this one function is what guarantees that,
- * rather than two independently-maintained implementations quietly drifting
- * apart.
+ * profile. Called from this module's own commitSavePromptName() (the create
+ * path behind Ready's own Save profile naming screen, src/mezzo-session.js)
+ * — the one place a temporary/unsaved profile is ever turned into a saved
+ * one.
  *
+
  * Deliberately does not touch mezzoSelectedProfile/mezzoLastUsedProfile —
  * updating "what's selected now" is session-lifecycle behavior the caller
  * owns, not a storage concern. This function's only job is turning a
