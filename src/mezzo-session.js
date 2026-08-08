@@ -768,10 +768,50 @@ export function createMezzoSession({
   }
 
   /**
-   * Opens the Mezzo Companion — Home's one and only action, with no
-   * arguments: Home never chooses a profile, never requests microphone
-   * permission, and never decides what screen the Companion opens to. Once
-   * the window and its document exist, the Companion resolves its own
+   * Requests microphone permission on Home, independent of the Companion —
+   * the one narrow, deliberate exception to "microphone access is
+   * Companion-only" (see CLAUDE.md's Non-Negotiable Decisions: "permission
+   * should follow understanding"). Home calls this only after explaining why
+   * Mezzo needs mic access and the user has explicitly asked to enable it —
+   * never on page load, never merged into startMonitoring() below — so a
+   * first-time user is never shown the browser's raw permission prompt out
+   * of context, and launching the Companion stays a separate, later,
+   * explicit action rather than something this call triggers itself.
+   *
+   * Acquires and immediately releases: this is a probe, not a hold. Its only
+   * job is confirming (or triggering) the permission grant — not keeping the
+   * microphone open while the user is still on Home deciding whether to
+   * launch the Companion. Reuses this module's own `audio` (AudioProcessor)
+   * instance directly, the same one calibrationController holds — never a
+   * second, parallel acquisition path (see the Calibration Controller
+   * Instance Rule in CLAUDE.md). Deliberately bypasses calibrationController
+   * itself: this is a plain permission probe, not a calibration attempt, so
+   * none of its mode/state machinery should be touched. Because the browser
+   * persists the grant per origin, calibration's own later `audio.acquire()`
+   * call (inside the Companion, unchanged) simply resolves silently once
+   * this has succeeded — no second prompt, and no reliance on whether a
+   * PiP-triggered prompt would even work.
+   * @returns {Promise<boolean>} whether microphone access was granted
+   */
+  async function requestMicrophoneAccess() {
+    try {
+      await audio.acquire();
+    } catch (err) {
+      console.warn('[Session] Microphone access denied:', err.message);
+      return false;
+    }
+    audio.release();
+    return true;
+  }
+
+  /**
+   * Opens the Mezzo Companion — Home's one action for actually launching it,
+   * with no arguments: Home never chooses a profile and never decides what
+   * screen the Companion opens to. Microphone permission is no longer this
+   * function's concern either — see requestMicrophoneAccess() above, a
+   * separate, earlier action Home calls only once it already has a grant, so
+   * this call and the permission prompt are never the same user gesture.
+   * Once the window and its document exist, the Companion resolves its own
    * entry state from src/profiles.js's storage (see enterPipReadyMode()
    * near the bottom of this function) — Welcome for zero saved profiles,
    * Ready for one or more — never straight into Monitoring. Call directly
@@ -3433,6 +3473,7 @@ export function createMezzoSession({
     isPipSupported: () => pipSupported,
 
     init,
+    requestMicrophoneAccess,
     startMonitoring,
     stopMonitoring,
     endSession,

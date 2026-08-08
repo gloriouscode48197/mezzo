@@ -5,13 +5,24 @@
  * session creation, direct Companion launch, Dock status mapping, and the
  * transitionToState() fade machinery. index.html (via landing.js) is this
  * module's one consumer — the Mezzo Companion (a Document Picture-in-Picture
- * window, built by src/mezzo-session.js) is the sole operational surface,
- * and this module owns none of that logic, only the three-state routing
- * around it:
+ * window, built by src/mezzo-session.js) still owns calibration, speaking
+ * profiles, Ready state, and monitoring outright, but this module now also
+ * owns one narrow, deliberate exception: requesting microphone permission
+ * before the Companion exists (see CLAUDE.md's Non-Negotiable Decisions,
+ * "permission should follow understanding"). Three outer states, plus a
+ * live-permission-state sub-machine nested inside `home`:
  *
- *   home:        One operational action — "Open Mezzo Companion" — and
- *                nothing else. No microphone permission request, no
- *                profile choice, no calibration decision happens here; the
+ *   home:        Preparation and trust. Reflects the browser's CURRENT
+ *                microphone-permission state, not first-time-vs-returning
+ *                visit history — there is no persisted onboarding flag
+ *                anywhere in this module, deliberately. Three
+ *                mutually-exclusive sub-states (see refreshMicState()/
+ *                showMicState() below): mic-request (not yet granted —
+ *                explain, then let the user explicitly ask), mic-granted
+ *                (confirmed — a separate, later "Open Mezzo Companion"
+ *                click actually launches it), mic-denied (recovery, kept on
+ *                this page; the Companion never opens). No profile choice,
+ *                no calibration decision happens here either way — the
  *                Companion decides all of that for itself the instant it
  *                opens (Welcome with zero saved profiles, Ready with one or
  *                more — see src/mezzo-session.js's enterPipReadyMode()).
@@ -61,7 +72,12 @@ const DOCK_STATUS_MODIFIERS = ['ready', 'calibrating', 'monitoring', 'attention'
  * @param {HTMLElement} elements.stateHome
  * @param {HTMLElement} elements.stateUnsupported
  * @param {HTMLElement} elements.stateDock
- * @param {HTMLElement} [elements.btnOpenCompanion]
+ * @param {HTMLElement} [elements.micRequestEl] - Home's not-yet-granted sub-state
+ * @param {HTMLElement} [elements.micGrantedEl] - Home's permission-confirmed sub-state
+ * @param {HTMLElement} [elements.micDeniedEl] - Home's recovery sub-state
+ * @param {HTMLElement} [elements.btnEnableMicrophone] - mic-request's one action
+ * @param {HTMLElement} [elements.btnOpenCompanion] - mic-granted's one action; launches the Companion
+ * @param {HTMLElement} [elements.btnMicRetry] - mic-denied's one action
  * @param {HTMLElement} [elements.btnCloseCompanion]
  * @param {HTMLElement} [elements.dockStatusDot]
  * @param {HTMLElement} [elements.dockStatusText]
@@ -72,7 +88,12 @@ export function initHomeDock({
   stateHome,
   stateUnsupported,
   stateDock,
+  micRequestEl,
+  micGrantedEl,
+  micDeniedEl,
+  btnEnableMicrophone,
   btnOpenCompanion,
+  btnMicRetry,
   btnCloseCompanion,
   dockStatusDot,
   dockStatusText,
@@ -155,6 +176,100 @@ export function initHomeDock({
   }
 
   // =============================================================================
+  // Microphone permission — Home's own narrow, deliberate exception (see
+  // CLAUDE.md's Non-Negotiable Decisions, "permission should follow
+  // understanding"). Three mutually-exclusive sub-states nested inside the
+  // `home` state, toggled with a plain class swap rather than
+  // transitionToState()'s fade machinery — every trigger here is a single,
+  // sequential, user-driven action (initial load, one click, or a retry),
+  // never the kind of rapid/overlapping calls that machinery exists to
+  // guard against, so there's nothing to reuse it for.
+  // =============================================================================
+
+  const micStates = { request: micRequestEl, granted: micGrantedEl, denied: micDeniedEl };
+  const micPrimaryButtons = { request: btnEnableMicrophone, granted: btnOpenCompanion, denied: btnMicRetry };
+
+  /** Moves focus to the newly-shown sub-state's primary action, the same
+   *  requestAnimationFrame(() => el?.focus()) convention every Companion
+   *  decision-state transition already uses (see src/mezzo-session.js's
+   *  showM1Screen()/showM2Screen()/showM3Screen()/openDeleteScreen()) —
+   *  reused here rather than invented fresh. Hiding a sub-state's container
+   *  (`display:none`) drops focus to <body> if that container held it, so
+   *  this always re-lands it somewhere useful; the requestAnimationFrame
+   *  wrap gives the browser one frame to register the target as focusable
+   *  again after the `hidden` class is removed, matching why the existing
+   *  convention wraps it the same way. */
+  function showMicState(name) {
+    Object.entries(micStates).forEach(([k, el]) => el?.classList.toggle('hidden', k !== name));
+    requestAnimationFrame(() => micPrimaryButtons[name]?.focus());
+  }
+
+  /** navigator.permissions.query() is used narrowly — only to pick which of
+   *  the three sub-states to show, never to decide success or failure by
+   *  itself (see CLAUDE.md's Calibration Controller Instance Rule /
+   *  Non-Negotiable Decisions for why that stays the acquire/release path's
+   *  job alone). Unsupported browsers, or the query itself throwing, fall
+   *  back to 'prompt' behavior — the safe default that waits for an
+   *  explicit click rather than assuming anything. */
+  async function queryMicrophonePermissionState() {
+    if (!navigator.permissions?.query) return 'prompt';
+    try {
+      const status = await navigator.permissions.query({ name: 'microphone' });
+      return status.state;
+    } catch {
+      return 'prompt';
+    }
+  }
+
+  /**
+   * Decides which mic sub-state to show — driven entirely by the browser's
+   * CURRENT permission state, never by visit history (no persisted
+   * onboarding/completion flag exists anywhere in this module). Called once
+   * on load and again every time the Companion closes back to Home, so a
+   * permission change made while the Companion was open (or in another tab)
+   * is reflected the next time this page is looked at.
+   *
+   * A 'granted' query result is still only a hint for which screen to show
+   * first — it never substitutes for the real thing. This still runs
+   * session.requestMicrophoneAccess() (the actual acquire/release path) in
+   * the background before landing on the success state, so a stale or
+   * inaccurate query result can't strand the user on a "granted" screen that
+   * can't actually launch the Companion.
+   */
+  async function refreshMicState() {
+    const state = await queryMicrophonePermissionState();
+    if (state === 'denied') {
+      showMicState('denied');
+      return;
+    }
+    if (state === 'granted') {
+      const granted = await session.requestMicrophoneAccess();
+      showMicState(granted ? 'granted' : 'denied');
+      return;
+    }
+    showMicState('request');
+  }
+
+  /** mic-request's one action — the only click that can ever trigger the
+   *  browser's raw microphone-permission prompt. Never chained into
+   *  launching the Companion: granting access and opening the Companion
+   *  stay two separate, explicit user gestures (see handleLaunchCompanion-
+   *  Click() below), so Document PiP's own fresh-gesture requirement is
+   *  never at risk of running out mid-flow. */
+  async function handleEnableMicrophoneClick() {
+    const granted = await session.requestMicrophoneAccess();
+    showMicState(granted ? 'granted' : 'denied');
+  }
+
+  /** mic-denied's one action — re-attempts the same acquire/release probe,
+   *  useful once the user has actually gone and flipped the browser's own
+   *  site-permission toggle. */
+  async function handleMicRetryClick() {
+    const granted = await session.requestMicrophoneAccess();
+    showMicState(granted ? 'granted' : 'denied');
+  }
+
+  // =============================================================================
   // Session
   // =============================================================================
 
@@ -165,16 +280,18 @@ export function initHomeDock({
   session.init();
 
   /**
-   * The one operational action Home offers. Called from a real click (a
-   * genuine user gesture, which is what Document PiP requires) — this page
-   * never opens the Companion on its own, and never navigates anywhere
-   * first. Home → Dock happens reactively via handleSessionStateChange()
-   * below, the moment the Companion reports its first state (Welcome or
-   * Ready, both COMPANION_READY here) rather than being transitioned here
-   * directly — this page never predicts which screen the Companion will
-   * choose to show.
+   * mic-granted's one action, and the only thing that actually opens the
+   * Companion. Called from a real click (a genuine user gesture, which is
+   * what Document PiP requires) — deliberately its own separate gesture
+   * from whatever click most recently confirmed microphone access, never
+   * chained onto it. This page never opens the Companion on its own, and
+   * never navigates anywhere first. Home → Dock happens reactively via
+   * handleSessionStateChange() below, the moment the Companion reports its
+   * first state (Welcome or Ready, both COMPANION_READY here) rather than
+   * being transitioned here directly — this page never predicts which
+   * screen the Companion will choose to show.
    */
-  async function handleOpenCompanionClick() {
+  async function handleLaunchCompanionClick() {
     await session.startMonitoring();
   }
 
@@ -205,18 +322,22 @@ export function initHomeDock({
   function handleSessionStateChange(state) {
     if (state === session.SESSION_STATES.COMPANION_CLOSED) {
       transitionToState('home');
+      if (pipSupported) refreshMicState();
       return;
     }
     transitionToState('dock');
     renderDockStatus(state);
   }
 
-  btnOpenCompanion?.addEventListener('click', handleOpenCompanionClick);
+  btnEnableMicrophone?.addEventListener('click', handleEnableMicrophoneClick);
+  btnOpenCompanion?.addEventListener('click', handleLaunchCompanionClick);
+  btnMicRetry?.addEventListener('click', handleMicRetryClick);
   btnCloseCompanion?.addEventListener('click', handleCloseCompanionClick);
 
   // PiP support is a static browser capability, not something that changes
   // at runtime — decided once, here, rather than re-checked per interaction.
   transitionToState(pipSupported ? 'home' : 'unsupported');
+  if (pipSupported) refreshMicState();
 
   return { session, isPipSupported: () => pipSupported };
 }

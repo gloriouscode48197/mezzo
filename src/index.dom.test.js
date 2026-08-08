@@ -66,6 +66,31 @@ class FakeIntersectionObserver {
 }
 
 /**
+ * A minimal stand-in for the real Web Audio pipeline src/audio.js's
+ * acquire() builds — just enough surface for it to run to completion
+ * without throwing: createAnalyser()/createMediaStreamSource() return
+ * plain objects accepting whatever properties/calls acquire() makes on
+ * them, and close() is a no-op release() can safely call. linkedom has no
+ * real AudioContext at all, so without this, ANY acquire() call (including
+ * the background probe refreshMicState() runs when the permission query
+ * reports 'granted') fails regardless of whether getUserMedia itself would
+ * have succeeded — silently routing every "granted" scenario to the denied
+ * sub-state instead. This class exists specifically to make that
+ * distinction testable.
+ */
+class FakeAudioContext {
+  createAnalyser() { return { fftSize: 0, smoothingTimeConstant: 0 }; }
+  createMediaStreamSource() { return { connect() {} }; }
+  close() {}
+}
+
+/** A minimal stand-in MediaStream — just enough for audio.js's release()
+ *  (getTracks().forEach(t => t.stop())) to run without throwing. */
+function createFakeMediaStream() {
+  return { getTracks: () => [{ kind: 'audio', stop() {} }] };
+}
+
+/**
  * Waits for a real screen transition to finish, not just for pending
  * promises to settle. src/home-dock.js's transitionToState() defers its
  * actual classList('hidden') swap behind real setTimeout calls (a 300ms
@@ -124,17 +149,33 @@ let importCounter = 0;
  * @param {object} [opts.sessionStorage] - defaults to a fresh empty mock
  * @param {boolean} [opts.pipSupported] - whether `documentPictureInPicture`
  *   exists on window at all — false simulates an unsupported browser.
+ * @param {'granted'|'denied'|'prompt'|null} [opts.permissionState] - what
+ *   navigator.permissions.query({name:'microphone'}) reports. `null`
+ *   simulates a browser with no Permissions API at all (the safe-default
+ *   'prompt'-like fallback). Defaults to 'granted' — the common case for
+ *   every pre-existing scenario in this file that isn't specifically about
+ *   permission state, so most tests don't need to think about this at all.
+ * @param {() => Promise<object>} [opts.getUserMedia] - the fake
+ *   navigator.mediaDevices.getUserMedia implementation. Defaults to one
+ *   that resolves successfully — override to simulate a rejection
+ *   (NotAllowedError etc.) for denied-permission scenarios.
  */
 async function setupPage({
   localStorage = createMemoryStorage(),
   sessionStorage = createMemoryStorage(),
   pipSupported = true,
+  permissionState = 'granted',
+  getUserMedia = async () => createFakeMediaStream(),
 } = {}) {
   const html = readFileSync(INDEX_HTML_PATH, 'utf8');
   const { window, document } = parseHTML(html);
   window.location = new URL('http://localhost/index.html');
   window.requestAnimationFrame = (fn) => setTimeout(fn, 0);
   window.IntersectionObserver = FakeIntersectionObserver;
+  // See FakeAudioContext's own doc comment — required for any acquire()
+  // call (the mic-permission probe included) to resolve successfully in
+  // this environment.
+  window.AudioContext = FakeAudioContext;
 
   // linkedom's `window` objects share an underlying global prototype across
   // separate parseHTML() calls in the same process — assigning
@@ -159,11 +200,14 @@ async function setupPage({
   // Node 21+ defines a built-in global `navigator` as a getter-only
   // accessor property — plain assignment throws. defineProperty overrides
   // it outright (configurable so a later test's setupPage() call can
-  // override it again).
+  // override it again). Configured entirely through this function's own
+  // params now, rather than a caller manually overriding `navigator` before
+  // calling setupPage() — that pattern used to be silently overwritten by
+  // this same unconditional defineProperty call running afterward.
   Object.defineProperty(globalThis, 'navigator', {
     value: {
-      permissions: { query: async () => ({ state: 'granted' }) },
-      mediaDevices: {}, // no getUserMedia — Home/Dock never call it directly; only a real calibration attempt inside the Companion would, and this file doesn't drive one
+      permissions: permissionState === null ? undefined : { query: async () => ({ state: permissionState }) },
+      mediaDevices: { getUserMedia },
     },
     configurable: true,
     writable: true,
@@ -181,15 +225,23 @@ function visibleStateId(document) {
   return ids.find((id) => !document.getElementById(id).classList.contains('hidden'));
 }
 
+/** Which of Home's three mic sub-states is currently visible — null if none
+ *  (e.g. Home itself isn't the visible top-level state right now). */
+function visibleMicStateId(document) {
+  const ids = ['mic-request', 'mic-granted', 'mic-denied'];
+  return ids.find((id) => !document.getElementById(id).classList.contains('hidden')) ?? null;
+}
+
 // =============================================================================
 // Home — the public homepage; no operational control besides Open Mezzo
 // Companion
 // =============================================================================
 
 describe('Home', () => {
-  it('shows the homepage with the Open Mezzo Companion primary CTA, in a PiP-capable browser', async () => {
+  it('shows the homepage with the Open Mezzo Companion primary CTA visible, once permission is already granted', async () => {
     const { document } = await setupPage();
     assert.strictEqual(visibleStateId(document), 'state-home');
+    assert.strictEqual(visibleMicStateId(document), 'mic-granted', 'a granted permission still requires the real acquire/release probe to succeed, not just the query result — see FakeAudioContext');
     assert.strictEqual(document.getElementById('btn-open-companion').textContent, 'Open Mezzo Companion');
   });
 
@@ -200,18 +252,14 @@ describe('Home', () => {
     assert.strictEqual(btn.hasAttribute('href'), false);
   });
 
-  it('never requests microphone permission on load', async () => {
+  it('never requests microphone permission on load when permission has not been granted yet', async () => {
     let getUserMediaCalled = false;
-    Object.defineProperty(globalThis, 'navigator', {
-      value: {
-        permissions: { query: async () => ({ state: 'prompt' }) },
-        mediaDevices: { getUserMedia: async () => { getUserMediaCalled = true; throw new Error('should never be called'); } },
-      },
-      configurable: true,
-      writable: true,
+    const { document } = await setupPage({
+      permissionState: 'prompt',
+      getUserMedia: async () => { getUserMediaCalled = true; throw new Error('should never be called'); },
     });
-    await setupPage();
     assert.strictEqual(getUserMediaCalled, false);
+    assert.strictEqual(visibleMicStateId(document), 'mic-request', 'a not-yet-granted permission must show the explain-and-request state, never skip straight past it');
   });
 
   it('has no calibration, profile-selection, or monitoring controls anywhere in the page', async () => {
@@ -237,6 +285,107 @@ describe('Home', () => {
 });
 
 // =============================================================================
+// Home reflects the browser's CURRENT microphone-permission state — never
+// first-time-vs-returning visit history. No persisted onboarding flag is
+// ever written or read anywhere in this file's scenarios below; each one is
+// driven purely by permissionState/getUserMedia. See CLAUDE.md's
+// Non-Negotiable Decisions, "permission should follow understanding."
+// =============================================================================
+
+describe('Home — microphone permission state', () => {
+  it('prompt: shows the explain-and-request state; Enable microphone is the only control present', async () => {
+    const { document } = await setupPage({ permissionState: 'prompt' });
+    assert.strictEqual(visibleMicStateId(document), 'mic-request');
+    assert.strictEqual(document.getElementById('mic-granted').classList.contains('hidden'), true);
+    assert.strictEqual(document.getElementById('mic-denied').classList.contains('hidden'), true);
+  });
+
+  it('prompt -> click Enable microphone -> granted: a real acquire/release success moves to the launch state', async () => {
+    const { document } = await setupPage({ permissionState: 'prompt' });
+    assert.strictEqual(visibleMicStateId(document), 'mic-request');
+
+    document.getElementById('btn-enable-microphone').click();
+    await tick();
+
+    assert.strictEqual(visibleMicStateId(document), 'mic-granted');
+    assert.strictEqual(document.getElementById('btn-open-companion').classList.contains('hidden'), false);
+  });
+
+  it('prompt -> click Enable microphone -> denied: an acquire() rejection moves to the recovery state, Companion never opens', async () => {
+    const { document, window } = await setupPage({
+      permissionState: 'prompt',
+      getUserMedia: async () => { throw new DOMException('Permission denied', 'NotAllowedError'); },
+    });
+    const locationBefore = window.location.href;
+
+    document.getElementById('btn-enable-microphone').click();
+    await tick();
+
+    assert.strictEqual(visibleMicStateId(document), 'mic-denied');
+    assert.strictEqual(visibleStateId(document), 'state-home', 'the Companion must never open on a denied grant');
+    assert.strictEqual(window.location.href, locationBefore);
+  });
+
+  it('denied on load: shows the recovery state directly, without waiting for a click first', async () => {
+    const { document } = await setupPage({ permissionState: 'denied' });
+    assert.strictEqual(visibleMicStateId(document), 'mic-denied');
+  });
+
+  it('denied -> Try again -> granted: retrying re-runs the same acquire/release probe', async () => {
+    let shouldGrant = false;
+    const { document } = await setupPage({
+      permissionState: 'denied',
+      getUserMedia: async () => {
+        if (!shouldGrant) throw new DOMException('Permission denied', 'NotAllowedError');
+        return createFakeMediaStream();
+      },
+    });
+    assert.strictEqual(visibleMicStateId(document), 'mic-denied');
+
+    shouldGrant = true;
+    document.getElementById('btn-mic-retry').click();
+    await tick();
+
+    assert.strictEqual(visibleMicStateId(document), 'mic-granted');
+  });
+
+  it('granted (query) but acquire() fails anyway: falls through to the recovery state, never strands the user on a launch button that cannot work', async () => {
+    const { document } = await setupPage({
+      permissionState: 'granted',
+      getUserMedia: async () => { throw new Error('device unavailable'); },
+    });
+    assert.strictEqual(visibleMicStateId(document), 'mic-denied');
+  });
+
+  it('a browser with no Permissions API at all falls back to the explain-and-request state, not an assumption either way', async () => {
+    const { document } = await setupPage({ permissionState: null });
+    assert.strictEqual(visibleMicStateId(document), 'mic-request');
+  });
+
+  it('re-evaluates permission state fresh every time Home is shown again after Close Companion', async () => {
+    let state = 'granted';
+    const { document } = await setupPage({
+      permissionState: 'granted',
+      getUserMedia: async () => {
+        if (state === 'granted') return createFakeMediaStream();
+        throw new DOMException('Permission denied', 'NotAllowedError');
+      },
+    });
+    document.getElementById('btn-open-companion').click();
+    await tick(2);
+    assert.strictEqual(visibleStateId(document), 'state-dock');
+
+    // Permission revoked while the Companion was open.
+    state = 'denied';
+    document.getElementById('btn-close-companion').click();
+    await tick(2);
+
+    assert.strictEqual(visibleStateId(document), 'state-home');
+    assert.strictEqual(visibleMicStateId(document), 'mic-denied', 'returning to Home must reflect the current state, not the state Home happened to be in before it was last opened');
+  });
+});
+
+// =============================================================================
 // Unsupported browser
 // =============================================================================
 
@@ -248,15 +397,11 @@ describe('Unsupported browser', () => {
 
   it('never requests microphone permission', async () => {
     let getUserMediaCalled = false;
-    Object.defineProperty(globalThis, 'navigator', {
-      value: {
-        permissions: { query: async () => ({ state: 'prompt' }) },
-        mediaDevices: { getUserMedia: async () => { getUserMediaCalled = true; } },
-      },
-      configurable: true,
-      writable: true,
+    await setupPage({
+      pipSupported: false,
+      permissionState: 'prompt',
+      getUserMedia: async () => { getUserMediaCalled = true; },
     });
-    await setupPage({ pipSupported: false });
     assert.strictEqual(getUserMediaCalled, false);
   });
 });
@@ -269,6 +414,13 @@ describe('Opening the Mezzo Companion', () => {
   it('transitions Home to Dock directly, with no navigation to try-it.html, reporting Ready with zero saved profiles', async () => {
     const { document, window } = await setupPage();
     const locationBefore = window.location.href;
+    // Confirms the click below is actually meaningful — element.click()
+    // fires handlers in this environment even on a button sitting inside a
+    // `hidden` parent (unlike a real browser or Playwright, which would
+    // refuse it as non-actionable), so this alone is what proves
+    // permission was genuinely confirmed before Home ever offers this
+    // action, not merely that the handler exists.
+    assert.strictEqual(visibleMicStateId(document), 'mic-granted');
     document.getElementById('btn-open-companion').click();
     await tick(2);
     assert.strictEqual(visibleStateId(document), 'state-dock');

@@ -8,6 +8,7 @@
  */
 
 import { test, expect } from '@playwright/test';
+import { openCompanion } from './support/open-companion.js';
 
 /** Waits out the calibration controller's real ~6s capture window. */
 async function waitForCapture(pipPage) {
@@ -21,11 +22,7 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
         { id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 200 },
       ]));
     });
-    await page.goto('/index.html');
-    const pipWindowPromise = context.waitForEvent('page');
-    await page.locator('#btn-open-companion').click();
-    const pipPage = await pipWindowPromise;
-    await pipPage.waitForLoadState('domcontentloaded');
+    const pipPage = await openCompanion(page, context);
 
     const readyScreen = pipPage.locator('.pip-screen-ready');
     await expect(readyScreen).toBeVisible();
@@ -53,11 +50,7 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
   });
 
   test('Save profile with a unique name creates a saved profile, selects it, and shows a toast', async ({ page, context }) => {
-    await page.goto('/index.html');
-    const pipWindowPromise = context.waitForEvent('page');
-    await page.locator('#btn-open-companion').click();
-    const pipPage = await pipWindowPromise;
-    await pipPage.waitForLoadState('domcontentloaded');
+    const pipPage = await openCompanion(page, context);
 
     await pipPage.locator('button:has-text("Create speaking profile")').click();
     await pipPage.locator('button:has-text("I\'m ready")').click();
@@ -85,11 +78,7 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
         { id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 200 },
       ]));
     });
-    await page.goto('/index.html');
-    const pipWindowPromise = context.waitForEvent('page');
-    await page.locator('#btn-open-companion').click();
-    const pipPage = await pipWindowPromise;
-    await pipPage.waitForLoadState('domcontentloaded');
+    const pipPage = await openCompanion(page, context);
 
     const readyScreen = pipPage.locator('.pip-screen-ready');
     await expect(readyScreen).toBeVisible();
@@ -126,11 +115,7 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
         { id: 'p5', name: 'Five', speakingDb: -30, spreadDb: 4, calibratedTs: 5 },
       ]));
     });
-    await page.goto('/index.html');
-    const pipWindowPromise = context.waitForEvent('page');
-    await page.locator('#btn-open-companion').click();
-    const pipPage = await pipWindowPromise;
-    await pipPage.waitForLoadState('domcontentloaded');
+    const pipPage = await openCompanion(page, context);
 
     const readyScreen = pipPage.locator('.pip-screen-ready');
     await expect(readyScreen).toBeVisible();
@@ -166,11 +151,7 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
         { id: 'p-office', name: 'Home Office', speakingDb: -28, spreadDb: 5, calibratedTs: 200 },
       ]));
     });
-    await page.goto('/index.html');
-    const pipWindowPromise = context.waitForEvent('page');
-    await page.locator('#btn-open-companion').click();
-    const pipPage = await pipWindowPromise;
-    await pipPage.waitForLoadState('domcontentloaded');
+    const pipPage = await openCompanion(page, context);
 
     const readyScreen = pipPage.locator('.pip-screen-ready');
     await expect(readyScreen).toBeVisible();
@@ -217,11 +198,7 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
         { id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 200 },
       ]));
     });
-    await page.goto('/index.html');
-    const pipWindowPromise = context.waitForEvent('page');
-    await page.locator('#btn-open-companion').click();
-    const pipPage = await pipWindowPromise;
-    await pipPage.waitForLoadState('domcontentloaded');
+    const pipPage = await openCompanion(page, context);
 
     const readyScreen = pipPage.locator('.pip-screen-ready');
     await expect(readyScreen).toBeVisible();
@@ -246,11 +223,7 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
         { id: 'p5', name: 'Five', speakingDb: -30, spreadDb: 4, calibratedTs: 5 },
       ]));
     });
-    await page.goto('/index.html');
-    const pipWindowPromise = context.waitForEvent('page');
-    await page.locator('#btn-open-companion').click();
-    const pipPage = await pipWindowPromise;
-    await pipPage.waitForLoadState('domcontentloaded');
+    const pipPage = await openCompanion(page, context);
 
     const readyScreen = pipPage.locator('.pip-screen-ready');
     await expect(readyScreen).toBeVisible();

@@ -12,15 +12,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-
-async function openCompanion(page, context) {
-  await page.goto('/index.html');
-  const pipWindowPromise = context.waitForEvent('page');
-  await page.locator('#btn-open-companion').click();
-  const pipPage = await pipWindowPromise;
-  await pipPage.waitForLoadState('domcontentloaded');
-  return pipPage;
-}
+import { openCompanion } from './support/open-companion.js';
 
 test.describe('First-time copy and calibration-entry routing', () => {
   test('Welcome shows the approved copy and has no secondary dismiss action', async ({ page, context }) => {
@@ -68,12 +60,25 @@ test.describe('First-time copy and calibration-entry routing', () => {
   });
 
   test('C0 shows the approved copy when microphone access is blocked, and Try again retries in-app', async ({ page, context }) => {
-    // Forces every audio.acquire() to fail — calibration-controller.js maps
-    // any acquire() failure to MIC_PERMISSION_DENIED unconditionally, so
-    // this reliably reaches C0 regardless of the rejection's real cause.
+    // C0 is now specifically the mid-session/revoked-after-open fallback
+    // (see CLAUDE.md's Non-Negotiable Decisions, "permission should follow
+    // understanding" — Home's own mic-denied state handles the primary,
+    // before-launch denial now). So this mock lets the FIRST getUserMedia
+    // call succeed (Home's own permission probe, which must succeed for the
+    // Companion to open at all) and rejects every call after that
+    // (calibration-controller.js's own acquire() attempt inside the
+    // Companion, which maps any acquire() failure to MIC_PERMISSION_DENIED
+    // unconditionally) — modeling access being revoked after the Companion
+    // was already opened, not blocked from the very start.
     await context.addInitScript(() => {
       if (navigator.mediaDevices) {
-        navigator.mediaDevices.getUserMedia = () => Promise.reject(new DOMException('Permission denied', 'NotAllowedError'));
+        let callCount = 0;
+        const realGetUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+        navigator.mediaDevices.getUserMedia = (...args) => {
+          callCount += 1;
+          if (callCount === 1) return realGetUserMedia(...args);
+          return Promise.reject(new DOMException('Permission denied', 'NotAllowedError'));
+        };
       }
     });
 

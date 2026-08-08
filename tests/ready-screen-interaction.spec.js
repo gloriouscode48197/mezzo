@@ -6,15 +6,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-
-async function openCompanion(page, context) {
-  await page.goto('/index.html');
-  const pipWindowPromise = context.waitForEvent('page');
-  await page.locator('#btn-open-companion').click();
-  const pipPage = await pipWindowPromise;
-  await pipPage.waitForLoadState('domcontentloaded');
-  return pipPage;
-}
+import { openCompanion } from './support/open-companion.js';
 
 test.describe('Companion: selector open/close and decision-state focus', () => {
   test('Escape closes the expanded selector panel and returns focus to the trigger', async ({ page, context }) => {

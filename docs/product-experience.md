@@ -53,7 +53,7 @@ From the user's perspective there are only two named product experiences.
 
 Mezzo is Picture-in-Picture–first: the Mezzo Companion is the one operational surface. Mezzo (the browser page) is not part of that operational workflow — it has exactly two narrow jobs, depending on whether a Companion exists yet:
 
-* **Before a Companion exists:** introduce the product. Nothing else. No profile selection, no calibration, no microphone permission request — its one action is opening the Mezzo Companion.
+* **Before a Companion exists:** introduce the product, and — as one narrow, deliberate exception — prepare and request microphone access (see "Learn About Mezzo," below, and CLAUDE.md's Non-Negotiable Decisions, "permission should follow understanding"). Still no profile selection and no calibration; its one operational action beyond the permission gate itself is opening the Mezzo Companion.
 * **While a Companion is open:** stay open to keep the Companion running, show whether monitoring is active or inactive, and offer one recovery action (Close Companion) for when the Companion's own native ✕ isn't reachable.
 
 Every other responsibility that used to live here — preparing for monitoring, selecting/calibrating/recalibrating a profile, managing the saved-profile library, managing an active session, recovering monitoring — now belongs to the Mezzo Companion alone. Users may still move between these two states of the same page, but they should never feel like they're doing anything there beyond "get me to the Companion" and "I can see it's running."
@@ -106,9 +106,9 @@ Marketing purpose:
 * communicate privacy
 * encourage users to try the product
 
-Onboarding purpose: reduce uncertainty about *what Mezzo is*, then hand off to the Mezzo Companion. Nothing more. It no longer explains microphone access, introduces Speaking Profiles, or supports calibration — none of that happens here anymore. It happens inside the Companion, the moment it's relevant (see "Companion States → Welcome" and "Calibration").
+Onboarding purpose: reduce uncertainty about *what Mezzo is*, then hand off to the Mezzo Companion. It no longer introduces Speaking Profiles or supports calibration — none of that happens here. It does, however, explain microphone access and request it — the one deliberate exception to "everything operational lives in the Companion" (see "Learn About Mezzo," below, and CLAUDE.md's Non-Negotiable Decisions).
 
-The one interactive element that actually starts anything is **Open Mezzo Companion** — the hero's primary CTA. Clicking it opens the Companion directly; it does not navigate to a second page first. There is no separate "Try Mezzo" step or intermediate launcher screen between the marketing content and the Companion opening.
+This page reflects the browser's *current* microphone-permission state — never first-time-vs-returning visit history, and never a persisted "have I seen this before" flag. Depending on that live state, it shows one of three things: an explanation of why access is needed with an **Enable microphone** action, a brief confirmation once access is granted with a separate **Open Mezzo Companion** action, or a recovery message if access is denied. Granting access and opening the Companion are always two separate, deliberate clicks — never chained into one, so opening the Companion always has its own fresh user gesture (see "Calibration," below, for why this matters). There is no separate "Try Mezzo" step or intermediate launcher screen between the marketing content and the Companion opening — just this permission gate, resolved before the Companion ever exists.
 
 The experience should feel:
 
@@ -171,7 +171,15 @@ Marketing Website — introduces Mezzo and doubles as Onboarding; there is no se
 
 ↓
 
-Open Mezzo Companion — the one action on this page; it does not request microphone permission and does not choose anything on the user's behalf, and opens the Companion directly rather than navigating anywhere
+Enable microphone — this page explains why access is needed, then this action is the actual moment microphone permission is requested (see "Learn About Mezzo")
+
+↓
+
+Permission granted — a brief confirmation, with its own separate **Open Mezzo Companion** action; opening the Companion is never chained onto the permission grant itself
+
+↓
+
+Open Mezzo Companion — does not choose anything on the user's behalf, and opens the Companion directly rather than navigating anywhere
 
 ↓
 
@@ -179,11 +187,11 @@ Mezzo Companion opens, showing Welcome — a first-time-only moment, not an inst
 
 ↓
 
-Create speaking profile — Welcome's one action; opens the calibration-introduction screen (C1). Still no microphone request yet.
+Create speaking profile — Welcome's one action; opens the calibration-introduction screen (C1). Microphone access is already granted by this point, so nothing is requested again here.
 
 ↓
 
-I'm ready, from C1 — the first point anything actually requests microphone permission
+I'm ready, from C1 — begins capture; the microphone was already granted back on the marketing page, so this resolves silently, with no second prompt
 
 ↓
 
@@ -225,13 +233,17 @@ Close the Dock, or close the Companion natively, to end the session
 
 ## Learn About Mezzo
 
-Before the Companion ever asks for microphone access, users should understand, from the introductory page alone:
+Before the browser ever shows its own microphone-permission prompt, users should understand, from the introductory page itself:
 
 * what Mezzo does
 * what Mezzo does not do
 * that monitoring begins only when they choose
+* why microphone access is needed
+* that audio is processed locally, never recorded, never transcribed, and never stored or sent elsewhere
 
-Microphone access itself is explained later, inside the Companion, at the moment it's actually requested (see "Companion States → Calibration Introduction (C1)") — not here, since this page never requests it.
+This page is where microphone access is now explained *and* requested — the one narrow, deliberate exception to "the Companion is the sole operational surface" (see CLAUDE.md's Non-Negotiable Decisions, "permission should follow understanding," and "Marketing / Onboarding" above for the three permission-state screens this produces). The principle behind moving it here: a first-time user should never see the browser's raw permission prompt with no context, and — separately — microphone permission cannot be reliably requested from within the Mezzo Companion's own Picture-in-Picture window, so asking here rather than there isn't only a trust choice, it's the only reliable one.
+
+This page reflects the browser's *current* permission state, not visit history — a returning user whose browser already grants access sees the brief confirmation screen directly, with no re-explanation forced on them, exactly as they'd expect from a page that's just checking, not re-litigating.
 
 Privacy messaging should be specific, calm, and verifiable.
 
@@ -243,7 +255,7 @@ Calibration should feel like preparation.
 
 It should never imply that there is one objectively correct speaking volume.
 
-Microphone permission is requested exactly once per browser, at the moment capture actually begins — never earlier (not on Companion open, not on Welcome appearing) and never anywhere outside the Companion.
+Microphone permission is requested exactly once per browser, on Home's own Enable microphone action, before the Companion ever opens — never inside the Companion itself, and never chained onto the click that opens it (see "Learn About Mezzo"). By the time capture actually begins, permission has normally already been granted, so the Companion's own acquire attempt resolves silently. The one exception is access being revoked after the Companion has already opened — see "Companion States → Microphone Access Blocked" for that narrower, defensive case.
 
 ### Calibration Entry
 
@@ -253,13 +265,13 @@ Reaching capture always starts with a short instructional step (C1) first, excep
 * **Create new profile**, from a saved-profile Ready state — also goes through C1 first: it's creating a brand-new profile from scratch, so the brief instructional step stays useful.
 * **Recalibrate**, on a saved or unsaved profile — skips C1 and begins capture immediately. Recalibrating is a faster, repeat action for someone who has already been through calibration before, so the instructional step isn't needed again.
 
-C1 explains, briefly, what the user should do before capture starts. Its one action, "I'm ready," begins capture — this is the actual moment microphone permission is requested. A Back text link returns to wherever C1 was opened from (Welcome, or the same Ready state, with its selection and any existing unsaved profile left untouched) without starting calibration or changing any profile.
+C1 explains, briefly, what the user should do before capture starts — not why microphone access is needed, which Home already covered before the Companion opened. Its one action, "I'm ready," begins capture; microphone permission is normally already granted by this point, so this resolves silently rather than prompting again. A Back text link returns to wherever C1 was opened from (Welcome, or the same Ready state, with its selection and any existing unsaved profile left untouched) without starting calibration or changing any profile.
 
 ### Active Calibration
 
 Calibration lasts six seconds and completes automatically — there is no manual "I'm done" action. It shows a live countdown ("Listening… 6s," ticking down) and a horizontal volume bar that fills proportionally to detected input, flanked by Quiet/Loud scale labels — enough to communicate active measurement without implying recording or transcription.
 
-If microphone access is blocked or denied, calibration cannot continue: a dedicated recovery screen explains what happened and how to fix it (see "Companion States → Microphone Access Blocked"), with an in-app Try again rather than requiring a manual page reload.
+If microphone access is blocked or denied at this point — access must have been revoked after the Companion already opened, since Home's own permission gate already ensured it was granted before the Companion could open at all — calibration cannot continue: a dedicated recovery screen explains what happened and how to fix it (see "Companion States → Microphone Access Blocked"), with an in-app Try again rather than requiring a manual page reload.
 
 ### On Completion
 
@@ -496,7 +508,7 @@ Purpose: a short instructional step before capture begins, explaining what the u
 
 Target size: shared with every other pre-monitoring screen.
 
-Reached from Welcome's Create speaking profile, and from Ready's Create new profile — see "Calibration → Calibration Entry" for the full rule (Recalibrate skips this screen). Its one action, **I'm ready**, begins the six-second capture — the actual moment microphone permission is requested. A **Back** text link returns to wherever C1 was opened from — Welcome, or the same Ready state, with its selection and any existing unsaved profile untouched — without starting calibration or changing any profile.
+Reached from Welcome's Create speaking profile, and from Ready's Create new profile — see "Calibration → Calibration Entry" for the full rule (Recalibrate skips this screen). Its one action, **I'm ready**, begins the six-second capture. Microphone permission is normally already granted by this point — Home's own permission gate handled that before the Companion ever opened — so this doesn't prompt again. A **Back** text link returns to wherever C1 was opened from — Welcome, or the same Ready state, with its selection and any existing unsaved profile untouched — without starting calibration or changing any profile.
 
 ## Ready
 
@@ -536,7 +548,7 @@ There is no in-Companion control to cancel and back out of an in-progress captur
 
 ## Microphone Access Blocked
 
-Purpose: recovery, specifically for a denied or unavailable microphone — a dedicated screen, not the generic Calibration Failed message every other failure uses.
+Purpose: recovery, specifically for a denied or unavailable microphone — a dedicated screen, not the generic Calibration Failed message every other failure uses. Now a narrower, defensive case than it once was: Home's own permission gate (see "Learn About Mezzo") handles the primary, before-the-Companion-opens denial, so this screen is reached only if access is revoked *after* the Companion has already opened — most plausibly during a later Recalibrate. It is kept, deliberately, rather than retired, precisely because Home's gate can't prevent that later case.
 
 Target size: shared with every other pre-monitoring screen.
 
@@ -872,7 +884,7 @@ Clearly explain:
 
 Never fail silently.
 
-Microphone permission is now requested from exactly one place — inside the Companion, when calibration first begins (see "Calibration") — so there is only one recovery experience to get right, not several to keep consistent with each other.
+Microphone permission is requested from exactly one place — Home's own permission gate, before the Companion ever opens (see "Learn About Mezzo" and "Calibration") — so there is exactly one *primary* recovery experience to get right, on Home itself. A second, narrower recovery screen exists inside the Companion (Microphone Access Blocked) purely for access being revoked after the Companion has already opened — not a second version of the same first-run problem to keep in sync, but a genuinely different scenario Home's own gate can't reach. Keep both calm, specific, and consistent with each other in tone even though their copy differs.
 
 ---
 
@@ -882,7 +894,7 @@ Privacy should be reinforced at moments where users naturally have questions.
 
 Especially:
 
-* before microphone permission, inside the Companion, when calibration first begins
+* before microphone permission, on Home, before the Companion ever opens
 * on Home, while introducing the product
 * on the Privacy page
 

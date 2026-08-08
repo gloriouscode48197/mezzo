@@ -24,6 +24,7 @@
  */
 
 import { test, expect } from '@playwright/test';
+import { openCompanion } from './support/open-companion.js';
 
 test.describe('Companion: Ready-screen button width cap', () => {
   test('Start monitoring never exceeds 320px, even in an oversized window', async ({ page, context }) => {
@@ -33,12 +34,7 @@ test.describe('Companion: Ready-screen button width cap', () => {
         { id: 'p-coffee', name: 'Coffee Shop', speakingDb: -28, spreadDb: 5, calibratedTs: 200 },
       ]));
     });
-    await page.goto('/index.html');
-
-    const pipWindowPromise = context.waitForEvent('page');
-    await page.locator('#btn-open-companion').click();
-    const pipPage = await pipWindowPromise;
-    await pipPage.waitForLoadState('domcontentloaded');
+    const pipPage = await openCompanion(page, context);
 
     const startBtn = pipPage.locator('.pip-ready-start-btn');
     await expect(startBtn).toBeVisible();
@@ -60,12 +56,7 @@ test.describe('Companion: Ready-screen button width cap', () => {
         { id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 200 },
       ]));
     });
-    await page.goto('/index.html');
-
-    const pipWindowPromise = context.waitForEvent('page');
-    await page.locator('#btn-open-companion').click();
-    const pipPage = await pipWindowPromise;
-    await pipPage.waitForLoadState('domcontentloaded');
+    const pipPage = await openCompanion(page, context);
 
     // One saved profile is auto-selected on Ready — its contextual actions
     // (Recalibrate/Create new profile) render directly, no selector needed.

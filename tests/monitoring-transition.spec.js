@@ -15,6 +15,7 @@
  */
 
 import { test, expect } from '@playwright/test';
+import { openCompanion } from './support/open-companion.js';
 
 /** Waits out the calibration controller's real ~6s capture window. */
 async function waitForCapture(pipPage) {
@@ -23,12 +24,7 @@ async function waitForCapture(pipPage) {
 
 test.describe('Companion: calibration -> Ready -> Monitoring -> Ready', () => {
   test('session calibration lands on Ready with the unsaved profile selected, then Start monitoring reaches the live Monitoring screen', async ({ page, context }) => {
-    await page.goto('/index.html');
-
-    const pipWindowPromise = context.waitForEvent('page');
-    await page.locator('#btn-open-companion').click();
-    const pipPage = await pipWindowPromise;
-    await pipPage.waitForLoadState('domcontentloaded');
+    const pipPage = await openCompanion(page, context);
 
     // Welcome (zero saved profiles) -> Create speaking profile -> C1 -> I'm ready -> real capture.
     await expect(pipPage.locator('.pip-screen-welcome')).toBeVisible();
@@ -77,12 +73,7 @@ test.describe('Companion: calibration -> Ready -> Monitoring -> Ready', () => {
         { id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 200 },
       ]));
     });
-    await page.goto('/index.html');
-
-    const pipWindowPromise = context.waitForEvent('page');
-    await page.locator('#btn-open-companion').click();
-    const pipPage = await pipWindowPromise;
-    await pipPage.waitForLoadState('domcontentloaded');
+    const pipPage = await openCompanion(page, context);
 
     const readyScreen = pipPage.locator('.pip-screen-ready');
     await expect(readyScreen).toBeVisible();

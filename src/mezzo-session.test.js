@@ -270,7 +270,7 @@ describe('createMezzoSession construction', () => {
     const session = createMezzoSession({ baseUrl: '/' });
     const expectedKeys = [
       'SESSION_STATES', 'getSessionState', 'subscribe', 'isPipSupported',
-      'init', 'startMonitoring', 'stopMonitoring', 'endSession',
+      'init', 'requestMicrophoneAccess', 'startMonitoring', 'stopMonitoring', 'endSession',
     ];
     assert.deepStrictEqual(Object.keys(session).sort(), expectedKeys.sort());
   });
@@ -279,6 +279,35 @@ describe('createMezzoSession construction', () => {
     const session = createMezzoSession({ baseUrl: '/' });
     const started = await session.startMonitoring();
     assert.strictEqual(started, false);
+  });
+});
+
+// =============================================================================
+// requestMicrophoneAccess — Home's own narrow, deliberate exception to
+// "microphone access is Companion-only" (see CLAUDE.md's Non-Negotiable
+// Decisions, "permission should follow understanding"). A probe: acquire
+// then immediately release, reusing this module's own AudioProcessor
+// instance directly rather than a second, parallel acquisition path — see
+// the Calibration Controller Instance Rule.
+// =============================================================================
+
+describe('requestMicrophoneAccess', () => {
+  it('resolves to false, without throwing, when the environment has no working microphone capability', async () => {
+    // This Node test environment has no real navigator.mediaDevices/
+    // getUserMedia/AudioContext behind it (see this file's own header
+    // comment) — audio.acquire() rejects here the same way it would for a
+    // real MIC_PERMISSION_DENIED, and this must surface as `false`, not an
+    // unhandled rejection.
+    const session = createMezzoSession({ baseUrl: '/' });
+    const granted = await session.requestMicrophoneAccess();
+    assert.strictEqual(granted, false);
+  });
+
+  it('never touches calibrationController/session state — a plain permission probe, not a calibration attempt', async () => {
+    const session = createMezzoSession({ baseUrl: '/' });
+    const stateBefore = session.getSessionState();
+    await session.requestMicrophoneAccess();
+    assert.strictEqual(session.getSessionState(), stateBefore);
   });
 });
 

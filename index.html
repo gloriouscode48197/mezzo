@@ -38,12 +38,30 @@
   <div class="page page-fade">
 
     <!-- ── Home — the page's one pre-Companion state: the public marketing
-         homepage. Its only operational action is "Open Mezzo Companion":
-         no microphone permission request, no profile choice, no
-         calibration decision happens here — the Companion decides all of
-         that for itself the moment it opens (see CLAUDE.md's "Companion
-         entry behavior"). See landing.js / src/home-dock.js's
-         handleOpenCompanionClick(). ── -->
+         homepage, which now also functions as Mezzo's preparation / trust
+         surface for launching the Companion. Its hero reflects the browser's
+         current, live microphone-permission state — never first-time vs.
+         returning-user history, no persisted onboarding flag anywhere (see
+         CLAUDE.md's "Permission should follow understanding") — as one of
+         three mutually-exclusive sub-states, toggled by src/home-dock.js's
+         refreshMicState()/showMicState():
+           #mic-request — permission not yet granted: explains what Mezzo
+             does and why microphone access is needed before anything is
+             requested. Its one action, "Enable microphone," is the only
+             thing that ever triggers the browser's permission prompt.
+           #mic-granted — permission already confirmed (via the same
+             acquire/release path "Enable microphone" uses, never trusted
+             from navigator.permissions.query() alone — see
+             requestMicrophoneAccess() in src/mezzo-session.js). "Open Mezzo
+             Companion" here is a second, separate, deliberate user action —
+             launching the Companion is never chained onto the permission
+             grant itself, so Document PiP's requestWindow() always gets its
+             own fresh user gesture.
+           #mic-denied — permission unavailable: Mezzo cannot continue, with
+             in-page recovery. The Companion never opens from this state.
+         No profile choice or calibration decision happens on this page
+         either way — the Companion decides all of that for itself the
+         moment it opens (see CLAUDE.md's "Companion entry behavior"). ── -->
     <main id="state-home">
 
       <!-- ── Hero ── -->
@@ -51,10 +69,23 @@
         <div class="hero-columns">
           <div class="hero-content">
             <h1 class="type-hero-heading">Know when you're getting loud.</h1>
-            <p class="type-hero-body hero-body">Mezzo gives you quiet, visual feedback when your speaking volume rises — so you can adjust without anyone else noticing.</p>
-            <button id="btn-open-companion" type="button" class="btn-primary">Open Mezzo Companion</button>
-            <p class="type-microcopy microcopy-cta">You can stop anytime. Nothing is saved.</p>
-            <p class="type-microcopy hero-privacy-line">No recording. No transcription. Just volume.</p>
+
+            <div id="mic-request" class="hero-mic-state hidden">
+              <p class="type-hero-body hero-body">Mezzo gives you quiet, visual feedback when your speaking volume rises — so you can adjust without anyone else noticing. It needs microphone access to measure your volume, entirely on your device: audio is never recorded, transcribed, stored, or sent anywhere.</p>
+              <button id="btn-enable-microphone" type="button" class="btn-primary">Enable microphone</button>
+              <p class="type-microcopy microcopy-cta">You can stop anytime. Nothing is saved.</p>
+            </div>
+
+            <div id="mic-granted" class="hero-mic-state hidden">
+              <p class="type-hero-body hero-body">Microphone access is enabled. Audio is still processed locally and never recorded, transcribed, stored, or sent anywhere.</p>
+              <button id="btn-open-companion" type="button" class="btn-primary">Open Mezzo Companion</button>
+              <p class="type-microcopy microcopy-cta">You can stop anytime. Nothing is saved.</p>
+            </div>
+
+            <div id="mic-denied" class="hero-mic-state hidden">
+              <p class="type-hero-body hero-body">Mezzo can't work without microphone access. Click the microphone icon in your browser's address bar, choose Allow, then try again.</p>
+              <button id="btn-mic-retry" type="button" class="btn-primary">Try again</button>
+            </div>
           </div>
           <div class="hero-visual">
             <div id="hero-companion-preview" class="hero-companion-preview-wrap"></div>
