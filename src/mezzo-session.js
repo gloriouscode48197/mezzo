@@ -103,7 +103,7 @@ import { markClassification, markPipUpdate } from './_timing-debug.js';
 import { SESSION_STATES, createSessionState } from './session-state.js';
 import {
   getSavedProfiles,
-  saveSavedProfiles,
+  deleteSavedProfile,
   getSelectedProfile,
   setSelectedProfile,
   getLastUsedProfile,
@@ -526,6 +526,7 @@ export function createMezzoSession({
   let deleteHeadingEl = null; // full "Delete "{name}"?" text set live in openDeleteScreen()
   let deleteConfirmBtn = null;
   let deleteCancelBtn = null;
+  let deleteErrorEl = null; // failure copy — see deleteSavedProfile()'s error branch in handleDeleteConfirm()
 
   // Toast — a save/replace confirmation, floated above whichever screen is
   // visible (a sibling of every .pip-screen, not owned by any one of them).
@@ -2257,6 +2258,18 @@ export function createMezzoSession({
     deleteBody.textContent = "This permanently removes the saved speaking profile. This can't be undone.";
     deleteScreen.appendChild(deleteBody);
 
+    // Inline failure copy — same convention as M2's own m2WarningEl (hidden
+    // by default, aria-live="polite", shown/hidden via handleDeleteConfirm()'s
+    // failure branch below). Reusing the existing .pip-decision-warning
+    // pattern rather than inventing a second one; see handleDeleteConfirm()
+    // for why this screen needs a failure path at all (Batch 1 root-cause fix).
+    const deleteError = pipDoc.createElement('p');
+    deleteError.className = 'pip-decision-warning hidden';
+    deleteError.id = 'delete-error';
+    deleteError.setAttribute('aria-live', 'polite');
+    deleteScreen.appendChild(deleteError);
+    deleteErrorEl = deleteError;
+
     const deleteActions = pipDoc.createElement('div');
     deleteActions.className = 'pip-decision-actions';
 
@@ -2829,13 +2842,26 @@ export function createMezzoSession({
 
   /** Discard — no confirmation (§10). Drops the unsaved profile entirely;
    *  nothing was ever written to storage for it, so there is nothing to
-   *  undo, only the in-memory reference to forget. */
+   *  undo, only the in-memory reference to forget.
+   *
+   *  Only recomputes/replaces the active selection if the unsaved profile
+   *  was itself the one selected — discarding it while a different, saved
+   *  profile is active must leave that selection untouched (Batch 1:
+   *  "Removing a nonselected unsaved profile"). isTemporaryProfile(activeProfile)
+   *  is a reliable "was the unsaved profile the active one" check on its
+   *  own: there is at most one unsaved profile at a time (see unsavedProfile's
+   *  own doc comment), so being temporary and being *this* unsaved profile
+   *  are the same thing here. */
   function handleDiscardUnsaved() {
+    const wasSelected = isTemporaryProfile(activeProfile);
     unsavedProfile = null;
+    closeSelectorPanel();
+
+    if (!wasSelected) return; // a different, saved profile stays selected — nothing else to do
+
     const saved = getSavedProfiles();
     const fallback = pickFallbackSavedProfile(saved);
     activeProfile = fallback;
-    closeSelectorPanel();
     if (fallback) {
       if (!isTemporaryProfile(fallback)) setSelectedProfile(fallback);
       showReadyScreen();
@@ -2853,6 +2879,11 @@ export function createMezzoSession({
     pendingDeleteProfileId = profile.id;
     decisionTriggerEl = triggerBtn ?? null;
     if (deleteHeadingEl) deleteHeadingEl.textContent = `Delete "${profile.name}"?`;
+    // Reset from any prior failed attempt — a fresh open should never carry
+    // over a stale error message or a Cancel button a previous attempt left
+    // disabled (see handleDeleteConfirm()'s failure branch below).
+    if (deleteErrorEl) { deleteErrorEl.textContent = ''; deleteErrorEl.classList.add('hidden'); }
+    if (deleteCancelBtn) deleteCancelBtn.disabled = false;
     closeSelectorPanel();
     layoutMode = LAYOUT_MODES.EXPANDED;
     if (pipDocument?.body) pipDocument.body.setAttribute('data-layout', LAYOUT_MODES.EXPANDED);
@@ -2869,18 +2900,66 @@ export function createMezzoSession({
     restoreDecisionFocus();
   }
 
-  /** Confirm — removes the profile from storage, repairs any stored
-   *  reference that pointed at it (this tab's selection, the cross-tab
-   *  last-used profile — see CLAUDE.md's Profile Model: no stored reference
-   *  should ever point at a missing profile), and falls back per §11: the
-   *  unsaved profile if one exists, else the most-recently-used remaining
-   *  saved profile, else Welcome. */
+  /** Confirm — removes the profile via deleteSavedProfile() (src/profiles.js),
+   *  which reports whether the write actually succeeded rather than assuming
+   *  it did (the confirmed root cause of deletion being able to leave the
+   *  screen stuck on "Deleting…" indefinitely — see CLAUDE.md's Batch 1
+   *  notes). deleteCancelBtn is disabled for the same processing window
+   *  deleteConfirmBtn already was, closing a race where clicking Cancel
+   *  during that window used to navigate away immediately while the
+   *  already-scheduled commit still ran underneath and deleted the profile
+   *  anyway.
+   *
+   *  On success: repairs any stored reference that pointed at the deleted
+   *  profile (this tab's selection, the cross-tab last-used profile — see
+   *  CLAUDE.md's Profile Model: no stored reference should ever point at a
+   *  missing profile), then falls back per §11 (unchanged — still
+   *  most-recently-used, not visible-list order): the unsaved profile if one
+   *  exists, else the most-recently-used remaining saved profile, else
+   *  Welcome.
+   *
+   *  On failure — either the handled kind (deleteSavedProfile() reports
+   *  removed:false) or an unexpected exception anywhere else in this
+   *  commitFn (caught by runDecisionCommit()'s own generic catch, which
+   *  calls the onError callback below): nothing above has happened — the
+   *  profile list, the current selection, and every stored reference are
+   *  untouched. Stays on this screen, restores both buttons (runDecisionCommit
+   *  itself only ever knows about deleteConfirmBtn — deleteCancelBtn and the
+   *  inline error are this screen's own responsibility, via showDeleteFailure()
+   *  below, called from both failure paths so there's exactly one recovery
+   *  routine, not two), and shows an inline error (the same .pip-decision-warning
+   *  convention M2's own naming-collision warning already uses) rather than
+   *  the generic "let commitFn silently not finish" behavior every failure
+   *  used to fall into before this fix. */
   function handleDeleteConfirm() {
     if (!pendingDeleteProfileId) return;
     const deletedId = pendingDeleteProfileId;
+    if (deleteCancelBtn) deleteCancelBtn.disabled = true;
+
+    // The one, complete recovery routine for both failure paths below —
+    // deliberately restores deleteConfirmBtn itself too, not just Cancel and
+    // the error copy: runDecisionCommit()'s own catch only ever fires for
+    // the onError (unexpected-exception) path, never for the handled
+    // removed:false path below, which returns normally rather than
+    // throwing. Making this function fully self-sufficient means both
+    // failure paths get identical recovery with no risk of drift between
+    // them, rather than splitting the restoration across two places.
+    const showDeleteFailure = (message) => {
+      if (deleteConfirmBtn) { deleteConfirmBtn.disabled = false; deleteConfirmBtn.textContent = 'Delete'; }
+      if (deleteCancelBtn) deleteCancelBtn.disabled = false;
+      if (deleteErrorEl) {
+        deleteErrorEl.textContent = message || "We couldn't delete this profile. Try again.";
+        deleteErrorEl.classList.remove('hidden');
+      }
+    };
+
     runDecisionCommit(deleteConfirmBtn, 'Deleting…', () => {
-      const remaining = getSavedProfiles().filter((p) => p.id !== deletedId);
-      saveSavedProfiles(remaining);
+      const { removed, remaining, error } = deleteSavedProfile(deletedId);
+
+      if (!removed) {
+        showDeleteFailure(error?.message);
+        return;
+      }
 
       if (getSelectedProfile()?.id === deletedId) setSelectedProfile(null);
       if (getLastUsedProfile()?.id === deletedId) clearLastUsedProfile();
@@ -2889,6 +2968,16 @@ export function createMezzoSession({
 
       if (activeProfile?.id === deletedId) {
         activeProfile = pickFallbackProfile(remaining);
+        // Persist the fallback as this tab's own selection — the same guard
+        // handleDiscardUnsaved() already applies for its own fallback
+        // (never persist a temporary profile as the selection; see
+        // beginMonitoringSession()'s identical guard). Without this, a
+        // reload right after deletion would re-resolve from whatever
+        // mezzoSelectedProfile/mezzoLastUsedProfile already say — not
+        // necessarily the fallback just landed on here — leaving the
+        // in-memory and persisted selection out of sync until the user
+        // picked something again.
+        if (activeProfile && !isTemporaryProfile(activeProfile)) setSelectedProfile(activeProfile);
       }
 
       if (!activeProfile) {
@@ -2897,7 +2986,7 @@ export function createMezzoSession({
         showReadyScreen();
       }
       restoreDecisionFocus();
-    });
+    }, () => showDeleteFailure());
   }
 
   // ---------------------------------------------------------------------------
@@ -3270,10 +3359,19 @@ export function createMezzoSession({
    *  flag is enough. Deliberately does not restore the button's own label
    *  afterward — every commitFn either navigates away (making the old label
    *  moot) or, on a failure it wants to stay on-screen for, calls its own
-   *  render function to set the correct label itself. */
-  function runDecisionCommit(button, processingLabel, commitFn) {
+   *  render function to set the correct label itself.
+   *
+   *  `onError` (optional) — this helper only knows about `button`, the one
+   *  affirmative control it manages directly; it has no knowledge of a
+   *  screen's OTHER controls (e.g. delete's own Cancel button) or its error
+   *  copy. `onError` is the caller's hook to restore both when the generic
+   *  catch below fires, without this shared helper needing screen-specific
+   *  knowledge — see handleDeleteConfirm()'s own use of it. Only delete
+   *  passes one today; every other decision screen is unaffected. */
+  function runDecisionCommit(button, processingLabel, commitFn, onError) {
     if (decisionCommitInFlight) return;
     decisionCommitInFlight = true;
+    const originalLabel = button?.textContent;
     if (button) { button.disabled = true; button.textContent = processingLabel; }
     setTimeout(() => {
       decisionCommitInFlight = false;
@@ -3286,7 +3384,22 @@ export function createMezzoSession({
       // commitSavePromptName() throwing on a null unsavedProfile) — there is
       // no Companion left to show the result in anyway.
       if (!pipWindow) return;
-      commitFn();
+      try {
+        commitFn();
+      } catch (err) {
+        // Defense in depth, not the primary fix for any known failure mode —
+        // every commitFn is expected to handle its own failure branch
+        // explicitly (see handleDeleteConfirm()'s deleteSavedProfile()
+        // branch, the confirmed root-cause fix for deletion getting stuck on
+        // "Deleting…"). This exists so an unexpected exception here — not
+        // just an already-handled one — still can't leave a decision
+        // screen's button permanently disabled on its processing label with
+        // no way to recover. A caught error here should be treated as a bug
+        // to fix at its source, not relied on as the primary safeguard.
+        console.error('[Decision] commitFn threw during processing:', err);
+        if (button) { button.disabled = false; button.textContent = originalLabel ?? processingLabel; }
+        onError?.();
+      }
     }, DECISION_PROCESSING_MS);
   }
 
@@ -3380,6 +3493,7 @@ export function createMezzoSession({
     deleteHeadingEl = null;
     deleteConfirmBtn = null;
     deleteCancelBtn = null;
+    deleteErrorEl = null;
     if (toastHideTimer) { clearTimeout(toastHideTimer); toastHideTimer = null; }
     toastEl = null;
     toastCardEl = null;

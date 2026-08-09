@@ -13,8 +13,9 @@
  *   - mezzoProfiles (localStorage, persists indefinitely) — the saved-profile
  *     library. A saved profile is a persistent, reusable identity
  *     (id, name, library position) — written via addSavedProfile() when the
- *     user explicitly saves a new one, and updated in place via
- *     updateSavedProfile() when they recalibrate an existing one. Capped at
+ *     user explicitly saves a new one, updated in place via
+ *     updateSavedProfile() when they recalibrate an existing one, and
+ *     removed via deleteSavedProfile() when they delete it. Capped at
  *     MAX_SAVED_PROFILES.
  *   - mezzoSelectedProfile (sessionStorage, this tab only) — whichever profile
  *     is active *in this tab* right now. Highest priority: respects an explicit
@@ -66,6 +67,15 @@ export function getSavedProfiles() {
   }
 }
 
+/**
+ * @returns {boolean} whether the write actually succeeded. Existing callers
+ *   that don't check this (addSavedProfile(), updateSavedProfile()) are
+ *   unaffected — this used to return nothing at all, so ignoring the return
+ *   value remains exactly as valid as before. deleteSavedProfile() below is
+ *   the one caller that needs the real answer, per Batch 1's requirement
+ *   that a failed removal must be recoverable rather than silently assumed
+ *   to have worked.
+ */
 export function saveSavedProfiles(profiles) {
   try {
     // Defense in depth: `temporary` is a runtime-only concept for the
@@ -75,9 +85,42 @@ export function saveSavedProfiles(profiles) {
     // upstream caller passed in.
     const sanitized = profiles.map(({ temporary, ...rest }) => rest);
     localStorage.setItem(PROFILES_STORAGE_KEY, JSON.stringify(sanitized));
+    return true;
   } catch (e) {
     console.error('[Profiles] Failed to persist saved profiles:', e);
+    return false;
   }
+}
+
+/**
+ * Delete a saved profile by id — the one dedicated persistence function for
+ * removal. Previously there was none: callers filtered getSavedProfiles()
+ * and called saveSavedProfiles() inline, with no way to know whether the
+ * write actually succeeded (saveSavedProfiles() used to swallow storage
+ * errors silently). Returns the same { ..., error: {code, message} } shape
+ * commitSavePromptName() already uses, so the caller (src/mezzo-session.js's
+ * handleDeleteConfirm()) can branch on real success/failure instead of
+ * assuming success — the confirmed root cause of deletion being able to
+ * leave the UI stuck on "Deleting…" indefinitely (see CLAUDE.md's Batch 1
+ * notes): there was previously nothing to detect a failed persist with.
+ * @param {string} id
+ * @returns {{ removed: boolean, remaining: object[], error: {code: string, message: string}|null }}
+ */
+export function deleteSavedProfile(id) {
+  const before = getSavedProfiles();
+  const remaining = before.filter((p) => p.id !== id);
+  if (remaining.length === before.length) {
+    // Already gone — deleted elsewhere, or a stale reference. Not a write
+    // failure: the desired end state (that id absent from storage) already
+    // holds, so nothing to persist, but the caller still needs to know this
+    // wasn't *this* call that removed it.
+    return { removed: false, remaining: before, error: { code: 'PROFILE_MISSING', message: 'That profile no longer exists.' } };
+  }
+  const persisted = saveSavedProfiles(remaining);
+  if (!persisted) {
+    return { removed: false, remaining: before, error: { code: 'PERSIST_FAILED', message: "We couldn't delete this profile. Try again." } };
+  }
+  return { removed: true, remaining, error: null };
 }
 
 /**

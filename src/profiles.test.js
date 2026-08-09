@@ -33,6 +33,7 @@ globalThis.sessionStorage = createMemoryStorage();
 import {
   getSavedProfiles,
   saveSavedProfiles,
+  deleteSavedProfile,
   addSavedProfile,
   updateSavedProfile,
   promoteTemporaryProfile,
@@ -654,6 +655,87 @@ describe('saveSavedProfiles', () => {
     assert.strictEqual(saved.speakingDb, -30);
     assert.strictEqual(saved.spreadDb, 4);
     assert.strictEqual(saved.calibratedTs, 1);
+  });
+
+  it('returns true on a successful write', () => {
+    assert.strictEqual(saveSavedProfiles([]), true);
+  });
+
+  it('returns false, without throwing, when storage access throws', () => {
+    const real = globalThis.localStorage;
+    globalThis.localStorage = {
+      getItem: real.getItem.bind(real),
+      setItem: () => { throw new Error('storage unavailable'); },
+      removeItem: real.removeItem.bind(real),
+      clear: real.clear.bind(real),
+    };
+    try {
+      assert.doesNotThrow(() => {
+        const result = saveSavedProfiles([{ id: '1', name: 'X', speakingDb: -30, spreadDb: 4, calibratedTs: 1 }]);
+        assert.strictEqual(result, false);
+      });
+    } finally {
+      globalThis.localStorage = real;
+    }
+  });
+});
+
+// =============================================================================
+// deleteSavedProfile — Batch 1: the one dedicated persistence function for
+// removal, reporting real success/failure rather than assuming success (the
+// confirmed root cause of deletion being able to leave the Companion's
+// delete screen stuck on "Deleting…" indefinitely).
+// =============================================================================
+
+describe('deleteSavedProfile', () => {
+  it('removes the matching profile and persists the result', () => {
+    const [kitchen, office] = fillLibrary(2);
+    const result = deleteSavedProfile(kitchen.id);
+    assert.strictEqual(result.removed, true);
+    assert.strictEqual(result.error, null);
+    assert.deepStrictEqual(result.remaining.map((p) => p.id), [office.id]);
+    assert.deepStrictEqual(getSavedProfiles().map((p) => p.id), [office.id]);
+  });
+
+  it('preserves the order of every profile it does not remove', () => {
+    const [a, b, c] = fillLibrary(3);
+    deleteSavedProfile(b.id);
+    assert.deepStrictEqual(getSavedProfiles().map((p) => p.id), [a.id, c.id]);
+  });
+
+  it('leaves storage untouched and reports PROFILE_MISSING for an id that is not present', () => {
+    const [kitchen] = fillLibrary(1);
+    const result = deleteSavedProfile('not-a-real-id');
+    assert.strictEqual(result.removed, false);
+    assert.strictEqual(result.error.code, 'PROFILE_MISSING');
+    assert.deepStrictEqual(getSavedProfiles().map((p) => p.id), [kitchen.id]);
+  });
+
+  it('leaves the profile in storage and reports PERSIST_FAILED when the write fails', () => {
+    const [kitchen] = fillLibrary(1);
+    const real = globalThis.localStorage;
+    globalThis.localStorage = {
+      getItem: real.getItem.bind(real),
+      setItem: () => { throw new Error('storage unavailable'); },
+      removeItem: real.removeItem.bind(real),
+      clear: real.clear.bind(real),
+    };
+    try {
+      const result = deleteSavedProfile(kitchen.id);
+      assert.strictEqual(result.removed, false);
+      assert.strictEqual(result.error.code, 'PERSIST_FAILED');
+      assert.strictEqual(result.error.message, "We couldn't delete this profile. Try again.");
+    } finally {
+      globalThis.localStorage = real;
+    }
+    // The profile must still be there once real storage is restored — a
+    // failed delete must never have removed it.
+    assert.deepStrictEqual(getSavedProfiles().map((p) => p.id), [kitchen.id]);
+  });
+
+  it('does not throw for an unexpected id shape', () => {
+    fillLibrary(1);
+    assert.doesNotThrow(() => deleteSavedProfile(undefined));
   });
 });
 

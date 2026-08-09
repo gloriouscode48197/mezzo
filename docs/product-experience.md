@@ -652,11 +652,11 @@ Five saved profiles is the maximum. The limit applies only to saved profiles —
 
 ## Discarding an Unsaved Profile
 
-Discard, from the selector's own row-level control, removes the unsaved profile with no confirmation — nothing was ever saved for it to protect. If a saved profile still exists afterward, the most recently used one becomes selected. If none exist, the Companion returns to Welcome, exactly as if calibration had never happened.
+Discard, from the selector's own row-level control, removes the unsaved profile with no confirmation — nothing was ever saved for it to protect. If the unsaved profile was the one selected: a saved profile still existing afterward means the most recently used one becomes selected; none existing means the Companion returns to Welcome, exactly as if calibration had never happened. If a different, saved profile was selected instead, discarding the unsaved one leaves that selection untouched — removing it from the background never changes what's active.
 
 ## Deleting a Saved Profile
 
-Deleting a saved profile uses a dedicated, full-screen confirmation — never a small floating dialog or a browser-native confirmation — asking plainly whether to permanently remove it. Canceling changes nothing. Confirming removes it and, if it was the selected profile, falls back in order: the unsaved profile, if one exists; otherwise the most recently used remaining saved profile; otherwise Welcome, if nothing usable is left at all.
+Deleting a saved profile uses a dedicated, full-screen confirmation — never a small floating dialog or a browser-native confirmation — asking plainly whether to permanently remove it. Canceling changes nothing. Confirming shows a brief processing state on Delete, with Cancel disabled for that same moment, before actually removing it — then, if it was the selected profile, falls back in order: the unsaved profile, if one exists; otherwise the most recently used remaining saved profile; otherwise Welcome, if nothing usable is left at all. If removal doesn't succeed, both actions become available again, the profile stays in the library exactly as it was, the current selection is untouched, and a brief, calm message explains it didn't work — the screen never remains stuck on its processing state.
 
 Renaming a saved profile does not exist as a feature yet. If it's ever built, it belongs here too, alongside delete.
 
