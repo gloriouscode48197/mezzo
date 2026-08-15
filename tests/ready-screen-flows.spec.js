@@ -9,10 +9,20 @@
 
 import { test, expect } from '@playwright/test';
 import { openCompanion } from './support/open-companion.js';
+import { reachReadyAfterSessionCalibration } from './support/reach-ready-after-calibration.js';
+import { recalibrateFromSelector } from './support/recalibrate-from-selector.js';
+import { createNewProfileFromSelector } from './support/create-new-profile-from-selector.js';
 
-/** Waits out the calibration controller's real ~6s capture window. */
+/** Waits out the full pre-capture window (see the calibration pacing
+ *  revision, second pass) — up to a 500ms delayed-disclosure wait, a
+ *  further 500ms minimum-display window (only if "Preparing microphone…"
+ *  actually rendered), and the fixed 3s "Start speaking in 3/2/1" countdown
+ *  (DEFAULT_PREPARATION_MS) — plus the ~6s capture window itself. 11200ms
+ *  preserves the same ~1200ms slack the original 7200ms figure already
+ *  carried beyond the 6s capture window itself, now also covering the
+ *  worst-case 4s of pre-capture preparation. */
 async function waitForCapture(pipPage) {
-  await pipPage.waitForTimeout(7200);
+  await pipPage.waitForTimeout(12000);
 }
 
 test.describe('Companion: Ready-screen selector and decision states', () => {
@@ -30,34 +40,42 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
 
     // Create new profile routes through C1 first (see
     // tests/first-time-copy-and-routing.spec.js for dedicated coverage).
-    await readyScreen.locator('button:has-text("Create new profile")').click();
+    await createNewProfileFromSelector(pipPage);
     await pipPage.locator('button:has-text("I\'m ready")').click();
     await waitForCapture(pipPage);
-    await expect(readyScreen).toBeVisible({ timeout: 15000 });
-    await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Unsaved profile');
+    // Slice 2: lands on "Speaking profile ready" first — see
+    // tests/post-calibration-result-screens.spec.js for that screen's own
+    // dedicated coverage; this test only needs Ready with the Unsaved
+    // profile selected, to exercise the selector itself.
+    await reachReadyAfterSessionCalibration(pipPage);
+    await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Temporary profile');
 
     await readyScreen.locator('.pip-ready-selector-trigger').click();
     const panel = pipPage.locator('.pip-ready-selector-panel');
     await expect(panel).toBeVisible();
-    await expect(panel.locator('.pip-ready-selector-group-label')).toHaveText(['Unsaved', 'Saved profiles']);
+    await expect(panel.locator('.pip-ready-selector-group-label')).toHaveText(['Temporary', 'Saved profiles']);
     await expect(panel).toContainText('Disappears when you close Mezzo');
 
-    await panel.locator('button[aria-label="Discard unsaved profile"]').click();
+    await panel.locator('button[aria-label="Discard temporary profile"]').click();
 
     // No confirmation — falls straight back to the only saved profile.
     await expect(panel).toBeHidden();
     await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Kitchen');
   });
 
-  test('Save profile with a unique name creates a saved profile, selects it, and shows a toast', async ({ page, context }) => {
+  test('Save profile (from Ready) with a unique name creates a saved profile, selects it, and shows a toast', async ({ page, context }) => {
     const pipPage = await openCompanion(page, context);
 
     await pipPage.locator('button:has-text("Create speaking profile")').click();
     await pipPage.locator('button:has-text("I\'m ready")').click();
     await waitForCapture(pipPage);
 
-    const readyScreen = pipPage.locator('.pip-screen-ready');
-    await expect(readyScreen).toBeVisible({ timeout: 15000 });
+    // Slice 2: reach Ready via the new "Your new speaking profile is ready" result
+    // screen first (see tests/post-calibration-result-screens.spec.js for
+    // that screen's own Save profile entry point) — this test's own
+    // concern is Ready's pre-existing "Save profile" contextual link and
+    // M2 itself, unaffected by Slice 2.
+    const readyScreen = await reachReadyAfterSessionCalibration(pipPage);
     await readyScreen.locator('button:has-text("Save profile")').click();
 
     const m2Screen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Name this profile' });
@@ -69,7 +87,12 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
     await expect(readyScreen).toBeVisible({ timeout: 3000 });
     await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Coffee Shop');
     await expect(pipPage.locator('.pip-toast')).toHaveClass(/pip-toast-visible/);
-    await expect(pipPage.locator('.pip-toast-card')).toHaveText('Profile "Coffee Shop" saved');
+    // "Speaking profile saved" (this revision) — generic rather than
+    // name-interpolated, matching the terminology section's "center on
+    // speaking profiles" principle; shared by the create path regardless
+    // of whether Save profile was opened from here (Ready) or from the
+    // result screen's own Save speaking profile button.
+    await expect(pipPage.locator('.pip-toast-card')).toHaveText('Speaking profile saved');
   });
 
   test('Save profile with a name matching an existing profile shows M2a and Replace overwrites it in place', async ({ page, context }) => {
@@ -82,10 +105,10 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
 
     const readyScreen = pipPage.locator('.pip-screen-ready');
     await expect(readyScreen).toBeVisible();
-    await readyScreen.locator('button:has-text("Create new profile")').click();
+    await createNewProfileFromSelector(pipPage);
     await pipPage.locator('button:has-text("I\'m ready")').click();
     await waitForCapture(pipPage);
-    await expect(readyScreen).toBeVisible({ timeout: 15000 });
+    await reachReadyAfterSessionCalibration(pipPage);
 
     await readyScreen.locator('button:has-text("Save profile")').click();
     const m2Screen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Name this profile' });
@@ -119,20 +142,26 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
 
     const readyScreen = pipPage.locator('.pip-screen-ready');
     await expect(readyScreen).toBeVisible();
-    // At the cap, "Create new profile" is hidden for a selected saved profile.
-    await expect(readyScreen.locator('.pip-ready-contextual-actions')).not.toContainText('Create new profile');
+    // A selected saved profile never shows anything in the contextual-actions
+    // row at all now (2026-08-18 — Create new profile lives in the selector
+    // panel's own persistent footer instead; see the dedicated cap-routing
+    // coverage for that action elsewhere in this file).
+    await expect(readyScreen.locator('.pip-ready-contextual-actions')).toBeEmpty();
 
-    // Recalibrate (still offered at the cap) -> M1 -> Keep as unsaved is the
-    // only way to reach an unsaved profile once Create new profile is hidden.
-    await readyScreen.locator('button:has-text("Recalibrate")').click();
+    // Recalibrate (still offered at the cap, via the selector panel's own
+    // per-row icon — 2026-08-17) -> M1 -> Keep temporarily is one way to
+    // reach an unsaved profile at the cap; this test exercises Save
+    // profile's own M3 routing via that path.
+    const selectedName = await readyScreen.locator('.pip-ready-selector-trigger-name').textContent();
+    await recalibrateFromSelector(pipPage, selectedName);
     await waitForCapture(pipPage);
 
-    const m1Screen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Replace existing' });
+    const m1Screen = pipPage.locator('.pip-screen-m1');
     await expect(m1Screen).toBeVisible({ timeout: 15000 });
-    await m1Screen.locator('button:has-text("Keep as unsaved")').click();
+    await m1Screen.locator('button:has-text("Keep temporarily")').click();
 
     await expect(readyScreen).toBeVisible({ timeout: 3000 });
-    await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Unsaved profile');
+    await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Temporary profile');
 
     await readyScreen.locator('button:has-text("Save profile")').click();
     const m3Screen = pipPage.locator('.pip-screen-decision').filter({ hasText: '5 of 5 profiles saved' });
@@ -141,7 +170,46 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
 
     await m3Screen.locator('.pip-decision-close-btn').click();
     await expect(readyScreen).toBeVisible();
-    await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Unsaved profile');
+    await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Temporary profile');
+  });
+
+  test('the selector panel\'s Create new profile footer action stays visible at the five-profile cap, and activating it routes straight to M3 without ever beginning C1 or Calibrating (2026-08-18)', async ({ page, context }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('mezzoProfiles', JSON.stringify([
+        { id: 'p1', name: 'One', speakingDb: -30, spreadDb: 4, calibratedTs: 1 },
+        { id: 'p2', name: 'Two', speakingDb: -30, spreadDb: 4, calibratedTs: 2 },
+        { id: 'p3', name: 'Three', speakingDb: -30, spreadDb: 4, calibratedTs: 3 },
+        { id: 'p4', name: 'Four', speakingDb: -30, spreadDb: 4, calibratedTs: 4 },
+        { id: 'p5', name: 'Five', speakingDb: -30, spreadDb: 4, calibratedTs: 5 },
+      ]));
+    });
+    const pipPage = await openCompanion(page, context);
+    const readyScreen = pipPage.locator('.pip-screen-ready');
+    await expect(readyScreen).toBeVisible();
+
+    await readyScreen.locator('.pip-ready-selector-trigger').click();
+    const panel = pipPage.locator('.pip-ready-selector-panel');
+    await expect(panel).toBeVisible();
+    await expect(panel.locator('.pip-ready-selector-row')).toHaveCount(5);
+
+    // Never hidden or disabled at the cap — a persistent action regardless
+    // of profile count.
+    const footerAction = panel.locator('.pip-ready-selector-footer-action');
+    await expect(footerAction).toBeVisible();
+    await expect(footerAction).toBeEnabled();
+    await expect(footerAction).toHaveText('Create new profile');
+
+    await footerAction.click();
+
+    // Straight to M3 — never C1, never Calibrating, never the microphone.
+    const m3Screen = pipPage.locator('.pip-screen-decision').filter({ hasText: '5 of 5 profiles saved' });
+    await expect(m3Screen).toBeVisible();
+    await expect(m3Screen).toContainText('Delete a saved profile before creating another.');
+    await expect(pipPage.locator('.pip-screen-c1')).toBeHidden();
+    await expect(pipPage.locator('.pip-screen-calibrating')).toBeHidden();
+
+    await m3Screen.locator('.pip-decision-close-btn').click();
+    await expect(readyScreen).toBeVisible();
   });
 
   test('Deleting a saved profile shows the full-screen 06b confirmation and falls back to the remaining profile', async ({ page, context }) => {
@@ -210,7 +278,9 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
     // selection," distinct from both fallback candidates.
     await readyScreen.locator('.pip-ready-selector-trigger').click();
     const panel = pipPage.locator('.pip-ready-selector-panel');
-    await panel.locator('.pip-ready-selector-row', { hasText: 'Charlie' }).locator('.pip-ready-selector-row-radio').check();
+    // The radio itself is visually hidden (Batch 2) — a real user clicks
+    // the visible label, which native <label for> semantics check it via.
+    await panel.locator('.pip-ready-selector-row', { hasText: 'Charlie' }).locator('.pip-ready-selector-row-label').click();
     await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Charlie');
 
     await readyScreen.locator('.pip-ready-selector-trigger').click();
@@ -451,15 +521,15 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
     const readyScreen = pipPage.locator('.pip-screen-ready');
     await expect(readyScreen).toBeVisible();
 
-    await readyScreen.locator('button:has-text("Create new profile")').click();
+    await createNewProfileFromSelector(pipPage);
     await pipPage.locator('button:has-text("I\'m ready")').click();
     await waitForCapture(pipPage);
-    await expect(readyScreen).toBeVisible({ timeout: 15000 });
-    await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Unsaved profile');
+    await reachReadyAfterSessionCalibration(pipPage);
+    await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Temporary profile');
 
     await readyScreen.locator('.pip-ready-selector-trigger').click();
     const panel = pipPage.locator('.pip-ready-selector-panel');
-    await panel.locator('button[aria-label="Discard unsaved profile"]').click();
+    await panel.locator('button[aria-label="Discard temporary profile"]').click();
 
     // No confirmation — falls straight back. With no last-used/selected
     // signal favoring either remaining saved profile, this lands on Kitchen,
@@ -477,13 +547,12 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
     await pipPage.locator('button:has-text("Create speaking profile")').click();
     await pipPage.locator('button:has-text("I\'m ready")').click();
     await waitForCapture(pipPage);
-    const readyScreen = pipPage.locator('.pip-screen-ready');
-    await expect(readyScreen).toBeVisible({ timeout: 15000 });
-    await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Unsaved profile');
+    const readyScreen = await reachReadyAfterSessionCalibration(pipPage);
+    await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Temporary profile');
 
     await readyScreen.locator('.pip-ready-selector-trigger').click();
     const panel = pipPage.locator('.pip-ready-selector-panel');
-    await panel.locator('button[aria-label="Discard unsaved profile"]').click();
+    await panel.locator('button[aria-label="Discard temporary profile"]').click();
 
     await expect(pipPage.locator('.pip-screen-welcome')).toBeVisible({ timeout: 3000 });
   });
@@ -502,20 +571,22 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
 
     // Produce an unsaved profile, then switch selection back to Kitchen —
     // the unsaved profile still exists in the background, just not selected.
-    await readyScreen.locator('button:has-text("Create new profile")').click();
+    await createNewProfileFromSelector(pipPage);
     await pipPage.locator('button:has-text("I\'m ready")').click();
     await waitForCapture(pipPage);
-    await expect(readyScreen).toBeVisible({ timeout: 15000 });
-    await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Unsaved profile');
+    await reachReadyAfterSessionCalibration(pipPage);
+    await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Temporary profile');
 
     await readyScreen.locator('.pip-ready-selector-trigger').click();
     const panel = pipPage.locator('.pip-ready-selector-panel');
-    await panel.locator('.pip-ready-selector-row', { hasText: 'Kitchen' }).locator('.pip-ready-selector-row-radio').check();
+    // The radio itself is visually hidden (Batch 2) — a real user clicks
+    // the visible label, which native <label for> semantics check it via.
+    await panel.locator('.pip-ready-selector-row', { hasText: 'Kitchen' }).locator('.pip-ready-selector-row-label').click();
     await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Kitchen');
 
     // Discard the (nonselected) unsaved profile — Kitchen must stay selected.
     await readyScreen.locator('.pip-ready-selector-trigger').click();
-    await panel.locator('button[aria-label="Discard unsaved profile"]').click();
+    await panel.locator('button[aria-label="Discard temporary profile"]').click();
 
     await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Kitchen');
     await expect(pipPage.locator('.pip-screen-calibrating')).toBeHidden();
@@ -567,12 +638,13 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
 
     const readyScreen = pipPage.locator('.pip-screen-ready');
     await expect(readyScreen).toBeVisible();
-    await readyScreen.locator('button:has-text("Recalibrate")').click();
+    const selectedName = await readyScreen.locator('.pip-ready-selector-trigger-name').textContent();
+    await recalibrateFromSelector(pipPage, selectedName);
     await waitForCapture(pipPage);
 
-    const m1Screen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Replace existing' });
+    const m1Screen = pipPage.locator('.pip-screen-m1');
     await expect(m1Screen).toBeVisible({ timeout: 15000 });
-    await m1Screen.locator('button:has-text("Keep as unsaved")').click();
+    await m1Screen.locator('button:has-text("Keep temporarily")').click();
     await expect(readyScreen).toBeVisible({ timeout: 3000 });
 
     await readyScreen.locator('.pip-ready-selector-trigger').click();
@@ -590,5 +662,290 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
     // always-visible, window-growing list).
     const startBtn = readyScreen.locator('.pip-ready-start-btn');
     await expect(startBtn).toBeVisible();
+  });
+});
+
+test.describe('Naming flow (M2/M2a) polish — inset modal card, heading typography, spacing, Save/Cancel reorder (2026-08-17)', () => {
+  /** Opens M2 from a freshly-created Temporary profile — the same entry
+   *  point most of this describe block's tests use. */
+  async function openM2(pipPage) {
+    await pipPage.locator('button:has-text("Create speaking profile")').click();
+    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await waitForCapture(pipPage);
+    const resultScreen = pipPage.locator('.pip-screen-result');
+    await expect(resultScreen).toBeVisible({ timeout: 15000 });
+    await resultScreen.locator('.pip-decision-primary-btn').click();
+    const m2Screen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Name this profile' });
+    await expect(m2Screen).toBeVisible();
+    return m2Screen;
+  }
+
+  test('the naming flow uses the same inset-modal-card treatment as the result screens — a real h1 heading matching the approved result-heading typography exactly, and no terminal punctuation', async ({ page, context }) => {
+    const pipPage = await openCompanion(page, context);
+    await pipPage.setViewportSize({ width: 382, height: 512 });
+    await pipPage.locator('button:has-text("Create speaking profile")').click();
+    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await waitForCapture(pipPage);
+    const resultScreen = pipPage.locator('.pip-screen-result');
+    await expect(resultScreen).toBeVisible({ timeout: 15000 });
+
+    const readStyle = (loc) => loc.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { fontFamily: s.fontFamily, fontSize: s.fontSize, fontWeight: s.fontWeight, lineHeight: s.lineHeight, letterSpacing: s.letterSpacing, color: s.color };
+    });
+    const reference = await readStyle(resultScreen.locator('.pip-decision-heading'));
+
+    await resultScreen.locator('.pip-decision-primary-btn').click();
+    const m2Screen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Name this profile' });
+    await expect(m2Screen).toBeVisible();
+
+    const m2Heading = m2Screen.locator('h1');
+    await expect(m2Heading).toHaveCount(1);
+    await expect(m2Heading).toHaveText('Name this profile');
+    expect(await readStyle(m2Heading)).toEqual(reference);
+    expect('Name this profile'.endsWith('.')).toBe(false);
+
+    // Preserve naming-flow input focus — unchanged by the h1 upgrade; the
+    // heading itself is never programmatically focused.
+    await expect(m2Screen.locator('input[type="text"]')).toBeFocused();
+  });
+
+  test('the naming flow presents inside an inset modal card like the result screens — outer surface visible around it', async ({ page, context }) => {
+    const pipPage = await openCompanion(page, context);
+    await pipPage.setViewportSize({ width: 382, height: 512 });
+    const m2Screen = await openM2(pipPage);
+
+    const outerBg = await m2Screen.evaluate((el) => getComputedStyle(el).backgroundColor);
+    const card = m2Screen.locator('.pip-modal-card');
+    await expect(card).toBeVisible();
+    const cardBg = await card.evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(cardBg).not.toBe(outerBg);
+
+    const [screenBox, cardBox] = await Promise.all([m2Screen.boundingBox(), card.boundingBox()]);
+    expect(cardBox.x).toBeGreaterThan(screenBox.x);
+    expect(cardBox.y).toBeGreaterThan(screenBox.y);
+    expect(cardBox.x + cardBox.width).toBeLessThan(screenBox.x + screenBox.width);
+    expect(cardBox.y + cardBox.height).toBeLessThan(screenBox.y + screenBox.height);
+
+    // No dialog/modal semantics were introduced.
+    await expect(m2Screen).not.toHaveAttribute('role', 'dialog');
+    await expect(m2Screen).not.toHaveAttribute('aria-modal', 'true');
+  });
+
+  test('the input has visibly increased separation from the action group, without moving the warning away from the input it describes', async ({ page, context }) => {
+    // Seed an existing "Kitchen" profile so the warning renders (M2a) —
+    // addInitScript() must run before openCompanion()'s own navigation;
+    // called afterward it never applies to the already-loaded page (it
+    // only fires on future navigations), silently leaving storage empty.
+    await page.addInitScript(() => {
+      localStorage.setItem('mezzoProfiles', JSON.stringify([
+        { id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 100 },
+      ]));
+    });
+    const pipPage = await openCompanion(page, context);
+    await pipPage.setViewportSize({ width: 382, height: 512 });
+
+    // A saved profile already exists, so the Companion opens on Ready, not
+    // Welcome — reach M2 via Ready's own "Create new profile" (through C1)
+    // rather than openM2()'s Welcome-only entry point.
+    const readyScreen = pipPage.locator('.pip-screen-ready');
+    await expect(readyScreen).toBeVisible();
+    await createNewProfileFromSelector(pipPage);
+    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await waitForCapture(pipPage);
+    const resultScreen = pipPage.locator('.pip-screen-result');
+    await expect(resultScreen).toBeVisible({ timeout: 15000 });
+    await resultScreen.locator('.pip-decision-primary-btn').click();
+    const m2Screen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Name this profile' });
+    await expect(m2Screen).toBeVisible();
+    const input = m2Screen.locator('input[type="text"]');
+    const actions = m2Screen.locator('.pip-m2-actions');
+
+    // Without the warning showing: input-to-actions gap is the widened one.
+    const [inputBox1, actionsBox1] = await Promise.all([input.boundingBox(), actions.boundingBox()]);
+    const gapNoWarning = actionsBox1.y - (inputBox1.y + inputBox1.height);
+    expect(gapNoWarning).toBeGreaterThan(20);
+
+    // With the warning showing (name matches "Kitchen"): warning still
+    // sits directly beneath the input (small gap), and the WIDENED gap
+    // moves to sit between the warning and the actions instead.
+    await input.fill('Kitchen');
+    const warning = m2Screen.locator('.pip-decision-warning');
+    await expect(warning).toBeVisible();
+    const [inputBox2, warningBox, actionsBox2] = await Promise.all([
+      input.boundingBox(), warning.boundingBox(), actions.boundingBox(),
+    ]);
+    const gapInputToWarning = warningBox.y - (inputBox2.y + inputBox2.height);
+    const gapWarningToActions = actionsBox2.y - (warningBox.y + warningBox.height);
+    expect(gapInputToWarning).toBeLessThan(16); // stays close — base gap only
+    expect(gapWarningToActions).toBeGreaterThan(gapInputToWarning);
+  });
+
+  test('Save precedes Cancel in DOM, visual, and keyboard order, and both sit side by side at the full 382px Companion width with equal width and a consistent gap', async ({ page, context }) => {
+    const pipPage = await openCompanion(page, context);
+    await pipPage.setViewportSize({ width: 382, height: 512 });
+    const m2Screen = await openM2(pipPage);
+    const actions = m2Screen.locator('.pip-m2-actions');
+
+    // DOM order.
+    const order = await actions.evaluate((el) => Array.from(el.children).map((c) => c.textContent));
+    expect(order).toEqual(['Save', 'Cancel']);
+
+    const saveBtn = m2Screen.locator('button[type="submit"]');
+    const cancelBtn = m2Screen.locator('button:has-text("Cancel")');
+    await expect(saveBtn).toHaveText('Save');
+    await expect(cancelBtn).toHaveText('Cancel');
+
+    // Visual order — side by side at this width, Save (left) before Cancel
+    // (right), same row (equal y), equal width, consistent gap.
+    const [saveBox, cancelBox] = await Promise.all([saveBtn.boundingBox(), cancelBtn.boundingBox()]);
+    expect(Math.abs(saveBox.y - cancelBox.y)).toBeLessThan(2); // same row
+    expect(saveBox.x).toBeLessThan(cancelBox.x); // Save left of Cancel
+    expect(Math.abs(saveBox.width - cancelBox.width)).toBeLessThan(2); // equal width
+    const gap = cancelBox.x - (saveBox.x + saveBox.width);
+    expect(gap).toBeGreaterThan(4);
+    expect(gap).toBeLessThan(20);
+
+    // Keyboard order — input already has focus (showM2Screen() focuses it).
+    // A disabled button is never a native tab stop, so the input must
+    // actually have a name typed in first (enabling Save) for this to
+    // meaningfully test the Save-then-Cancel order rather than Save being
+    // silently skipped.
+    const input = m2Screen.locator('input[type="text"]');
+    await expect(input).toBeFocused();
+    await input.fill('Coffee Shop');
+    await expect(saveBtn).toBeEnabled();
+    await pipPage.keyboard.press('Tab');
+    await expect(saveBtn).toBeFocused();
+    await pipPage.keyboard.press('Tab');
+    await expect(cancelBtn).toBeFocused();
+  });
+
+  test('Save and Cancel stack Save-above-Cancel, each full-width, at a narrower supported width', async ({ page, context }) => {
+    const pipPage = await openCompanion(page, context);
+    // Narrower than 382 — below the ~210px (2×100px basis + gap) threshold
+    // .pip-m2-actions needs to fit both side by side, forcing the wrap.
+    await pipPage.setViewportSize({ width: 220, height: 512 });
+    const m2Screen = await openM2(pipPage);
+
+    const saveBtn = m2Screen.locator('button[type="submit"]');
+    const cancelBtn = m2Screen.locator('button:has-text("Cancel")');
+    const [saveBox, cancelBox] = await Promise.all([saveBtn.boundingBox(), cancelBtn.boundingBox()]);
+
+    // Stacked: Cancel sits below Save, not beside it.
+    expect(cancelBox.y).toBeGreaterThan(saveBox.y + saveBox.height - 2);
+    // Save above Cancel specifically (not the reverse).
+    expect(saveBox.y).toBeLessThan(cancelBox.y);
+
+    // No horizontal scrolling introduced, no compressed/clipped labels.
+    const { scrollWidth, clientWidth } = await m2Screen.evaluate((el) => ({ scrollWidth: el.scrollWidth, clientWidth: el.clientWidth }));
+    expect(scrollWidth).toBeLessThanOrEqual(clientWidth + 1);
+    await expect(saveBtn).toHaveText('Save');
+    await expect(cancelBtn).toHaveText('Cancel');
+  });
+
+  test('Save uses the approved primary-button font weight — the exact same weight as "Save speaking profile", not a heavier one', async ({ page, context }) => {
+    const pipPage = await openCompanion(page, context);
+    await pipPage.locator('button:has-text("Create speaking profile")').click();
+    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await waitForCapture(pipPage);
+    const resultScreen = pipPage.locator('.pip-screen-result');
+    await expect(resultScreen).toBeVisible({ timeout: 15000 });
+    const saveSpeakingProfileWeight = await resultScreen.locator('.pip-decision-primary-btn').evaluate((el) => getComputedStyle(el).fontWeight);
+
+    await resultScreen.locator('.pip-decision-primary-btn').click();
+    const m2Screen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Name this profile' });
+    await expect(m2Screen).toBeVisible();
+    const saveBtn = m2Screen.locator('button[type="submit"]');
+    const saveWeight = await saveBtn.evaluate((el) => getComputedStyle(el).fontWeight);
+    expect(saveWeight).toBe(saveSpeakingProfileWeight);
+
+    // Enabled/disabled/hover/focus states are unchanged — Save starts
+    // disabled with an empty input (existing validation behavior).
+    await expect(saveBtn).toBeDisabled();
+    const input = m2Screen.locator('input[type="text"]');
+    await input.fill('Coffee Shop');
+    await expect(saveBtn).toBeEnabled();
+    await expect(saveBtn).not.toHaveCSS('opacity', '0.5'); // not disabled-looking once enabled
+
+    // Real Tab navigation, not .focus() — :focus-visible's own native
+    // styling is specifically a keyboard-origin heuristic in Chromium and
+    // doesn't reliably activate for a bare programmatic .focus() call
+    // (established convention elsewhere in this suite).
+    await input.focus();
+    await pipPage.keyboard.press('Tab');
+    await expect(saveBtn).toBeFocused();
+    const outline = await saveBtn.evaluate((el) => getComputedStyle(el).outlineStyle);
+    expect(outline).not.toBe('none');
+  });
+
+  test('naming validation, cancellation, success, and the five-profile-limit behavior are unaffected by the reorder/modal-card pass', async ({ page, context }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('mezzoProfiles', JSON.stringify([
+        { id: 'p1', name: 'One', speakingDb: -30, spreadDb: 4, calibratedTs: 1 },
+        { id: 'p2', name: 'Two', speakingDb: -30, spreadDb: 4, calibratedTs: 2 },
+        { id: 'p3', name: 'Three', speakingDb: -30, spreadDb: 4, calibratedTs: 3 },
+        { id: 'p4', name: 'Four', speakingDb: -30, spreadDb: 4, calibratedTs: 4 },
+      ]));
+    });
+    const pipPage = await openCompanion(page, context);
+    const readyScreen = pipPage.locator('.pip-screen-ready');
+    await expect(readyScreen).toBeVisible();
+    await createNewProfileFromSelector(pipPage);
+    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await waitForCapture(pipPage);
+    const resultScreen = pipPage.locator('.pip-screen-result');
+    await expect(resultScreen).toBeVisible({ timeout: 15000 });
+    await resultScreen.locator('.pip-decision-primary-btn').click();
+
+    const m2Screen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Name this profile' });
+    await expect(m2Screen).toBeVisible();
+    const saveBtn = m2Screen.locator('button[type="submit"]');
+    const input = m2Screen.locator('input[type="text"]');
+
+    // Empty input: Save disabled (existing validation, unaffected).
+    await expect(saveBtn).toBeDisabled();
+
+    // Cancel without saving — reached here via the RESULT screen's own
+    // "Save speaking profile" button, so Cancel's existing, unchanged
+    // returnTo behavior sends it back to the result screen, not Ready
+    // (see handleM2Cancel()'s own m2ReturnTo branch — unaffected by this
+    // pass, which only touched layout/typography/spacing/order).
+    await m2Screen.locator('button:has-text("Cancel")').click();
+    await expect(resultScreen).toBeVisible({ timeout: 3000 });
+    let profiles = await page.evaluate(() => JSON.parse(localStorage.getItem('mezzoProfiles') || '[]'));
+    expect(profiles).toHaveLength(4);
+
+    // Success path: still on the result screen (Cancel's own destination
+    // above), with the same Temporary profile still available — reopen M2
+    // from there and save with a unique name.
+    await resultScreen.locator('.pip-decision-primary-btn').click();
+    await expect(m2Screen).toBeVisible();
+    await input.fill('Coffee Shop');
+    await expect(saveBtn).toBeEnabled();
+    await saveBtn.click();
+    await expect(readyScreen).toBeVisible({ timeout: 3000 });
+    await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Coffee Shop');
+    profiles = await page.evaluate(() => JSON.parse(localStorage.getItem('mezzoProfiles') || '[]'));
+    expect(profiles).toHaveLength(5);
+
+    // Five-profile limit: now at the cap, Recalibrate (via the selector
+    // panel's own icon) -> Keep temporarily -> Save profile reaches a
+    // naming attempt which must route straight to M3, never opening M2
+    // (existing, unmodified behavior — see the dedicated M3 test elsewhere
+    // in this file for the full assertion; this just confirms it still
+    // holds after this pass). The selector panel's own Create new profile
+    // footer action routes to M3 the same way at the cap — see its
+    // dedicated coverage elsewhere in this file.
+    await recalibrateFromSelector(pipPage, 'Coffee Shop');
+    await waitForCapture(pipPage);
+    const m1Screen = pipPage.locator('.pip-screen-m1');
+    await expect(m1Screen).toBeVisible({ timeout: 15000 });
+    await m1Screen.locator('button:has-text("Keep temporarily")').click();
+    await expect(readyScreen).toBeVisible({ timeout: 3000 });
+    await readyScreen.locator('button:has-text("Save profile")').click();
+    const m3Screen = pipPage.locator('.pip-screen-decision').filter({ hasText: '5 of 5 profiles saved' });
+    await expect(m3Screen).toBeVisible();
+    await expect(m2Screen).toBeHidden();
   });
 });

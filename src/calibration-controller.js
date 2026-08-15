@@ -46,6 +46,29 @@ import {
 // Default calibration capture window.
 const DEFAULT_CAPTURE_DURATION_MS = 6000;
 
+// Default bound on how long runCapture() will wait for audio.acquire() to
+// settle before treating it as stranded — see MIC_ACQUISITION_TIMEOUT below.
+// A silent, already-granted getUserMedia() resolves in well under a second
+// in practice; 5s is generous slack for a slow device/driver without
+// leaving a genuinely stuck attempt visible for long.
+const DEFAULT_ACQUIRE_TIMEOUT_MS = 5000;
+
+// Duration of the fixed, real preparation countdown ("Start speaking in
+// 3/2/1" — see the Companion's own startPreparationCountdown()) — see the
+// `preparing` state field and runCapture() below. This is NOT started the
+// instant audio.acquire() succeeds anymore (that produced a real,
+// documented UX problem: a warm, already-granted getUserMedia() can
+// resolve in single-digit milliseconds — Home's own permission probe
+// already acquires-and-releases this exact mic once before the Companion
+// even opens, priming it — fast enough that the pre-capture UI state could
+// legitimately never paint at all, and fast enough that a real person had
+// no realistic chance to notice capture had begun before it was already
+// collecting samples). It now starts only once the caller explicitly calls
+// beginCountdown(), after its own delayed-disclosure UI timing (if any) has
+// resolved — see pendingCountdownResolve's own comment. 3000ms matches
+// three full one-second "3", "2", "1" ticks exactly.
+const DEFAULT_PREPARATION_MS = 3000;
+
 const STATUSES = Object.freeze({
   IDLE: 'idle',
   CALIBRATING: 'calibrating',
@@ -75,6 +98,21 @@ function idleState() {
     // avoids that ambiguity even though the sketch in the request didn't
     // include it.
     commitError: null,
+    // True only for the span between audio.acquire() succeeding and real
+    // capture actually starting — i.e. the fixed DEFAULT_PREPARATION_MS
+    // window (see runCapture() below), during which the mic is held but no
+    // samples are being collected and audio.startMonitoring() has not yet
+    // been called. A presentational-timing signal for the Companion's own
+    // "Get ready…" text, not something this controller's own logic
+    // branches on.
+    preparing: false,
+    // True only for the span between audio.startMonitoring() actually
+    // succeeding (audio.isMonitoring reads true right after calling it —
+    // not merely "the call was made") and the next exit from capture
+    // (success, failure, cancel, or close). A presentational-timing signal
+    // for the Companion's own visible countdown, not something this
+    // controller's own logic branches on — see runCapture()'s own comment.
+    capturing: false,
   };
 }
 
@@ -122,6 +160,10 @@ function unknownProfileError(profileId) {
  *   updateSavedProfile}, defaulting to the real src/profiles.js functions.
  * @param {() => number} [deps.now] - clock for calibratedTs, defaults to Date.now.
  * @param {number} [deps.captureDurationMs] - calibration capture window length.
+ * @param {number} [deps.acquireTimeoutMs] - bound on how long to wait for
+ *   audio.acquire() before treating it as stranded (MIC_ACQUISITION_TIMEOUT).
+ * @param {number} [deps.preparationMs] - fixed delay between audio.acquire()
+ *   succeeding and real capture (sample collection + countdown) starting.
  * @param {(fn: Function, ms: number) => any} [deps.setTimeoutFn]
  * @param {(handle: any) => void} [deps.clearTimeoutFn]
  */
@@ -134,6 +176,8 @@ export function createCalibrationController({
   },
   now = () => Date.now(),
   captureDurationMs = DEFAULT_CAPTURE_DURATION_MS,
+  acquireTimeoutMs = DEFAULT_ACQUIRE_TIMEOUT_MS,
+  preparationMs = DEFAULT_PREPARATION_MS,
   setTimeoutFn = (fn, ms) => setTimeout(fn, ms),
   clearTimeoutFn = (handle) => clearTimeout(handle),
 } = {}) {
@@ -151,7 +195,46 @@ export function createCalibrationController({
   // capture-timer completion that arrives after a cancel/close/new-run is a
   // silent no-op instead of corrupting state that's already moved on.
   let generation = 0;
+  // Bounds the audio.acquire() wait itself — a separate timer from
+  // activeTimerHandle below (the real capture-duration window), since the
+  // two never coexist: this one is always cleared (settled or fired) before
+  // activeTimerHandle is ever created. Tracked at this scope, not locally
+  // inside runCapture(), so reset() (cancel()/close()) can clear a still-
+  // pending one directly rather than relying solely on the generation
+  // guard inside its own callback to neutralize it.
+  let acquireTimeoutHandle = null;
+  // Resolved externally, by the caller's own beginCountdown() call — not by
+  // an internal timer. Acquisition succeeding doesn't by itself mean the
+  // fixed preparation countdown should start counting: the Companion's own
+  // delayed-disclosure UI (a "Preparing microphone…" message shown only if
+  // acquisition took a while, then held for its own minimum display time)
+  // determines the real moment the countdown may begin, and that moment is
+  // inherently data-dependent (it depends on real elapsed wall-clock time
+  // the controller has no visibility into) — not something this controller
+  // can compute or own itself, per this file's own "does NOT own... screen
+  // copy" boundary. beginCountdown() is the caller's explicit signal that
+  // whatever presentation-layer waiting it needed to do has finished.
+  // Deliberately has no timeout of its own: the caller's own delayed-
+  // disclosure timing is bounded and deterministic by construction (a
+  // fixed ~1s worst case), so a missing beginCountdown() call would be a
+  // wiring bug for the test suite to catch, not a real-world uncertainty
+  // like a slow getUserMedia() this controller needs to defend against.
+  let pendingCountdownResolve = null;
+  // Bounds the fixed preparation window (see idleState()'s own comment on
+  // `preparing` and runCapture() below) — a separate timer from both
+  // acquireTimeoutHandle above and activeTimerHandle below, since none of
+  // the three ever coexist: acquireTimeoutHandle is always cleared before
+  // this one is created, and this one is always settled before
+  // activeTimerHandle is created. Same reset()/cancellation treatment as
+  // the other two — tracked at this scope so a cancel/close mid-preparation
+  // can clear it directly.
+  let preparationTimerHandle = null;
   let activeTimerHandle = null;
+  // The pending preparation-window promise's own resolve() — same reason
+  // activeCaptureResolve (below) exists: clearing the timer alone would
+  // leave runCapture() permanently suspended at its `await` if cancelled
+  // mid-preparation, since nothing else would ever resolve it.
+  let activePreparationResolve = null;
   // The pending capture-window promise's own resolve(), kept alongside the
   // timer handle — reset() needs to both cancel the timer AND settle this
   // promise itself. Clearing the timer alone would leave runCapture()
@@ -276,27 +359,144 @@ export function createCalibrationController({
       result: null,
       failure: null,
       commitError: null,
+      // Explicit, not inherited: a retry() re-enters runCapture() from a
+      // FAILED state, which (if that failure happened after real capture
+      // had already started, e.g. SILENCE) could otherwise still carry
+      // preparing:true/capturing:true forward into this brand-new,
+      // still-acquiring attempt via setState()'s shallow merge.
+      preparing: false,
+      capturing: false,
     });
+
+    // Bounds the audio.acquire() wait — an unresolved (not just rejected)
+    // getUserMedia() call would otherwise strand this attempt in CALIBRATING
+    // forever, with nothing else ever invalidating it. Cleared as soon as
+    // acquire() settles, one way or another, below.
+    //
+    // acquireTimeoutHandle is a single shared (not per-run) variable, same
+    // as activeTimerHandle/activeCaptureResolve/micHeld above — every read
+    // or write of it here is gated on `myGeneration === generation` first,
+    // so a stale run's own delayed continuation (this timer firing after
+    // being superseded, or acquire() itself resolving/rejecting late) can
+    // never null out or clear a DIFFERENT, still-current run's own pending
+    // timer. Only reset() clears it unconditionally — that's the one
+    // deliberate invalidation point, not a stale-continuation hazard.
+    acquireTimeoutHandle = setTimeoutFn(() => {
+      if (myGeneration !== generation) return; // already cancelled/superseded — not this run's timer to touch
+      acquireTimeoutHandle = null;
+      generation++; // invalidate this attempt — a late-resolving acquire() is caught by the generation checks below, same as an explicit cancel()
+      setState({
+        status: STATUSES.FAILED,
+        failure: {
+          code: 'MIC_ACQUISITION_TIMEOUT',
+          message: `Timed out waiting for microphone access after ${acquireTimeoutMs}ms.`,
+        },
+        capturing: false,
+      });
+    }, acquireTimeoutMs);
 
     try {
       await audio.acquire();
     } catch (err) {
-      if (myGeneration !== generation) return; // cancelled/superseded while acquiring
+      if (myGeneration === generation && acquireTimeoutHandle !== null) {
+        clearTimeoutFn(acquireTimeoutHandle);
+        acquireTimeoutHandle = null;
+      }
+      if (myGeneration !== generation) return; // timed out or cancelled/superseded while acquiring
       setState({
         status: STATUSES.FAILED,
         failure: { code: 'MIC_PERMISSION_DENIED', message: err.message },
+        capturing: false,
       });
       return;
+    }
+    if (myGeneration === generation && acquireTimeoutHandle !== null) {
+      clearTimeoutFn(acquireTimeoutHandle);
+      acquireTimeoutHandle = null;
     }
 
     micHeld = true;
 
     if (myGeneration !== generation) {
-      // Cancelled during acquisition — we now hold a mic nobody wants.
+      // Timed out or cancelled during acquisition — we now hold a mic
+      // nobody wants; release it immediately rather than leaving it open.
       audio.release();
       micHeld = false;
       return;
     }
+
+    // The mic is held from here on, but no samples are collected and
+    // audio.startMonitoring() is not called until real capture actually
+    // begins below — nothing for the Companion's level meter to react to
+    // for the whole preparing span, whatever its real duration ends up
+    // being.
+    //
+    // Stage 1 setup — wait for the caller's explicit go-ahead
+    // (beginCountdown()), not an internal timer. See pendingCountdownResolve's
+    // own comment above for why this genuinely can't be a fixed,
+    // controller-owned duration: the real-world wait depends on the
+    // Companion's own delayed-disclosure UI timing, which only the caller
+    // knows.
+    //
+    // pendingCountdownResolve MUST be assigned before setState() below, not
+    // after: setState() (see its own implementation) notifies every
+    // subscriber synchronously, in the same call stack — and a real
+    // subscriber (mezzo-session.js's own state.preparing edge listener) can
+    // itself synchronously call beginCountdown() right back, before this
+    // function ever gets a chance to run a line after setState(). Assigning
+    // afterward (the original ordering here) meant that synchronous
+    // beginCountdown() call always found pendingCountdownResolve still null
+    // — a genuine no-op per beginCountdown()'s own guard — permanently
+    // stranding this run waiting on a promise nothing would ever resolve
+    // again (preparingHandled-style once-only listeners don't get a second
+    // chance). Found via real-Chrome/Playwright evidence, not the unit
+    // suite: every existing test drove beginCountdown() from test code
+    // after an explicit tick, not from a synchronous subscribe callback, so
+    // this ordering bug had no coverage until now — see the dedicated
+    // regression test added alongside this fix.
+    const countdownPromise = new Promise((resolve) => {
+      pendingCountdownResolve = resolve;
+    });
+    setState({ preparing: true });
+    await countdownPromise;
+
+    if (myGeneration !== generation) {
+      // Cancelled/closed while waiting for beginCountdown(); teardown
+      // already ran in reset() — micHeld is unconditionally already true
+      // by this point (set right after acquire() resolved), so reset()'s
+      // own micHeld-gated cleanup has already released the mic. See the
+      // matching comment below (Stage 2's own generation check) for why
+      // this deliberately doesn't call audio.release() again.
+      return;
+    }
+
+    // Stage 2 — the real, fixed countdown window (see DEFAULT_PREPARATION_MS's
+    // own comment and idleState()'s `preparing` field) — unchanged in
+    // spirit from the original design, just relocated to start only once
+    // Stage 1 resolves rather than immediately when acquire() resolves. A
+    // cancel/close arriving during this window resolves the promise early
+    // (see reset() below); the generation check afterward tells the two
+    // cases apart.
+    await new Promise((resolve) => {
+      activePreparationResolve = resolve;
+      preparationTimerHandle = setTimeoutFn(() => {
+        preparationTimerHandle = null;
+        activePreparationResolve = null;
+        resolve();
+      }, preparationMs);
+    });
+
+    // Cancelled/closed during the fixed countdown window; teardown already
+    // ran in reset() — unlike the post-acquire generation check above,
+    // micHeld is unconditionally already true by this point (set right
+    // after acquire() resolved, before preparation even began), so
+    // reset()'s own micHeld-gated cleanup has already released the mic
+    // here. Calling audio.release() again would be a genuine redundant
+    // call, not just a harmless idempotent one — the mock audio used in
+    // tests counts raw invocations, and a real duplicate call is simply
+    // unnecessary work regardless.
+    if (myGeneration !== generation) return;
+    setState({ preparing: false });
 
     const samples = [];
     audio.onLevelChange = ({ rms }) => {
@@ -304,6 +504,18 @@ export function createCalibrationController({
       levelListeners.forEach((fn) => fn(rms));
     };
     audio.startMonitoring();
+    // capturing flips true only once monitoring has actually started
+    // (audio.isMonitoring reads true), not merely because startMonitoring()
+    // was called — see idleState()'s own comment on this field. In the
+    // (currently unreachable in practice — startMonitoring() only declines
+    // when the mic isn't acquired, which can't be true here) case where it
+    // doesn't, capturing stays false and the rest of this run proceeds
+    // exactly as it already did before this field existed: engine.calibrate()
+    // still fails naturally on empty samples at the end of the real capture
+    // window, via its own existing NO_SAMPLES/SILENCE validation.
+    if (audio.isMonitoring) {
+      setState({ capturing: true });
+    }
 
     await new Promise((resolve) => {
       activeCaptureResolve = resolve;
@@ -325,7 +537,7 @@ export function createCalibrationController({
       engine.calibrate(samples);
     } catch (err) {
       if (myGeneration !== generation) return;
-      setState({ status: STATUSES.FAILED, failure: mapCalibrationError(err) });
+      setState({ status: STATUSES.FAILED, failure: mapCalibrationError(err), capturing: false });
       return;
     }
 
@@ -335,6 +547,7 @@ export function createCalibrationController({
     setState({
       status: STATUSES.CALIBRATED,
       result: { speakingDb: MezzoEngine.rmsToDb(baselineRMS), spreadDb, calibratedTs: now() },
+      capturing: false,
     });
   }
 
@@ -344,18 +557,40 @@ export function createCalibrationController({
 
   /**
    * Shared teardown for cancel()/close()/every successful commit:
-   * invalidates any in-flight run, clears the capture timer if one is
-   * pending, releases the microphone if (and only if) one is actually held,
-   * and resets to idle. Safe to call from any status, any number of times
-   * in a row — every step it performs is itself idempotent (bumping an
+   * invalidates any in-flight run, clears the acquire-timeout, the
+   * preparation timer, and/or the capture timer — whichever is pending —
+   * releases the microphone if (and only if) one is actually held, and
+   * resets to idle. Safe to call from any status, any number of times in a
+   * row — every step it performs is itself idempotent (bumping an
    * already-current generation is harmless, clearing an already-null timer
    * handle is a no-op, and the micHeld guard means stopMonitoring()/
    * release() are simply skipped, not redundantly re-invoked, when nothing
    * is held) — so repeated close/cancel paths never throw, and the mic is
    * torn down exactly once per real session, not once-per-cleanup-call.
+   * Clearing acquireTimeoutHandle/preparationTimerHandle here means a
+   * cancel/close that lands while either is pending doesn't just rely on a
+   * generation check to no-op later — it's prevented from firing at all.
    */
   function reset() {
     generation++;
+    if (acquireTimeoutHandle !== null) {
+      clearTimeoutFn(acquireTimeoutHandle);
+      acquireTimeoutHandle = null;
+    }
+    if (pendingCountdownResolve !== null) {
+      const resolve = pendingCountdownResolve;
+      pendingCountdownResolve = null;
+      resolve(); // unstick a runCapture() suspended awaiting the caller's beginCountdown() call
+    }
+    if (preparationTimerHandle !== null) {
+      clearTimeoutFn(preparationTimerHandle);
+      preparationTimerHandle = null;
+    }
+    if (activePreparationResolve !== null) {
+      const resolve = activePreparationResolve;
+      activePreparationResolve = null;
+      resolve(); // unstick a runCapture() suspended awaiting the preparation window
+    }
     if (activeTimerHandle !== null) {
       clearTimeoutFn(activeTimerHandle);
       activeTimerHandle = null;
@@ -380,6 +615,22 @@ export function createCalibrationController({
 
   function close() {
     reset();
+  }
+
+  /**
+   * The caller's explicit signal that its own presentation-layer waiting
+   * (e.g. the Companion's delayed-disclosure "Preparing microphone…"
+   * handling) has finished, and the real, fixed preparation countdown may
+   * now begin. A no-op if called when nothing is actually waiting for it
+   * (state.preparing is false, or a stale/superseded generation already
+   * moved on) — safe to call defensively rather than needing the caller to
+   * track whether it's still relevant.
+   */
+  function beginCountdown() {
+    if (pendingCountdownResolve === null) return;
+    const resolve = pendingCountdownResolve;
+    pendingCountdownResolve = null;
+    resolve();
   }
 
   // ===========================================================================
@@ -502,6 +753,7 @@ export function createCalibrationController({
     retry,
     cancel,
     close,
+    beginCountdown,
     commitStartMonitoring,
     commitUpdateProfile,
     commitUpdateProfileAndStartMonitoring,

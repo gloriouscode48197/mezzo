@@ -82,8 +82,28 @@
               <p class="type-microcopy microcopy-cta">You can stop anytime. Nothing is saved.</p>
             </div>
 
+            <!-- Batch 4 (independent corrections): visually distinct from
+                 mic-request/mic-granted (previously identical layout/color
+                 to both, differing only in text) via the same schematic
+                 blocked-mic illustration the Companion's own C0 screen uses
+                 (C0_ILLUSTRATION_SVG in src/mezzo-session.js) — kept as a
+                 hand-copied literal (not shared code; this is static markup
+                 with no bundler), so if C0's illustration ever changes,
+                 this one needs updating to match by hand. Copy names the
+                 actual browser mechanism (the address-bar site-settings
+                 icon) rather than a generic "your browser," and states the
+                 restore-before-continue sequence explicitly. Try again
+                 (btn-mic-retry) is kept, not replaced with a reload
+                 instruction — see this correction's own commit/report for
+                 the browser/API reasoning: a getUserMedia() call always
+                 re-checks the current permission state live, so a manual
+                 Allow doesn't need a reload to take effect, and Chrome
+                 never re-prompts (just re-rejects silently) while a site
+                 permission is still explicitly Blocked, so this can't
+                 trigger an unwanted second prompt either. -->
             <div id="mic-denied" class="hero-mic-state hidden">
-              <p class="type-hero-body hero-body">Mezzo can't work without microphone access. Click the microphone icon in your browser's address bar, choose Allow, then try again.</p>
+              <div class="hero-mic-denied-illustration" aria-hidden="true"><svg viewBox="0 0 200 60" fill="none"><rect x="1" y="1" width="198" height="34" rx="8" stroke="rgba(172,158,136,0.4)" stroke-width="1.5"/><circle cx="20" cy="18" r="6" stroke="rgba(210,155,75,0.9)" stroke-width="1.5"/><path d="M17 15l6 6M23 15l-6 6" stroke="rgba(210,155,75,0.9)" stroke-width="1.5" stroke-linecap="round"/><rect x="34" y="13" width="140" height="10" rx="5" fill="rgba(172,158,136,0.15)"/><path d="M60 50l-14 -14M46 50l14 -14" stroke="rgba(210,155,75,0.7)" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+              <p class="type-hero-body hero-body">Chrome has blocked microphone access for this site. Click the icon in the address bar, set Microphone to Allow, then try again — Mezzo can't continue until access is restored.</p>
               <button id="btn-mic-retry" type="button" class="btn-primary">Try again</button>
             </div>
           </div>

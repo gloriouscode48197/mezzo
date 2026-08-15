@@ -133,14 +133,52 @@ import {
 // Calibration Failed screen and copy map for a calm, consistent experience,
 // without ever touching the controller, the mic, or generating a real
 // calibration failure of its own.
+// No terminal periods (2026-08-16 Companion heading-punctuation audit) — see
+// the module-level note above CALIBRATION_FAILURE_COPY's own doc comment
+// block for the full scope. Every entry here renders as failedMessageEl's
+// sole text (.pip-h1.pip-failed-message — the Failed screen's only
+// heading-equivalent content, see showFailedScreen()), so each is trimmed of
+// its own trailing period; any internal, mid-sentence period (e.g.
+// MIC_PERMISSION_DENIED's "...calibrate. Check...") is left exactly as
+// written, since only the terminal period is in scope.
 export const CALIBRATION_FAILURE_COPY = {
-  SILENCE: "Didn't catch enough clear speech — let's try again.",
-  INSUFFICIENT_VOICE: "Didn't catch enough clear speech — let's try again.",
-  UNSTABLE_ENVIRONMENT: 'Try somewhere a little quieter.',
-  MIC_PERMISSION_DENIED: 'Mezzo needs microphone access to calibrate. Check your browser\'s microphone permission for this site, then try again.',
-  NO_SAMPLES: "Didn't catch enough clear speech — let's try again.",
-  CROSS_TAB_LOCKED: 'Calibration is already open in another Mezzo tab.',
-  UNKNOWN: "Something went wrong — let's try again.",
+  SILENCE: "Didn't catch enough clear speech — let's try again",
+  INSUFFICIENT_VOICE: "Didn't catch enough clear speech — let's try again",
+  UNSTABLE_ENVIRONMENT: 'Try somewhere a little quieter',
+  MIC_PERMISSION_DENIED: 'Mezzo needs microphone access to calibrate. Check your browser\'s microphone permission for this site, then try again',
+  // Always routed to the dedicated C0 screen (see showFailedScreen()), same
+  // as MIC_PERMISSION_DENIED above — this entry exists only as the same
+  // kind of defensive fallback MIC_PERMISSION_DENIED's own entry already
+  // is, not because this code is expected to reach the generic screen.
+  MIC_ACQUISITION_TIMEOUT: 'The connection took longer than expected. Try again to restart calibration',
+  NO_SAMPLES: "Didn't catch enough clear speech — let's try again",
+  CROSS_TAB_LOCKED: 'Calibration is already open in another Mezzo tab',
+  UNKNOWN: "Something went wrong — let's try again",
+};
+
+// C0's own heading/body pairs, keyed by failure code — the two codes that
+// route there (see showFailedScreen()/showC0Screen()) render genuinely
+// different, honest copy on the one shared screen/illustration/actions
+// rather than a single fixed message covering both. MIC_PERMISSION_DENIED
+// matches the PRD/design artifact exactly (see the C0 skeleton's own build
+// comment in startMonitoring()); MIC_ACQUISITION_TIMEOUT is the
+// calibration-stall reliability correction's own approved copy —
+// deliberately never describing the mic as denied or blocked, since a
+// stalled/slow acquisition is a different, calmer failure mode than an
+// explicit browser-level block. Exported alongside calibrationFailureMessage()
+// below so this pure copy mapping is unit-testable without a DOM.
+// heading strings carry no terminal period (2026-08-16 audit — see
+// CALIBRATION_FAILURE_COPY's own doc comment above); body strings are
+// explanatory helper text, not headings, and keep their periods unchanged.
+export const C0_COPY = {
+  MIC_PERMISSION_DENIED: {
+    heading: 'Your browser has blocked microphone access',
+    body: 'Click the icon in your address bar and change the microphone setting to "Allow," then try again.',
+  },
+  MIC_ACQUISITION_TIMEOUT: {
+    heading: 'Mezzo couldn’t connect to your microphone',
+    body: 'The connection took longer than expected. Try again to restart calibration.',
+  },
 };
 
 // Exported (along with isTemporaryProfile/profileMetaText below) purely so
@@ -188,18 +226,29 @@ export function saveProfileNameCopy(resolution) {
 }
 
 /**
- * Pure copy for M1 (see docs/prd/ready-screen-speaking-profiles-mvp.md) —
- * reached only from a saved-profile recalibration's completion (never
- * session mode, which lands directly on Ready with the freshly-calibrated
- * unsaved profile selected instead — see handleCalibrationCompleted()
+ * Pure copy for Variant 2's own primary button label (post-creation result
+ * screen, reached only from a saved-profile recalibration's completion —
+ * never session mode, or speaking again for the current Temporary profile,
+ * both of which land on Variant 1 instead — see handleCalibrationCompleted()
  * below). `targetName` is the recalibrated saved profile's own name.
+ *
+ * Revised twice now: the original "Replace existing {name} profile?"
+ * heading put the name in the heading; the first Slice 2 pass moved it into
+ * a dynamic body ("Replace the saved calibration for {name}..."), asking
+ * essentially the same question as the heading. This revision retires both
+ * — Variant 1 and Variant 2 now share one static heading/body pair ("Your
+ * new speaking profile is ready" / "What would you like to do with it?",
+ * built directly into each screen's own DOM, no copy function needed for
+ * either), and the target name lives only here, in the one place it's
+ * actually decision-relevant: the primary button itself. Straight double
+ * quotes, matching CLAUDE.md's escaping convention for interpolated names
+ * elsewhere (Delete "{name}"?, A profile named "{name}" already exists.,
+ * etc.) — the button's own visible text is also its accessible name, so a
+ * long or unusual profile name still produces an understandable label
+ * without any separate aria-label needed.
  */
-export function replaceProfileCopy(targetName) {
-  const body = 'Replace the saved calibration with the one you just created?';
-  if (!targetName) {
-    return { heading: 'Replace this saved profile?', body };
-  }
-  return { heading: `Replace existing "${targetName}" profile?`, body };
+export function replaceButtonLabel(targetName) {
+  return targetName ? `Replace "${targetName}"` : 'Replace this profile';
 }
 
 // The one and only signal for "this profile is a runtime-only calibration
@@ -218,6 +267,12 @@ export function isTemporaryProfile(profile) {
 const MIC_ICON_SVG = '<svg class="pip-intro-btn-icon" viewBox="0 0 12 12" fill="none" aria-hidden="true"><rect x="4" y="1" width="4" height="6" rx="2" stroke="currentColor" stroke-width="1.2"/><path d="M2.5 6.5a3.5 3.5 0 0 0 7 0M6 10v1.2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>';
 const CHEVRON_ICON_SVG = '<span class="pip-ready-selector-chevron" aria-hidden="true"><svg viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
 const TRASH_ICON_SVG = '<svg width="13" height="14" viewBox="0 0 13 14" fill="none" aria-hidden="true"><path d="M1 3.5h11M4.5 3.5V2h4v1.5M5.5 6.5v4M7.5 6.5v4M2 3.5l.8 8.5h7.4l.8-8.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+// A clean pencil/edit glyph — visual shorthand for "modify this speaking
+// profile" on the Ready selector's per-row Recalibrate action (2026-08-17).
+// Matched to TRASH_ICON_SVG's own size (13x14 viewBox) and stroke-width
+// (1.3), decorative only (aria-hidden — the button's own aria-label, set
+// per row in buildSelectorRow(), is the real accessible name).
+const PENCIL_ICON_SVG = '<svg width="13" height="14" viewBox="0 0 13 14" fill="none" aria-hidden="true"><path d="M9.3 1.8l2 2-6.7 6.7-2.8.6.6-2.8 6.9-6.5z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M8.1 3l2 2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const CLOSE_ICON_SVG = '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>';
 // Schematic, not photorealistic — enough to point at "the icon in your
 // browser's address bar" without claiming to be a literal screenshot of
@@ -231,12 +286,54 @@ const C0_ILLUSTRATION_SVG = '<svg viewBox="0 0 200 60" fill="none" aria-hidden="
 // countdown text counts down from.
 const CALIBRATION_COUNTDOWN_SECONDS = 6;
 
+// Mirrors calibration-controller.js's own DEFAULT_PREPARATION_MS (3000ms) —
+// same relationship as CALIBRATION_COUNTDOWN_SECONDS above: the controller's
+// own fixed-window timer is the real source of truth for when capture may
+// begin, this constant only decides what the "Start speaking in {n}" text
+// counts down from. See startPreparationCountdown() below.
+const PREPARATION_COUNTDOWN_SECONDS = 3;
+
+// Delayed-disclosure timing for "Preparing microphone…" (calibration pacing
+// revision, second pass — real-Chrome feedback showed the message could
+// flash briefly enough to capture attention even when technically accurate,
+// and that a flat 1s "Get ready…" beat wasn't reliably noticeable either).
+// PREPARING_MESSAGE_DELAY_MS: how long audio.acquire() must remain pending
+// before the message is shown at all — a fast/warm acquisition (the common
+// case; see calibration-controller.js's own DEFAULT_PREPARATION_MS comment)
+// never shows it. PREPARING_MESSAGE_MIN_DISPLAY_MS: once shown, the minimum
+// real time it stays visible before the fixed countdown may begin, even if
+// acquisition itself finishes sooner — prevents a second, equally
+// unreadable flash. See the dedicated subscribe() listener below for the
+// exact sequencing.
+const PREPARING_MESSAGE_DELAY_MS = 500;
+const PREPARING_MESSAGE_MIN_DISPLAY_MS = 500;
+
 // Shared full-screen-decision affirmative-action timing (see the PRD's
-// "Processing and Toast Feedback" requirements) and toast auto-dismiss
-// timing. No existing precedent for either in this codebase, so both use
-// the PRD's own suggested values directly.
+// "Processing and Toast Feedback" requirements).
 const DECISION_PROCESSING_MS = 1000;
-const TOAST_VISIBLE_MS = 2000;
+// Toast auto-dismiss timing — the elapsed time from showToast() adding the
+// visible class to it removing that class again, at which point the
+// existing 0.2s CSS fade-out (see .pip-toast's own transition) takes over.
+// 3200ms (2026-08-15, was 2000ms): the fade-in itself takes 200ms, so this
+// leaves the toast fully opaque for 3000ms after the fade-in completes —
+// "at least three seconds," per the requested read duration — before the
+// fade-out begins.
+const TOAST_VISIBLE_MS = 3200;
+
+// Brief completion transition ("Creating your speaking profile…") shown
+// between the end of capture and the post-creation result screen (Slice 2
+// revision) — see showCreatingTransition() below. The actual work this
+// screen represents (committing the just-completed calibration to a
+// Temporary profile object, or simply preparing to show the recalibration
+// decision screen) is synchronous and effectively instant today, so this
+// constant is the WHOLE visible duration in practice, not a floor added on
+// top of real processing time — showCreatingTransition() still computes it
+// as `max(0, this - elapsed-since-shown)`, so if a future change ever made
+// the underlying work genuinely slower, the transition would only ever get
+// longer, never shorter than this. Picked from the requested 600–800ms
+// range's midpoint — long enough to register as a real, perceptible state
+// change, short enough not to read as a stall.
+const CREATING_TRANSITION_MIN_MS = 700;
 
 // One product-oriented configuration source for every fixed Companion size —
 // named for what they are, not for the underlying Picture-in-Picture API.
@@ -246,85 +343,79 @@ const TOAST_VISIBLE_MS = 2000;
 // the two used to share one constant, but the Ready and Monitoring cards
 // have different target dimensions.
 //
-// Width — wide enough that a max-width:320px action button (see
-// .pip-ready-start-btn etc. below) sits with ~30px clear on each side:
-// .pip-screen-ready's own existing 20px side padding is unchanged, so once
-// a button hits its 320px cap inside a wider column, centering (margin-
-// inline:auto) splits the remaining slack evenly — 320 (button) + 2x20
-// (existing padding) + 2x10 (that centering slack) = 380. No internal
-// padding/spacing value on the screen itself changed to get here.
-export const MEZZO_COMPANION_READY_WIDTH = 380;
+// Batch 2 (2026-08-09): 382×512 is the approved, fixed pre-monitoring
+// content-viewport target — reference-verified against the approved
+// standalone Ready-screen HTML and screenshots, not derived from this
+// screen's own content the way the old 380/364 pair was. Passed directly to
+// documentPictureInPicture.requestWindow() (the primary mechanism — its
+// width/height are documented to describe the window's content area) and,
+// as a best-effort correction only, to resizeCompanionToContent() — not the
+// plain resizeCompanionTo() Monitoring uses — which measures the window's
+// actual innerWidth/innerHeight first and adjusts outerWidth/outerHeight by
+// only the observed gap, rather than handing window.resizeTo() (an OUTER-
+// window call per the HTML spec) these same content-area numbers directly,
+// which is what the pre-Batch-2-audit code did. Neither call is
+// independently verifiable from this Playwright/CDP sandbox, which is
+// confirmed (see tests/companion-sizing.spec.js's own header comment) to
+// always render at a fixed 1280×720 regardless of what's requested — the
+// real window.innerWidth/innerHeight this constant is meant to produce can
+// only be confirmed on real desktop Chrome.
+export const MEZZO_COMPANION_READY_WIDTH = 382;
 
-// Baseline height — shared by every pre-monitoring screen (Welcome,
-// Calibrating, and every full-screen decision state, alongside Ready
-// itself). See computeReadyContentHeight() below for the term-by-term
-// derivation.
-//
-// Ready-screen PRD note (docs/prd/ready-screen-speaking-profiles-mvp.md):
-// this height is no longer profile-count-dependent, unlike the pre-PRD
-// formula it replaces. The old Ready screen rendered every saved profile as
-// an always-visible inline row, so the window had to grow with the library.
-// The approved selector instead shows one collapsed summary row + an
-// overlay dropdown that expands *within* the existing card bounds (own
-// internal scroll, same pattern the old delete-confirmation modal and the
-// dropdown's own row list both already use) — the collapsed layout's height
-// is therefore fixed regardless of how many profiles exist. See
-// computeReadyContentHeight() below.
-export const MEZZO_COMPANION_READY_BASE_HEIGHT = 364;
+// Fixed height — shared by every pre-monitoring screen (Welcome, the
+// calibration-introduction interstitial, Calibrating, and every full-screen
+// decision state, alongside Ready itself). See computeReadyContentHeight()
+// below — it has no profile-count or selector-state term of any kind: this
+// constant is the whole answer, unconditionally. The Ready screen's own
+// selector (both collapsed and its expanded overlay panel, up to five saved
+// profiles plus an unsaved one) fits and scrolls entirely within this fixed
+// height — see .pip-ready-selector-panel's own max-height:260px, internal
+// overflow-y:auto — never by growing the window. Opening the selector does
+// not call resizeCompanionTo() or resizeCompanionToContent() at all (see
+// openSelectorPanel()).
+export const MEZZO_COMPANION_READY_BASE_HEIGHT = 512;
 
 const MEZZO_COMPANION_READY_SIZE = { width: MEZZO_COMPANION_READY_WIDTH, height: MEZZO_COMPANION_READY_BASE_HEIGHT };
 
 /**
- * Deterministic Ready-screen height, derived from the actual rendered
- * layout below (.pip-screen-ready/.pip-ready-* rules) rather than a flat
- * guess. No longer a function of saved-profile count (see the PRD note on
- * MEZZO_COMPANION_READY_BASE_HEIGHT above) — kept as an exported function,
- * not inlined to a bare constant, so every call site still reads as "the
- * Ready screen's own computed height" rather than a magic number, and so a
- * future change that genuinely does need to vary this again has one place
- * to do it.
+ * Ready-screen height — always MEZZO_COMPANION_READY_BASE_HEIGHT, full stop.
+ * No profile-count term, no selector-state term, no addition of any kind:
+ * Ready must never request more height because a saved-profile library or
+ * an unsaved profile exists (Batch 2's explicit sizing requirement) — the
+ * selector's own overlay panel scrolls internally within this fixed height
+ * instead (see .pip-ready-selector-panel's max-height:260px/overflow-y:auto
+ * below), the same way it already did before Batch 2 changed the target
+ * from 380×364 to 382×512. Kept as an exported function, not inlined to a
+ * bare constant, so every call site still reads as "the Ready screen's own
+ * computed height" rather than a magic number, and so a future change that
+ * genuinely does need to vary this again has exactly one place to do it —
+ * that place currently does nothing but return the constant.
  *
- * Every term below is read directly off the CSS the Ready screen is
- * actually built with (six direct children, five 10px gaps between them):
- *   36  - .pip-screen-ready's own top+bottom padding (18px each), unchanged
- *   26  - .pip-ready-heading, one line
- *   12  - .pip-ready-profile-label ("Speaking profile")
- *   40  - .pip-ready-selector-wrap (min-height, one line + chevron — the
- *         wrap, not the trigger button directly, is the actual flex child
- *         here: it holds the trigger's own real height, since the
- *         overlay panel inside it is absolutely positioned and
- *         contributes nothing to it — see .pip-ready-selector-wrap's own
- *         comment below for why the panel anchors to the wrap rather than
- *         a fixed pixel offset from the screen)
- *   28  - .pip-ready-contextual-actions (min-height — one row of small
- *         text-link actions, never the old full-width pill buttons; see
- *         the PRD's Button and Action System)
- *   40  - .pip-ready-start-btn (min-height, unchanged from the pre-PRD
- *         Start Monitoring button)
- *   32  - .pip-ready-disclaimer (min-height — two lines at its own
- *         max-width:260px)
- *   50  - 5 x the screen's own 10px gap (six children)
- *  100  - requested breathing room: ~50px visible above the heading, ~50px
- *         below the disclaimer. .pip-screen-ready uses
- *         justify-content:center specifically so unused height shows up as
- *         space at both ends instead of only pushing the bottom down — see
- *         that rule below. No change to the screen's own padding/gap
- *         values, only how leftover space distributes.
- * Every min-height referenced above is set explicitly in the CSS below —
- * not left to intrinsic content sizing — specifically so this comment and
- * the actual rendered layout can never quietly drift apart.
+ * Unlike the pre-Batch-2 380×364 target, 382×512 was not derived bottom-up
+ * from this screen's own element min-heights — it's the approved,
+ * reference-verified fixed target itself (see CLAUDE.md's Batch 2 notes).
+ * .pip-screen-ready's own justify-content:center is what absorbs the
+ * difference between the screen's actual content height and 512px, showing
+ * up as breathing room above the heading and below the disclaimer, exactly
+ * as it did at the old size — no elements were added solely to fill space.
  */
 export function computeReadyContentHeight() {
   return MEZZO_COMPANION_READY_BASE_HEIGHT;
 }
-const MEZZO_COMPANION_EXPANDED_SIZE = { width: 290, height: 420 };
+// Monitoring's own sizes — completely separate from the Ready/pre-monitoring
+// constants above (a different object, never MEZZO_COMPANION_READY_SIZE),
+// and untouched by Batch 2's 382×512 change. Exported, matching the Ready
+// constants' own pattern, so this separation is a directly testable fact
+// (see src/mezzo-session.test.js) rather than something only provable by
+// reading source.
+export const MEZZO_COMPANION_EXPANDED_SIZE = { width: 290, height: 420 };
 // 220×220 — the intentional Compact footprint: a small, square window built
 // for peripheral awareness, not a shrunk-down Expanded window (was
 // 220×260 — matched against the approved design direction and updated).
 // No title bar (the real Document PiP window chrome covers that) and no
 // wordmark/status text/profile metadata; only the visualization and the
 // Stop/Expand corner-overlay controls remain.
-const MEZZO_COMPANION_COMPACT_SIZE = { width: 220, height: 220 };
+export const MEZZO_COMPANION_COMPACT_SIZE = { width: 220, height: 220 };
 
 const LAYOUT_MODES = Object.freeze({ EXPANDED: 'expanded', COMPACT: 'compact' });
 
@@ -334,10 +425,45 @@ const SUSTAINED_DRIFT_MS = 1000; // continuous time outside range before drift e
 // Calibrating screen's live meter dB-to-0..1 mapping. (Predates the
 // PiP-first model: a page-level calibration ring on the old dual-surface
 // try-it.js once used the same ENERGY_DB_MIN/MAX naming — that page-level
-// screen is long retired, calibration is Companion-only now, but the
-// mapping itself is unchanged.)
-const CALIBRATION_METER_DB_MIN = -50;
-const CALIBRATION_METER_DB_MAX = -10;
+// screen is long retired, calibration is Companion-only now.)
+//
+// -55..-30 (2026-08-12 revision, presentational only): the original -50..-10
+// window read as a progress bar users felt they had to fill, and real-
+// microphone diagnostics (see the calibration-meter investigation this
+// revision closes out) confirmed why — without getUserMedia's autoGainControl
+// (deliberately off; see audio.js), ordinary natural speech without AGC
+// commonly measured p50 around -41 to -45dB and p90 around -37 to -44dB,
+// which the old window's bottom quarter compressed into "barely any visible
+// movement, regardless of how the person was actually speaking." -55 aligns
+// the floor with engine.js's own MIN_USABLE_BASELINE_DB (a quiet-but-valid
+// calibration no longer reads as near-zero activity); -30 narrows the span
+// to the range real speech actually occupies. This constant is read only by
+// handleCalibrationLevelSample() below to drive the meter's own continuous
+// visual fill — see CLAUDE.md's Engineering Notes for confirmation that
+// changing it has no effect on captured samples, the computed speaking
+// profile, monitoring thresholds, or mic constraints, all of which are
+// computed independently in calibration-controller.js/engine.js from the
+// same raw samples, never from this mapping.
+const CALIBRATION_METER_DB_MIN = -55;
+const CALIBRATION_METER_DB_MAX = -30;
+
+// A raw dB value (already computed from rms the same way
+// handleCalibrationLevelSample() does) -> a clamped 0..1 fill ratio for the
+// continuous calibration meter bar (2026-08-12 revision — replaces the
+// earlier 5-segment presentation; see CLAUDE.md's Engineering Notes for why:
+// discrete segments meant a real, audible change in speaking level often
+// produced no visible change at all until it crossed a whole segment
+// boundary, which read as unresponsive). Exported so this one piece of real
+// math gets direct unit coverage without needing a live DOM or a
+// fake-audio-device fixture — see src/mezzo-session.test.js — and so there
+// is exactly one implementation of the mapping (handleCalibrationLevelSample()
+// itself just calls this and sets the fill element's width directly), not a
+// test-only reimplementation that could silently drift from production
+// behavior.
+export function dbToMeterFillRatio(db) {
+  if (!Number.isFinite(db)) return 0;
+  return Math.min(1, Math.max(0, (db - CALIBRATION_METER_DB_MIN) / (CALIBRATION_METER_DB_MAX - CALIBRATION_METER_DB_MIN)));
+}
 
 function zoneLabel(zone) {
   if (zone === 0) return 'Quiet';
@@ -346,20 +472,16 @@ function zoneLabel(zone) {
   return 'Outside Range'; // zone === OUTSIDE_ZONE
 }
 
-// The Monitoring screen's read-only profile line, e.g. "Profile: Coffee Shop
-// (Custom)" or "Profile: Current speaking range (Unsaved)" for a temporary
-// calibration — checked first and only via isTemporaryProfile(), never
-// inferred from name/id shape. A profile counts as "Custom" if and only if
-// it carries `id` — the one canonical shape every production caller now
-// produces for a saved-profile monitoring session (the persisted saved-
-// profile object itself: {id, name, speakingDb, spreadDb, calibratedTs} —
-// see src/profiles.js's addSavedProfile()/updateSavedProfile()). The older
-// `savedProfileId`-wrapper shape (no `id`) that try-it.js used to construct
-// for this purpose is gone — Step 7 normalized every production call site
-// onto the direct saved-profile object instead of wrapping it, so there is
-// nothing left to check `savedProfileId` for here. `savedProfileId: null`
-// still appears, but only as part of the *temporary* shape (alongside
-// `temporary: true`), which isTemporaryProfile() already catches above.
+// The Monitoring screen's read-only profile line, e.g. "Profile: Coffee
+// Shop". Batch 4 (independent corrections) removed the old "(Custom)"/
+// "(Unsaved)" parenthetical qualifiers this used to append — saved-vs-
+// unsaved status is still fully tracked in the underlying profile object
+// and still governs real behavior elsewhere (Ready's selector groups,
+// save/replace/delete availability, etc.); this label just no longer
+// surfaces it during Monitoring, which is a quieter, less jargon-y moment
+// than Ready. The name itself remains the one piece of accessibility-
+// relevant information this label exists to convey, and that's preserved
+// exactly as before — only the qualifier is gone.
 export function profileMetaText(profile) {
   // A neutral fallback — there is no built-in default profile to fall back
   // to a label for. Every real profile shape reaching this function
@@ -368,8 +490,7 @@ export function profileMetaText(profile) {
   // before init() resolves an active profile), never with a real, named
   // profile lacking one.
   const name = profile?.name || 'Unknown Profile';
-  if (isTemporaryProfile(profile)) return `Profile: ${name} (Unsaved)`;
-  return profile?.id ? `Profile: ${name} (Custom)` : `Profile: ${name}`;
+  return `Profile: ${name}`;
 }
 
 export function createMezzoSession({
@@ -443,6 +564,42 @@ export function createMezzoSession({
     }
   });
 
+  // The state.preparing false→true edge (delayed-disclosure decision for
+  // "Preparing microphone…", then the "Start speaking in 3/2/1" countdown)
+  // is handled by a dedicated listener defined alongside
+  // prepareCalibratingScreen() below, since its logic depends on local
+  // preparation-timer state declared there — see handleAcquisitionConfirmed().
+
+  // Calibration-stall reliability correction (see CLAUDE.md's Engineering
+  // Notes), extended for the calibration pacing revision (second pass):
+  // starts the visible "Listening… {n}s" countdown AND reveals the
+  // meter on state.capturing's false→true edge — the point
+  // calibration-controller.js's runCapture() has confirmed
+  // audio.startMonitoring() actually succeeded, not merely that it was
+  // called and not merely that CALIBRATING status was set (which happens
+  // before audio.acquire() even resolves, well before the fixed
+  // preparation countdown even starts). Also fires the one-time "Listening
+  // for 6 seconds." announcement here, and defensively stops the
+  // preparation countdown (startPreparationCountdown()'s own 3→2→1 timer
+  // should already have stopped itself by this point, but capture
+  // beginning is the real authority on when preparation is over, not the
+  // presentational countdown's own arithmetic). calibrationCountdownStarted
+  // guards this to fire at most once per attempt; prepareCalibratingScreen()
+  // resets it to false at the start of every fresh attempt/retry. A
+  // dedicated listener, not folded into the generic one above, since it
+  // reacts to a different signal (a field, not a status transition) for a
+  // different purpose (presentational timing, not screen routing).
+  calibrationController.subscribe((state) => {
+    if (state.capturing && !calibrationCountdownStarted) {
+      calibrationCountdownStarted = true;
+      stopPreparationCountdown();
+      if (calibratingMeterRowEl) calibratingMeterRowEl.classList.remove('hidden');
+      if (calibratingMeterHintEl) calibratingMeterHintEl.classList.remove('hidden');
+      if (calibratingAnnounceEl) calibratingAnnounceEl.textContent = 'Listening for 6 seconds.';
+      startCalibratingCountdown();
+    }
+  });
+
   let pipCircle = null;
   let activeCircle = null;
   let pipWindow = null;
@@ -482,9 +639,14 @@ export function createMezzoSession({
   let c1EntrySource = null;
 
   // C0 — dedicated microphone-blocked screen, reached instead of the
-  // generic Calibration Failed screen specifically for
-  // MIC_PERMISSION_DENIED (see showFailedScreen()).
+  // generic Calibration Failed screen for MIC_PERMISSION_DENIED and
+  // MIC_ACQUISITION_TIMEOUT alike (see showFailedScreen()). Heading/body
+  // are re-set per failure code on every show (see showC0Screen()) rather
+  // than fixed at DOM-build time, so the two failure codes can render
+  // distinct, honest copy on the one shared screen/illustration/actions.
   let c0ScreenEl = null;
+  let c0HeadingEl = null;
+  let c0BodyEl = null;
 
   // Ready-screen DOM refs, (re)assigned each time startMonitoring() builds
   // the document. The approved selector model (see
@@ -504,22 +666,71 @@ export function createMezzoSession({
   let readyDisclaimerEl = null;
   let selectorExpanded = false;
 
-  // Full-screen decision states — M1 (replace/keep-as-unsaved), M2/M2a
-  // (name/replace a new profile), M3 (five-profile limit), and 06b (delete
-  // confirmation). Each is a genuinely separate screen (see CLAUDE.md:
-  // never one screen with elements toggled), built from the shared
-  // .pip-screen-decision visual vocabulary.
+  // Full-screen decision states — the post-creation completion transition
+  // (creatingScreenEl) and result screens (Slice 2's "Your new speaking
+  // profile is ready", Variant 1 = resultScreenEl, Variant 2 = m1ScreenEl),
+  // M2/M2a (name/replace a new profile), M3 (five-profile limit), and 06b
+  // (delete confirmation). Each is a genuinely separate screen (see
+  // CLAUDE.md: never one screen with elements toggled), built from the
+  // shared .pip-screen-decision visual vocabulary. Variant 1 and Variant 2
+  // now share one static heading/body pair — only Variant 2's primary
+  // button label is still dynamic (see replaceButtonLabel()).
   let m1ScreenEl = null;
   let m1HeadingEl = null;
   let m1ReplaceBtn = null;
   let m1KeepBtn = null;
+  let m1DiscardBtn = null;
+
+  // "Your new speaking profile is ready" (Slice 2, Variant 1) — reached
+  // from a session-mode calibration's completion (a brand-new profile, or
+  // redoing for the current Temporary profile — both are session mode; see
+  // handleCalibrationCompleted() below). Static copy throughout.
+  let resultScreenEl = null;
+  let resultHeadingEl = null;
+  let resultSaveBtn = null;
+  let resultKeepBtn = null;
+  let resultDiscardBtn = null; // see priorProfileBeforeCreation
+
+  // "Creating your speaking profile…" — the brief completion transition
+  // (Slice 2 revision) between real capture ending and a result screen
+  // appearing. See showCreatingTransition() below for the timing model.
+  let creatingScreenEl = null;
+  let creatingAnnounceEl = null; // visually-hidden aria-live region — one announcement, as this screen appears
+  let creatingTransitionTimer = null;
+
+  // Variant 1's own Discard needs to know what was selected before the
+  // CURRENT "new speaking profile" creation flow began, so it can restore
+  // that selection rather than merely falling back to some default. Set
+  // once, at the first beginCalibrationFlow('session', ...) call of a given
+  // flow (never overwritten by a later Redo within the same flow, so
+  // Discard can undo the whole flow, not just its most recent take);
+  // consumed and reset back to `undefined` whenever the flow concludes
+  // (Save, Keep temporarily, Discard itself, a Calibrating-screen Cancel,
+  // or the Companion closing). `undefined` means "no session-mode creation
+  // flow is currently in progress"; `null` is itself a valid snapshot
+  // (nothing was selected beforehand). Variant 2 (recalibrating a saved
+  // profile) never needs this: activeProfile is never reassigned during
+  // that flow until a commit, so its own Discard already just falls back to
+  // the untouched original selection — see handleM1Discard().
+  let priorProfileBeforeCreation;
 
   let m2ScreenEl = null;
   let m2WarningEl = null;
   let m2NameInput = null;
   let m2SubmitBtn = null;
+  // Where M2's own Cancel returns to — 'ready' (the existing, default entry
+  // point: Ready's own "Save profile" contextual link) or 'result' (Slice
+  // 2's "Speaking profile ready" screen's own Save profile button). Only
+  // Cancel branches on this — a successful save always returns to Ready
+  // regardless of origin (see handleM2Submit()), so this is deliberately
+  // narrower than a general "where did M2 come from" state: it exists
+  // purely to satisfy "cancelling the save flow returns to the result
+  // screen with the calibration still available" without a second M2
+  // implementation. Set by showM2Screen(); read and reset by handleM2Cancel().
+  let m2ReturnTo = 'ready';
 
   let m3ScreenEl = null;
+  let m3BodyEl = null;
   let m3CloseBtn = null;
 
   let deleteScreenEl = null; // 06b
@@ -545,9 +756,41 @@ export function createMezzoSession({
   // Calibrating-screen (C2) DOM refs
   let calibratingScreenEl = null;
   let calibratingSubheadingEl = null; // mode-aware "Recalibrating {name}" line — session mode leaves it empty
-  let calibratingStatusEl = null; // live "Listening… {n}s" countdown text
-  let calibratingBarFillEl = null;
+  let calibratingStatusEl = null; // aria-hidden visible text: blank, then (if shown) "Preparing microphone…", then "Start speaking in {n}", then a live "Listening… {n}s" countdown
+  let calibratingAnnounceEl = null; // visually-hidden aria-live region — exactly two one-time announcements, see its own construction comment above
+  let calibratingMeterRowEl = null;
+  let calibratingMeterFillEl = null; // the single continuous-fill element, width set via handleCalibrationLevelSample()
+  let calibratingMeterHintEl = null; // "Background sounds may move the meter too." — shares calibratingMeterRowEl's own hidden/visible lifecycle exactly
   let calibratingCountdownTimer = null;
+  // Guards the countdown's false→true "start exactly once per attempt"
+  // requirement — reset in prepareCalibratingScreen() at the top of every
+  // fresh attempt/retry, flipped true by the calibrationController.subscribe()
+  // listener below the first time state.capturing reads true for that
+  // attempt. Without this, a second capturing:true notification for the
+  // same attempt (there isn't one today, but nothing prevents it structurally)
+  // would otherwise restart the countdown from 6 mid-capture.
+  let calibrationCountdownStarted = false;
+
+  // Preparation-stage local timing state (calibration pacing revision,
+  // second pass — delayed disclosure + fixed 3-2-1 countdown). None of this
+  // is calibration-controller.js's concern: the controller only knows
+  // "preparing:true started" and "beginCountdown() was called" — the
+  // decision of WHEN to call beginCountdown() (immediately, for a fast
+  // acquisition; after a minimum-display wait, for a slow one) is a
+  // presentation-layer timing decision this module owns instead. See the
+  // dedicated calibrationController.subscribe() listener below for how
+  // these are used, and prepareCalibratingScreen()/stopPreparationCountdown()
+  // for where they're reset/cleared.
+  let preparingMessageDelayTimer = null; // fires PREPARING_MESSAGE_DELAY_MS after acquisition begins; shows "Preparing microphone…" if acquisition is still pending
+  let preparingMessageMinDisplayTimer = null; // once the message is shown, guarantees it stays up for PREPARING_MESSAGE_MIN_DISPLAY_MS before beginCountdown() fires
+  let preparingMessageShown = false; // true once "Preparing microphone…" has actually been rendered this attempt — decides whether the min-display wait applies at all
+  let preparingMessageShownAt = 0; // Date.now() at the moment the message actually rendered — 0 (unused) whenever preparingMessageShown is false
+  let preparationCountdownTimer = null; // drives the visible/announced "Start speaking in 3/2/1" ticks, started only once beginCountdown() is actually called
+  // Guards state.preparing's false→true edge to run at most once per
+  // attempt — reset in prepareCalibratingScreen(), same pattern/reasoning
+  // as calibrationCountdownStarted below for the capturing:true edge. See
+  // handleAcquisitionConfirmed()'s own doc comment.
+  let preparingHandled = false;
 
   // Calibration Failed-screen DOM refs
   let failedScreenEl = null;
@@ -733,7 +976,15 @@ export function createMezzoSession({
    * already-open Document PiP window isn't guaranteed by every browser — if
    * it's unsupported or blocked, the layout still renders correctly at
    * whatever size the window actually is; explicit state, not window
-   * dimensions, decides which content shows.
+   * dimensions, decides which content shows. Monitoring-only as of Batch 2's
+   * audit correction below — every pre-monitoring screen uses
+   * resizeCompanionToContent() instead, since window.resizeTo() itself
+   * operates on outerWidth/outerHeight (chrome-inclusive), and handing it
+   * the same numbers requested as a *content*-area target (as this function
+   * does, unchanged, still correct for its own Monitoring callers, which
+   * have never claimed a content-viewport guarantee) is exactly the
+   * mismatch that helper exists to correct for pre-monitoring's own,
+   * explicit 382×512 content-viewport requirement.
    */
   function resizeCompanionTo(size) {
     if (!pipWindow) return;
@@ -743,6 +994,88 @@ export function createMezzoSession({
       console.warn('[Session] Could not resize the Mezzo Companion:', err.message);
     }
   }
+
+  /**
+   * Pre-monitoring-only content-aware resize (Batch 2 audit correction) —
+   * replaces the old blind resizeCompanionTo(target) call (an OUTER-window
+   * resizeTo() being handed CONTENT-area numbers) with a measure-first
+   * correction: reads the window's actual innerWidth/innerHeight, and only
+   * ever adjusts outerWidth/outerHeight by the OBSERVED gap between that and
+   * the target — never assumes a fixed chrome inset, never blindly sets
+   * outer=target the way the old call did. Platform-tolerant by
+   * construction: zero chrome means the delta is 0 (an effective no-op);
+   * real chrome means this corrects for exactly however much exists, on
+   * whatever OS/Chrome version this happens to be — never a hardcoded
+   * assumption either way.
+   *
+   * Still a best-effort correction, not a guarantee: nothing here (or
+   * anywhere in JavaScript) can force Chrome to honor a resize it chooses to
+   * clamp or ignore outright — the same caveat resizeCompanionTo() itself
+   * already carried. If the measurements this depends on aren't usable
+   * (missing, non-finite, zero, or negative — e.g. a browser that doesn't
+   * expose them the way this assumes), this deliberately does NOT fall back
+   * to a blind resizeTo(target.width, target.height): that blind call is
+   * the exact behavior being corrected, not a safe default to land on when
+   * uncertain.
+   *
+   * Called both right after requestWindow() resolves and on every
+   * pre-monitoring screen transition (Welcome/C1/Calibrating/every decision
+   * state/Ready) — the repeated calls stay, so a user's manual resize
+   * between screens still gets corrected back, but because this measures
+   * first, a call where nothing has actually drifted is a genuine no-op
+   * rather than a wasted (or actively harmful) resizeTo() invocation.
+   *
+   * Also guards against a computed, non-positive resize target — found via
+   * this correction's own focused Playwright coverage (not assumed): this
+   * Playwright/CDP sandbox's real PiP window leaves innerWidth/innerHeight
+   * permanently locked at its fixed automation viewport but *does* let
+   * outerWidth/outerHeight drift after a resizeTo() call, an asymmetry real
+   * desktop Chrome isn't expected to have (there, outer and inner move
+   * together). Left uncorrected, a later call's delta math against that
+   * drifted outerWidth against a still-locked innerWidth can compute a
+   * negative width/height — never a value any real caller should hand to
+   * resizeTo(). Same "no blind fallback" policy as the measurement-usability
+   * check above: skip the call outright rather than clamp to some
+   * arbitrary substitute size.
+   */
+  function resizeCompanionToContent(target) {
+    if (!pipWindow) return;
+    try {
+      const { innerWidth, innerHeight, outerWidth, outerHeight } = pipWindow;
+      const usable = [innerWidth, innerHeight, outerWidth, outerHeight].every(
+        (n) => typeof n === 'number' && Number.isFinite(n) && n > 0
+      );
+      if (!usable) return; // no blind fallback — see this function's own doc comment
+      if (innerWidth === target.width && innerHeight === target.height) return; // already correct
+      const deltaW = target.width - innerWidth;
+      const deltaH = target.height - innerHeight;
+      const nextWidth = outerWidth + deltaW;
+      const nextHeight = outerHeight + deltaH;
+      if (nextWidth <= 0 || nextHeight <= 0) return; // computed target is nonsensical — see this function's own doc comment
+      pipWindow.resizeTo(nextWidth, nextHeight);
+    } catch (err) {
+      console.warn('[Session] Could not resize the Mezzo Companion:', err.message);
+    }
+  }
+
+  // forceInitialCompanionSize() — the JS-side initial-sizing correction
+  // that used to live here (first a single same-tick call, then a
+  // double-rAF-gated attempt, then a several-hundred-ms time-spread retry
+  // schedule) — was retired outright (2026-08-19), not merely simplified.
+  // Confirmed why no version of it could ever have been a reliable fix,
+  // not just an insufficiently-tuned one: resizeTo()/resizeBy() on a
+  // Document Picture-in-Picture window require transient user activation
+  // per spec, which a setTimeout/requestAnimationFrame callback firing
+  // after the opening click has already returned is not reliably still
+  // holding — no amount of retrying or spreading those calls out over
+  // time could fix a mechanism the platform itself won't honor outside a
+  // real, current user gesture. The actual, sanctioned fix is
+  // requestWindow()'s own preferInitialWindowPlacement option — see its
+  // call site's doc comment in startMonitoring() above. Welcome's/Ready's
+  // own showXScreen() functions still each call resizeCompanionToContent()
+  // synchronously on every show (unchanged) — that's legitimate, real
+  // user-gesture-driven correction for a manual resize made mid-session on
+  // a different screen, not the initial-open case this removal concerns.
 
   /**
    * Applies an explicit Monitoring layout mode: updates the state variable,
@@ -836,14 +1169,38 @@ export function createMezzoSession({
       // full-screen decision state) now shares this one fixed size — see
       // MEZZO_COMPANION_READY_BASE_HEIGHT's own comment for why Ready's
       // height stopped depending on saved-profile count.
-      pipWindow = await documentPictureInPicture.requestWindow(MEZZO_COMPANION_READY_SIZE);
-      // Belt-and-suspenders, not a poll/loop: requestWindow()'s size argument
-      // isn't guaranteed to be honored by every browser (the same caveat
-      // resizeCompanionTo() below already carries) — a returning user's
-      // previously-honored manual resize is the documented case this
-      // guards against. One corrective call right after open, never
-      // repeated/watched afterward.
-      resizeCompanionTo(MEZZO_COMPANION_READY_SIZE);
+      //
+      // preferInitialWindowPlacement: true (2026-08-19, replaces the
+      // retired forceInitialCompanionSize() correction — see the note left
+      // in its place just above startMonitoring()) — the
+      // Document Picture-in-Picture spec's own, browser-native answer to
+      // "a returning user's previously-honored manual resize" (Chrome
+      // 130+): it tells the browser not to reuse the previous Document PiP
+      // window's remembered position/size for this open, so width/height
+      // above are what actually get honored rather than a stale manual
+      // size the window otherwise remembers across opens. This replaces a
+      // whole prior generation of JS-side correction attempts (a
+      // same-tick resizeCompanionToContent() call, then a double-rAF-gated
+      // one, then a several-hundred-ms time-spread retry schedule) that
+      // were never structurally capable of fixing this: per spec,
+      // resizeTo()/resizeBy() on a Document PiP window require transient
+      // user activation, which a setTimeout/requestAnimationFrame callback
+      // firing after the opening click has already returned does not
+      // reliably still have. No amount of retrying or spreading those
+      // calls out over time could fix a mechanism the platform itself
+      // won't honor outside a real, current user gesture — this option is
+      // the actual, sanctioned fix, not another timing adjustment. Welcome's
+      // and Ready's own showXScreen() functions still each call
+      // resizeCompanionToContent() themselves on every show (unchanged,
+      // and legitimate to keep: each is reached via a real, synchronous
+      // in-window click — Cancel, Discard, Recalibrate, Stop, and so on —
+      // so a manual resize made mid-session, on a different screen, still
+      // gets corrected on the next real user-initiated transition, under
+      // that click's own valid activation, not a deferred timer's).
+      pipWindow = await documentPictureInPicture.requestWindow({
+        ...MEZZO_COMPANION_READY_SIZE,
+        preferInitialWindowPlacement: true,
+      });
     } catch (err) {
       console.error('[Session] Failed to open the Mezzo Companion:', err.message);
       return false;
@@ -951,39 +1308,70 @@ export function createMezzoSession({
         color: var(--text-subdued);
         letter-spacing: 0.04em;
       }
-      .btn-wide {
-        padding: 16px 64px;
-        min-width: 240px;
-      }
-
       /* Shared cap for every full-width, single-column pill action in the
-         Companion — Start monitoring and every full-screen decision
-         state's primary/secondary action share this one rule (Recalibrate/
-         Create new profile/Save profile are text links now, not pills —
-         see .pip-ready-contextual-actions, which reuses .pip-text-btn
-         directly rather than a dedicated class of its own — so they never
-         need this cap). At the default Companion width these buttons
-         already sit well under 320px, so this only matters once a user
-         manually resizes the window wider — see MEZZO_COMPANION_READY_WIDTH's
-         own comment above for how 320 (button) + 30 + 30 (this centering
-         slack, on top of each screen's own unchanged side padding) adds up.
+         Companion — every full-screen decision state's primary/secondary
+         action shares this one rule (Recalibrate/Create new profile/Save
+         profile are text links, not pills, so they never need this cap).
+         Discard (M1/Result) is covered too — as of the 2026-08-14
+         visual-language pass it carries .pip-decision-secondary-btn
+         directly (see that class's own comment), not a separate class of
+         its own, so no extra selector is needed here. Start monitoring is
+         not part of this group either — it has its own dedicated
+         width/max-width rule instead (see .pip-ready-start-btn's own CSS
+         comment), narrower than this 320px cap, not wider.
          Compact controls, selector rows, and the native window-close
-         control are untouched — they don't use this pattern. */
-      .pip-ready-start-btn,
+         control are untouched — they don't use this pattern either. */
       .pip-decision-primary-btn,
       .pip-decision-secondary-btn {
         max-width: 320px;
         margin-inline: auto;
       }
 
-      /* ── Shared intro-text vocabulary — heading + body, used by both
-         Welcome/01 and C1 (their content shape is identical: a short
-         heading, one explanatory paragraph, one primary action). ── */
-      .pip-intro-heading {
+      /* ── Shared Companion H1 typography — every real <h1> in the
+         Companion (Welcome, C1, C0, Ready, and both post-creation result
+         screens) uses this one rule for font-size/weight/line-height/
+         letter-spacing/color, rather than each screen redefining its own
+         (found to have drifted — Welcome/C1/C0 at 17px with no
+         letter-spacing, decision screens at 15px — during this revision's
+         own H1-consistency pass). Values are Ready's own pre-existing H1
+         treatment, copied here as the shared source of truth; layout-only
+         concerns that genuinely differ per screen (margin, min-height,
+         max-width) stay on each screen's own class alongside this one,
+         never duplicated here. ── */
+      /* h1.pip-h1/p.pip-h1, not just .pip-h1: every real <h1> this applies
+         to needs the element+class compound selector's higher specificity
+         to reliably win over .pip-decision-heading's own font-size/
+         line-height/color (still used, unchanged, by M2/M3/06b's own <p>
+         headings) regardless of which rule happens to come later in this
+         stylesheet — no fragile reliance on source order between the two.
+         p.pip-h1 was added in the 2026-08-14 Companion-wide typography
+         pass, extending this exact same shared rule to Calibrating's own
+         heading (.pip-calibrating-heading) and Failed's own message
+         (.pip-failed-message) — both real <p> elements, not <h1> (see
+         "Preserve semantic heading structure" — this pass changes their
+         typography only, never their tag), so h1.pip-h1 alone would never
+         have matched them; neither carries .pip-decision-heading, so no
+         specificity conflict exists there either, but the same compound
+         pattern is used for consistency and to guard against one being
+         added later. */
+      h1.pip-h1,
+      p.pip-h1 {
         font-family: var(--font-display);
         font-weight: var(--weight-light);
-        font-size: 17px;
-        color: rgba(222, 210, 194, 0.92);
+        font-size: 24px;
+        line-height: 1.15;
+        letter-spacing: -0.2px;
+        color: #F0EBE2;
+        text-align: center;
+        margin: 0;
+      }
+
+      /* ── Shared intro-text vocabulary — heading + body, used by both
+         Welcome/01 and C1 (their content shape is identical: a short
+         heading, one explanatory paragraph, one primary action). Typography
+         itself now comes from .pip-h1 (always paired on the same element) —
+         this class no longer redeclares it. ── */
+      .pip-intro-heading {
         margin: 0;
       }
       .pip-intro-body {
@@ -1021,6 +1409,20 @@ export function createMezzoSession({
         box-sizing: border-box;
         gap: 12px;
         text-align: center;
+      }
+
+      /* margin-top (2026-08-16 pass, C1/"Create speaking profile" only —
+         Welcome and C0 keep the shared 12px base gap unchanged, so this is
+         scoped to just C1's own primary button rather than raising the
+         shared rule above): the heading-to-paragraph relationship stays at
+         that same base 12px gap, untouched, while the paragraph-to-button
+         gap gets noticeably larger — reusing this file's own established
+         "add margin-top on top of an unchanged base gap" pattern (see
+         .pip-screen-result/.pip-screen-m1's own .pip-decision-body rule)
+         rather than a new, isolated arbitrary value. 14px on top of the
+         12px base gives ~26px between the paragraph and "I'm ready". */
+      .pip-screen-c1 .pip-intro-primary-btn {
+        margin-top: 14px;
       }
 
       /* Primary action shares the pill treatment .pip-ready-start-btn
@@ -1076,54 +1478,68 @@ export function createMezzoSession({
         gap: 10px;
       }
 
+      /* Typography now comes from .pip-h1 (always paired on the same
+         element) — this class only carries Ready's own layout specifics. */
       .pip-ready-heading {
-        font-family: var(--font-display);
-        font-weight: var(--weight-light);
-        font-size: 16px;
-        line-height: 1.4;
-        letter-spacing: 0.01em;
-        color: rgba(222, 210, 194, 0.85);
-        text-align: center;
         margin: 2px 0 0;
-        min-height: 26px;
+        min-height: 32px;
         flex-shrink: 0;
       }
 
+      /* margin-top (2026-08-15 pass): the heading should read as the
+         screen's own introduction, with the SPEAKING PROFILE label/selector
+         beneath it as a distinctly separate, closely-connected control
+         group — the screen's own flat 10px .pip-screen-ready gap didn't
+         differentiate "end of the intro" from "start of a tight label+
+         selector pairing." 14px added on top of that 10px base (reusing
+         the same value already used elsewhere in this same pass for an
+         analogous "noticeably larger than the base rhythm" gap — see
+         .pip-screen-result/.pip-screen-m1's own .pip-decision-actions
+         margin-top) gives ~24px between the heading and the label.
+         Label-to-selector spacing is deliberately NOT touched — it stays
+         at the screen's own base 10px gap, since that pairing should stay
+         tight. */
       .pip-ready-profile-label {
         font-family: var(--font-body);
         font-size: 10px;
         font-weight: var(--weight-medium);
         letter-spacing: 0.10em;
         text-transform: uppercase;
-        color: rgba(172, 158, 136, 0.65);
+        color: #9A9289;
+        text-align: center;
         min-height: 12px;
         flex-shrink: 0;
+        margin-top: 14px;
       }
 
       /* Collapsed summary row — shows the selected profile, opens the
          panel below on click. A real <button>, not a native <select>: the
          panel's own grouped/sectioned layout (Unsaved vs. Saved profiles,
-         inline delete/discard) has no equivalent in a native select. */
+         inline delete/discard) has no equivalent in a native select.
+         Reference-matched (Batch 2): a centered, borderless dark pill —
+         border:0 explicitly, not a low-contrast border left to read as
+         invisible. */
       .pip-ready-selector-trigger {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 8px;
+        gap: 10px;
         width: 100%;
-        min-height: 40px;
+        min-height: 44px;
         box-sizing: border-box;
-        padding: 10px 14px;
-        border-radius: 8px;
-        background: rgba(255, 255, 255, 0.06);
-        border: 1px solid rgba(255, 255, 255, 0.10);
+        padding: 13px 32px;
+        border-radius: 100px;
+        background: #222222;
+        border: 0;
         font-family: var(--font-body);
-        font-size: 13px;
+        font-weight: var(--weight-light);
+        font-size: 17px;
         color: rgba(222, 210, 194, 0.92);
         cursor: pointer;
         flex-shrink: 0;
         text-align: left;
       }
-      .pip-ready-selector-trigger:hover { background: rgba(255, 255, 255, 0.09); }
+      .pip-ready-selector-trigger:hover { background: #2a2a2a; }
       .pip-ready-selector-trigger-name {
         flex: 1;
         min-width: 0;
@@ -1131,12 +1547,41 @@ export function createMezzoSession({
         overflow: hidden;
         text-overflow: ellipsis;
       }
+      /* display:inline-flex + centered align/justify (2026-08-16 fix — was a
+         bare inline <span>, so its width:10px/height:10px never actually
+         applied per CSS's own rules for inline boxes, leaving the SVG glyph
+         positioned by its default inline baseline instead of centered in
+         its declared box): one shared vertical-centering anchor for both
+         the closed (downward) and expanded (upward, rotated) states — the
+         icon's own box is now genuinely 10x10 and centered on itself, so
+         the default center transform-origin rotate(180deg) already uses
+         pivots around the same visual center the closed state renders at,
+         rather than needing separate offsets per state. The parent
+         trigger's own align-items:center (unchanged) still centers this
+         whole box within the row; this rule only fixes what happens
+         *inside* the box. Shape, size, color, and the rotation transition
+         are all unchanged. */
       .pip-ready-selector-chevron {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
         flex-shrink: 0;
         width: 10px;
         height: 10px;
         color: rgba(172, 158, 136, 0.80);
         transition: transform 0.15s ease;
+      }
+      /* Explicit 100%/100% (2026-08-16, same fix) — deterministically pins
+         the glyph itself to the wrapper's own 10x10 box regardless of
+         whatever intrinsic/default replaced-element sizing an unstyled
+         <svg viewBox> would otherwise resolve to, so this pass changes only
+         the icon's vertical position, never its rendered size. display:block
+         avoids the SVG's own inline baseline gap inside the flex box (belt
+         and suspenders alongside align-items:center above). */
+      .pip-ready-selector-chevron svg {
+        display: block;
+        width: 100%;
+        height: 100%;
       }
       .pip-ready-selector-trigger[aria-expanded="true"] .pip-ready-selector-chevron {
         transform: rotate(180deg);
@@ -1149,25 +1594,43 @@ export function createMezzoSession({
          means the panel always sits just below the trigger regardless of
          how tall the heading/label above it actually render — a fixed
          pixel offset from the screen's own top would silently break if
-         either ever wrapped to a second line. */
+         either ever wrapped to a second line. Reference-matched (Batch 2):
+         260px, centered — not the full card width. */
       .pip-ready-selector-wrap {
         position: relative;
-        width: 100%;
+        width: 260px;
+        max-width: 100%;
+        margin-inline: auto;
         flex-shrink: 0;
       }
 
-      /* Expanded panel — absolutely positioned over the card's own bounds
-         (.pip-screen is already position:relative, overflow:hidden clips
-         this to the 14px radius), so it never affects window height. Its
-         own row list is the one thing inside it allowed to scroll. */
+      /* Expanded panel — a native <fieldset> now (Batch 2), not a
+         role="listbox" <div>: its content is a mutually-exclusive group of
+         native radio profile choices plus independent delete/discard
+         buttons, which radiogroup semantics describe honestly and listbox
+         semantics don't (a listbox's option children aren't expected to
+         contain their own focusable descendants). border/margin/min-width
+         reset the default fieldset chrome; everything else (position,
+         background, scrolling) is unchanged from the pre-Batch-2 panel.
+         Absolutely positioned over the card's own bounds (.pip-screen is
+         already position:relative, overflow:hidden clips this to the 14px
+         radius), so it never affects window height — opening it never
+         calls resizeCompanionTo() or resizeCompanionToContent() (see
+         openSelectorPanel()). Its own row
+         list is the one thing inside it allowed to scroll, capped at
+         max-height:260px regardless of how many profiles exist (up to five
+         saved plus one unsaved) — see MEZZO_COMPANION_READY_BASE_HEIGHT's
+         own comment. */
       .pip-ready-selector-panel {
         position: absolute;
         left: 0;
         right: 0;
         top: calc(100% + 8px);
         z-index: 30;
-        background: #3c3b3f;
-        border: 1px solid rgba(255, 255, 255, 0.10);
+        background: #222222;
+        border: 0;
+        margin: 0;
+        min-width: 0;
         border-radius: 10px;
         box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
         max-height: 260px;
@@ -1176,9 +1639,27 @@ export function createMezzoSession({
         box-sizing: border-box;
         padding: 6px 0;
       }
+      /* The <fieldset>'s <legend> — provides its one accessible name
+         ("Speaking profiles"), same string the old aria-label carried.
+         Visually hidden via the standard clip technique (never
+         display:none/visibility:hidden, which would drop it from the
+         accessibility tree instead of just hiding it visually — legends
+         don't need to be seen here, the "Speaking profile" label above the
+         trigger already carries the visible heading). */
+      .pip-ready-selector-legend {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
       .pip-ready-selector-group-label {
         font-family: var(--font-body);
-        font-size: 9px;
+        font-size: 10px;
         font-weight: var(--weight-medium);
         letter-spacing: 0.12em;
         text-transform: uppercase;
@@ -1190,6 +1671,40 @@ export function createMezzoSession({
         background: rgba(255, 255, 255, 0.08);
         margin: 6px 10px;
       }
+      /* Create new profile — persistent selector-panel footer action
+         (2026-08-18, moved here from the retired Ready-level contextual
+         link). A plain, full-width text button reusing the row's own
+         padding rhythm (8px 14px) rather than a filled pill — "visually
+         separated... without becoming a large marketing-style button." The
+         --hanko-fill accent color (already used for this Companion's own
+         affirmative/creation actions elsewhere) is what distinguishes it
+         from a plain profile row at a glance, not size or a filled
+         background. Sentence case in the DOM (not forced uppercase via
+         CSS, unlike .pip-ready-contextual-link/.pip-text-btn's own
+         treatment) — this reads as a persistent list action, not a
+         secondary link. */
+      .pip-ready-selector-footer-action {
+        display: block;
+        width: 100%;
+        box-sizing: border-box;
+        padding: 10px 14px;
+        background: none;
+        border: none;
+        font-family: var(--font-body);
+        font-size: 12.5px;
+        font-weight: var(--weight-medium);
+        color: var(--hanko-fill);
+        text-align: center;
+        cursor: pointer;
+      }
+      .pip-ready-selector-footer-action:hover {
+        background: rgba(255, 255, 255, 0.06);
+      }
+      .pip-ready-selector-footer-action:focus-visible {
+        outline: 2px solid var(--hanko-fill);
+        outline-offset: -2px;
+        background: rgba(255, 255, 255, 0.06);
+      }
       .pip-ready-selector-row {
         display: flex;
         align-items: center;
@@ -1199,11 +1714,33 @@ export function createMezzoSession({
         box-sizing: border-box;
       }
       .pip-ready-selector-row:hover { background: rgba(255, 255, 255, 0.04); }
+      /* Visually hidden, never removed from the accessibility tree or the
+         focus order (no display:none/visibility:hidden) — the standard
+         "visually-hidden" clip technique, collapsed to 1x1px. This is a
+         native radio: Tab/Arrow/Space behavior is entirely the browser's,
+         no custom keydown handling. position:absolute takes it out of
+         normal flow (so it never introduces stray flex-gap spacing before
+         the label) and — because no inset properties are set — it renders
+         at its own static position (approximately where the label starts),
+         never stretched to cover the row, so it can never overlay or
+         intercept the delete/discard button further along the same row. */
       .pip-ready-selector-row-radio {
-        width: 16px;
-        height: 16px;
-        accent-color: var(--hanko-fill);
-        flex-shrink: 0;
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+      .pip-ready-selector-row-label {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
         cursor: pointer;
       }
       .pip-ready-selector-row-name {
@@ -1212,21 +1749,51 @@ export function createMezzoSession({
         font-family: var(--font-body);
         font-size: 13px;
         color: rgba(222, 210, 194, 0.92);
-        cursor: pointer;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+      }
+      /* The checkmark and the selected row's own medium weight are both
+         derived directly from the radio's native :checked state — no
+         second, JS-maintained "selected" flag to drift out of sync with
+         it. visibility (not opacity/color) toggling survives forced-colors
+         mode, where custom color rules are overridden but layout
+         properties are not. aria-hidden below: the radio itself already
+         announces "checked" to assistive tech: the glyph is decorative
+         reinforcement, not a second thing to announce. */
+      .pip-ready-selector-row-radio:checked ~ .pip-ready-selector-row-label .pip-ready-selector-row-name {
+        font-weight: var(--weight-medium);
+      }
+      .pip-ready-selector-row-check {
+        flex-shrink: 0;
+        color: var(--hanko-fill);
+        visibility: hidden;
+      }
+      .pip-ready-selector-row-radio:checked ~ .pip-ready-selector-row-label .pip-ready-selector-row-check {
+        visibility: visible;
+      }
+      /* Redirects the hidden radio's own focus ring onto the visible label
+         — outline, not a background/color-only change, so the indicator
+         itself also survives forced-colors/high-contrast presentation. */
+      .pip-ready-selector-row-radio:focus-visible ~ .pip-ready-selector-row-label {
+        outline: 2px solid var(--hanko-fill);
+        outline-offset: 2px;
+        border-radius: 4px;
       }
       .pip-ready-selector-row-note {
         font-family: var(--font-body);
         font-size: 10px;
         color: rgba(172, 158, 136, 0.60);
-        padding: 0 14px 6px 40px;
+        padding: 0 14px 6px;
         margin: -6px 0 0;
       }
       /* Delete (saved rows) / discard (the unsaved row) — same restrained
          icon-button treatment either way, distinguished only by which icon
-         and aria-label the row supplies. */
+         and aria-label the row supplies. An independent sibling of the
+         radio+label, never nested inside either — selecting a row can
+         never accidentally activate it, and activating it can never check
+         the radio (see handleSelectorRowChange() / the row action's own
+         click handler, both unchanged from before Batch 2). */
       .pip-ready-selector-row-action {
         flex-shrink: 0;
         display: flex;
@@ -1253,40 +1820,116 @@ export function createMezzoSession({
         background: rgba(255, 255, 255, 0.06);
       }
 
-      /* Contextual actions — text links per the PRD's Button and Action
-         System, not full-width pills: uppercase, medium-dark gray, no
-         button chrome. Reuses .pip-text-btn's own treatment (already this
-         exact pattern, used by Cancel/Back elsewhere) rather than a
-         second, near-identical rule. */
+      /* Contextual actions — reference-matched (Batch 2): sentence-case,
+         underlined inline links, not the old uppercase .pip-text-btn chip
+         treatment. Unsaved-profile-only now (2026-08-18): Save profile is
+         the sole action ever shown here. Recalibrate moved to the
+         selector panel's own per-row icon (2026-08-17) and Create new
+         profile moved to the selector panel's own persistent footer
+         action (2026-08-18, see renderSelectorPanel()) — a saved profile
+         selected shows nothing in this row at all.
+         min-height: 20px removed (2026-08-19 spacing pass, see
+         .pip-ready-start-btn's own comment for the full before/after
+         gap math) — the row now collapses to zero height when it's
+         genuinely empty (the common, saved-profile-selected case) instead
+         of always reserving space for content that isn't there. A
+         selected unsaved profile's own "Save profile" link still renders
+         at its natural (unchanged) size when it IS present — this only
+         removes the empty case's own reserved minimum, so the row's
+         height still simply follows its actual content either way. */
       .pip-ready-contextual-actions {
         display: flex;
         align-items: center;
         justify-content: center;
         flex-wrap: wrap;
-        gap: 4px 14px;
+        gap: 8px;
         width: 100%;
-        min-height: 28px;
         flex-shrink: 0;
-      }
-
-      .pip-ready-start-btn {
-        width: 100%;
-        background: var(--hanko-fill);
-        border: none;
-        border-radius: 50px;
-        padding: 12px;
         font-family: var(--font-body);
-        font-size: 13px;
-        font-weight: var(--weight-medium);
-        color: rgba(255, 255, 255, 0.92);
-        letter-spacing: 0.04em;
-        cursor: pointer;
-        transition: opacity 0.15s ease;
-        box-sizing: border-box;
-        min-height: 40px;
-        flex-shrink: 0;
+        font-size: 12px;
       }
-      .pip-ready-start-btn:hover { opacity: 0.88; }
+      /* Shared secondary text-action treatment (2026-08-14 Companion-wide
+         visual-language pass) — Ready's own Recalibrate link is the
+         reference; .pip-text-btn (Cancel across C1/Calibrating/Failed,
+         Back across C0) now shares this exact rule rather than its own
+         older uppercase-chip treatment, so every secondary text action
+         in the Companion reads
+         the same way: sentence case, underlined, no forced letter-spacing,
+         no decorative icon. font-family/font-size are explicit here (not
+         font:inherit, the original Ready-only version's own approach) so
+         this reads identically regardless of which screen's ambient
+         context it's used in — Ready's own .pip-ready-contextual-actions
+         happens to already set this exact font-family/size on its
+         children, so this is a no-op change there, but M1/Result/C1/C0/
+         Calibrating/Failed have no equivalent ambient font of their own to
+         inherit correctly. */
+      .pip-ready-contextual-link,
+      .pip-text-btn {
+        font-family: var(--font-body);
+        font-size: 12px;
+        color: rgba(184, 169, 154, 0.85);
+        background: none;
+        border: none;
+        padding: 0;
+        cursor: pointer;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
+      .pip-ready-contextual-link:hover,
+      .pip-text-btn:hover { color: rgba(222, 210, 194, 0.92); }
+      .pip-ready-contextual-link:focus-visible,
+      .pip-text-btn:focus-visible {
+        outline: 2px solid var(--hanko-fill);
+        outline-offset: 2px;
+        border-radius: 2px;
+      }
+      /* Width (2026-08-19 pass): narrower than the 260px selector above it
+         (.pip-ready-selector-wrap), not the "no cap, intrinsically sized"
+         Batch 2 treatment this replaces (which happened to land around
+         ~240px purely as a side effect of .btn-wide's own 64px horizontal
+         padding — a padding value doing width's job, not an actual width
+         rule). width:100% + max-width:224px is the real, explicit sizing
+         rule instead: at the standard 382px Companion width (382 - 2×20px
+         screen padding = 342px available), 100% would be 342px, so
+         max-width always clamps it to exactly the approved ~224px target;
+         on a narrower manually-resized window, width:100% shrinks it
+         proportionally with the available space instead of holding a
+         fixed 224px and overflowing. box-sizing:border-box (own padding
+         below included in that 224px, not added on top of it) is what
+         makes that clamping arithmetic exact rather than approximate.
+         Centered for free via .pip-screen's own align-items:center, same
+         as the Batch 2 version — a capped width, not width:100% actually
+         filling the row, is what leaves room for that centering. Padding
+         reduced from .btn-wide's old 16px 64px (a value sized to produce
+         a WIDTH, no longer this rule's job) to a plainer, purely
+         vertical-comfort-driven 13px 24px, matching .btn-primary's own
+         base 13px 28px closely rather than reintroducing another
+         width-shaping number. */
+      /* margin-top: 14px -> 24px (2026-08-15 pass) -> 10px (2026-08-18) ->
+         4px (2026-08-19, this pass). With the now-empty contextual-actions
+         row's own min-height also removed (see that class's own comment
+         above), the total visual gap from the closed selector to Start
+         monitoring in the common (saved-profile-selected) case is the
+         screen's own two 10px base flex gaps either side of the
+         zero-height empty row, plus this 4px: 10 + 0 + 10 + 4 = 24px,
+         reference-matched to the approved ~24px target — down from ~50px
+         (10 + 20 + 10 + 10) before this pass. Start monitoring now reads
+         as directly, closely following the selector, not a separately
+         emphasized step, while the 4px still keeps the two visually
+         distinct rather than touching. When an unsaved profile IS selected
+         (the contextual-actions row showing its own "Save profile" link
+         instead of being empty), the gap is correspondingly larger by
+         that link's own real rendered height — unchanged by this pass,
+         and not a regression: there is visibly a link occupying that
+         space in that case. */
+      .pip-ready-start-btn {
+        flex-shrink: 0;
+        margin-top: 4px;
+        width: 100%;
+        max-width: 224px;
+        box-sizing: border-box;
+        padding: 13px 24px;
+      }
       .pip-ready-start-btn:disabled { opacity: 0.5; cursor: default; }
 
       .pip-ready-disclaimer {
@@ -1295,7 +1938,7 @@ export function createMezzoSession({
         line-height: 1.4;
         color: rgba(172, 158, 136, 0.65);
         text-align: center;
-        margin: 0;
+        margin: 14px 0 0;
         max-width: 260px;
         min-height: 32px;
         flex-shrink: 0;
@@ -1320,69 +1963,96 @@ export function createMezzoSession({
         text-align: center;
         min-height: 12px;
       }
+      /* Typography now comes from .pip-h1 (2026-08-14 pass — see p.pip-h1's
+         own comment on the shared rule above); this class only carries the
+         one genuinely layout-specific concern left. */
       .pip-calibrating-heading {
-        font-family: var(--font-display);
-        font-weight: var(--weight-light);
-        font-size: 15px;
-        line-height: 1.5;
-        color: rgba(222, 210, 194, 0.85);
-        text-align: center;
-        margin: 0;
         max-width: 250px;
       }
-      /* "Listening… 6s" — a live countdown, not a static label; see
-         handleCalibrationLevelSample()/the capture-start timer below. */
+      /* "Preparing microphone…" / "Start speaking in {n}" / "Listening…
+         {n}s" — aria-hidden (see calibratingAnnounceEl for what assistive
+         tech actually hears); a live countdown, not a static label. See
+         handleAcquisitionConfirmed()/startPreparationCountdown()/
+         startCalibratingCountdown(). One consistent, more prominent
+         treatment across every pre-capture and active-capture state
+         (2026-08-14 pass) — bumped from 11px/regular to 15px/medium-weight
+         (15px reuses the exact size .pip-calibrating-heading/
+         .pip-failed-message used before this same pass moved them up to
+         24px, rather than picking a new, unrelated number), still clearly
+         smaller than the 24px heading above it, and still the same amber
+         already used here (unchanged color — a larger size only improves
+         its own effective contrast, never worsens it). min-height scaled
+         to match so the pre-disclosure blank state still reserves the
+         right amount of layout space. */
       .pip-calibrating-status {
         font-family: var(--font-body);
-        font-size: 11px;
+        font-size: 15px;
+        font-weight: var(--weight-medium);
         color: rgba(210, 155, 75, 0.90);
         text-align: center;
+        min-height: 19px; /* holds its own layout space even while blank, pre-disclosure */
       }
-      .pip-calibrating-bar-row {
+      /* Continuous fill meter (2026-08-12 revision — restores the
+         continuous presentation the old "Quiet"/"Loud" bar used, minus its
+         judgmental labels; supersedes the intermediate 5-segment
+         presentation, which made a real, audible change in speaking level
+         often produce no visible movement at all until it crossed a whole
+         segment boundary). Hidden until real six-second capture begins (see
+         calibratingMeterRowEl's own construction comment). Row dimensions
+         (100% width, 160px max, 28px height) and the fill color
+         (var(--hanko-fill), the same token the old segments used when lit)
+         are unchanged from the segmented presentation this replaces. */
+      .pip-calibrating-meter-row {
         display: flex;
         align-items: center;
-        gap: 8px;
+        justify-content: center;
         width: 100%;
-        max-width: 240px;
+        max-width: 160px;
+        height: 28px;
       }
-      /* The PRD's "scale sized to a realistic vocal range" — flanking
-         labels rather than tick marks, calmer and legible at this size. */
-      .pip-calibrating-bar-scale-label {
-        font-family: var(--font-body);
-        font-size: 9px;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        color: rgba(172, 158, 136, 0.55);
-        flex-shrink: 0;
-      }
-      .pip-calibrating-bar-track {
-        flex: 1;
-        height: 10px;
-        border-radius: 5px;
+      .pip-calibrating-meter-track {
+        width: 100%;
+        height: 100%;
+        border-radius: 4px;
         background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(172, 158, 136, 0.35);
         overflow: hidden;
       }
-      .pip-calibrating-bar-fill {
+      .pip-calibrating-meter-fill {
         height: 100%;
         width: 0%;
         background: var(--hanko-fill);
-        border-radius: 5px;
         transition: width 0.08s linear;
       }
-      .pip-text-btn {
-        background: none;
-        border: none;
+      @media (prefers-reduced-motion: reduce) {
+        .pip-calibrating-meter-fill { transition: none; }
+      }
+      /* Meter helper text (2026-08-13) — a product decision, not a bug fix:
+         real-microphone diagnostics confirmed the meter's own quiet-state
+         movement is genuine ambient/background sound reaching the mic, not
+         a rendering defect, and calibration's own validation already
+         rejects a capture without enough real speech regardless of what
+         the meter shows. Rather than gating or suppressing that movement,
+         one line of concise secondary copy sets the right expectation.
+         Same muted "secondary helper text" treatment already established
+         for Ready's own privacy disclaimer (.pip-ready-disclaimer) — reused
+         rather than inventing a new visual weight. Shares calibratingMeterRowEl's
+         own hidden/visible lifecycle exactly (see its own toggle sites) so
+         it's visible only whenever the active meter is, never a moment
+         longer or shorter. */
+      .pip-calibrating-meter-hint {
         font-family: var(--font-body);
         font-size: 11px;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: var(--text-subdued);
-        cursor: pointer;
-        padding: 8px 14px;
-        margin-top: 4px;
-        border-radius: 6px;
+        line-height: 1.4;
+        color: rgba(172, 158, 136, 0.65);
+        text-align: center;
+        max-width: 220px;
       }
-      .pip-text-btn:hover { background: rgba(255, 255, 255, 0.06); color: var(--text-default); }
+      /* .pip-text-btn's own rule now lives merged with .pip-ready-contextual-link
+         above (2026-08-14 visual-language pass) — the old uppercase-chip
+         treatment (11px, letter-spacing, padded/bordered hover chip) is
+         retired in favor of Ready's own Recalibrate link styling, shared
+         directly rather than duplicated. */
 
       /* ── Calibration Failed — calm, specific copy mapped from a stable
          controller failure code (never the raw engine.js message). Try
@@ -1397,13 +2067,10 @@ export function createMezzoSession({
         gap: 20px;
         text-align: center;
       }
+      /* Typography now comes from .pip-h1 (2026-08-14 pass — see p.pip-h1's
+         own comment on the shared rule above); this class only carries the
+         one genuinely layout-specific concern left. */
       .pip-failed-message {
-        font-family: var(--font-display);
-        font-weight: var(--weight-light);
-        font-size: 15px;
-        line-height: 1.5;
-        color: rgba(222, 210, 194, 0.85);
-        margin: 0;
         max-width: 250px;
       }
 
@@ -1420,6 +2087,74 @@ export function createMezzoSession({
         box-sizing: border-box;
         gap: 14px;
         text-align: center;
+      }
+      /* ── Inset modal-card treatment (2026-08-17 pass) — both
+         post-calibration result variants and the naming flow (M2/M2a) now
+         present their content inside an inset modal-style card floating
+         within the Companion's own regular #3c3b3f screen surface,
+         instead of the #222222 modal-surface color filling the entire
+         content area directly (the earlier treatment, kept for Failed/M3/
+         06b, which are deliberately NOT part of this pass — they keep the
+         original full-bleed .pip-screen-decision treatment unchanged, so
+         this overrides only the three screens named here).
+         Purely presentational: showOnlyScreen() already hides every other
+         screen outright whenever one of these three is visible (see that
+         function's own doc comment) — there is no previous Ready/
+         calibration screen rendered underneath to leave visible or
+         interactive, and no new dialog semantics are introduced (see
+         .pip-modal-card's own comment below for why aria-modal/role=dialog
+         are deliberately absent).
+         Padding here is the OUTER inset — replacing .pip-screen-decision's
+         own 28px/24px value for just these three screens with a larger
+         one (targeting ~48px of visible outer surface per side, per the
+         approved spec) — that original 28px/24px value moves onto
+         .pip-modal-card itself below, unchanged, so "how much padding
+         surrounds the actual content" hasn't changed overall, only where
+         it now sits (outer inset vs. the card's own inner padding).
+         justify-content:center and align-items:center (both inherited,
+         unchanged from .pip-screen-decision/.pip-screen) still center the
+         single .pip-modal-card child within whatever room this padding
+         leaves — real content only ever measures well under 300px tall in
+         practice (see the 382x512 containment tests), so the ~48px target
+         is comfortably met on every side without needing a smaller,
+         responsive fallback value in this fixed-size window. */
+      .pip-screen-result,
+      .pip-screen-m1,
+      .pip-screen-m2 {
+        padding: 48px;
+      }
+      /* The inset card itself — reuses .pip-screen's own established
+         corner radius, border, and box-shadow elevation values verbatim
+         (see that rule above) rather than inventing new ones, per "the
+         established modal radius, subtle border, and elevation
+         treatment." #222222 is the same modal-surface literal already
+         used at .pip-ready-selector-trigger/.pip-ready-selector-panel and,
+         before this pass, directly on the result/M1 screens themselves —
+         the WCAG contrast figures already checked and recorded there
+         still apply unchanged (the background value itself didn't
+         change, only which element now carries it: heading 9.36:1 ->
+         13.4:1, body text 4.98:1 -> 6.62:1, Keep/Discard button text
+         against its own fill 5.01:1 -> 6.79:1).
+         No role="dialog"/aria-modal here: this card is purely a visual
+         treatment inside a screen showOnlyScreen() already renders
+         exclusively (nothing else is visible underneath to protect
+         against), so introducing dialog semantics would claim a focus-
+         trap/modal contract this code doesn't actually implement.
+         Heading focus, commit handlers, and navigation are all completely
+         unchanged by this — see each screen's own showXScreen()
+         function. */
+      .pip-modal-card {
+        width: 100%;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 14px;
+        padding: 28px 24px;
+        background: #222222;
+        border-radius: 14px;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        box-shadow: 0 24px 56px rgba(0, 0, 0, 0.55), inset 0 0 40px rgba(0, 0, 0, 0.16);
       }
       .pip-decision-heading {
         font-family: var(--font-display);
@@ -1485,6 +2220,124 @@ export function createMezzoSession({
       }
       .pip-decision-secondary-btn:hover { background: rgba(255, 255, 255, 0.12); }
 
+      /* ── Naming flow (M2/M2a) action layout (2026-08-17 pass) — Save now
+         precedes Cancel in DOM/visual/keyboard order (was Cancel, Save),
+         and the pair lays out side by side when there's room, stacked
+         otherwise. flex-wrap, not a media query: this is a fixed 382px-
+         wide Companion window, not a responsively-resized page, so
+         there is no viewport breakpoint to key off of — the actual
+         question is "do these two buttons fit side by side at their own
+         minimum comfortable width," which flex-wrap answers directly from
+         the buttons' own measured size. flex:1 1 100px on each button
+         (below) means: side by side, both grow equally to fill the row
+         (equal width, per the spec) off the same 100px basis; if the row
+         is too narrow for both at once, the second one wraps to its own
+         new line — where, alone on that line, flex-grow:1 has nothing to
+         share with, so it fills that line's own full width instead
+         (Save-above-Cancel, full-width, matching every other stacked
+         decision button on this screen — no separate stacked-state rule
+         needed). gap stays the same 10px either way. max-width is
+         widened from the shared 230px (still used by every OTHER
+         .pip-decision-actions consumer, unaffected) to 260px here
+         specifically, since two ~100px-minimum buttons plus a 10px gap
+         need slightly more than 230px to ever actually sit side by side
+         at this Companion width — scoped to .pip-m2-actions alone so nothing
+         else's own 230px cap changes. */
+      .pip-m2-actions {
+        flex-direction: row;
+        flex-wrap: wrap;
+        max-width: 260px;
+      }
+      .pip-m2-actions > button {
+        flex: 1 1 100px;
+        min-width: 100px;
+        width: auto;
+      }
+
+      /* Input-to-actions spacing (2026-08-17 pass) — the heading-to-input
+         relationship stays at the form's own unchanged base 10px gap
+         (m2Form's own inline flex gap, untouched), and the warning stays
+         directly beneath the input it describes via that same unchanged
+         gap — only the space ABOVE the action group is widened, via
+         margin-top on .pip-m2-actions itself (present whether or not the
+         warning is currently visible, since flexbox gap excludes
+         display:none siblings from spacing entirely — a hidden warning
+         never leaves a stray double-gap). 14px on top of the existing
+         10px base reuses the same "add margin-top over an unchanged base
+         gap" pattern used elsewhere in this file (see .pip-decision-body's
+         own margin-top above) rather than a new, isolated arbitrary
+         value — ~24px total between the input (or warning, when shown)
+         and the action group. */
+      .pip-screen-m2 .pip-m2-actions {
+        margin-top: 14px;
+      }
+
+      /* ── Result-screen action hierarchy — M1/Result answer one question:
+         "what do I want to do with it?" (the body/question introduces the
+         three decisions below it — Save/Replace > Keep temporarily >
+         Discard). Try again was removed (2026-08-18 — see this screen's
+         own construction comment): a user unhappy with the result can
+         Discard, return to the appropriate prior state, and begin again,
+         so the extra shortcut wasn't necessary. Heading, question, and the
+         decision group all now sit at the screen's own plain, unscoped
+         base gap (.pip-screen-decision's own 14px) — no scoped override
+         needed anymore, since there's no longer a second, more-separated
+         question to create space before. No divider anywhere in this
+         sequence, and Discard is a real third full-width decision inside
+         .pip-decision-actions, not a text link paired with anything.
+         Discard shares .pip-decision-secondary-btn's exact treatment
+         directly (same class, applied alongside this one) rather than its
+         own bespoke surface — Keep temporarily and Discard look identical
+         at rest, which is itself the de-emphasis signal relative to the
+         filled primary above them. No icon, no destructive-red (this
+         design system has none — discarding a pending, not-yet-reviewed
+         result is a low-consequence action, not equivalent to deleting a
+         saved profile). The three decisions are equally spaced from one
+         another via .pip-decision-actions' own single shared gap (10px,
+         unchanged) — no per-button margin drift. */
+
+      /* ── "Creating your speaking profile…" — the brief completion
+         transition (see showCreatingTransition()). A single processing
+         state, start to finish: a spinning ring plus static text, with no
+         discrete "done" state of its own — the result screen immediately
+         behind it is what communicates completion. Under
+         prefers-reduced-motion the ring simply stops spinning; the text
+         alone still communicates "processing" understandably, so no
+         fallback state change is needed. ── */
+      .pip-screen-creating {
+        justify-content: center;
+        padding: 32px 24px;
+        box-sizing: border-box;
+        gap: 14px;
+      }
+      .pip-creating-icon {
+        width: 28px;
+        height: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+      }
+      .pip-creating-spinner {
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        border: 2px solid rgba(240, 235, 226, 0.18);
+        border-top-color: var(--hanko-fill);
+        animation: pip-creating-spin 0.8s linear infinite;
+      }
+      @keyframes pip-creating-spin { to { transform: rotate(360deg); } }
+      @media (prefers-reduced-motion: reduce) {
+        .pip-creating-spinner { animation: none; }
+      }
+      .pip-creating-text {
+        font-family: var(--font-body);
+        font-size: 12.5px;
+        color: rgba(222, 210, 194, 0.85);
+        text-align: center;
+        margin: 0;
+      }
+
       /* M3 — close icon only, no other action (see the PRD: "no
          management controls appear inside M3"). Reuses the same icon-
          button treatment the selector's own row actions use. */
@@ -1515,36 +2368,64 @@ export function createMezzoSession({
       }
       .pip-name-input:focus-visible { outline: 2px solid var(--border-outline); outline-offset: 1px; }
 
-      /* ── Toast — transient save/replace confirmation. A child of
-         .pip-layout (sibling to every .pip-screen), not any one screen, so
-         it can float above whichever screen is visible without being
-         duplicated per screen. Fixed at the card's own bottom edge; never
-         shifts surrounding layout (position:absolute, taken out of flow)
-         and never intercepts pointer/keyboard input (pointer-events:none —
-         it has no interactive content of its own). */
+      /* ── Toast — transient save/replace/discard confirmation, shared by
+         every message that uses it (no per-message positioning rules). A
+         child of .pip-layout (sibling to every .pip-screen), not any one
+         screen, so it can float above whichever screen is visible without
+         being duplicated per screen. Positioned near the top edge, not the
+         bottom (manual verification found a bottom-pinned toast, sitting
+         below the privacy disclaimer, too easy to miss: after a
+         Ready-bound action, attention is up near the heading and the
+         restored selection, not the very bottom edge). 16px top inset is
+         comfortably clear of Ready's own H1 — confirmed against the real
+         382x512 Companion size, where the heading's own top edge sits well
+         over 100px lower. Never shifts surrounding layout
+         (position:absolute, taken out of flow) and never intercepts
+         pointer/keyboard input (pointer-events:none — it has no
+         interactive content of its own), so it can never cover essential
+         controls in any functional sense even though it visually floats
+         above them.
+         Surface (2026-08-15 pass): the original near-black capsule
+         (rgba(20,19,21,.92), border-radius:50px) read too similarly to the
+         selector trigger/panel's own #222222 surface — the same dark
+         family, just a touch darker/rounder. Now uses var(--washi) (the
+         warm, light neutral this design system already defines for
+         exactly this kind of "reads as its own distinct surface, not part
+         of the dark UI" role) with var(--ink) text — both existing
+         tokens, no new color introduced — and a modest 10px rounded
+         rectangle (matching .pip-ready-selector-panel's own corner
+         radius) instead of a full capsule. Contrast checked directly:
+         washi-on-ink text is 8.4:1 (WCAG AAA for normal text), and washi
+         itself sits at 8.4:1–12:1 against the dark screen surfaces behind
+         it, so it visibly pops as an overlay without needing a heavy
+         border — a light, subtle ink-toned hairline is enough. */
       .pip-toast {
         position: absolute;
         left: 20px;
         right: 20px;
-        bottom: 18px;
+        top: 16px;
         z-index: 40;
         display: flex;
         justify-content: center;
         pointer-events: none;
         opacity: 0;
-        transform: translateY(4px);
+        transform: translateY(-4px);
         transition: opacity 0.2s ease, transform 0.2s ease;
       }
       .pip-toast.pip-toast-visible { opacity: 1; transform: translateY(0); }
+      @media (prefers-reduced-motion: reduce) {
+        .pip-toast { transition: opacity 0.2s ease; transform: none; }
+        .pip-toast.pip-toast-visible { transform: none; }
+      }
       .pip-toast-card {
         max-width: 100%;
-        background: rgba(20, 19, 21, 0.92);
-        border: 1px solid rgba(255, 255, 255, 0.10);
-        border-radius: 50px;
+        background: var(--washi);
+        border: 1px solid rgba(60, 59, 63, 0.14);
+        border-radius: 10px;
         padding: 9px 18px;
         font-family: var(--font-body);
         font-size: 12px;
-        color: rgba(222, 210, 194, 0.95);
+        color: var(--ink);
         text-align: center;
         box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
       }
@@ -1843,7 +2724,7 @@ export function createMezzoSession({
     welcomeScreen.className = 'pip-screen pip-screen-welcome hidden';
 
     const welcomeHeading = pipDoc.createElement('h1');
-    welcomeHeading.className = 'pip-intro-heading';
+    welcomeHeading.className = 'pip-h1 pip-intro-heading';
     welcomeHeading.textContent = 'Welcome';
     welcomeScreen.appendChild(welcomeHeading);
 
@@ -1876,7 +2757,7 @@ export function createMezzoSession({
     c1Screen.className = 'pip-screen pip-screen-c1 hidden';
 
     const c1Heading = pipDoc.createElement('h1');
-    c1Heading.className = 'pip-intro-heading';
+    c1Heading.className = 'pip-h1 pip-intro-heading';
     c1Heading.textContent = 'Create speaking profile';
     c1Screen.appendChild(c1Heading);
 
@@ -1885,20 +2766,34 @@ export function createMezzoSession({
     c1Body.textContent = "Talk for a few seconds so Mezzo can learn the speaking level you'd like to maintain.";
     c1Screen.appendChild(c1Body);
 
+    // No mic icon here (2026-08-16 — Welcome's own primary action, above,
+    // keeps its icon; this button's own accessible name was already just
+    // its text, since the icon was aria-hidden, so removing it changes
+    // nothing about the accessible name). Plain textContent, no wrapping
+    // <span> needed once there's no icon to lay out beside — the button's
+    // existing display:inline-flex + justify-content:center already
+    // centers a single text child with no extra rule required.
     const c1PrimaryBtn = pipDoc.createElement('button');
     c1PrimaryBtn.type = 'button';
     c1PrimaryBtn.className = 'pip-intro-primary-btn';
-    c1PrimaryBtn.innerHTML = `${MIC_ICON_SVG}<span>I'm ready</span>`;
+    c1PrimaryBtn.textContent = "I'm ready";
     c1PrimaryBtn.addEventListener('click', handleC1StartClick);
     c1Screen.appendChild(c1PrimaryBtn);
 
     // Low-emphasis text link, beneath the primary action — reuses
     // .pip-text-btn, the same established treatment Cancel/Back already use
-    // on every other screen (Calibrating, Calibration Failed, C0).
+    // on every other screen (Calibrating, Calibration Failed, C0). Labeled
+    // "Cancel" (2026-08-19), not "Back": this screen is the calibration
+    // *introduction*, not a step in a linear flow the user is stepping back
+    // through, and "Cancel" is already this Companion's own canonical term
+    // for leaving a not-yet-committed flow without starting/continuing it.
+    // Behavior (handleC1BackClick(), unrenamed — see its own doc comment
+    // below) is completely unchanged: pure navigation back to wherever C1
+    // was opened from, no calibration ever started, nothing mutated.
     const c1BackButton = pipDoc.createElement('button');
     c1BackButton.type = 'button';
     c1BackButton.className = 'pip-text-btn';
-    c1BackButton.textContent = 'Back';
+    c1BackButton.textContent = 'Cancel';
     c1BackButton.addEventListener('click', handleC1BackClick);
     c1Screen.appendChild(c1BackButton);
     c1BackBtn = c1BackButton;
@@ -1907,22 +2802,31 @@ export function createMezzoSession({
     c1ScreenEl = c1Screen;
 
     // ── C0 — dedicated microphone-blocked screen, reached instead of the
-    //    generic Calibration Failed screen specifically for
-    //    MIC_PERMISSION_DENIED (see showFailedScreen()). Reuses Failed's own
-    //    Try Again/Back handlers — the underlying recovery is identical,
-    //    only the explanatory copy/illustration differs. Heading/body match
-    //    the PRD/design artifact exactly, with one deliberate change: "then
-    //    try again" rather than the PRD's "then reload this page" — this
-    //    screen's own in-app Try again action (see below) makes a manual
-    //    page reload unnecessary; the PRD's own wording assumed no such
-    //    action existed. ──
+    //    generic Calibration Failed screen for MIC_PERMISSION_DENIED and
+    //    (as of the calibration-stall reliability correction) also
+    //    MIC_ACQUISITION_TIMEOUT (see showFailedScreen()/showC0Screen()).
+    //    Reuses Failed's own Try Again/Back handlers — the underlying
+    //    recovery is identical, only the explanatory copy differs, and now
+    //    differs BY failure code too, not just from the generic screen:
+    //    MIC_PERMISSION_DENIED's heading/body match the PRD/design artifact
+    //    exactly, with one deliberate change: "then try again" rather than
+    //    the PRD's "then reload this page" — this screen's own in-app Try
+    //    again action (see below) makes a manual page reload unnecessary;
+    //    the PRD's own wording assumed no such action existed.
+    //    MIC_ACQUISITION_TIMEOUT gets its own distinct, approved copy (see
+    //    showC0Screen()) — deliberately never describing the mic as denied
+    //    or blocked, since a timeout is a different, calmer failure mode. ──
     const c0Screen = pipDoc.createElement('div');
     c0Screen.className = 'pip-screen pip-screen-c0 hidden';
 
+    // Text content is set per failure code in showC0Screen() below, not
+    // here — this is only the empty skeleton, built once. Same shared
+    // illustration either way (a generic, schematic mic graphic — accurate
+    // context for both "blocked" and "timed out").
     const c0Heading = pipDoc.createElement('h1');
-    c0Heading.className = 'pip-intro-heading';
-    c0Heading.textContent = 'Your browser has blocked microphone access.';
+    c0Heading.className = 'pip-h1 pip-intro-heading';
     c0Screen.appendChild(c0Heading);
+    c0HeadingEl = c0Heading;
 
     const c0Illustration = pipDoc.createElement('div');
     c0Illustration.className = 'pip-c0-illustration';
@@ -1931,8 +2835,8 @@ export function createMezzoSession({
 
     const c0Body = pipDoc.createElement('p');
     c0Body.className = 'pip-intro-body';
-    c0Body.textContent = 'Click the icon in your address bar and change the microphone setting to "Allow," then try again.';
     c0Screen.appendChild(c0Body);
+    c0BodyEl = c0Body;
 
     const c0PrimaryBtn = pipDoc.createElement('button');
     c0PrimaryBtn.type = 'button';
@@ -1967,13 +2871,14 @@ export function createMezzoSession({
     // in startMonitoring()).
 
     const readyHeading = pipDoc.createElement('h1');
-    readyHeading.className = 'pip-ready-heading';
+    readyHeading.className = 'pip-h1 pip-ready-heading';
     readyScreen.appendChild(readyHeading);
     readyHeadingEl = readyHeading;
 
     const readyLabel = pipDoc.createElement('div');
+    readyLabel.id = 'pip-ready-profile-label';
     readyLabel.className = 'pip-ready-profile-label';
-    readyLabel.textContent = 'Speaking profile';
+    readyLabel.textContent = 'Speaking profile:';
     readyScreen.appendChild(readyLabel);
 
     // Trigger and panel share one position:relative wrapper (see
@@ -1985,13 +2890,29 @@ export function createMezzoSession({
     selectorWrap.className = 'pip-ready-selector-wrap';
     readyScreen.appendChild(selectorWrap);
 
+    // Disclosure trigger (Batch 2) — aria-expanded + aria-controls only, no
+    // aria-haspopup: the disclosed panel below is a <fieldset> now, not a
+    // listbox, so claiming listbox popup semantics here would be
+    // inaccurate. See the panel's own comment for why it's a fieldset.
     const selectorTrigger = pipDoc.createElement('button');
     selectorTrigger.type = 'button';
     selectorTrigger.className = 'pip-ready-selector-trigger';
-    selectorTrigger.setAttribute('aria-haspopup', 'listbox');
     selectorTrigger.setAttribute('aria-expanded', 'false');
+    selectorTrigger.setAttribute('aria-controls', 'pip-ready-selector-panel');
     const selectorTriggerName = pipDoc.createElement('span');
+    selectorTriggerName.id = 'pip-ready-selector-trigger-name';
     selectorTriggerName.className = 'pip-ready-selector-trigger-name';
+    // aria-labelledby chains the static "Speaking profile:" label with the
+    // dynamic selected-name span, in that order, so the trigger's computed
+    // accessible name is "Speaking profile: {name}" (e.g. "Speaking
+    // profile: Presentation") rather than the bare name alone — found
+    // missing during the Batch 2 audit (see CLAUDE.md's Engineering Notes).
+    // Both referenced ids live on elements already inside the trigger's own
+    // rendered content, so this updates automatically whenever
+    // selectorTriggerName's textContent changes (see renderReadyScreen())
+    // — no separate aria-label to keep in sync. The chevron stays
+    // aria-hidden (see CHEVRON_ICON_SVG) so it never contributes text.
+    selectorTrigger.setAttribute('aria-labelledby', 'pip-ready-profile-label pip-ready-selector-trigger-name');
     selectorTrigger.appendChild(selectorTriggerName);
     selectorTrigger.insertAdjacentHTML('beforeend', CHEVRON_ICON_SVG);
     selectorTrigger.addEventListener('click', handleSelectorTriggerClick);
@@ -1999,10 +2920,24 @@ export function createMezzoSession({
     readySelectorTriggerEl = selectorTrigger;
     readySelectorTriggerNameEl = selectorTriggerName;
 
-    const selectorPanel = pipDoc.createElement('div');
+    // A native <fieldset> — the smallest native structure that accurately
+    // represents what's actually inside it: a mutually-exclusive group of
+    // native radio profile choices (real radiogroup semantics, entirely
+    // free arrow-key/Tab/Space behavior, no custom keydown handling needed
+    // for selection itself) plus independent delete/discard buttons, which
+    // don't belong inside any single ARIA composite widget's option/radio
+    // children. role="listbox" was the pre-Batch-2 choice here and didn't
+    // honestly describe either of those things. Its <legend> — the
+    // fieldset's one accessible name (visually hidden — the visible
+    // "Speaking profile" label above the trigger already serves as the
+    // on-screen heading for this control); no aria-label needed alongside
+    // it — is (re)created fresh in renderSelectorPanel() on every open, not
+    // here: this skeleton build only runs once, but the panel's own
+    // innerHTML gets fully rebuilt on every open, which would otherwise
+    // wipe a legend only ever added at this one-time skeleton stage.
+    const selectorPanel = pipDoc.createElement('fieldset');
+    selectorPanel.id = 'pip-ready-selector-panel';
     selectorPanel.className = 'pip-ready-selector-panel hidden';
-    selectorPanel.setAttribute('role', 'listbox');
-    selectorPanel.setAttribute('aria-label', 'Speaking profiles');
     selectorWrap.appendChild(selectorPanel);
     readySelectorPanelEl = selectorPanel;
 
@@ -2011,9 +2946,15 @@ export function createMezzoSession({
     readyScreen.appendChild(contextualActions);
     readyContextualActionsEl = contextualActions;
 
+    // Reuses the shared marketing-site .btn-primary treatment for its
+    // color/typography (Batch 2) — its own width now comes from
+    // .pip-ready-start-btn directly (2026-08-19: narrower-than-the-
+    // selector target, see that class's own CSS comment), not the old
+    // .btn-wide modifier (padding-driven width, retired along with this —
+    // it had no other caller).
     const pipStartBtn = pipDoc.createElement('button');
     pipStartBtn.type = 'button';
-    pipStartBtn.className = 'pip-ready-start-btn';
+    pipStartBtn.className = 'pip-ready-start-btn btn-primary';
     pipStartBtn.textContent = 'Start monitoring';
     pipStartBtn.addEventListener('click', resumeMonitoringFromPipReady);
     readyScreen.appendChild(pipStartBtn);
@@ -2039,40 +2980,74 @@ export function createMezzoSession({
     calibratingSubheadingEl = calibratingSubheading;
 
     const calibratingHeading = pipDoc.createElement('p');
-    calibratingHeading.className = 'pip-calibrating-heading';
+    calibratingHeading.className = 'pip-h1 pip-calibrating-heading';
     calibratingHeading.textContent = 'Keep speaking at the level you want to maintain';
     calibratingScreen.appendChild(calibratingHeading);
 
-    // Live, non-disruptive countdown — text, not just the bar below, so
-    // progress/completion is conveyed to assistive tech too (see the PRD's
-    // accessibility requirements: "non-disruptive countdown announcements").
+    // Visible status text ("Start speaking in 3/2/1", then "Listening…
+    // {n}s") — calibration pacing revision, second pass: this rapidly-
+    // changing element is now aria-hidden. Assistive tech gets exactly two
+    // one-time announcements instead (calibratingAnnounceEl, immediately
+    // below), per the accessibility decision in CLAUDE.md's Engineering
+    // Notes — narrating every visible tick was found to be noisy, not
+    // helpful, for a fast, decorative countdown like this one.
     const calibratingStatus = pipDoc.createElement('div');
     calibratingStatus.className = 'pip-calibrating-status';
-    calibratingStatus.setAttribute('aria-live', 'polite');
+    calibratingStatus.setAttribute('aria-hidden', 'true');
     calibratingScreen.appendChild(calibratingStatus);
     calibratingStatusEl = calibratingStatus;
 
-    const barRow = pipDoc.createElement('div');
-    barRow.className = 'pip-calibrating-bar-row';
-    const scaleLow = pipDoc.createElement('span');
-    scaleLow.className = 'pip-calibrating-bar-scale-label';
-    scaleLow.textContent = 'Quiet';
-    scaleLow.setAttribute('aria-hidden', 'true');
-    barRow.appendChild(scaleLow);
-    const barTrack = pipDoc.createElement('div');
-    barTrack.className = 'pip-calibrating-bar-track';
-    barTrack.setAttribute('aria-hidden', 'true'); // decorative — progress/completion is conveyed via calibratingStatusEl's text, not this bar
-    const barFill = pipDoc.createElement('div');
-    barFill.className = 'pip-calibrating-bar-fill';
-    barTrack.appendChild(barFill);
-    barRow.appendChild(barTrack);
-    const scaleHigh = pipDoc.createElement('span');
-    scaleHigh.className = 'pip-calibrating-bar-scale-label';
-    scaleHigh.textContent = 'Loud';
-    scaleHigh.setAttribute('aria-hidden', 'true');
-    barRow.appendChild(scaleHigh);
-    calibratingScreen.appendChild(barRow);
-    calibratingBarFillEl = barFill;
+    // Static, visually-hidden live region carrying exactly two one-time
+    // announcements ("Get ready. Calibration starts in 3 seconds." /
+    // "Listening for 6 seconds.") — kept separate from calibratingStatusEl
+    // above specifically so its rapid visible-text changes never reach
+    // assistive tech, and so this element's own text only ever changes at
+    // the two moments meant to be announced, never in between (a single
+    // shared live region firing on every visible-text change would
+    // otherwise re-announce "Start speaking in 2", "…in 1", etc.).
+    const calibratingAnnounce = pipDoc.createElement('div');
+    calibratingAnnounce.className = 'pip-calibrating-announce';
+    calibratingAnnounce.setAttribute('aria-live', 'polite');
+    calibratingAnnounce.style.cssText = 'position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0;';
+    calibratingScreen.appendChild(calibratingAnnounce);
+    calibratingAnnounceEl = calibratingAnnounce;
+
+    // Continuous fill meter (2026-08-12 revision — see dbToMeterFillRatio()'s
+    // own comment above). Hidden until real six-second capture begins: no
+    // meter movement, and no samples, during either preparation stage
+    // (delayed-disclosure wait or the fixed 3-2-1 countdown) — see the
+    // capturing:true edge listener below, which is the only place this
+    // row's hidden class is removed. Entirely decorative (communicates "the
+    // microphone is responding," not a judgment about the current level, and
+    // carries no numeric dB values, tick marks, or target zones), so the
+    // whole row stays aria-hidden even once visible.
+    const meterRow = pipDoc.createElement('div');
+    meterRow.className = 'pip-calibrating-meter-row hidden';
+    meterRow.setAttribute('aria-hidden', 'true');
+    const meterTrack = pipDoc.createElement('div');
+    meterTrack.className = 'pip-calibrating-meter-track';
+    const meterFill = pipDoc.createElement('div');
+    meterFill.className = 'pip-calibrating-meter-fill';
+    meterTrack.appendChild(meterFill);
+    meterRow.appendChild(meterTrack);
+    calibratingScreen.appendChild(meterRow);
+    calibratingMeterRowEl = meterRow;
+    calibratingMeterFillEl = meterFill;
+
+    // Meter helper text (2026-08-13) — see .pip-calibrating-meter-hint's
+    // own CSS comment for the product reasoning. A separate element (not
+    // nested inside meterRow, which has its own fixed 28px height sized
+    // exactly for the bar) sharing meterRow's hidden/visible lifecycle
+    // exactly — toggled at the same two sites (the capturing:true edge
+    // listener above reveals both together; prepareCalibratingScreen()
+    // hides both together on every fresh attempt/retry). Not aria-hidden:
+    // unlike the purely decorative bar, this is real, static informative
+    // text a screen reader should read as ordinary page content.
+    const meterHint = pipDoc.createElement('p');
+    meterHint.className = 'pip-calibrating-meter-hint hidden';
+    meterHint.textContent = 'Background sounds may move the meter too.';
+    calibratingScreen.appendChild(meterHint);
+    calibratingMeterHintEl = meterHint;
 
     const calibratingCancelBtn = pipDoc.createElement('button');
     calibratingCancelBtn.type = 'button';
@@ -2090,7 +3065,7 @@ export function createMezzoSession({
     failedScreen.className = 'pip-screen pip-screen-failed hidden';
 
     const failedMessage = pipDoc.createElement('p');
-    failedMessage.className = 'pip-failed-message';
+    failedMessage.className = 'pip-h1 pip-failed-message';
     failedMessage.setAttribute('aria-live', 'assertive');
     failedScreen.appendChild(failedMessage);
     failedMessageEl = failedMessage;
@@ -2115,46 +3090,215 @@ export function createMezzoSession({
     layout.appendChild(failedScreen);
     failedScreenEl = failedScreen;
 
-    // ── M1 — reached only from a saved-profile recalibration's completion
-    //    (see handleCalibrationCompleted()). Keep as unsaved first, Replace
-    //    second — matches the PRD's own listed action order; Replace is
-    //    still the visually primary (filled) action, since it's the more
-    //    consequential, "write to the saved profile" outcome. ──
-    const m1Screen = pipDoc.createElement('div');
-    m1Screen.className = 'pip-screen pip-screen-decision hidden';
+    // ── "Creating your speaking profile…" — the brief completion
+    //    transition (Slice 2 revision, simplified 2026-08-12) between real
+    //    capture ending and a result screen appearing. Not a decision
+    //    screen (no buttons) — a small spinner plus static text, matching
+    //    Calibrating's own non-h1, transient-state heading treatment (see
+    //    calibratingHeading above) rather than the decision screens'
+    //    focused h1. Single-stage throughout — no checkmark/"done" state of
+    //    its own; the result screen behind it communicates completion. See
+    //    showCreatingTransition() for the timing model. ──
+    const creatingScreen = pipDoc.createElement('div');
+    creatingScreen.className = 'pip-screen pip-screen-creating hidden';
 
-    const m1Heading = pipDoc.createElement('p');
-    m1Heading.className = 'pip-decision-heading';
-    m1Screen.appendChild(m1Heading);
+    const creatingIcon = pipDoc.createElement('div');
+    creatingIcon.className = 'pip-creating-icon';
+    creatingIcon.setAttribute('aria-hidden', 'true');
+    creatingIcon.innerHTML = '<span class="pip-creating-spinner"></span>';
+    creatingScreen.appendChild(creatingIcon);
+
+    const creatingText = pipDoc.createElement('p');
+    creatingText.className = 'pip-creating-text';
+    creatingText.textContent = 'Creating your speaking profile…';
+    creatingText.setAttribute('aria-hidden', 'true'); // decorative visible text — the announcement below is what assistive tech hears
+    creatingScreen.appendChild(creatingText);
+
+    // Visually-hidden, single-fire live region — announces once, as soon
+    // as this screen appears, rather than narrating a spinner it can't
+    // meaningfully describe anyway. Kept separate from the visible text
+    // above so this element's own content only ever changes at the one
+    // moment meant to be announced (see the identical convention already
+    // established for Calibrating's own calibratingAnnounceEl).
+    const creatingAnnounce = pipDoc.createElement('div');
+    creatingAnnounce.className = 'pip-creating-announce';
+    creatingAnnounce.setAttribute('aria-live', 'polite');
+    creatingAnnounce.style.cssText = 'position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0;';
+    creatingScreen.appendChild(creatingAnnounce);
+    creatingAnnounceEl = creatingAnnounce;
+
+    layout.appendChild(creatingScreen);
+    creatingScreenEl = creatingScreen;
+
+    // ── M1 (Slice 2, Variant 2) — reached only from a saved-profile
+    //    recalibration's completion (see handleCalibrationCompleted()).
+    //    Shares Variant 1's exact heading/body (see resultHeading/resultBody
+    //    below) — only the primary button's label still differs, since
+    //    naming the target profile is the one thing this variant alone
+    //    needs to say (see replaceButtonLabel()).
+    //
+    //    Action hierarchy (2026-08-13 revision; reordered 2026-08-16; Try
+    //    again removed 2026-08-18 — see below): the screen answers one
+    //    question — "what do I want to do with it?" — top to bottom:
+    //    heading, body/question, then the three decisions — primary
+    //    (Replace), Keep temporarily, Discard — all inside one
+    //    .pip-decision-actions block, full-width, no divider between them.
+    //    Try again (a standalone shortcut that repeated capture without
+    //    going through Discard first) was removed outright: a user unhappy
+    //    with the result can already Discard, return to the appropriate
+    //    prior state, and begin again — the extra shortcut wasn't
+    //    necessary. DOM order matches visual and keyboard-focus order
+    //    exactly. ──
+    const m1Screen = pipDoc.createElement('div');
+    // pip-screen-m1 — a dedicated hook class, not just pip-screen-decision:
+    // this screen and resultScreen below now render byte-for-byte identical
+    // heading/body text (both "Your new speaking profile is ready"/"What
+    // would you like to do with it?"), so a heading-text-based locator can
+    // no longer tell them apart (both exist in the DOM simultaneously, one
+    // merely hidden) — this class (and resultScreen's own pip-screen-result)
+    // is what tests use instead.
+    m1Screen.className = 'pip-screen pip-screen-decision pip-screen-m1 hidden';
+
+    // Inset modal card (2026-08-17) — see .pip-modal-card's own CSS
+    // comment. All of this screen's actual content lives inside it; the
+    // outer m1Screen itself now only supplies the larger outer inset via
+    // its own overridden padding.
+    const m1Card = pipDoc.createElement('div');
+    m1Card.className = 'pip-modal-card';
+    m1Screen.appendChild(m1Card);
+
+    const m1Heading = pipDoc.createElement('h1');
+    m1Heading.className = 'pip-h1 pip-decision-heading';
+    m1Heading.tabIndex = -1; // programmatically focusable only — see showM1Screen()'s own focus call
+    m1Heading.textContent = 'Your new speaking profile is ready';
+    m1Card.appendChild(m1Heading);
     m1HeadingEl = m1Heading;
 
+    // Try again removed (2026-08-18) — a user unhappy with the result can
+    // Discard, return to the appropriate prior state, and begin again; the
+    // extra shortcut wasn't necessary (see this screen's own construction
+    // comment above for the current, simplified hierarchy: heading,
+    // question, then the three decisions). handleM1Redo() itself was
+    // removed outright along with this — it had no other caller.
     const m1Body = pipDoc.createElement('p');
     m1Body.className = 'pip-decision-body';
-    m1Body.textContent = 'Replace the saved calibration with the one you just created?';
-    m1Screen.appendChild(m1Body);
+    m1Body.textContent = 'What would you like to do with it?';
+    m1Card.appendChild(m1Body);
 
     const m1Actions = pipDoc.createElement('div');
     m1Actions.className = 'pip-decision-actions';
 
-    const m1Keep = pipDoc.createElement('button');
-    m1Keep.type = 'button';
-    m1Keep.className = 'pip-decision-secondary-btn';
-    m1Keep.textContent = 'Keep as unsaved';
-    m1Keep.addEventListener('click', handleM1KeepAsUnsaved);
-    m1Actions.appendChild(m1Keep);
-    m1KeepBtn = m1Keep;
-
     const m1Replace = pipDoc.createElement('button');
     m1Replace.type = 'button';
     m1Replace.className = 'pip-decision-primary-btn';
-    m1Replace.textContent = 'Replace';
     m1Replace.addEventListener('click', handleM1Replace);
     m1Actions.appendChild(m1Replace);
     m1ReplaceBtn = m1Replace;
 
-    m1Screen.appendChild(m1Actions);
+    const m1Keep = pipDoc.createElement('button');
+    m1Keep.type = 'button';
+    m1Keep.className = 'pip-decision-secondary-btn';
+    m1Keep.textContent = 'Keep temporarily';
+    m1Keep.addEventListener('click', handleM1KeepAsUnsaved);
+    m1Actions.appendChild(m1Keep);
+    m1KeepBtn = m1Keep;
+
+    // Discard — the third full-width decision, sharing Keep temporarily's
+    // exact secondary-button treatment (2026-08-14 visual-language pass —
+    // no icon, no distinct de-emphasized surface of its own; see
+    // .pip-decision-discard-btn's own comment for why).
+    const m1Discard = pipDoc.createElement('button');
+    m1Discard.type = 'button';
+    m1Discard.className = 'pip-decision-secondary-btn pip-decision-discard-btn';
+    m1Discard.textContent = 'Discard';
+    m1Discard.addEventListener('click', handleM1Discard);
+    m1Actions.appendChild(m1Discard);
+    m1DiscardBtn = m1Discard;
+
+    m1Card.appendChild(m1Actions);
+
     layout.appendChild(m1Screen);
     m1ScreenEl = m1Screen;
+
+    // ── "Your new speaking profile is ready" (Slice 2, Variant 1) —
+    //    reached from a session-mode calibration's completion: a brand-new
+    //    profile, or redoing for the current Temporary profile (both
+    //    session mode — see handleCalibrationCompleted()). The calibration
+    //    result is already committed to the Temporary profile by the time
+    //    this screen shows (see showCreatingTransition()), so its own
+    //    actions reuse the exact same profile/session state Ready itself
+    //    would use. No Start monitoring here (starting Monitoring is a
+    //    separate choice, made from Ready) — every action below resolves
+    //    the new profile first, then returns to Ready.
+    //
+    //    Action hierarchy: identical structure/reasoning to M1 above — see
+    //    that screen's own comment (heading, question, then the three
+    //    decisions — Try again removed 2026-08-18). ──
+    const resultScreen = pipDoc.createElement('div');
+    resultScreen.className = 'pip-screen pip-screen-decision pip-screen-result hidden';
+
+    // Inset modal card (2026-08-17) — see .pip-modal-card's own CSS
+    // comment (M1's own construction site above has the fuller writeup).
+    const resultCard = pipDoc.createElement('div');
+    resultCard.className = 'pip-modal-card';
+    resultScreen.appendChild(resultCard);
+
+    const resultHeading = pipDoc.createElement('h1');
+    resultHeading.className = 'pip-h1 pip-decision-heading';
+    resultHeading.tabIndex = -1;
+    resultHeading.textContent = 'Your new speaking profile is ready';
+    resultCard.appendChild(resultHeading);
+    resultHeadingEl = resultHeading;
+
+    // Try again removed (2026-08-18) — see M1's own construction comment
+    // above for the full reasoning; identical here. Redoing is still
+    // reachable indirectly: Discard restores the prior selection (or
+    // Welcome, for a first-ever creation — see handleResultDiscard()) and
+    // handleUnsavedRecalibrateClick() (unchanged, still shared with the
+    // Ready selector panel's own per-row Recalibrate icon for the
+    // Temporary profile) remains the way a Temporary profile gets
+    // re-captured from there.
+    const resultBody = pipDoc.createElement('p');
+    resultBody.className = 'pip-decision-body';
+    resultBody.textContent = 'What would you like to do with it?';
+    resultCard.appendChild(resultBody);
+
+    const resultActions = pipDoc.createElement('div');
+    resultActions.className = 'pip-decision-actions';
+
+    const resultSave = pipDoc.createElement('button');
+    resultSave.type = 'button';
+    resultSave.className = 'pip-decision-primary-btn';
+    resultSave.textContent = 'Save speaking profile';
+    // Direct reuse of Ready's own Save profile handler — unsavedProfile is
+    // already set, so the exact same validation/5-profile-limit/duplicate-
+    // name handling applies. 'result' tells M2's own Cancel where to
+    // return to (see handleM2Cancel()) — a successful save still always
+    // returns to Ready regardless (see handleM2Submit()).
+    resultSave.addEventListener('click', (event) => handleSaveProfileClick(event, 'result'));
+    resultActions.appendChild(resultSave);
+    resultSaveBtn = resultSave;
+
+    const resultKeep = pipDoc.createElement('button');
+    resultKeep.type = 'button';
+    resultKeep.className = 'pip-decision-secondary-btn';
+    resultKeep.textContent = 'Keep temporarily';
+    resultKeep.addEventListener('click', handleResultKeepTemporarily);
+    resultActions.appendChild(resultKeep);
+    resultKeepBtn = resultKeep;
+
+    const resultDiscard = pipDoc.createElement('button');
+    resultDiscard.type = 'button';
+    resultDiscard.className = 'pip-decision-secondary-btn pip-decision-discard-btn';
+    resultDiscard.textContent = 'Discard';
+    resultDiscard.addEventListener('click', handleResultDiscard);
+    resultActions.appendChild(resultDiscard);
+    resultDiscardBtn = resultDiscard;
+
+    resultCard.appendChild(resultActions);
+
+    layout.appendChild(resultScreen);
+    resultScreenEl = resultScreen;
 
     // ── M2/M2a — naming a new profile (below the five-profile cap; at cap,
     //    handleSaveProfileClick() routes to M3 instead, never opening this
@@ -2162,12 +3306,34 @@ export function createMezzoSession({
     //    warning shown and the submit button's label swapped to "Replace"
     //    (see renderM2State()), not a second screen. ──
     const m2Screen = pipDoc.createElement('div');
-    m2Screen.className = 'pip-screen pip-screen-decision hidden';
+    // pip-screen-m2 — a dedicated hook class (2026-08-17, new — this screen
+    // previously had none beyond the shared pip-screen-decision), scoping
+    // this screen's own inset-modal-card padding override and its own
+    // input-to-actions spacing/action-layout rules without touching M3/06b,
+    // which still share the plain pip-screen-decision treatment.
+    m2Screen.className = 'pip-screen pip-screen-decision pip-screen-m2 hidden';
 
-    const m2Heading = pipDoc.createElement('p');
-    m2Heading.className = 'pip-decision-heading';
+    // Inset modal card (2026-08-17) — see .pip-modal-card's own CSS
+    // comment (M1's own construction site above has the fuller writeup).
+    const m2Card = pipDoc.createElement('div');
+    m2Card.className = 'pip-modal-card';
+    m2Screen.appendChild(m2Card);
+
+    // <h1>, not <p> (2026-08-17) — this is the naming screen's one
+    // meaningful heading, so it now gets real heading semantics and the
+    // exact same typography as "Your new speaking profile is ready" via
+    // the shared pip-h1 class (font family/size/weight/line-height/
+    // letter-spacing/responsive behavior all come from that one rule —
+    // pip-decision-heading only still contributes its own max-width
+    // constraint, same as on the result screens). No tabIndex/focus
+    // change: this heading is never programmatically focused (unlike
+    // resultHeading/m1Heading) — showM2Screen() still focuses m2NameInput
+    // directly, unchanged, so tabIndex=-1 (which those two headings use
+    // only because THEY receive focus()) would serve no purpose here.
+    const m2Heading = pipDoc.createElement('h1');
+    m2Heading.className = 'pip-h1 pip-decision-heading';
     m2Heading.textContent = 'Name this profile';
-    m2Screen.appendChild(m2Heading);
+    m2Card.appendChild(m2Heading);
 
     const m2Form = pipDoc.createElement('form');
     m2Form.style.cssText = 'width:100%;max-width:230px;display:flex;flex-direction:column;gap:10px;';
@@ -2184,7 +3350,10 @@ export function createMezzoSession({
 
     // Live, non-error-toned warning — an existing-name match is an
     // expected, natural outcome of this flow (see saveProfileNameCopy()),
-    // not a validation failure.
+    // not a validation failure. Stays directly beneath the input via the
+    // form's own unchanged base 10px gap — only the gap above the actions
+    // group (below) was widened, so this never moves away from the field
+    // it describes.
     const m2Warning = pipDoc.createElement('p');
     m2Warning.className = 'pip-decision-warning hidden';
     m2Warning.id = 'm2-name-warning';
@@ -2192,15 +3361,14 @@ export function createMezzoSession({
     m2Form.appendChild(m2Warning);
     m2WarningEl = m2Warning;
 
+    // pip-m2-actions (2026-08-17, new modifier alongside the shared
+    // pip-decision-actions base) — side-by-side when there's room, stacked
+    // otherwise, via flex-wrap rather than a media query (see its own CSS
+    // comment for the mechanism). Save first, Cancel second, in DOM order
+    // — matches the required visual/keyboard order directly, no separate
+    // reordering step needed anywhere else.
     const m2Actions = pipDoc.createElement('div');
-    m2Actions.className = 'pip-decision-actions';
-
-    const m2Cancel = pipDoc.createElement('button');
-    m2Cancel.type = 'button';
-    m2Cancel.className = 'pip-decision-secondary-btn';
-    m2Cancel.textContent = 'Cancel';
-    m2Cancel.addEventListener('click', handleM2Cancel);
-    m2Actions.appendChild(m2Cancel);
+    m2Actions.className = 'pip-decision-actions pip-m2-actions';
 
     const m2Submit = pipDoc.createElement('button');
     m2Submit.type = 'submit';
@@ -2209,9 +3377,16 @@ export function createMezzoSession({
     m2Actions.appendChild(m2Submit);
     m2SubmitBtn = m2Submit;
 
+    const m2Cancel = pipDoc.createElement('button');
+    m2Cancel.type = 'button';
+    m2Cancel.className = 'pip-decision-secondary-btn';
+    m2Cancel.textContent = 'Cancel';
+    m2Cancel.addEventListener('click', handleM2Cancel);
+    m2Actions.appendChild(m2Cancel);
+
     m2Form.appendChild(m2Actions);
     m2Form.addEventListener('submit', handleM2Submit);
-    m2Screen.appendChild(m2Form);
+    m2Card.appendChild(m2Form);
     layout.appendChild(m2Screen);
     m2ScreenEl = m2Screen;
 
@@ -2229,6 +3404,7 @@ export function createMezzoSession({
     m3Body.className = 'pip-decision-body';
     m3Body.textContent = 'Delete a saved profile before saving this one.';
     m3Screen.appendChild(m3Body);
+    m3BodyEl = m3Body;
 
     const m3Close = pipDoc.createElement('button');
     m3Close.type = 'button';
@@ -2486,14 +3662,25 @@ export function createMezzoSession({
    *  handler that forgets to do it. */
   function showOnlyScreen(screenEl) {
     [
-      welcomeScreenEl, c1ScreenEl, c0ScreenEl, readyScreenEl, calibratingScreenEl,
-      failedScreenEl, m1ScreenEl, m2ScreenEl, m3ScreenEl, deleteScreenEl, monitoringScreenEl,
+      welcomeScreenEl, c1ScreenEl, c0ScreenEl, readyScreenEl, calibratingScreenEl, creatingScreenEl,
+      failedScreenEl, m1ScreenEl, resultScreenEl, m2ScreenEl, m3ScreenEl, deleteScreenEl, monitoringScreenEl,
     ].forEach((el) => {
       if (el) el.classList.toggle('hidden', el !== screenEl);
     });
     if (screenEl !== calibratingScreenEl) {
       if (unsubscribeCalibrationLevel) { unsubscribeCalibrationLevel(); unsubscribeCalibrationLevel = null; }
       stopCalibratingCountdown();
+      stopPreparationCountdown();
+      clearPreparingMessageTimers();
+    }
+    // The completion transition's own minimum-display timer must not fire
+    // into a screen the user (or a native Companion close) has already
+    // navigated away from — same "clear it at the one chokepoint every
+    // transition passes through" convention as Calibrating's own timers
+    // above, not scattered per-caller cleanup.
+    if (screenEl !== creatingScreenEl && creatingTransitionTimer) {
+      clearTimeout(creatingTransitionTimer);
+      creatingTransitionTimer = null;
     }
     if (screenEl !== readyScreenEl) closeSelectorPanel();
   }
@@ -2506,7 +3693,7 @@ export function createMezzoSession({
     if (!pipWindow) return;
     layoutMode = LAYOUT_MODES.EXPANDED;
     if (pipDocument?.body) pipDocument.body.setAttribute('data-layout', LAYOUT_MODES.EXPANDED);
-    resizeCompanionTo(MEZZO_COMPANION_READY_SIZE);
+    resizeCompanionToContent(MEZZO_COMPANION_READY_SIZE);
     activeCircle = null;
     showOnlyScreen(welcomeScreenEl);
     sessionState.set(SESSION_STATES.COMPANION_READY);
@@ -2539,13 +3726,16 @@ export function createMezzoSession({
     beginCalibrationFlow('session', null);
   }
 
-  /** Back — pure navigation, never starts calibration and never touches
-   *  activeProfile/unsavedProfile/saved-profile storage/the
-   *  first-monitoring flag: C1 itself doesn't mutate any of that (only
-   *  beginCalibrationFlow(), never called here, does), so simply not
-   *  calling it is what preserves everything. Returns to wherever C1 was
-   *  actually opened from (see c1EntrySource) — Welcome, or the same Ready
-   *  state (selection and any existing unsaved profile untouched). */
+  /** C1's own "Cancel" link (visible label changed from "Back", 2026-08-19
+   *  — see this button's own construction comment above; function name and
+   *  behavior below are unchanged) — pure navigation, never starts
+   *  calibration and never touches activeProfile/unsavedProfile/saved-
+   *  profile storage/the first-monitoring flag: C1 itself doesn't mutate
+   *  any of that (only beginCalibrationFlow(), never called here, does),
+   *  so simply not calling it is what preserves everything. Returns to
+   *  wherever C1 was actually opened from (see c1EntrySource) — Welcome,
+   *  or the same Ready state (selection and any existing unsaved profile
+   *  untouched). */
   function handleC1BackClick() {
     if (c1EntrySource === 'welcome') {
       showWelcomeScreen();
@@ -2555,12 +3745,21 @@ export function createMezzoSession({
     c1EntrySource = null;
   }
 
-  /** Dedicated microphone-blocked screen — reused Try Again/Back handlers
-   *  are identical to the generic Failed screen's (see handleFailedTryAgain/
-   *  handleFailedBack below); only the explanatory copy/illustration
-   *  differs, so no separate C0 handlers exist. */
-  function showC0Screen() {
+  /** Dedicated microphone-blocked/timed-out screen — reused Try Again/Back
+   *  handlers are identical to the generic Failed screen's (see
+   *  handleFailedTryAgain/handleFailedBack below); only the explanatory
+   *  copy differs, so no separate C0 handlers exist. Heading/body are set
+   *  here, per failure code (see C0_COPY), rather than fixed at DOM-build
+   *  time — MIC_PERMISSION_DENIED and MIC_ACQUISITION_TIMEOUT render
+   *  distinct copy on this one shared screen. Falls back to
+   *  MIC_PERMISSION_DENIED's own copy for a failure with neither code (not
+   *  expected — showFailedScreen() only ever routes these two codes here —
+   *  but never leaves the screen blank if it happened). */
+  function showC0Screen(failure) {
     activeCircle = null; // defensive, matching every other screen-show function — never actually non-null here, since C0 is only ever reached before monitoring starts
+    const copy = C0_COPY[failure?.code] || C0_COPY.MIC_PERMISSION_DENIED;
+    if (c0HeadingEl) c0HeadingEl.textContent = copy.heading;
+    if (c0BodyEl) c0BodyEl.textContent = copy.body;
     showOnlyScreen(c0ScreenEl);
     sessionState.set(SESSION_STATES.COMPANION_NEEDS_ATTENTION);
   }
@@ -2575,7 +3774,7 @@ export function createMezzoSession({
     if (!pipWindow) return;
     layoutMode = LAYOUT_MODES.EXPANDED;
     if (pipDocument?.body) pipDocument.body.setAttribute('data-layout', LAYOUT_MODES.EXPANDED);
-    resizeCompanionTo(MEZZO_COMPANION_READY_SIZE);
+    resizeCompanionToContent(MEZZO_COMPANION_READY_SIZE);
     activeCircle = null;
     showOnlyScreen(readyScreenEl);
     renderReadyScreen();
@@ -2621,9 +3820,11 @@ export function createMezzoSession({
     // setHasStartedMonitoring()'s own call site (beginMonitoringSession())
     // for the only place it's ever set.
     if (readyHeadingEl) {
+      // No terminal period (2026-08-16 heading-punctuation audit) — see
+      // this file's own module-level note on Companion heading punctuation.
       readyHeadingEl.textContent = getHasStartedMonitoring()
-        ? 'Ready for your next conversation.'
-        : 'Ready for your first conversation.';
+        ? 'Ready for your next conversation'
+        : 'Ready for your first conversation';
     }
 
     // Re-resolve the active selection fresh — a saved profile may have been
@@ -2643,36 +3844,39 @@ export function createMezzoSession({
   function renderSelectorTrigger() {
     if (!readySelectorTriggerNameEl) return;
     readySelectorTriggerNameEl.textContent = activeProfile
-      ? (isTemporaryProfile(activeProfile) ? 'Unsaved profile' : activeProfile.name)
+      ? (isTemporaryProfile(activeProfile) ? 'Temporary profile' : activeProfile.name)
       : 'Select a speaking profile';
   }
 
   /** Contextual actions directly beneath the selector — never the old
-   *  always-visible pills; text links whose set depends only on whether the
-   *  current selection is the unsaved profile (§5) or a saved one (§6). A
-   *  profile change re-renders this in place; the surrounding screen layout
-   *  never restructures. */
+   *  always-visible pills; a sentence-case, underlined inline link (Batch 2)
+   *  shown only for the unsaved profile (§5).
+   *  Recalibrate retired from this row entirely (2026-08-17) — it now
+   *  lives inside the selector panel itself, as a per-row icon action next
+   *  to Delete/Discard (see buildSelectorRow()'s own doc comment and
+   *  handleSelectorRowRecalibrateClick()).
+   *  Create new profile retired from this row too (2026-08-18) — it's now
+   *  a persistent footer action inside the selector panel itself (see
+   *  renderSelectorPanel()), reachable regardless of which profile happens
+   *  to be selected (including at the five-profile cap, where it used to
+   *  be hidden here entirely), not a contextual link that only appeared
+   *  for a saved-profile selection below the cap. A saved profile selected
+   *  now shows nothing at all here — this row is unsaved-profile-only. A
+   *  profile change re-renders this in place; the surrounding screen
+   *  layout never restructures. */
   function renderContextualActions() {
     if (!readyContextualActionsEl || !pipDocument) return;
     readyContextualActionsEl.innerHTML = '';
     if (!activeProfile) return;
-
     if (isTemporaryProfile(activeProfile)) {
-      readyContextualActionsEl.appendChild(buildActionLink('Recalibrate', handleUnsavedRecalibrateClick));
       readyContextualActionsEl.appendChild(buildActionLink('Save profile', handleSaveProfileClick));
-    } else {
-      readyContextualActionsEl.appendChild(buildActionLink('Recalibrate', handleSavedRecalibrateClick));
-      const atCap = getSavedProfiles().length >= MAX_SAVED_PROFILES;
-      if (!atCap) {
-        readyContextualActionsEl.appendChild(buildActionLink('Create new profile', handleCreateNewProfileClick));
-      }
     }
   }
 
   function buildActionLink(text, onClick) {
     const btn = pipDocument.createElement('button');
     btn.type = 'button';
-    btn.className = 'pip-text-btn';
+    btn.className = 'pip-ready-contextual-link';
     btn.textContent = text;
     btn.addEventListener('click', onClick);
     return btn;
@@ -2695,6 +3899,19 @@ export function createMezzoSession({
     selectorExpanded = true;
     pipDocument.addEventListener('click', handleSelectorOutsideClick, true);
     pipDocument.addEventListener('keydown', handleSelectorKeydown, true);
+    // Predictable focus movement on open (Batch 2): the checked radio if
+    // one exists, else the first available radio — never left stranded on
+    // the trigger once the panel it disclosed is actually visible.
+    // requestAnimationFrame matches the same convention every decision
+    // screen already uses (see showM1Screen() etc.) — one frame for the
+    // browser to register the just-unhidden radio as focusable before
+    // focusing it.
+    requestAnimationFrame(() => {
+      const radios = readySelectorPanelEl?.querySelectorAll('input[type="radio"]');
+      if (!radios || radios.length === 0) return;
+      const checked = readySelectorPanelEl.querySelector('input[type="radio"]:checked');
+      (checked || radios[0]).focus();
+    });
   }
 
   function closeSelectorPanel() {
@@ -2725,24 +3942,51 @@ export function createMezzoSession({
   function renderSelectorPanel() {
     if (!readySelectorPanelEl || !pipDocument) return;
     readySelectorPanelEl.innerHTML = '';
+    // The <legend> must be re-added here, not just once at initial skeleton
+    // build time: the innerHTML='' above clears it along with the old rows
+    // on every re-render, and a <legend> only provides a <fieldset>'s
+    // accessible name while it's actually present as its first child.
+    const selectorLegend = pipDocument.createElement('legend');
+    selectorLegend.className = 'pip-ready-selector-legend';
+    selectorLegend.textContent = 'Speaking profiles';
+    readySelectorPanelEl.appendChild(selectorLegend);
     const saved = getSavedProfiles();
 
+    // Each section is its own role="group" + aria-labelledby, pointing at
+    // the same visible "Unsaved"/"Saved profiles" <div> already used as the
+    // on-screen heading — not a second, hidden label. This gives assistive
+    // tech a programmatic association the plain sibling <div>s below never
+    // had (found during the Batch 2 audit — see CLAUDE.md's Engineering
+    // Notes). Deliberately role="group", not a second <fieldset>/radiogroup:
+    // there is still exactly one native radio group (one shared `name`)
+    // spanning both sections, so arrow keys/Tab move across the whole
+    // Unsaved+Saved set as one native control — these wrapper divs only add
+    // a label association, they never partition the radios themselves.
     if (unsavedProfile) {
-      const unsavedLabel = pipDocument.createElement('div');
-      unsavedLabel.className = 'pip-ready-selector-group-label';
-      unsavedLabel.textContent = 'Unsaved';
-      readySelectorPanelEl.appendChild(unsavedLabel);
+      const unsavedGroup = pipDocument.createElement('div');
+      unsavedGroup.setAttribute('role', 'group');
+      unsavedGroup.setAttribute('aria-labelledby', 'pip-ready-selector-unsaved-label');
 
-      readySelectorPanelEl.appendChild(buildSelectorRow(unsavedProfile, {
-        label: 'Unsaved profile',
-        actionLabel: 'Discard unsaved profile',
+      const unsavedLabel = pipDocument.createElement('div');
+      unsavedLabel.id = 'pip-ready-selector-unsaved-label';
+      unsavedLabel.className = 'pip-ready-selector-group-label';
+      unsavedLabel.textContent = 'Temporary';
+      unsavedGroup.appendChild(unsavedLabel);
+
+      unsavedGroup.appendChild(buildSelectorRow(unsavedProfile, {
+        label: 'Temporary profile',
+        recalibrateLabel: 'Recalibrate Temporary profile',
+        onRecalibrate: () => handleSelectorRowRecalibrateClick(unsavedProfile),
+        actionLabel: 'Discard temporary profile',
         onAction: () => handleDiscardUnsaved(),
       }));
 
       const note = pipDocument.createElement('div');
       note.className = 'pip-ready-selector-row-note';
       note.textContent = 'Disappears when you close Mezzo';
-      readySelectorPanelEl.appendChild(note);
+      unsavedGroup.appendChild(note);
+
+      readySelectorPanelEl.appendChild(unsavedGroup);
 
       if (saved.length > 0) {
         const divider = pipDocument.createElement('div');
@@ -2752,41 +3996,127 @@ export function createMezzoSession({
     }
 
     if (saved.length > 0) {
+      const savedGroup = pipDocument.createElement('div');
+      savedGroup.setAttribute('role', 'group');
+      savedGroup.setAttribute('aria-labelledby', 'pip-ready-selector-saved-label');
+
       const savedLabel = pipDocument.createElement('div');
+      savedLabel.id = 'pip-ready-selector-saved-label';
       savedLabel.className = 'pip-ready-selector-group-label';
       savedLabel.textContent = 'Saved profiles';
-      readySelectorPanelEl.appendChild(savedLabel);
+      savedGroup.appendChild(savedLabel);
 
       saved.forEach((profile) => {
-        readySelectorPanelEl.appendChild(buildSelectorRow(profile, {
+        savedGroup.appendChild(buildSelectorRow(profile, {
           label: profile.name,
+          recalibrateLabel: `Recalibrate ${profile.name}`,
+          onRecalibrate: () => handleSelectorRowRecalibrateClick(profile),
           actionLabel: `Delete ${profile.name} profile`,
           onAction: (triggerBtn) => openDeleteScreen(profile, triggerBtn),
         }));
       });
+
+      readySelectorPanelEl.appendChild(savedGroup);
     }
+
+    // Create new profile — persistent footer action (2026-08-18), moved
+    // here from the old Ready-level contextual link (see
+    // renderContextualActions()'s own updated doc comment). Always present
+    // regardless of profile count, including at the five-profile cap —
+    // never hidden or disabled there; activating it at the cap routes to
+    // the existing M3 limit screen instead of beginning calibration (see
+    // handleCreateNewProfileClick()). The panel is only ever opened once
+    // at least one profile exists (Unsaved and/or Saved), so there is
+    // always at least one row above this — the divider below reuses the
+    // exact same treatment already used between the Unsaved/Saved groups,
+    // not a second, bespoke separator rule, keeping this a visually
+    // distinct footer without turning it into a large marketing-style
+    // button of its own.
+    const footerDivider = pipDocument.createElement('div');
+    footerDivider.className = 'pip-ready-selector-divider';
+    readySelectorPanelEl.appendChild(footerDivider);
+
+    const createNewProfileBtn = pipDocument.createElement('button');
+    createNewProfileBtn.type = 'button';
+    createNewProfileBtn.className = 'pip-ready-selector-footer-action';
+    createNewProfileBtn.textContent = 'Create new profile';
+    createNewProfileBtn.addEventListener('click', handleCreateNewProfileClick);
+    readySelectorPanelEl.appendChild(createNewProfileBtn);
   }
 
-  function buildSelectorRow(profile, { label, actionLabel, onAction }) {
+  /** Native radio (visually hidden — see .pip-ready-selector-row-radio's own
+   *  CSS comment) + a visible label wrapping the name and a decorative
+   *  checkmark, both driven straight off :checked in CSS — no second,
+   *  JS-maintained "selected" flag. The recalibrate icon and the
+   *  delete/discard button are both independent siblings of the
+   *  radio+label, never descendants of either, so neither can ever
+   *  accidentally check the radio, and the radio's own change handler
+   *  never touches either of them.
+   *
+   *  Recalibrate icon (2026-08-17, new — see renderContextualActions()'s
+   *  own doc comment for why the standalone Ready-screen Recalibrate link
+   *  was retired in favor of this): placed immediately before the
+   *  delete/discard button, sharing its exact .pip-ready-selector-row-action
+   *  treatment (size, stroke weight/color, hover/focus behavior, target
+   *  size) so the two read as one consistent pair of row-level icon
+   *  actions. Both supported profile types get one — a saved profile via
+   *  onRecalibrate targeting beginCalibrationFlow('recalibrate', profile.id)
+   *  directly, the Temporary profile via the same handleUnsavedRecalibrateClick()
+   *  the old standalone link already used for it (see
+   *  handleSelectorRowRecalibrateClick()) — there is no profile type this
+   *  selector ever lists that recalibration doesn't already support. */
+  function buildSelectorRow(profile, { label, actionLabel, onAction, recalibrateLabel, onRecalibrate }) {
     const row = pipDocument.createElement('div');
     row.className = 'pip-ready-selector-row';
+
+    const rowId = `ready-selector-${profile.id ?? 'unsaved'}`;
 
     const radio = pipDocument.createElement('input');
     radio.type = 'radio';
     radio.name = 'ready-selector-profile';
     radio.className = 'pip-ready-selector-row-radio';
-    const rowId = `ready-selector-${profile.id ?? 'unsaved'}`;
     radio.id = rowId;
     radio.checked = isSameProfile(profile, activeProfile);
     radio.addEventListener('change', () => handleSelectorRowChange(profile));
     row.appendChild(radio);
 
     const rowLabel = pipDocument.createElement('label');
-    rowLabel.className = 'pip-ready-selector-row-name';
+    rowLabel.className = 'pip-ready-selector-row-label';
     rowLabel.setAttribute('for', rowId);
-    rowLabel.textContent = label;
-    rowLabel.title = label;
+
+    const rowName = pipDocument.createElement('span');
+    rowName.className = 'pip-ready-selector-row-name';
+    rowName.textContent = label;
+    rowName.title = label;
+    rowLabel.appendChild(rowName);
+
+    // Decorative only — aria-hidden, since the radio itself already
+    // announces its own checked state to assistive tech; this glyph would
+    // only double it. visibility (not opacity/color) is what actually
+    // shows/hides it, via :checked in CSS — survives forced-colors mode.
+    const rowCheck = pipDocument.createElement('span');
+    rowCheck.className = 'pip-ready-selector-row-check';
+    rowCheck.setAttribute('aria-hidden', 'true');
+    rowCheck.textContent = '✓';
+    rowLabel.appendChild(rowCheck);
+
     row.appendChild(rowLabel);
+
+    const recalibrateBtn = pipDocument.createElement('button');
+    recalibrateBtn.type = 'button';
+    recalibrateBtn.className = 'pip-ready-selector-row-action';
+    recalibrateBtn.setAttribute('aria-label', recalibrateLabel);
+    // A visible native tooltip — this glyph (unlike the trash can) has no
+    // universally self-evident meaning, so it gets one; the trash button
+    // is left exactly as it was (no title), unaffected by this addition.
+    recalibrateBtn.title = 'Recalibrate';
+    recalibrateBtn.innerHTML = PENCIL_ICON_SVG;
+    recalibrateBtn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      event.preventDefault();
+      onRecalibrate();
+    });
+    row.appendChild(recalibrateBtn);
 
     const actionBtn = pipDocument.createElement('button');
     actionBtn.type = 'button';
@@ -2805,7 +4135,16 @@ export function createMezzoSession({
 
   /** Selecting a row updates selection, closes the selector, and updates
    *  contextual actions — it never starts monitoring and never deletes or
-   *  discards anything else. */
+   *  discards anything else. Fires on the radio's native 'change' event,
+   *  which — because arrow-key movement between radios in the same native
+   *  group changes which one is checked immediately, not just on a
+   *  separate confirm step — means an arrow press that lands on a
+   *  different profile selects it and closes the panel right away. This is
+   *  native <input type="radio"> behavior, not a bug: there is no
+   *  "highlight several options while the panel stays open, then commit"
+   *  step here, by design (see the accompanying test). Returns focus to
+   *  the trigger afterward — the panel that just held it is now hidden,
+   *  which would otherwise strand focus on <body>. */
   function handleSelectorRowChange(profile) {
     activeProfile = profile;
     if (!isTemporaryProfile(profile)) setSelectedProfile(profile);
@@ -2813,6 +4152,7 @@ export function createMezzoSession({
     renderSelectorTrigger();
     renderContextualActions();
     if (readyStartBtn) readyStartBtn.disabled = !activeProfile;
+    readySelectorTriggerEl?.focus();
   }
 
   // ---------------------------------------------------------------------------
@@ -2887,7 +4227,7 @@ export function createMezzoSession({
     closeSelectorPanel();
     layoutMode = LAYOUT_MODES.EXPANDED;
     if (pipDocument?.body) pipDocument.body.setAttribute('data-layout', LAYOUT_MODES.EXPANDED);
-    resizeCompanionTo(MEZZO_COMPANION_READY_SIZE);
+    resizeCompanionToContent(MEZZO_COMPANION_READY_SIZE);
     activeCircle = null;
     showOnlyScreen(deleteScreenEl);
     sessionState.set(SESSION_STATES.COMPANION_READY);
@@ -2993,11 +4333,6 @@ export function createMezzoSession({
   // Contextual-action click handlers
   // ---------------------------------------------------------------------------
 
-  function handleSavedRecalibrateClick() {
-    if (!activeProfile?.id) return; // defensive — only reachable with a saved profile selected
-    beginCalibrationFlow('recalibrate', activeProfile.id);
-  }
-
   /** Recalibrating the unsaved profile itself is just another session-mode
    *  calibration — handleCalibrationCompleted() below always replaces
    *  unsavedProfile wholesale on completion, satisfying "at most one unsaved
@@ -3006,23 +4341,83 @@ export function createMezzoSession({
     beginCalibrationFlow('session', null);
   }
 
+  /** Ready selector panel's own per-row Recalibrate icon (2026-08-17 —
+   *  replaces the retired standalone Ready-screen Recalibrate link; see
+   *  renderContextualActions()'s own doc comment). Takes the row's own
+   *  profile explicitly rather than reading activeProfile, so it always
+   *  targets the exact profile the icon was clicked on — not whichever
+   *  profile happened to already be selected. Deliberately does NOT
+   *  reassign activeProfile/selection before starting: beginCalibrationFlow()
+   *  threads targetProfileId straight through to the calibration
+   *  controller (see startRecalibration()/getTargetSnapshot() in
+   *  calibration-controller.js), which is entirely independent of this
+   *  module's own activeProfile — and both existing outcomes already
+   *  handle the "was this the selected profile or a different one"
+   *  question correctly on their own: handleM1Replace() explicitly
+   *  re-selects whichever profile was just updated (regardless of prior
+   *  selection), and handleM1Discard() simply returns to Ready with
+   *  activeProfile exactly as it was before this call — the same
+   *  behavior a saved profile's recalibration has always had. This is the
+   *  smallest safe change that satisfies "target the profile in its own
+   *  row," not a new selection-state rule.
+   *  Both currently-recalibratable profile types are supported here, same
+   *  as the retired standalone link: a saved profile via
+   *  beginCalibrationFlow('recalibrate', profile.id) directly (this
+   *  function's own former handleSavedRecalibrateClick() body, now reached
+   *  this way instead), and the Temporary profile via the exact same
+   *  handleUnsavedRecalibrateClick() the old link always called for it —
+   *  no profile type this selector ever lists is left without a working
+   *  icon. */
+  function handleSelectorRowRecalibrateClick(profile) {
+    closeSelectorPanel();
+    if (isTemporaryProfile(profile)) {
+      handleUnsavedRecalibrateClick();
+    } else {
+      if (!profile?.id) return; // defensive — should be unreachable, every saved profile has an id
+      beginCalibrationFlow('recalibrate', profile.id);
+    }
+  }
+
   /** Create new profile — routes through C1 first, same as Welcome's own
    *  first-time entry (see the PRD's §12 State Transitions: "02 → C1 → C2 →
    *  04"). Unlike Recalibrate, this is creating a brand-new profile from
    *  scratch, so it keeps the instructional interstitial rather than
-   *  skipping straight to Calibrating. */
-  function handleCreateNewProfileClick() {
+   *  skipping straight to Calibrating.
+   *
+   *  At the five-profile cap (2026-08-18 — now reachable at the cap too,
+   *  since this is a persistent selector-panel footer action rather than a
+   *  contextual link the cap used to hide outright): routes to the
+   *  existing M3 five-profile-limit screen instead, mirroring
+   *  handleSaveProfileClick()'s own at-cap check exactly — no calibration
+   *  ever begins, and no new profile-renaming capability is implied
+   *  (M3 remains close-icon-only, unchanged). */
+  function handleCreateNewProfileClick(event) {
+    const atCap = getSavedProfiles().length >= MAX_SAVED_PROFILES;
+    if (atCap) {
+      showM3Screen(event?.currentTarget ?? null, 'create');
+      return;
+    }
     showC1Screen('ready');
   }
 
   /** Save profile — below cap opens M2; at cap goes straight to M3, never
-   *  opening M2 at all (§5/§9). */
-  function handleSaveProfileClick(event) {
+   *  opening M2 at all (§5/§9). Shared by Ready's own contextual "Save
+   *  profile" link (returnTo defaults to 'ready', unchanged behavior) and
+   *  Slice 2's "Speaking profile ready" result screen's own Save profile
+   *  button (returnTo: 'result') — the exact same validation/limit/
+   *  duplicate-name handling either way; only where M2's own Cancel
+   *  returns to differs (see showM2Screen()/handleM2Cancel()). M3's own
+   *  Close always returns to Ready regardless of origin — reaching the
+   *  five-profile limit is a blocking notice, not "the save flow" itself,
+   *  and Ready already reflects the calibration as the selected Unsaved
+   *  profile either way, so nothing is lost by not threading returnTo
+   *  through M3 too. */
+  function handleSaveProfileClick(event, returnTo = 'ready') {
     if (!unsavedProfile) return;
     const atCap = getSavedProfiles().length >= MAX_SAVED_PROFILES;
     const triggerBtn = event?.currentTarget ?? null;
     if (atCap) showM3Screen(triggerBtn);
-    else showM2Screen(triggerBtn);
+    else showM2Screen(triggerBtn, returnTo);
   }
 
   // ===========================================================================
@@ -3067,23 +4462,20 @@ export function createMezzoSession({
     }
     pendingLockedAttempt = null;
 
-    const targetName = targetProfileId
-      ? getSavedProfiles().find((p) => p.id === targetProfileId)?.name ?? null
-      : null;
-
-    layoutMode = LAYOUT_MODES.EXPANDED;
-    if (pipDocument?.body) pipDocument.body.setAttribute('data-layout', LAYOUT_MODES.EXPANDED);
-    resizeCompanionTo(MEZZO_COMPANION_READY_SIZE); // Calibrating shares Ready's fixed size — see CLAUDE.md's Companion sizes
-    activeCircle = null;
-
-    if (calibratingSubheadingEl) {
-      calibratingSubheadingEl.textContent = mode === 'recalibrate' && targetName ? `Recalibrating ${targetName}` : '';
+    // Snapshot what was selected before this "new speaking profile" flow
+    // began — Variant 1's own Discard restores it later (see
+    // handleResultDiscard()). Captured only once per flow: a later "Speak
+    // again" re-enters this same function with mode 'session' again, but
+    // priorProfileBeforeCreation is no longer undefined by then, so it's
+    // left alone — Discard must be able to undo the whole flow, not just
+    // its most recent take. Recalibrate mode never touches this at all —
+    // Variant 2's own Discard relies on activeProfile simply never being
+    // reassigned during that flow instead (see handleM1Discard()).
+    if (mode === 'session' && priorProfileBeforeCreation === undefined) {
+      priorProfileBeforeCreation = activeProfile;
     }
-    if (calibratingBarFillEl) calibratingBarFillEl.style.width = '0%';
-    startCalibratingCountdown();
-    showOnlyScreen(calibratingScreenEl);
-    unsubscribeCalibrationLevel = calibrationController.subscribeToLevel(handleCalibrationLevelSample);
-    sessionState.set(SESSION_STATES.COMPANION_CALIBRATING);
+
+    prepareCalibratingScreen(mode, targetProfileId);
 
     try {
       if (mode === 'recalibrate') {
@@ -3098,11 +4490,175 @@ export function createMezzoSession({
     }
   }
 
-  /** Live "Listening… {n}s" countdown — text, not just the bar, so
-   *  progress/completion is conveyed to assistive tech too. Purely a
-   *  presentational countdown; the controller's own capture timer (see
-   *  calibration-controller.js's DEFAULT_CAPTURE_DURATION_MS) is the actual
-   *  source of truth for when capture ends. */
+  /**
+   * Shows and resets the Calibrating screen to its pre-capture state —
+   * shared by beginCalibrationFlow() (a fresh attempt) and
+   * handleFailedTryAgain()'s retry path (calibration-stall reliability
+   * correction), so a retry after a timeout visibly goes through the same
+   * "show Calibrating, then wait for real capture to begin" sequence as the
+   * very first attempt, rather than silently doing nothing on screen for
+   * however long the retried acquisition takes. Resets layout/size, the
+   * subheading, the meter (hidden, unfilled), every preparation-stage timer
+   * and flag, the countdown-started guard, and the status text — blank,
+   * deliberately: calibration pacing revision, second pass, no longer shows
+   * "Getting microphone ready…" (or anything else) synchronously here. The
+   * delayed-disclosure "Preparing microphone…" message (if it appears at
+   * all), "Start speaking in {n}", and "Listening… {n}s" are each driven by
+   * their own timer/listener below, none of which fire until real progress
+   * (acquisition succeeding, then beginCountdown(), then real capture
+   * starting) actually happens.
+   */
+  function prepareCalibratingScreen(mode, targetProfileId) {
+    const targetName = targetProfileId
+      ? getSavedProfiles().find((p) => p.id === targetProfileId)?.name ?? null
+      : null;
+
+    layoutMode = LAYOUT_MODES.EXPANDED;
+    if (pipDocument?.body) pipDocument.body.setAttribute('data-layout', LAYOUT_MODES.EXPANDED);
+    resizeCompanionToContent(MEZZO_COMPANION_READY_SIZE); // Calibrating shares Ready's fixed size — see CLAUDE.md's Companion sizes
+    activeCircle = null;
+
+    if (calibratingSubheadingEl) {
+      calibratingSubheadingEl.textContent = mode === 'recalibrate' && targetName ? `Recalibrating ${targetName}` : '';
+    }
+    resetCalibrationMeter();
+    if (calibratingMeterRowEl) calibratingMeterRowEl.classList.add('hidden'); // revealed only on the capturing:true edge below
+    if (calibratingMeterHintEl) calibratingMeterHintEl.classList.add('hidden'); // shares the meter row's own hidden/visible lifecycle exactly
+    stopCalibratingCountdown(); // defensive — see startCalibratingCountdown()'s own trigger below; this guarantees a clean slate even on a retry
+    stopPreparationCountdown();
+    clearPreparingMessageTimers();
+    preparingHandled = false;
+    calibrationCountdownStarted = false;
+    if (calibratingStatusEl) calibratingStatusEl.textContent = '';
+    if (calibratingAnnounceEl) calibratingAnnounceEl.textContent = '';
+    showOnlyScreen(calibratingScreenEl);
+    unsubscribeCalibrationLevel = calibrationController.subscribeToLevel(handleCalibrationLevelSample);
+    sessionState.set(SESSION_STATES.COMPANION_CALIBRATING);
+
+    // Delayed-disclosure timer for "Preparing microphone…" — started here,
+    // covering the real audio.acquire() wait (the span before
+    // calibration-controller.js's state.preparing turns true), not
+    // restarted or referenced anywhere else. See handleAcquisitionConfirmed()
+    // for the corresponding cancel-on-fast-acquisition path.
+    preparingMessageDelayTimer = setTimeout(() => {
+      preparingMessageDelayTimer = null;
+      preparingMessageShown = true;
+      preparingMessageShownAt = Date.now();
+      if (calibratingStatusEl) calibratingStatusEl.textContent = 'Preparing microphone…';
+    }, PREPARING_MESSAGE_DELAY_MS);
+  }
+
+  /** Clears both "Preparing microphone…" timers and resets the
+   *  shown/shown-at bookkeeping — called from prepareCalibratingScreen()
+   *  (fresh attempt) and every calibration-teardown path (cancel, close,
+   *  navigating away) so a stale delayed-disclosure or minimum-display
+   *  timer from an abandoned attempt can never fire into a screen that's no
+   *  longer showing Calibrating. */
+  function clearPreparingMessageTimers() {
+    if (preparingMessageDelayTimer) { clearTimeout(preparingMessageDelayTimer); preparingMessageDelayTimer = null; }
+    if (preparingMessageMinDisplayTimer) { clearTimeout(preparingMessageMinDisplayTimer); preparingMessageMinDisplayTimer = null; }
+    preparingMessageShown = false;
+    preparingMessageShownAt = 0;
+  }
+
+  /** state.preparing's false→true edge (calibration pacing revision, second
+   *  pass) — the point calibration-controller.js's runCapture() confirms
+   *  microphone acquisition actually succeeded, immediately before it
+   *  begins waiting on this module's own beginCountdown() call (Stage 1).
+   *  Decides, per the delayed-disclosure spec, whether beginCountdown() can
+   *  fire immediately (acquisition was fast enough that "Preparing
+   *  microphone…" never rendered) or must first wait out whatever remains
+   *  of PREPARING_MESSAGE_MIN_DISPLAY_MS (acquisition was slow enough that
+   *  the message did render, and disappearing it immediately would be the
+   *  same unreadable-flash problem in reverse). preparingHandled guards
+   *  this to run at most once per attempt — reset in
+   *  prepareCalibratingScreen() — matching the guard pattern
+   *  calibrationCountdownStarted already uses for the capturing:true edge
+   *  below, for the same reason: nothing structurally prevents a second
+   *  notification carrying preparing:true, even though today's controller
+   *  never produces one. */
+  calibrationController.subscribe((state) => {
+    if (state.preparing && !preparingHandled) {
+      preparingHandled = true;
+      handleAcquisitionConfirmed();
+    }
+  });
+
+  function handleAcquisitionConfirmed() {
+    if (preparingMessageDelayTimer) {
+      // Fast acquisition — the 500ms delayed-disclosure window hadn't
+      // elapsed yet, so "Preparing microphone…" never rendered at all.
+      // Nothing to wait out; go straight to the countdown.
+      clearTimeout(preparingMessageDelayTimer);
+      preparingMessageDelayTimer = null;
+      beginPreparationCountdown();
+      return;
+    }
+    if (preparingMessageShown) {
+      const remaining = PREPARING_MESSAGE_MIN_DISPLAY_MS - (Date.now() - preparingMessageShownAt);
+      if (remaining > 0) {
+        preparingMessageMinDisplayTimer = setTimeout(() => {
+          preparingMessageMinDisplayTimer = null;
+          beginPreparationCountdown();
+        }, remaining);
+        return;
+      }
+    }
+    beginPreparationCountdown();
+  }
+
+  /** The one place calibrationController.beginCountdown() is ever called —
+   *  signals the controller that its own fixed Stage 2 window may start,
+   *  and starts this module's own visible/announced "Start speaking in
+   *  {n}" countdown in the exact same synchronous step, so the two stay in
+   *  lockstep (both begin, and both last PREPARATION_COUNTDOWN_SECONDS/
+   *  DEFAULT_PREPARATION_MS, from this same instant). */
+  function beginPreparationCountdown() {
+    if (calibratingAnnounceEl) calibratingAnnounceEl.textContent = `Get ready. Calibration starts in ${PREPARATION_COUNTDOWN_SECONDS} seconds.`;
+    calibrationController.beginCountdown();
+    startPreparationCountdown();
+  }
+
+  /** Visible-only (aria-hidden) "Start speaking in 3/2/1" — decorative
+   *  pacing text, not an accessibility announcement (see
+   *  beginPreparationCountdown()'s one-time "Get ready…" announcement and
+   *  the capturing:true edge listener's own one-time "Listening for 6
+   *  seconds." announcement below, which are the only two things assistive
+   *  tech actually hears). Purely presentational: calibration-controller.js's
+   *  own Stage 2 timer (preparationMs) is the real source of truth for when
+   *  the countdown ends and real capture may begin — this only decides what
+   *  the text reads meanwhile. No samples are collected and the meter stays
+   *  hidden for the countdown's whole duration; both only start on the
+   *  capturing:true edge. */
+  function startPreparationCountdown() {
+    stopPreparationCountdown();
+    let remaining = PREPARATION_COUNTDOWN_SECONDS;
+    if (calibratingStatusEl) calibratingStatusEl.textContent = `Start speaking in ${remaining}`;
+    preparationCountdownTimer = setInterval(() => {
+      remaining -= 1;
+      if (remaining > 0 && calibratingStatusEl) calibratingStatusEl.textContent = `Start speaking in ${remaining}`;
+      if (remaining <= 0) stopPreparationCountdown(); // the capturing:true edge listener below takes over the status text from here
+    }, 1000);
+  }
+
+  function stopPreparationCountdown() {
+    if (preparationCountdownTimer) { clearInterval(preparationCountdownTimer); preparationCountdownTimer = null; }
+  }
+
+  /** Live "Listening… {n}s" countdown — text, not just the meter, so
+   *  progress/completion is conveyed to assistive tech too (via the
+   *  separate one-time "Listening for 6 seconds." announcement — see the
+   *  capturing:true edge listener below; this visible text itself stays
+   *  aria-hidden). Purely a presentational countdown; the controller's own
+   *  capture timer (see calibration-controller.js's
+   *  DEFAULT_CAPTURE_DURATION_MS) is the actual source of truth for when
+   *  capture ends. Started only once per attempt, by the dedicated
+   *  calibrationController.subscribe() listener below that watches for
+   *  state.capturing's false→true edge — never called eagerly from
+   *  beginCalibrationFlow()/prepareCalibratingScreen() itself, since the
+   *  microphone-acquisition wait and the fixed preparation countdown that
+   *  precede real capture must not be counted as part of this countdown —
+   *  see the calibration-stall reliability correction. */
   function startCalibratingCountdown() {
     stopCalibratingCountdown();
     let remaining = CALIBRATION_COUNTDOWN_SECONDS;
@@ -3118,23 +4674,47 @@ export function createMezzoSession({
     if (calibratingCountdownTimer) { clearInterval(calibratingCountdownTimer); calibratingCountdownTimer = null; }
   }
 
+  /** Empties the meter fill and hides the row — the pre-capture resting
+   *  state, restored by prepareCalibratingScreen() on every fresh
+   *  attempt/retry. Kept as its own function (rather than inlined) since
+   *  it's also what a defensive full reset needs, independent of whether
+   *  the row happens to already be hidden. */
+  function resetCalibrationMeter() {
+    if (!calibratingMeterFillEl) return;
+    calibratingMeterFillEl.style.width = '0%';
+  }
+
+  /** Drives the continuous-fill meter — see dbToMeterFillRatio()'s own
+   *  comment above for the mapping. subscribeToLevel() delivers samples
+   *  throughout the whole calibration attempt, including the preparation
+   *  stages — this function itself, not the subscription, is what enforces
+   *  "no meter movement before capture begins," by simply declining to
+   *  touch the (hidden) fill until calibratingMeterRowEl no longer carries
+   *  the 'hidden' class. */
   function handleCalibrationLevelSample(rms) {
-    if (!calibratingBarFillEl) return;
+    if (!calibratingMeterFillEl || !calibratingMeterRowEl || calibratingMeterRowEl.classList.contains('hidden')) return;
     const db = 20 * Math.log10(rms + 1e-10);
-    const energy = Math.min(1, Math.max(0, (db - CALIBRATION_METER_DB_MIN) / (CALIBRATION_METER_DB_MAX - CALIBRATION_METER_DB_MIN)));
-    calibratingBarFillEl.style.width = `${Math.round(energy * 100)}%`;
+    const ratio = dbToMeterFillRatio(db);
+    calibratingMeterFillEl.style.width = `${ratio * 100}%`;
   }
 
   function handleCalibratingCancel() {
     calibrationController.cancel();
+    // The whole creation flow is being abandoned outright here (not
+    // superseded via Redo) — clear the snapshot so it can't leak into some
+    // later, unrelated flow. A no-op for recalibrate mode, which never sets
+    // this in the first place.
+    priorProfileBeforeCreation = undefined;
     showReadyScreen();
   }
 
-  /** MIC_PERMISSION_DENIED routes to the dedicated C0 screen instead of the
-   *  generic Failed screen — every other failure code renders here. */
+  /** MIC_PERMISSION_DENIED and MIC_ACQUISITION_TIMEOUT both route to the
+   *  dedicated C0 screen instead of the generic Failed screen (with
+   *  distinct copy per code — see showC0Screen()/C0_COPY) — every other
+   *  failure code renders on the generic screen. */
   function showFailedScreen(failure) {
-    if (failure?.code === 'MIC_PERMISSION_DENIED') {
-      showC0Screen();
+    if (failure?.code === 'MIC_PERMISSION_DENIED' || failure?.code === 'MIC_ACQUISITION_TIMEOUT') {
+      showC0Screen(failure);
       return;
     }
     if (failedMessageEl) failedMessageEl.textContent = calibrationFailureMessage(failure);
@@ -3150,13 +4730,26 @@ export function createMezzoSession({
    *  re-attempts via beginCalibrationFlow() — re-checking the lock fresh —
    *  instead of calling retry(), which would throw from an idle controller.
    *  Shared by both the generic Failed screen and C0 — see their DOM
-   *  construction above. */
+   *  construction above.
+   *
+   *  Calibration-stall reliability correction: calls
+   *  prepareCalibratingScreen() itself before retry() — previously this
+   *  called retry() directly, so a retry never visibly showed the
+   *  Calibrating screen at all (invisible only because the one tested retry
+   *  path failed near-instantly; a retry that goes on to actually succeed
+   *  after a real multi-second wait would otherwise look frozen on
+   *  Failed/C0 throughout it). mode/targetProfileId are read from the
+   *  controller's own current (failed) state — still populated, since nothing
+   *  clears them on a FAILED transition — the same values retry() itself
+   *  is about to re-enter runCapture() with. */
   function handleFailedTryAgain() {
     if (pendingLockedAttempt) {
       const { mode, targetProfileId } = pendingLockedAttempt;
       beginCalibrationFlow(mode, targetProfileId);
       return;
     }
+    const { mode, targetProfileId } = calibrationController.getState();
+    prepareCalibratingScreen(mode, targetProfileId);
     try {
       calibrationController.retry();
     } catch (err) {
@@ -3173,56 +4766,279 @@ export function createMezzoSession({
   }
 
   // ===========================================================================
-  // Calibration completion — session mode lands directly on Ready with the
-  // freshly-calibrated unsaved profile selected (see §5's Unsaved-Profile
-  // Ready States); recalibrate mode shows M1 (§7), since it targets an
-  // existing saved profile whose calibration the user must explicitly choose
-  // to replace or keep separate. Nothing is persisted merely by reaching
-  // this handler — the saved profile a recalibration targeted stays
-  // untouched until M1's own commit handlers below.
+  // Calibration completion (Slice 2, revised). Real capture ending always
+  // shows the brief "Creating your speaking profile…" transition first (see
+  // showCreatingTransition()), then routes to whichever result screen fits:
+  // session mode (a brand-new profile, or speaking again for the current
+  // Temporary profile) shows "Your new speaking profile is ready" (Variant
+  // 1, showResultScreen()); recalibrate mode shows the same heading/body
+  // but with a name-specific primary button (Variant 2, showM1Screen()),
+  // since it targets an existing saved profile the user must explicitly
+  // choose to replace, keep separate, or discard. Recalibrate mode persists
+  // nothing until M1's own commit handlers below. Session mode's commit
+  // happens during the transition (see showCreatingTransition()) — it only
+  // ever produces an in-memory, never-persisted Temporary profile, so it
+  // isn't "persisting a new calibration" in the sense the state/routing
+  // safeguards mean by that phrase (only Save speaking profile writes to
+  // storage); it's what lets the result screen's own actions reuse Ready's
+  // existing profile/session state exactly, rather than inventing a second,
+  // uncommitted calibration-result model.
   // ===========================================================================
 
   function handleCalibrationCompleted(state) {
-    if (state.mode === 'recalibrate') {
-      showM1Screen();
-      return;
-    }
-    // commitStartMonitoring() only produces the temporary-profile object and
-    // resets the controller to idle here — it does not itself start
-    // monitoring (see its own doc comment in calibration-controller.js);
-    // reused rather than duplicating that object construction.
-    const temp = calibrationController.commitStartMonitoring();
-    unsavedProfile = temp;
-    activeProfile = temp;
+    showCreatingTransition(state);
+  }
+
+  /** "Creating your speaking profile…" — the brief completion transition
+   *  (Slice 2 revision) between real capture ending and a result screen
+   *  appearing. Does the actual, genuine work up front — committing a
+   *  session-mode result to a Temporary profile (recalibrate mode has
+   *  nothing to commit yet; M1 itself stays fully uncommitted, exactly as
+   *  before) — then holds this screen for whatever's left of
+   *  CREATING_TRANSITION_MIN_MS beyond however long that took, so a real
+   *  (if today near-instant) processing step and a perceivable minimum
+   *  display time are the same mechanism, not two competing ones. Never a
+   *  full extra artificial second on top: `remaining` is computed from
+   *  actual elapsed time.
+   *
+   *  Single-stage by design (2026-08-12 revision): earlier versions swapped
+   *  the spinner for a checkmark partway through and announced "Speaking
+   *  profile created." at that moment. Manual acceptance found the
+   *  checkmark confusing — the result screen immediately behind it already
+   *  communicates "ready," so a second "done" signal one beat earlier was
+   *  redundant, not clarifying. This screen now stays a single processing
+   *  state (spinner + "Creating your speaking profile…") from start to
+   *  finish and hands off directly to the result screen with no
+   *  intermediate completion state to announce or render. */
+  function showCreatingTransition(state) {
+    if (!pipWindow) return;
+    layoutMode = LAYOUT_MODES.EXPANDED;
+    if (pipDocument?.body) pipDocument.body.setAttribute('data-layout', LAYOUT_MODES.EXPANDED);
+    resizeCompanionToContent(MEZZO_COMPANION_READY_SIZE);
+    activeCircle = null;
+    showOnlyScreen(creatingScreenEl);
+    sessionState.set(SESSION_STATES.COMPANION_READY);
+    // Announced once, immediately, independent of the paint-confirmation
+    // wait below: a screen-reader announcement isn't gated on visual paint
+    // the way the spinner's own perceptibility is, and delaying it to
+    // match the visual gate would only add latency an AT user gains
+    // nothing from.
+    if (creatingAnnounceEl) creatingAnnounceEl.textContent = 'Creating your speaking profile.';
+
+    // Confirm the spinner has actually had a chance to paint before doing
+    // anything else. Root-caused via manual real-Chrome acceptance testing
+    // (2026-08-11): the original version of this function used the bare
+    // global requestAnimationFrame for its own checkmark-swap step — which,
+    // because Document Picture-in-Picture shares the opener tab's JS realm
+    // (see CLAUDE.md's Engineering Notes — the same class of issue as the
+    // earlier window.__lateStream finding), is the OPENER tab's rAF, tied
+    // to the opener's own paint cycle, not the Companion's. Document PiP is
+    // a genuinely separate always-on-top compositor surface; nothing
+    // guarantees the opener's paint schedule correlates with it. This
+    // Companion's OTHER real-time UI (Calibrating's countdown, the 3-2-1
+    // preparation countdown) survived the same mistake elsewhere in this
+    // file only because each ticks visibly many times over several real
+    // seconds — one dropped/delayed frame among dozens is imperceptible.
+    // This transition is architecturally different: a single one-shot
+    // state change with exactly one visible window, so a single missed
+    // paint opportunity can make the ENTIRE state invisible, which is what
+    // real-Chrome manual testing found.
+    //
+    // pipWindow.requestAnimationFrame (double-rAF, the standard "confirm a
+    // paint happened" technique) is the preferred signal — real desktop
+    // Chrome should fire it within a frame or two. But gating the WHOLE
+    // flow behind it turned out to trade one bug for a worse one: this
+    // project's own Playwright/CDP sandbox measurably fires
+    // pipWindow.requestAnimationFrame unreliably (confirmed while building
+    // this fix's own regression test — sometimes several seconds late,
+    // sometimes not at all before a test's own timeout), which would leave
+    // a real user permanently stuck on this screen if the same ever
+    // happened outside the sandbox. `proceed()` below is therefore raced
+    // against a short, bounded safety-net timer — "fails open," matching
+    // this codebase's own established philosophy elsewhere (e.g. the
+    // cross-tab calibration lock's own fails-open default under a
+    // localStorage failure) — so this flow always completes within a
+    // bounded time regardless of whether the paint-confirmation signal
+    // itself ever arrives.
+    let paintConfirmed = false;
+    const proceed = () => {
+      if (paintConfirmed) return;
+      paintConfirmed = true;
+      if (!pipWindow) return; // closed during the wait — nothing left to transition
+      const startedAt = Date.now();
+
+      // The genuine work this screen represents — synchronous today, but
+      // structured so a future genuinely-async version of this step would
+      // still fit the same shape (do the work, THEN compute what's left of
+      // the minimum display time from real elapsed time).
+      let destination;
+      if (state.mode === 'recalibrate') {
+        destination = showM1Screen;
+      } else {
+        // commitStartMonitoring() only produces the temporary-profile
+        // object and resets the controller to idle here — it does not
+        // itself start monitoring (see its own doc comment in
+        // calibration-controller.js); reused rather than duplicating that
+        // object construction.
+        const temp = calibrationController.commitStartMonitoring();
+        unsavedProfile = temp;
+        activeProfile = temp;
+        destination = showResultScreen;
+      }
+
+      const elapsed = Date.now() - startedAt;
+      const remaining = Math.max(0, CREATING_TRANSITION_MIN_MS - elapsed);
+      creatingTransitionTimer = setTimeout(() => {
+        creatingTransitionTimer = null;
+        destination();
+      }, remaining);
+    };
+
+    const pipRaf = typeof pipWindow.requestAnimationFrame === 'function'
+      ? pipWindow.requestAnimationFrame.bind(pipWindow)
+      : null;
+    if (pipRaf) pipRaf(() => pipRaf(proceed));
+    // Safety net — always armed, regardless of whether pipRaf exists or
+    // ever fires. 100ms is generous for "two real frames" (normally
+    // ~32ms at 60fps) while staying comfortably inside the overall ~700ms
+    // budget, so it practically never wins the race in real desktop
+    // Chrome — only when the preferred signal is slow or absent.
+    setTimeout(proceed, 100);
+  }
+
+  /** "Your new speaking profile is ready" (Slice 2, Variant 1) — reached
+   *  only from a session-mode calibration's completion (see
+   *  showCreatingTransition() above). Static copy throughout — nothing to
+   *  interpolate here (unlike M1). Focus moves to the heading, not a
+   *  button — a deliberate departure from every other decision screen's
+   *  own convention (see the DOM construction comment on
+   *  m1Heading/resultHeading's shared tabIndex=-1 treatment) — reusing the
+   *  same requestAnimationFrame-after-render mechanism every other
+   *  showXScreen() already uses, just aimed at a different element, so a
+   *  keyboard/screen-reader user hears what changed ("Your new speaking
+   *  profile is ready") immediately rather than landing on an unlabeled
+   *  button. */
+  function showResultScreen() {
+    if (!pipWindow) return;
+    layoutMode = LAYOUT_MODES.EXPANDED;
+    if (pipDocument?.body) pipDocument.body.setAttribute('data-layout', LAYOUT_MODES.EXPANDED);
+    resizeCompanionToContent(MEZZO_COMPANION_READY_SIZE);
+    activeCircle = null;
+    showOnlyScreen(resultScreenEl);
+    sessionState.set(SESSION_STATES.COMPANION_READY);
+    requestAnimationFrame(() => resultHeadingEl?.focus());
+  }
+
+  /** Keep temporarily (Slice 2, Variant 1 — new in this revision). The
+   *  Temporary profile is already exactly what showCreatingTransition()
+   *  committed and selected — nothing further to write anywhere, so this
+   *  is just "return to Ready with what's already selected," same as
+   *  every other exit from this screen. Concludes the creation flow: the
+   *  Discard-restoration snapshot is no longer needed once the user has
+   *  explicitly chosen to keep this result (even temporarily).
+   *
+   *  Shows one "Available until you close the Companion" toast (2026-08-16)
+   *  once Ready has rendered with the Temporary profile selected — accurate
+   *  per handlePipClose()'s own unconditional `unsavedProfile = null` on
+   *  every close path (native window-close and the Dock's programmatic
+   *  pipWindow.close(), both funnel through the same pipWindow 'pagehide'
+   *  listener — see that function's own doc comment). Deliberately scoped
+   *  to this one call site: Cancel/Save/Replace/Discard all end this flow
+   *  a different way and must not show this toast (see the shared toast's
+   *  own single-message-at-a-time behavior in showToast()). */
+  function handleResultKeepTemporarily() {
+    priorProfileBeforeCreation = undefined;
     showReadyScreen();
+    showToast('Available until you close the Companion');
+    restoreDecisionFocus();
+  }
+
+  /** Discard (Slice 2, Variant 1 — new in this revision). Discards only
+   *  the newly created Temporary profile, restoring whatever was selected
+   *  before this creation flow began (see priorProfileBeforeCreation's own
+   *  doc comment) — re-validated in case a saved profile it pointed to was
+   *  deleted elsewhere during capture. Falls back to the application's
+   *  existing default (most-recently-used saved profile, else Welcome —
+   *  the same pickFallbackSavedProfile()/showWelcomeScreen() pair
+   *  Discard-unsaved and Delete already use) when there's no valid prior
+   *  selection to restore — a first-ever creation from Welcome, or a prior
+   *  saved profile that's since been deleted.
+   *
+   *  Shows one "New profile discarded" toast (shortened 2026-08-15, was
+   *  "New speaking profile discarded") regardless of which restoration
+   *  path was taken — the toast confirms the discard action itself, not
+   *  which screen it lands on.
+   *  Deliberately scoped to this one call site only: cancelling calibration
+   *  (handleCalibratingCancel) and closing the Companion (handlePipClose)
+   *  both already reach a "nothing was ever created" or "abandoned mid-
+   *  capture" state through different paths and must not show this toast,
+   *  and Variant 2's own Discard (handleM1Discard) discards a new
+   *  *calibration attempt* for an existing saved profile, not a "newly
+   *  created speaking profile" — a different action this approval doesn't
+   *  cover. */
+  function handleResultDiscard() {
+    const prior = priorProfileBeforeCreation;
+    priorProfileBeforeCreation = undefined;
+    unsavedProfile = null;
+
+    let restored = null;
+    if (prior && isTemporaryProfile(prior)) {
+      // The flow started from speaking again for the Temporary profile
+      // itself — that object was never destroyed (only ever replaced by a
+      // later commit), so it's always still valid to restore as-is.
+      unsavedProfile = prior;
+      restored = prior;
+    } else if (prior) {
+      // Was a saved profile — re-validate it still exists.
+      restored = getSavedProfiles().some((p) => p.id === prior.id) ? prior : null;
+    }
+    if (!restored) {
+      restored = pickFallbackSavedProfile(getSavedProfiles());
+    }
+
+    activeProfile = restored;
+    if (restored && !isTemporaryProfile(restored)) setSelectedProfile(restored);
+
+    if (restored) {
+      showReadyScreen();
+    } else {
+      showWelcomeScreen();
+    }
+    showToast('New profile discarded');
+    restoreDecisionFocus();
   }
 
   // ===========================================================================
-  // M1 — reached only from a saved-profile recalibration's completion.
+  // M1 (Slice 2, Variant 2) — reached only from a saved-profile
+  // recalibration's completion.
   // ===========================================================================
 
   function showM1Screen() {
     if (!pipWindow) return;
     // M1 is never reached from a synchronous click on Ready — a real ~6s
-    // calibration capture sits in between — so there is no real "the button
-    // that opened this" to capture; decisionTriggerEl is left unset here,
-    // and restoreDecisionFocus() below falls back to the selector trigger.
+    // calibration capture (plus the completion transition) sits in
+    // between — so there is no real "the button that opened this" to
+    // capture; decisionTriggerEl is left unset here, and
+    // restoreDecisionFocus() below falls back to the selector trigger.
     const targetName = calibrationController.getTargetSnapshot()?.name;
-    const copy = replaceProfileCopy(targetName);
-    if (m1HeadingEl) m1HeadingEl.textContent = copy.heading;
+    if (m1ReplaceBtn) m1ReplaceBtn.textContent = replaceButtonLabel(targetName);
     layoutMode = LAYOUT_MODES.EXPANDED;
     if (pipDocument?.body) pipDocument.body.setAttribute('data-layout', LAYOUT_MODES.EXPANDED);
-    resizeCompanionTo(MEZZO_COMPANION_READY_SIZE);
+    resizeCompanionToContent(MEZZO_COMPANION_READY_SIZE);
     activeCircle = null;
     showOnlyScreen(m1ScreenEl);
     sessionState.set(SESSION_STATES.COMPANION_READY);
-    requestAnimationFrame(() => m1ReplaceBtn?.focus());
+    // Focus moves to the heading, not m1ReplaceBtn — see showResultScreen()'s
+    // own comment on this deliberate, Slice-2-specific departure from every
+    // OTHER decision screen's "focus the primary button" convention.
+    requestAnimationFrame(() => m1HeadingEl?.focus());
   }
 
-  /** Replace — writes the recalibration to the targeted saved profile,
-   *  preserving its id/name/library position (the same updateSavedProfile()
-   *  Recalibrate's own commit path always used). Falls back safely to Ready
-   *  if the target was deleted elsewhere mid-calibration (commitError). */
+  /** Replace "{name}" — writes the recalibration to the targeted saved
+   *  profile, preserving its id/name/library position (the same
+   *  updateSavedProfile() Recalibrate's own commit path always used). Falls
+   *  back safely to Ready if the target was deleted elsewhere mid-
+   *  calibration (commitError). */
   function handleM1Replace() {
     runDecisionCommit(m1ReplaceBtn, 'Replacing…', () => {
       const updated = calibrationController.commitUpdateProfile();
@@ -3235,17 +5051,42 @@ export function createMezzoSession({
     });
   }
 
-  /** Keep as unsaved — the saved profile this attempt targeted is left
-   *  completely untouched; the new calibration becomes a fresh unsaved
-   *  profile instead (see commitKeepAsUnsaved() in calibration-controller.js). */
+  /** Keep temporarily — the saved profile this attempt targeted is left
+   *  completely untouched; the new calibration becomes a fresh Temporary
+   *  profile instead (see commitKeepAsUnsaved() in calibration-controller.js).
+   *
+   *  Shows the same one "Available until you close the Companion" toast as
+   *  Variant 1's own Keep temporarily (handleResultKeepTemporarily) —
+   *  identical claim, identical lifecycle guarantee, reached from the other
+   *  result variant. See that function's own doc comment for the full
+   *  reasoning. */
   function handleM1KeepAsUnsaved() {
     runDecisionCommit(m1KeepBtn, 'Keeping…', () => {
       const temp = calibrationController.commitKeepAsUnsaved();
       unsavedProfile = temp;
       activeProfile = temp;
       showReadyScreen();
+      showToast('Available until you close the Companion');
       restoreDecisionFocus();
     });
+  }
+
+  /** Discard (Slice 2, Variant 2 — renamed from "Discard new calibration").
+   *  Deliberately not labeled "Cancel": that wouldn't clearly describe what
+   *  gets discarded (this new, uncommitted calibration result — not the
+   *  saved profile, which was never touched to begin with). A plain
+   *  cancel(), not a runDecisionCommit()-wrapped commit: nothing is written
+   *  anywhere, so there's nothing to "process" — matches the same
+   *  immediate, no-processing-state treatment every other escape-hatch
+   *  text link in this Companion already uses (M2's own Cancel, M3's
+   *  Close, Calibrating's own Cancel). activeProfile was never reassigned
+   *  during a recalibration attempt (only a commit does that), so it's
+   *  still the original saved profile — showReadyScreen() naturally shows
+   *  it still selected, unchanged, with no extra bookkeeping needed here. */
+  function handleM1Discard() {
+    calibrationController.cancel();
+    showReadyScreen();
+    restoreDecisionFocus();
   }
 
   // ===========================================================================
@@ -3253,14 +5094,15 @@ export function createMezzoSession({
   // current unsaved profile.
   // ===========================================================================
 
-  function showM2Screen(triggerBtn) {
+  function showM2Screen(triggerBtn, returnTo = 'ready') {
     if (!pipWindow || !unsavedProfile) return;
     decisionTriggerEl = triggerBtn ?? null;
+    m2ReturnTo = returnTo;
     if (m2NameInput) m2NameInput.value = '';
     renderM2State();
     layoutMode = LAYOUT_MODES.EXPANDED;
     if (pipDocument?.body) pipDocument.body.setAttribute('data-layout', LAYOUT_MODES.EXPANDED);
-    resizeCompanionTo(MEZZO_COMPANION_READY_SIZE);
+    resizeCompanionToContent(MEZZO_COMPANION_READY_SIZE);
     activeCircle = null;
     showOnlyScreen(m2ScreenEl);
     sessionState.set(SESSION_STATES.COMPANION_READY);
@@ -3287,7 +5129,24 @@ export function createMezzoSession({
     m2NameInput.setAttribute('aria-describedby', copy.warningText ? 'm2-name-warning' : '');
   }
 
+  /** Cancel — where it returns depends on where Save profile was opened
+   *  from (see showM2Screen()'s own returnTo param and m2ReturnTo's doc
+   *  comment): Ready's own "Save profile" contextual link (the default,
+   *  unchanged behavior) returns to Ready; Slice 2's "Speaking profile
+   *  ready" result screen's own Save profile button returns there instead
+   *  — "cancelling the save flow returns to the result screen with the
+   *  calibration still available" (it's still the selected Unsaved
+   *  profile; nothing about it changes by opening and cancelling M2).
+   *  showResultScreen() manages its own heading focus, the same way every
+   *  other showXScreen() does — restoreDecisionFocus() is deliberately not
+   *  called in that branch, since it would otherwise re-focus M2's own
+   *  now-hidden trigger button instead. */
   function handleM2Cancel() {
+    if (m2ReturnTo === 'result') {
+      decisionTriggerEl = null;
+      showResultScreen();
+      return;
+    }
     showReadyScreen();
     restoreDecisionFocus();
   }
@@ -3322,7 +5181,14 @@ export function createMezzoSession({
       activeProfile = profile;
       unsavedProfile = null;
       showReadyScreen();
-      showToast(isUpdate ? `Profile "${profile.name}" replaced` : `Profile "${profile.name}" saved`);
+      // "Speaking profile saved" (this revision) for the create path —
+      // generic rather than name-interpolated, matching the terminology
+      // section's "center on speaking profiles" principle; the replace
+      // path (a name typed here happens to match an existing profile) is
+      // untouched, unrelated to this revision's own explicitly-scoped
+      // save-confirmation toast, and still reserved for the later
+      // toast-feedback work otherwise.
+      showToast(isUpdate ? `Profile "${profile.name}" replaced` : 'Speaking profile saved');
       restoreDecisionFocus();
     });
   }
@@ -3331,12 +5197,25 @@ export function createMezzoSession({
   // M3 — the five-profile limit.
   // ===========================================================================
 
-  function showM3Screen(triggerBtn) {
+  /** Shared by two entry points now (2026-08-18): Save profile at the cap
+   *  (context 'save', the original/default — unchanged copy, unchanged
+   *  every other call site) and the selector panel's own persistent
+   *  Create new profile action at the cap (context 'create' — see
+   *  handleCreateNewProfileClick()). Same screen, same close behavior,
+   *  same "no calibration begins" guarantee either way — only the body
+   *  copy differs, since "before saving this one" would be inaccurate from
+   *  the create path (nothing has been calibrated/named yet to "save"). */
+  function showM3Screen(triggerBtn, context = 'save') {
     if (!pipWindow) return;
     decisionTriggerEl = triggerBtn ?? null;
+    if (m3BodyEl) {
+      m3BodyEl.textContent = context === 'create'
+        ? 'Delete a saved profile before creating another.'
+        : 'Delete a saved profile before saving this one.';
+    }
     layoutMode = LAYOUT_MODES.EXPANDED;
     if (pipDocument?.body) pipDocument.body.setAttribute('data-layout', LAYOUT_MODES.EXPANDED);
-    resizeCompanionTo(MEZZO_COMPANION_READY_SIZE);
+    resizeCompanionToContent(MEZZO_COMPANION_READY_SIZE);
     activeCircle = null;
     showOnlyScreen(m3ScreenEl);
     sessionState.set(SESSION_STATES.COMPANION_READY);
@@ -3426,9 +5305,11 @@ export function createMezzoSession({
     decisionTriggerEl = null;
   }
 
-  /** Save/replace confirmation toast (§12) — never shifts layout
-   *  (position:absolute, out of flow) and never steals focus (no focus()
-   *  call here); a polite aria-live region announces it instead. */
+  /** Shared toast mechanism (§12; also used by the discard confirmation) —
+   *  never shifts layout (position:absolute, out of flow) and never steals
+   *  focus (no focus() call here); a polite aria-live region announces it
+   *  instead. One shared positioning rule for every message that uses this
+   *  — see .pip-toast's own CSS comment for where and why. */
   function showToast(message) {
     if (!toastEl || !toastCardEl) return;
     toastCardEl.textContent = message;
@@ -3470,6 +5351,8 @@ export function createMezzoSession({
     c1BackBtn = null;
     c1EntrySource = null;
     c0ScreenEl = null;
+    c0HeadingEl = null;
+    c0BodyEl = null;
     readyScreenEl = null;
     readyHeadingEl = null;
     readySelectorTriggerEl = null;
@@ -3483,11 +5366,26 @@ export function createMezzoSession({
     m1HeadingEl = null;
     m1ReplaceBtn = null;
     m1KeepBtn = null;
+    m1DiscardBtn = null;
+    resultScreenEl = null;
+    resultHeadingEl = null;
+    resultSaveBtn = null;
+    resultKeepBtn = null;
+    resultDiscardBtn = null;
+    if (creatingTransitionTimer) { clearTimeout(creatingTransitionTimer); creatingTransitionTimer = null; }
+    creatingScreenEl = null;
+    creatingAnnounceEl = null;
+    // In-memory only, same reasoning as unsavedProfile's own doc comment —
+    // a native Companion close is exactly the boundary a pending creation
+    // flow's own restoration snapshot must not survive either.
+    priorProfileBeforeCreation = undefined;
     m2ScreenEl = null;
     m2WarningEl = null;
     m2NameInput = null;
     m2SubmitBtn = null;
+    m2ReturnTo = 'ready';
     m3ScreenEl = null;
+    m3BodyEl = null;
     m3CloseBtn = null;
     deleteScreenEl = null;
     deleteHeadingEl = null;
@@ -3505,8 +5403,15 @@ export function createMezzoSession({
     calibratingScreenEl = null;
     calibratingSubheadingEl = null;
     calibratingStatusEl = null;
-    calibratingBarFillEl = null;
+    calibratingAnnounceEl = null;
+    calibratingMeterRowEl = null;
+    calibratingMeterFillEl = null;
+    calibratingMeterHintEl = null;
     stopCalibratingCountdown();
+    stopPreparationCountdown();
+    clearPreparingMessageTimers();
+    preparingHandled = false;
+    calibrationCountdownStarted = false;
     failedScreenEl = null;
     failedMessageEl = null;
     pendingLockedAttempt = null;

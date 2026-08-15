@@ -81,6 +81,20 @@ body {
 
 .microcopy-cta { margin-top: 24px; }
 
+/* Batch 4 (independent corrections) — makes the mic-denied state visually
+   distinct from mic-request/mic-granted, which otherwise share this exact
+   layout down to the pixel. Same schematic illustration (colors included)
+   as the Companion's own C0_ILLUSTRATION_SVG — see index.html's own
+   comment on #mic-denied — so this reads as the product's own established
+   "blocked mic" visual, not a new one invented for this page. Sized modestly
+   (not full hero-visual scale) since it's a supporting glyph above the
+   explanatory copy, not the page's own focal illustration. */
+.hero-mic-denied-illustration {
+  width: 160px;
+  margin: 0 auto 20px;
+}
+.hero-mic-denied-illustration svg { display: block; width: 100%; height: auto; }
+
 /* ── Hero visual — the Mezzo Companion preview is the visual focal point of
    the page, so it gets generous breathing room rather than sitting flush
    against the copy column.
@@ -120,12 +134,26 @@ body {
   box-sizing: border-box;
 }
 
+/* Batch 4 (independent corrections): matches the real Companion's own
+   typography recipe (Sora / --weight-medium — the same family+weight
+   .pip-status-heading actually renders with, see src/mezzo-session.js),
+   not the serif display font used elsewhere on this page — this label is
+   inside a live preview of the Companion itself, so it should look like
+   something the Companion could plausibly show, not read as marketing
+   display type. Muted (--text-subdued), not --text-primary (which resolves
+   to a near-white cream in this dark-surfaced card and read as flatly
+   "bright white" against it) — --text-subdued is the same muted-token
+   family .hero-companion-label just below already draws its own resting
+   (zone 0/1) color from. Font-size/letter-spacing intentionally left
+   unchanged — this corrects typeface/case/color only, not the card's
+   established layout. */
 .hero-companion-wordmark {
-  font-family: var(--font-display);
-  font-weight: var(--weight-light);
+  font-family: var(--font-body);
+  font-weight: var(--weight-medium);
   font-size: 14px;
-  color: var(--text-primary);
+  color: var(--text-subdued);
   letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 /* Typography and per-zone color intentionally match the real Companion's

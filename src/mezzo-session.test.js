@@ -41,11 +41,15 @@ const {
   profileMetaText,
   calibrationFailureMessage,
   CALIBRATION_FAILURE_COPY,
+  C0_COPY,
   saveProfileNameCopy,
-  replaceProfileCopy,
+  replaceButtonLabel,
   computeReadyContentHeight,
   MEZZO_COMPANION_READY_WIDTH,
   MEZZO_COMPANION_READY_BASE_HEIGHT,
+  MEZZO_COMPANION_EXPANDED_SIZE,
+  MEZZO_COMPANION_COMPACT_SIZE,
+  dbToMeterFillRatio,
 } = await import('./mezzo-session.js');
 
 // =============================================================================
@@ -89,11 +93,14 @@ describe('isTemporaryProfile', () => {
 // =============================================================================
 
 describe('calibrationFailureMessage', () => {
+  // No terminal periods (2026-08-16 heading-punctuation audit) — every one
+  // of these renders as failedMessageEl's sole text, which functions as the
+  // Failed screen's heading (see CALIBRATION_FAILURE_COPY's own doc comment).
   it('maps every known failure code to its documented copy', () => {
-    assert.strictEqual(calibrationFailureMessage({ code: 'SILENCE' }), "Didn't catch enough clear speech — let's try again.");
-    assert.strictEqual(calibrationFailureMessage({ code: 'INSUFFICIENT_VOICE' }), "Didn't catch enough clear speech — let's try again.");
-    assert.strictEqual(calibrationFailureMessage({ code: 'UNSTABLE_ENVIRONMENT' }), 'Try somewhere a little quieter.');
-    assert.strictEqual(calibrationFailureMessage({ code: 'NO_SAMPLES' }), "Didn't catch enough clear speech — let's try again.");
+    assert.strictEqual(calibrationFailureMessage({ code: 'SILENCE' }), "Didn't catch enough clear speech — let's try again");
+    assert.strictEqual(calibrationFailureMessage({ code: 'INSUFFICIENT_VOICE' }), "Didn't catch enough clear speech — let's try again");
+    assert.strictEqual(calibrationFailureMessage({ code: 'UNSTABLE_ENVIRONMENT' }), 'Try somewhere a little quieter');
+    assert.strictEqual(calibrationFailureMessage({ code: 'NO_SAMPLES' }), "Didn't catch enough clear speech — let's try again");
   });
 
   it('explains microphone permission denial with a return path, not a generic error', () => {
@@ -114,6 +121,46 @@ describe('calibrationFailureMessage', () => {
     Object.keys(CALIBRATION_FAILURE_COPY).forEach((code) => {
       assert.doesNotMatch(calibrationFailureMessage({ code }), /Calibration failed/);
     });
+  });
+
+  it('has a defensive fallback entry for MIC_ACQUISITION_TIMEOUT, even though this code always routes to C0 instead', () => {
+    const msg = calibrationFailureMessage({ code: 'MIC_ACQUISITION_TIMEOUT' });
+    assert.match(msg, /longer than expected/i);
+  });
+});
+
+// =============================================================================
+// C0_COPY — the dedicated microphone-blocked/timed-out screen's own
+// heading/body pairs, keyed by failure code (calibration-stall reliability
+// correction). MIC_PERMISSION_DENIED and MIC_ACQUISITION_TIMEOUT share one
+// screen but must render genuinely distinct, honest copy — never describing
+// a timeout as a denial/block.
+// =============================================================================
+
+describe('C0_COPY', () => {
+  // Heading carries no terminal period (2026-08-16 audit); body is
+  // explanatory helper text and keeps its own periods unchanged.
+  it('MIC_PERMISSION_DENIED copy matches the approved PRD/design-artifact text', () => {
+    assert.strictEqual(C0_COPY.MIC_PERMISSION_DENIED.heading, 'Your browser has blocked microphone access');
+    assert.strictEqual(
+      C0_COPY.MIC_PERMISSION_DENIED.body,
+      'Click the icon in your address bar and change the microphone setting to "Allow," then try again.'
+    );
+  });
+
+  it('MIC_ACQUISITION_TIMEOUT copy matches the approved text and never says denied/blocked', () => {
+    assert.strictEqual(C0_COPY.MIC_ACQUISITION_TIMEOUT.heading, 'Mezzo couldn’t connect to your microphone');
+    assert.strictEqual(
+      C0_COPY.MIC_ACQUISITION_TIMEOUT.body,
+      'The connection took longer than expected. Try again to restart calibration.'
+    );
+    const combined = `${C0_COPY.MIC_ACQUISITION_TIMEOUT.heading} ${C0_COPY.MIC_ACQUISITION_TIMEOUT.body}`;
+    assert.doesNotMatch(combined, /denied|blocked/i);
+  });
+
+  it('the two codes render different copy on the shared screen', () => {
+    assert.notStrictEqual(C0_COPY.MIC_PERMISSION_DENIED.heading, C0_COPY.MIC_ACQUISITION_TIMEOUT.heading);
+    assert.notStrictEqual(C0_COPY.MIC_PERMISSION_DENIED.body, C0_COPY.MIC_ACQUISITION_TIMEOUT.body);
   });
 });
 
@@ -183,32 +230,34 @@ describe('saveProfileNameCopy', () => {
 });
 
 // =============================================================================
-// replaceProfileCopy — M1's terminology-sensitive copy (heading + body),
-// pure and DOM-free for the same reason saveProfileNameCopy is: unit-tested
-// directly rather than only through a real PiP window. M1 is only ever
-// reached from a saved-profile recalibration, so there is no session-mode
-// variant to test here (unlike the old, retired calibratedCheckpointCopy).
+// replaceButtonLabel — Variant 2's own primary-button label, pure and
+// DOM-free for the same reason saveProfileNameCopy is: unit-tested directly
+// rather than only through a real PiP window. Reached only from a
+// saved-profile recalibration's completion — session mode (a brand-new
+// profile, or speaking again for the current Temporary profile) always
+// lands on Variant 1 instead, which has no name to interpolate at all.
+// Revised twice now (see CLAUDE.md's Engineering Notes): the target name
+// used to live in the heading, then in a dynamic body; this revision
+// retired both in favor of one static heading/body pair shared by both
+// result variants, leaving the name to live only in this one button label.
 // =============================================================================
 
-describe('replaceProfileCopy', () => {
-  it('names the target profile in the heading', () => {
-    const copy = replaceProfileCopy('Kitchen');
-    assert.strictEqual(copy.heading, 'Replace existing "Kitchen" profile?');
-    assert.strictEqual(copy.body, 'Replace the saved calibration with the one you just created?');
+describe('replaceButtonLabel', () => {
+  it('names the target profile, in straight double quotes', () => {
+    assert.strictEqual(replaceButtonLabel('Kitchen'), 'Replace "Kitchen"');
   });
 
-  it('falls back to a neutral heading if the target snapshot is somehow missing', () => {
-    const copy = replaceProfileCopy(undefined);
-    assert.strictEqual(copy.heading, 'Replace this saved profile?');
+  it('falls back to a neutral label if the target snapshot is somehow missing, without inventing a fake name', () => {
+    assert.strictEqual(replaceButtonLabel(undefined), 'Replace this profile');
+    assert.strictEqual(replaceButtonLabel(null), 'Replace this profile');
+    assert.strictEqual(replaceButtonLabel(''), 'Replace this profile');
   });
 
   it('never phrases the decision as saving, choosing, or selecting "a calibration" as if it were the persistent object', () => {
-    [replaceProfileCopy('Kitchen'), replaceProfileCopy(undefined)].forEach((copy) => {
-      [copy.heading, copy.body].forEach((text) => {
-        assert.doesNotMatch(text, /choose a calibration/i);
-        assert.doesNotMatch(text, /calibration profile/i);
-        assert.doesNotMatch(text, /save calibration/i);
-      });
+    [replaceButtonLabel('Kitchen'), replaceButtonLabel(undefined)].forEach((text) => {
+      assert.doesNotMatch(text, /choose a calibration/i);
+      assert.doesNotMatch(text, /calibration profile/i);
+      assert.doesNotMatch(text, /save calibration/i);
     });
   });
 });
@@ -218,22 +267,28 @@ describe('replaceProfileCopy', () => {
 // =============================================================================
 
 describe('profileMetaText', () => {
-  it('reads "(Unsaved)" for a temporary profile, checked before anything else', () => {
+  // Batch 4 (independent corrections): the old "(Unsaved)"/"(Custom)"
+  // parenthetical qualifiers are gone from this label — every profile now
+  // reads as a plain "Profile: {name}" during Monitoring, regardless of
+  // saved/temporary status. That status is still tracked and still governs
+  // real behavior elsewhere (see profiles.js/isTemporaryProfile) — only
+  // this specific label stopped surfacing it.
+  it('reads a plain "Profile: {name}" for a temporary profile — no qualifier', () => {
     const temp = { name: 'Current speaking range', speakingDb: -30, spreadDb: 4, savedProfileId: null, temporary: true };
-    assert.strictEqual(profileMetaText(temp), 'Profile: Current speaking range (Unsaved)');
+    assert.strictEqual(profileMetaText(temp), 'Profile: Current speaking range');
   });
 
-  it('reads "(Custom)" for a saved profile using the canonical direct shape (id)', () => {
+  it('reads a plain "Profile: {name}" for a saved profile using the canonical direct shape (id) — no qualifier', () => {
     const saved = { id: 'p1', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 1 };
-    assert.strictEqual(profileMetaText(saved), 'Profile: Kitchen (Custom)');
+    assert.strictEqual(profileMetaText(saved), 'Profile: Kitchen');
   });
 
-  it('reads a bare name, no qualifier, for the older wrapper-reference shape (savedProfileId, no id) — no production caller produces this anymore; `id` is the sole "Custom" signal now', () => {
+  it('reads a plain "Profile: {name}" for the older wrapper-reference shape (savedProfileId, no id) too — no production caller produces this anymore', () => {
     const legacySelected = { name: 'Coffee Shop', speakingDb: -28, savedProfileId: 'p2' };
     assert.strictEqual(profileMetaText(legacySelected), 'Profile: Coffee Shop');
   });
 
-  it('falls back to a neutral name, no qualifier, when given no profile at all', () => {
+  it('falls back to a neutral name when given no profile at all', () => {
     // This branch is unreachable from any real code path today (every real
     // profile shape carries a name) — it exists only so a missing name is a
     // strange label, not a crash.
@@ -241,9 +296,9 @@ describe('profileMetaText', () => {
     assert.strictEqual(profileMetaText(undefined), 'Profile: Unknown Profile');
   });
 
-  it('a temporary flag always wins over an id — the two are not expected to coexist, but temporary must still take priority if they somehow do', () => {
+  it('an id alongside temporary:true still reads as a plain name — there is no qualifier left for either flag to win priority over', () => {
     const oddCase = { id: 'p1', name: 'Weird', temporary: true };
-    assert.strictEqual(profileMetaText(oddCase), 'Profile: Weird (Unsaved)');
+    assert.strictEqual(profileMetaText(oddCase), 'Profile: Weird');
   });
 });
 
@@ -317,33 +372,129 @@ describe('requestMicrophoneAccess', () => {
 // mezzo-session.js): the approved selector is an overlay dropdown that
 // expands within the existing card bounds, not an always-visible growing
 // list, so every pre-monitoring screen shares one fixed height regardless of
-// how many profiles exist.
+// how many profiles exist. Batch 2 (2026-08-09) moved the fixed target from
+// 380×364 to the reference-verified 382×512 pre-monitoring content-viewport
+// size — still unconditional, still not a bottom-up sum of this screen's own
+// element heights (see the constant's own doc comment for why 382×512 isn't
+// derived the way 380×364 used to be).
 // =============================================================================
 
 describe('computeReadyContentHeight', () => {
-  it('returns exactly the documented baseline, unconditionally', () => {
+  it('returns exactly the documented, fixed target, unconditionally', () => {
     assert.strictEqual(computeReadyContentHeight(), MEZZO_COMPANION_READY_BASE_HEIGHT);
-    assert.strictEqual(computeReadyContentHeight(), 364);
+    assert.strictEqual(computeReadyContentHeight(), 512);
   });
 
-  it('ignores any argument passed to it — never profile-count-dependent again', () => {
+  it('ignores any argument passed to it — never profile-count-dependent, even with five saved profiles plus an unsaved one', () => {
     assert.strictEqual(computeReadyContentHeight(0), MEZZO_COMPANION_READY_BASE_HEIGHT);
     assert.strictEqual(computeReadyContentHeight(5), MEZZO_COMPANION_READY_BASE_HEIGHT);
+    assert.strictEqual(computeReadyContentHeight(6), MEZZO_COMPANION_READY_BASE_HEIGHT); // 5 saved + 1 unsaved
     assert.strictEqual(computeReadyContentHeight(100), MEZZO_COMPANION_READY_BASE_HEIGHT);
   });
 });
 
 // =============================================================================
-// MEZZO_COMPANION_READY_WIDTH — locks in the 320 (button) + 2x20 (existing
-// .pip-screen-ready padding) + 2x10 (centering slack) = 380 decomposition
-// documented alongside the constant itself, so a future change to any one
-// of those inputs is caught here rather than silently drifting.
+// dbToMeterFillRatio — the continuous calibration meter's real, current dB
+// -> clamped 0..1 fill-ratio mapping (2026-08-12 revision — replaces the
+// earlier 5-segment presentation's energyToSegmentCount()/
+// dbToMeterSegmentCount(), retired outright alongside the segmented DOM/CSS
+// they drove; see CLAUDE.md's Engineering Notes). Exercised directly rather
+// than reimplemented here, so this suite can't silently drift from what
+// handleCalibrationLevelSample() actually renders — it calls this same
+// function and sets the fill element's width to `${ratio * 100}%` directly,
+// with no intermediate rounding/segment step.
+//
+// -55..-30: unchanged from the segmented presentation's own revision (see
+// CALIBRATION_METER_DB_MIN/MAX's doc comment) — real-microphone diagnostics
+// confirmed this window fits ordinary natural speech; what changed here is
+// only the presentation (continuous vs. discrete), not the range. The
+// specific dB values below are the approximate percentiles measured from
+// two real-microphone captures during that investigation — a quieter
+// natural-speaking take and a more expressive one — not synthetic boundary
+// values, so this test locks in the actual product requirement (smaller
+// changes in natural speech move the bar continuously and proportionally,
+// not in visible jumps only at segment boundaries).
 // =============================================================================
 
-describe('MEZZO_COMPANION_READY_WIDTH', () => {
-  it('is exactly 380 — the button cap (320) plus 30px clearance on each side', () => {
-    const BUTTON_MAX_WIDTH = 320;
-    const EXPECTED_CLEARANCE_PER_SIDE = 30;
-    assert.strictEqual(MEZZO_COMPANION_READY_WIDTH, BUTTON_MAX_WIDTH + EXPECTED_CLEARANCE_PER_SIDE * 2);
+describe('dbToMeterFillRatio', () => {
+  it('-55dB (the floor) maps to an empty bar (ratio 0)', () => {
+    assert.strictEqual(dbToMeterFillRatio(-55), 0);
+  });
+
+  it('-30dB (the ceiling) maps to a full bar (ratio 1)', () => {
+    assert.strictEqual(dbToMeterFillRatio(-30), 1);
+  });
+
+  it('an intermediate value maps proportionally within the range, not rounded to a discrete step', () => {
+    // -42.5dB is exactly the midpoint of -55..-30 -> exactly 0.5, not
+    // rounded up/down to some fixed increment the old segment presentation
+    // would have produced.
+    assert.strictEqual(dbToMeterFillRatio(-42.5), 0.5);
+    // A small, real difference in speaking level produces a correspondingly
+    // small, distinct difference in ratio — the whole point of restoring a
+    // continuous presentation instead of discrete segments.
+    const quieter = dbToMeterFillRatio(-45.0);
+    const louder = dbToMeterFillRatio(-44.1);
+    assert.ok(louder > quieter);
+    assert.ok(louder - quieter < 0.1); // a ~1dB difference is a small, non-jumpy move
+  });
+
+  it('real-microphone reference values from the calibration-meter investigation map to the expected relative positions', () => {
+    // Quieter natural-speaking capture (p50 ~ -45.0dB, p90 ~ -44.1dB) sits
+    // in the lower-middle of the bar, not empty.
+    assert.ok(dbToMeterFillRatio(-45.0) > 0 && dbToMeterFillRatio(-45.0) < 0.5);
+    // More expressive capture (p50 ~ -41.3dB) sits past the midpoint;
+    // its louder moments (p90 ~ -37.5dB) sit further still, closer to full.
+    assert.ok(dbToMeterFillRatio(-41.3) > 0.5);
+    assert.ok(dbToMeterFillRatio(-37.5) > dbToMeterFillRatio(-41.3));
+  });
+
+  it('a valid-but-quiet calibration at the engine\'s own MIN_USABLE_BASELINE_DB floor (-55dB) reads as the empty bar, not a negative/unreachable value', () => {
+    assert.strictEqual(dbToMeterFillRatio(-55), 0);
+    assert.ok(dbToMeterFillRatio(-52) > 0); // just above the engine's own floor, now visibly nonzero
+  });
+
+  it('clamps below the floor and above the ceiling instead of an out-of-range ratio', () => {
+    assert.strictEqual(dbToMeterFillRatio(-90), 0); // near-silence
+    assert.strictEqual(dbToMeterFillRatio(0), 1); // implausibly loud/clipping
+  });
+
+  it('returns 0 for non-finite input rather than NaN or throwing', () => {
+    assert.strictEqual(dbToMeterFillRatio(NaN), 0);
+    assert.strictEqual(dbToMeterFillRatio(undefined), 0);
+  });
+});
+
+// =============================================================================
+// MEZZO_COMPANION_READY_WIDTH / BASE_HEIGHT — locks in the approved,
+// reference-verified 382×512 pre-monitoring content-viewport target (Batch
+// 2), so a future edit can't silently drift the requested size away from it.
+// =============================================================================
+
+describe('MEZZO_COMPANION_READY_WIDTH / MEZZO_COMPANION_READY_BASE_HEIGHT', () => {
+  it('requests exactly 382×512 — the fixed pre-monitoring content-viewport target', () => {
+    assert.strictEqual(MEZZO_COMPANION_READY_WIDTH, 382);
+    assert.strictEqual(MEZZO_COMPANION_READY_BASE_HEIGHT, 512);
+  });
+});
+
+// =============================================================================
+// Monitoring sizes — must stay untouched by Batch 2's 382×512 change to the
+// pre-monitoring constants above. A separate object, not merely a separate
+// value that happens to differ today.
+// =============================================================================
+
+describe('Monitoring sizes remain unchanged by the Batch 2 pre-monitoring sizing change', () => {
+  it('Expanded is still 290×420', () => {
+    assert.deepStrictEqual(MEZZO_COMPANION_EXPANDED_SIZE, { width: 290, height: 420 });
+  });
+
+  it('Compact is still 220×220', () => {
+    assert.deepStrictEqual(MEZZO_COMPANION_COMPACT_SIZE, { width: 220, height: 220 });
+  });
+
+  it('neither Monitoring size equals the Ready/pre-monitoring size', () => {
+    assert.notDeepStrictEqual(MEZZO_COMPANION_EXPANDED_SIZE, { width: MEZZO_COMPANION_READY_WIDTH, height: MEZZO_COMPANION_READY_BASE_HEIGHT });
+    assert.notDeepStrictEqual(MEZZO_COMPANION_COMPACT_SIZE, { width: MEZZO_COMPANION_READY_WIDTH, height: MEZZO_COMPANION_READY_BASE_HEIGHT });
   });
 });

@@ -321,12 +321,25 @@
 
 /* ── Shared focus-visible treatment for interactive elements (nav links,
    footer link, buttons) — moved here from a page-specific stylesheet so
-   every page gets a visible keyboard-focus ring, not just the homepage. ── */
+   every page gets a visible keyboard-focus ring, not just the homepage.
+   Batch 4 (independent corrections): no border-radius override here
+   anymore — this used to force every focused element's OWN border-radius
+   to a flat 4px, which is fine for plain-text links (no radius of their
+   own to begin with) but was actively wrong for every pill-shaped button
+   (.btn-primary/.btn-outline/etc. all use --radius-cta/--radius-pill,
+   100px) — focusing one visibly squared its corners off to 4px and drew
+   the outline around that near-rectangular shape instead of the pill,
+   exactly the "unrelated rectangular outline" this correction was scoped
+   to fix. Removing the override lets the outline follow each element's own
+   actual, already-correct border-radius (current Chrome/Edge already trace
+   outlines to the element's real shape without any extra CSS) — a plain
+   link still gets a normal square-ish outline (nothing here ever gave it
+   one on purpose), and a pill button's outline now genuinely traces the
+   pill. ── */
 a:focus-visible,
 button:focus-visible {
   outline: 2px solid var(--hanko-fill);
   outline-offset: 3px;
-  border-radius: 4px;
 }
 
 .type-monitoring-within {

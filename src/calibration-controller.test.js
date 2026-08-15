@@ -42,10 +42,17 @@ function createMockAudio() {
   const calls = { acquire: 0, release: 0, startMonitoring: 0, stopMonitoring: 0 };
   let acquireResolvers = [];
   let onLevelChange = null;
+  // Mirrors src/audio.js's real isMonitoring semantics (true only between a
+  // startMonitoring() call and the next stopMonitoring()/release()) — the
+  // controller's own `capturing` state field reads this directly (not just
+  // "was startMonitoring() called"), so the mock needs to track it for real
+  // rather than always reading undefined/falsy.
+  let isMonitoring = false;
   return {
     calls,
     get onLevelChange() { return onLevelChange; },
     set onLevelChange(fn) { onLevelChange = fn; },
+    get isMonitoring() { return isMonitoring; },
     acquire() {
       calls.acquire++;
       return new Promise((resolve, reject) => acquireResolvers.push({ resolve, reject }));
@@ -58,9 +65,9 @@ function createMockAudio() {
       const r = acquireResolvers.shift();
       r?.reject(err);
     },
-    release() { calls.release++; },
-    startMonitoring() { calls.startMonitoring++; },
-    stopMonitoring() { calls.stopMonitoring++; },
+    release() { calls.release++; isMonitoring = false; },
+    startMonitoring() { calls.startMonitoring++; isMonitoring = true; },
+    stopMonitoring() { calls.stopMonitoring++; isMonitoring = false; },
     emitLevel(rms) { onLevelChange?.({ rms }); },
     emitSamples(rms, count) {
       for (let i = 0; i < count; i++) onLevelChange?.({ rms });
@@ -129,7 +136,7 @@ function createMockProfileOps(initialProfiles = []) {
   };
 }
 
-function setup(profileOpsInit = []) {
+function setup(profileOpsInit = [], { acquireTimeoutMs = 5000 } = {}) {
   const audio = createMockAudio();
   const scheduler = createFakeScheduler();
   const profileOps = createMockProfileOps(profileOpsInit);
@@ -138,18 +145,39 @@ function setup(profileOpsInit = []) {
     profileOps,
     now: () => 123456,
     captureDurationMs: 6000,
+    acquireTimeoutMs,
     setTimeoutFn: scheduler.setTimeoutFn,
     clearTimeoutFn: scheduler.clearTimeoutFn,
   });
   return { controller, audio, scheduler, profileOps };
 }
 
-/** Drives a controller through a full, successful capture (either mode). */
-async function runToCalibrated(controller, audio, scheduler, { rms = dbToRms(-30), count = 100 } = {}) {
+/** Resolves acquire(), signals the controller's own beginCountdown() (the
+ *  caller's explicit "my own delayed-disclosure UI timing is done" signal —
+ *  see pendingCountdownResolve's own comment in calibration-controller.js),
+ *  and passes through the fixed preparation window (DEFAULT_PREPARATION_MS)
+ *  — the point after which real capture (audio.startMonitoring(), samples,
+ *  capturing:true) has genuinely begun. Every test that needs to reach real
+ *  capture goes through this rather than a bare `resolveAcquire(); await
+ *  tick();`, which now only reaches the *preparation* phase (and not even
+ *  the fixed countdown within it, until beginCountdown() is called). */
+async function resolveAcquireAndPrepare(controller, audio, scheduler) {
   audio.resolveAcquire();
   await tick();
+  controller.beginCountdown();
+  // beginCountdown()'s resolve() only schedules its awaiting continuation
+  // as a microtask — the fixed-window timer isn't actually registered with
+  // the scheduler until that continuation resumes, one tick later.
+  await tick();
+  scheduler.flush(); // the preparation timer
+  await tick();
+}
+
+/** Drives a controller through a full, successful capture (either mode). */
+async function runToCalibrated(controller, audio, scheduler, { rms = dbToRms(-30), count = 100 } = {}) {
+  await resolveAcquireAndPrepare(controller, audio, scheduler);
   audio.emitSamples(rms, count);
-  scheduler.flush();
+  scheduler.flush(); // the capture-duration timer
   await tick();
 }
 
@@ -164,8 +192,7 @@ describe('subscribeToLevel', () => {
     const unsubscribe = controller.subscribeToLevel((rms) => seen.push(rms));
 
     controller.startSessionCalibration();
-    audio.resolveAcquire();
-    await tick();
+    await resolveAcquireAndPrepare(controller, audio, scheduler);
     audio.emitLevel(0.11);
     audio.emitLevel(0.22);
     audio.emitLevel(0.33);
@@ -183,13 +210,12 @@ describe('subscribeToLevel', () => {
   });
 
   it('unsubscribe stops further notifications', async () => {
-    const { controller, audio } = setup();
+    const { controller, audio, scheduler } = setup();
     const seen = [];
     const unsubscribe = controller.subscribeToLevel((rms) => seen.push(rms));
 
     controller.startSessionCalibration();
-    audio.resolveAcquire();
-    await tick();
+    await resolveAcquireAndPrepare(controller, audio, scheduler);
     audio.emitLevel(0.1);
     unsubscribe();
     audio.emitLevel(0.2);
@@ -198,14 +224,13 @@ describe('subscribeToLevel', () => {
   });
 
   it('is independent of getState()/subscribe() — does not trigger state-change notifications', async () => {
-    const { controller, audio } = setup();
+    const { controller, audio, scheduler } = setup();
     const stateChanges = [];
     controller.subscribe((s) => stateChanges.push(s.status));
     controller.subscribeToLevel(() => {});
 
     controller.startSessionCalibration();
-    audio.resolveAcquire();
-    await tick();
+    await resolveAcquireAndPrepare(controller, audio, scheduler);
     const countAfterAcquire = stateChanges.length;
     audio.emitLevel(0.1);
     audio.emitLevel(0.2);
@@ -307,10 +332,9 @@ describe('retry', () => {
   it('re-enters session mode after a failure, discarding the prior failure', async () => {
     const { controller, audio, scheduler } = setup();
     const first = controller.startSessionCalibration();
-    audio.resolveAcquire();
-    await tick();
+    await resolveAcquireAndPrepare(controller, audio, scheduler);
     // No samples emitted at all -> NO_SAMPLES failure.
-    scheduler.flush();
+    scheduler.flush(); // capture-duration timer
     await tick();
     await first;
     assert.strictEqual(controller.getState().status, 'failed');
@@ -330,8 +354,7 @@ describe('retry', () => {
     const original = { id: 'p1', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 1 };
     const { controller, audio, scheduler } = setup([original]);
     const first = controller.startRecalibration('p1');
-    audio.resolveAcquire();
-    await tick();
+    await resolveAcquireAndPrepare(controller, audio, scheduler);
     scheduler.flush(); // no samples -> NO_SAMPLES
     await tick();
     await first;
@@ -367,8 +390,7 @@ describe('retry', () => {
     const original = { id: 'p1', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 1 };
     const { controller, audio, scheduler, profileOps } = setup([original]);
     const first = controller.startRecalibration('p1');
-    audio.resolveAcquire();
-    await tick();
+    await resolveAcquireAndPrepare(controller, audio, scheduler);
     scheduler.flush(); // no samples -> NO_SAMPLES failure
     await tick();
     await first;
@@ -406,9 +428,8 @@ describe('calibration failure categories', () => {
   it('NO_SAMPLES when nothing is ever emitted', async () => {
     const { controller, audio, scheduler } = setup();
     const done = controller.startSessionCalibration();
-    audio.resolveAcquire();
-    await tick();
-    scheduler.flush();
+    await resolveAcquireAndPrepare(controller, audio, scheduler);
+    scheduler.flush(); // capture-duration timer
     await tick();
     await done;
     assert.strictEqual(controller.getState().status, 'failed');
@@ -418,10 +439,9 @@ describe('calibration failure categories', () => {
   it('SILENCE for a silent capture', async () => {
     const { controller, audio, scheduler } = setup();
     const done = controller.startSessionCalibration();
-    audio.resolveAcquire();
-    await tick();
+    await resolveAcquireAndPrepare(controller, audio, scheduler);
     audio.emitSamples(0, 100);
-    scheduler.flush();
+    scheduler.flush(); // capture-duration timer
     await tick();
     await done;
     assert.strictEqual(controller.getState().failure.code, 'SILENCE');
@@ -430,11 +450,10 @@ describe('calibration failure categories', () => {
   it('INSUFFICIENT_VOICE for a mostly-silent capture with one loud outlier', async () => {
     const { controller, audio, scheduler } = setup();
     const done = controller.startSessionCalibration();
-    audio.resolveAcquire();
-    await tick();
+    await resolveAcquireAndPrepare(controller, audio, scheduler);
     audio.emitSamples(dbToRms(-50), 99);
     audio.emitLevel(dbToRms(0));
-    scheduler.flush();
+    scheduler.flush(); // capture-duration timer
     await tick();
     await done;
     assert.strictEqual(controller.getState().failure.code, 'INSUFFICIENT_VOICE');
@@ -443,10 +462,9 @@ describe('calibration failure categories', () => {
   it('UNSTABLE_ENVIRONMENT for wildly alternating levels', async () => {
     const { controller, audio, scheduler } = setup();
     const done = controller.startSessionCalibration();
-    audio.resolveAcquire();
-    await tick();
+    await resolveAcquireAndPrepare(controller, audio, scheduler);
     for (let i = 0; i < 100; i++) audio.emitLevel(i % 2 === 0 ? dbToRms(-50) : dbToRms(0));
-    scheduler.flush();
+    scheduler.flush(); // capture-duration timer
     await tick();
     await done;
     assert.strictEqual(controller.getState().failure.code, 'UNSTABLE_ENVIRONMENT');
@@ -455,9 +473,8 @@ describe('calibration failure categories', () => {
   it('a failed calibration leaves result null and mic released', async () => {
     const { controller, audio, scheduler } = setup();
     const done = controller.startSessionCalibration();
-    audio.resolveAcquire();
-    await tick();
-    scheduler.flush();
+    await resolveAcquireAndPrepare(controller, audio, scheduler);
+    scheduler.flush(); // capture-duration timer
     await tick();
     await done;
     assert.strictEqual(controller.getState().result, null);
@@ -486,6 +503,436 @@ describe('permission denial', () => {
     audio.rejectAcquire(new Error('Permission denied'));
     await done;
     assert.strictEqual(audio.calls.release, 0);
+  });
+});
+
+// =============================================================================
+// Microphone-acquisition timeout — the calibration-stall reliability
+// correction. A permanently pending (never resolving, never rejecting)
+// audio.acquire() used to strand a run in CALIBRATING forever; these cover
+// the bounded timeout that now invalidates it, the recoverable
+// MIC_ACQUISITION_TIMEOUT failure code, and every cleanup/retry path around it.
+// =============================================================================
+
+describe('microphone acquisition timeout', () => {
+  it('a permanently pending acquisition times out into a recoverable MIC_ACQUISITION_TIMEOUT failure', async () => {
+    const { controller, audio, scheduler } = setup();
+    controller.startSessionCalibration();
+    assert.strictEqual(controller.getState().status, 'calibrating');
+
+    scheduler.flush(); // fires the acquire-timeout — acquire() itself never settles
+    assert.strictEqual(controller.getState().status, 'failed');
+    assert.strictEqual(controller.getState().failure.code, 'MIC_ACQUISITION_TIMEOUT');
+    assert.strictEqual(controller.getState().capturing, false);
+    assert.strictEqual(audio.calls.startMonitoring, 0, 'capture must never have started');
+  });
+
+  it('a delayed but successful acquisition, resolving before the timeout fires, completes normally', async () => {
+    const { controller, audio, scheduler } = setup();
+    const done = controller.startSessionCalibration();
+    // "Delayed" relative to an instant grant, but still well inside the
+    // bound — resolved manually here rather than via any real elapsed time,
+    // and the acquire-timeout is never flushed, modeling "settled first."
+    audio.resolveAcquire();
+    await tick();
+    assert.strictEqual(controller.getState().status, 'calibrating');
+    assert.strictEqual(controller.getState().preparing, true, 'entering the fixed preparation window immediately after acquire resolves');
+    assert.strictEqual(controller.getState().capturing, false, 'must not start capturing until preparation elapses, however fast acquire() was');
+
+    controller.beginCountdown(); // the caller's own delayed-disclosure timing is presumed to have already resolved
+    await tick(); // let beginCountdown()'s resolve() continuation actually register the fixed-window timer
+    scheduler.flush(); // preparation timer — the acquire-timeout was already cleared on resolve
+    await tick();
+    assert.strictEqual(controller.getState().preparing, false);
+    assert.strictEqual(controller.getState().capturing, true, 'monitoring actually started, so capturing must be true');
+
+    audio.emitSamples(dbToRms(-30), 100);
+    scheduler.flush(); // the real capture-duration timer
+    await tick();
+    await done;
+    assert.strictEqual(controller.getState().status, 'calibrated');
+  });
+
+  it('a late-resolving acquire() after timeout is immediately released, and never starts sampling', async () => {
+    const { controller, audio, scheduler } = setup();
+    controller.startSessionCalibration();
+    scheduler.flush(); // times out
+    assert.strictEqual(controller.getState().failure.code, 'MIC_ACQUISITION_TIMEOUT');
+    assert.strictEqual(audio.calls.release, 0, 'nothing to release yet — acquire has not resolved');
+
+    audio.resolveAcquire(); // the late-arriving grant
+    await tick();
+    assert.strictEqual(audio.calls.release, 1, 'the late-arriving stream must be released, not left open');
+    assert.strictEqual(audio.calls.startMonitoring, 0, 'a timed-out attempt must never start sampling');
+    assert.strictEqual(controller.getState().status, 'failed', 'the late resolution must not resurrect or change state');
+    assert.strictEqual(controller.getState().failure.code, 'MIC_ACQUISITION_TIMEOUT');
+  });
+
+  it('a late rejection after timeout does not overwrite state or throw', async () => {
+    const { controller, audio, scheduler } = setup();
+    controller.startSessionCalibration();
+    scheduler.flush(); // times out
+    assert.strictEqual(controller.getState().failure.code, 'MIC_ACQUISITION_TIMEOUT');
+
+    audio.rejectAcquire(new Error('denied'));
+    await tick(); // must not throw / produce an unhandled rejection
+    assert.strictEqual(controller.getState().status, 'failed');
+    assert.strictEqual(controller.getState().failure.code, 'MIC_ACQUISITION_TIMEOUT', 'must not be overwritten by the late rejection');
+  });
+
+  it('cancel while acquisition is pending clears the timeout outright — it can never fire later', async () => {
+    const { controller, scheduler } = setup();
+    controller.startSessionCalibration();
+    controller.cancel();
+    assert.strictEqual(controller.getState().status, 'idle');
+    assert.strictEqual(scheduler.pendingCount(), 0, 'reset() must have cleared the pending acquire-timeout');
+
+    scheduler.flush(); // no-op — nothing pending
+    assert.strictEqual(controller.getState().status, 'idle', 'must still be idle, not resurrected into failed');
+  });
+
+  it('close (native Companion close) while acquisition is pending also clears the timeout', async () => {
+    const { controller, scheduler } = setup();
+    controller.startSessionCalibration();
+    controller.close();
+    assert.strictEqual(controller.getState().status, 'idle');
+    assert.strictEqual(scheduler.pendingCount(), 0);
+  });
+
+  it('a successful retry after a timeout starts a clean new attempt and can complete normally', async () => {
+    const { controller, audio, scheduler } = setup();
+    controller.startSessionCalibration();
+    scheduler.flush(); // first attempt times out — its own acquire() mock promise is still unresolved/dangling
+    assert.strictEqual(controller.getState().failure.code, 'MIC_ACQUISITION_TIMEOUT');
+
+    const retryDone = controller.retry();
+    assert.strictEqual(controller.getState().status, 'calibrating');
+    // The mock's acquire resolver queue is FIFO: the first startSessionCalibration()'s
+    // own acquire() call is still queued ahead of retry()'s — resolving it
+    // drains that stale entry (a harmless no-op release, same as the
+    // "stale async completion" test above), and only the SECOND
+    // resolveAcquire() call settles the retry's own, current acquire().
+    audio.resolveAcquire(); // stale (gen1) — released as a no-op
+    audio.resolveAcquire(); // the retry's own
+    await tick();
+    assert.strictEqual(controller.getState().preparing, true);
+    controller.beginCountdown();
+    await tick(); // let beginCountdown()'s resolve() continuation actually register the fixed-window timer
+    scheduler.flush(); // the retry's own preparation timer
+    await tick();
+    assert.strictEqual(controller.getState().capturing, true);
+    audio.emitSamples(dbToRms(-30), 100);
+    scheduler.flush(); // the retry's own capture-duration timer
+    await tick();
+    await retryDone;
+    assert.strictEqual(controller.getState().status, 'calibrated');
+  });
+});
+
+// =============================================================================
+// Preparation phase — the calibration-stall reliability correction's second
+// pass. A silent-calibration incident showed that "Getting microphone
+// ready…" could be legitimately unpaintable on a fast/warm acquisition (no
+// enforced minimum duration), and that real capture could begin before a
+// person had any realistic chance to notice and start speaking. These cover
+// the fixed DEFAULT_PREPARATION_MS window this introduced: no bypass on a
+// fast acquisition, no sample collection during it, capture and `capturing`
+// beginning together only once it elapses, and cancellation during it
+// preventing capture outright. (Existing slow-acquisition/timeout/retry/
+// completion behavior is covered by the rest of this file — all of it still
+// passes unchanged, which is the direct verification that this addition
+// didn't regress any of it.)
+// =============================================================================
+
+describe('preparation phase (calibration-stall reliability correction, part 2)', () => {
+  it('preparing:true does not auto-advance — the fixed countdown never starts without an explicit beginCountdown() call', async () => {
+    const { controller, audio, scheduler } = setup();
+    controller.startSessionCalibration();
+    audio.resolveAcquire();
+    await tick();
+
+    assert.strictEqual(controller.getState().preparing, true);
+    assert.strictEqual(scheduler.pendingCount(), 0, 'no timer is scheduled yet — the countdown is caller-triggered, not automatic');
+
+    // Simulates real elapsed time passing with no explicit trigger — this
+    // is the whole point of the redesign: however long the Companion's own
+    // delayed-disclosure UI takes, the countdown must not start on its own.
+    for (let i = 0; i < 5; i++) await tick();
+    assert.strictEqual(controller.getState().preparing, true);
+    assert.strictEqual(controller.getState().capturing, false);
+    assert.strictEqual(audio.calls.startMonitoring, 0);
+  });
+
+  it('beginCountdown() starts the fixed countdown window, which still cannot be bypassed', async () => {
+    const { controller, audio, scheduler } = setup();
+    controller.startSessionCalibration();
+    audio.resolveAcquire();
+    await tick();
+
+    controller.beginCountdown();
+    // beginCountdown()'s resolve() only schedules its awaiting continuation
+    // as a microtask — the fixed-window timer isn't actually registered
+    // with the scheduler until that continuation resumes, one tick later.
+    await tick();
+    assert.strictEqual(scheduler.pendingCount(), 1, 'the fixed preparation timer is now scheduled');
+    assert.strictEqual(controller.getState().capturing, false, 'capture must not have started yet, even immediately after beginCountdown()');
+    assert.strictEqual(audio.calls.startMonitoring, 0);
+
+    scheduler.flush(); // the preparation timer — the only way past this window
+    await tick();
+
+    assert.strictEqual(controller.getState().preparing, false);
+    assert.strictEqual(controller.getState().capturing, true);
+    assert.strictEqual(audio.calls.startMonitoring, 1);
+  });
+
+  it('a second beginCountdown() call is a harmless no-op', async () => {
+    const { controller, audio, scheduler } = setup();
+    controller.startSessionCalibration();
+    audio.resolveAcquire();
+    await tick();
+
+    controller.beginCountdown();
+    controller.beginCountdown(); // must not double-schedule or throw
+    await tick();
+    assert.strictEqual(scheduler.pendingCount(), 1);
+
+    scheduler.flush();
+    await tick();
+    assert.strictEqual(controller.getState().capturing, true);
+  });
+
+  it('a subscriber that calls beginCountdown() synchronously, from inside its own preparing:true notification, still starts the fixed countdown (real-world regression: setState() notifies listeners synchronously, so a real caller wiring beginCountdown() directly off this edge — as mezzo-session.js does — must not race pendingCountdownResolve\'s own assignment)', async () => {
+    const { controller, audio, scheduler } = setup();
+    let sawPreparingTrue = false;
+    controller.subscribe((state) => {
+      // Mirrors mezzo-session.js's own state.preparing edge listener: calls
+      // beginCountdown() synchronously, from inside the notification itself
+      // — no setTimeout, no await, no tick() in between. Before the fix
+      // this documents, pendingCountdownResolve was still null at this
+      // exact point (runCapture() hadn't yet reached the line that assigns
+      // it, since setState()'s own synchronous notification runs first),
+      // making this call a silent no-op per beginCountdown()'s own guard —
+      // permanently stranding the run in Stage 1.
+      if (state.preparing && !sawPreparingTrue) {
+        sawPreparingTrue = true;
+        controller.beginCountdown();
+      }
+    });
+
+    controller.startSessionCalibration();
+    audio.resolveAcquire();
+    await tick();
+
+    assert.strictEqual(sawPreparingTrue, true, 'sanity check — the listener above must have actually observed preparing:true');
+    // If beginCountdown() landed as a genuine no-op, this timer would never
+    // get scheduled and the assertions below would fail/hang.
+    assert.strictEqual(scheduler.pendingCount(), 1, 'the fixed preparation timer must be scheduled even though beginCountdown() was called synchronously, before this line ever ran');
+
+    scheduler.flush(); // the preparation timer
+    await tick();
+
+    assert.strictEqual(controller.getState().preparing, false);
+    assert.strictEqual(controller.getState().capturing, true);
+    assert.strictEqual(audio.calls.startMonitoring, 1);
+  });
+
+  it('no samples are collected during either preparation stage, even if the mic emits levels', async () => {
+    const { controller, audio, scheduler } = setup();
+    const seen = [];
+    controller.subscribeToLevel((rms) => seen.push(rms));
+
+    controller.startSessionCalibration();
+    audio.resolveAcquire();
+    await tick();
+
+    // Stage 1 — waiting for beginCountdown(). audio.onLevelChange isn't
+    // assigned until real capture begins, so these calls have nothing to
+    // reach regardless of how long this stage lasts.
+    audio.emitLevel(dbToRms(-20));
+    assert.deepStrictEqual(seen, [], 'no level samples during stage 1 (waiting for beginCountdown())');
+
+    // Stage 2 — the fixed countdown window itself.
+    controller.beginCountdown();
+    audio.emitLevel(dbToRms(-15));
+    assert.deepStrictEqual(seen, [], 'no level samples during stage 2 (the fixed countdown) either');
+    await tick(); // let beginCountdown()'s resolve() continuation actually register the fixed-window timer
+
+    scheduler.flush(); // preparation timer
+    await tick();
+    audio.emitLevel(dbToRms(-20));
+    assert.deepStrictEqual(seen, [dbToRms(-20)], 'samples emitted after preparation elapses must reach subscribers normally');
+  });
+
+  it('capture (audio.startMonitoring) and the capturing signal begin at the exact same point preparation elapses — never a separate, later step', async () => {
+    const { controller, audio, scheduler } = setup();
+    controller.startSessionCalibration();
+    audio.resolveAcquire();
+    await tick();
+    controller.beginCountdown();
+    await tick(); // let beginCountdown()'s resolve() continuation actually register the fixed-window timer
+    assert.strictEqual(audio.calls.startMonitoring, 0);
+
+    scheduler.flush(); // preparation timer
+    await tick();
+
+    // Both true immediately after the same flush/tick pair — there is no
+    // intermediate state where one has happened and not the other.
+    assert.strictEqual(audio.calls.startMonitoring, 1);
+    assert.strictEqual(controller.getState().capturing, true);
+  });
+
+  it('cancellation while waiting for beginCountdown() (stage 1) prevents capture from ever starting', async () => {
+    const { controller, audio, scheduler } = setup();
+    controller.startSessionCalibration();
+    audio.resolveAcquire();
+    await tick();
+    assert.strictEqual(controller.getState().preparing, true);
+
+    controller.cancel(); // never called beginCountdown() at all
+
+    assert.strictEqual(controller.getState().status, 'idle');
+    assert.strictEqual(audio.calls.startMonitoring, 0, 'capture must never begin for a preparation stage that was cancelled before it was even triggered');
+
+    // A stray beginCountdown() call after cancellation must not resurrect
+    // anything (this run's generation has already moved on).
+    controller.beginCountdown();
+    assert.strictEqual(controller.getState().status, 'idle');
+    assert.strictEqual(audio.calls.startMonitoring, 0);
+  });
+
+  it('cancellation during the fixed countdown (stage 2, after beginCountdown() was called) prevents capture from ever starting', async () => {
+    const { controller, audio, scheduler } = setup();
+    controller.startSessionCalibration();
+    audio.resolveAcquire();
+    await tick();
+    controller.beginCountdown();
+    assert.strictEqual(controller.getState().preparing, true);
+
+    controller.cancel();
+
+    assert.strictEqual(controller.getState().status, 'idle');
+    assert.strictEqual(audio.calls.startMonitoring, 0, 'capture must never begin for a preparation window that was cancelled');
+    assert.strictEqual(scheduler.pendingCount(), 0, 'the preparation timer must have been cleared, not left pending');
+
+    // The cleared timer cannot resurrect anything even if something tried
+    // to fire it late.
+    scheduler.flush();
+    assert.strictEqual(controller.getState().status, 'idle');
+    assert.strictEqual(audio.calls.startMonitoring, 0);
+  });
+
+  it('close (native Companion close) while waiting for beginCountdown() (stage 1) also prevents capture and releases the mic exactly once', async () => {
+    const { controller, audio } = setup();
+    controller.startSessionCalibration();
+    audio.resolveAcquire();
+    await tick();
+    assert.strictEqual(controller.getState().preparing, true);
+
+    controller.close();
+
+    assert.strictEqual(controller.getState().status, 'idle');
+    assert.strictEqual(audio.calls.startMonitoring, 0);
+    assert.strictEqual(audio.calls.release, 1, 'exactly one release — reset()\'s own cleanup, not a duplicate from the resumed stage-1 continuation');
+  });
+
+  it('close (native Companion close) during the fixed countdown (stage 2) also prevents capture and releases the mic exactly once', async () => {
+    const { controller, audio, scheduler } = setup();
+    controller.startSessionCalibration();
+    audio.resolveAcquire();
+    await tick();
+    controller.beginCountdown();
+    assert.strictEqual(controller.getState().preparing, true);
+
+    controller.close();
+
+    assert.strictEqual(controller.getState().status, 'idle');
+    assert.strictEqual(audio.calls.startMonitoring, 0);
+    assert.strictEqual(audio.calls.release, 1, 'exactly one release — reset()\'s own cleanup, not a duplicate from the resumed stage-2 continuation');
+  });
+});
+
+// =============================================================================
+// `capturing` state transitions — the presentational signal the Companion's
+// visible countdown starts on (see mezzo-session.js's dedicated subscribe()
+// listener). Distinct from `status`: CALIBRATING covers the whole acquire-
+// then-capture span, while `capturing` is true only once real capture begins.
+// =============================================================================
+
+describe('capturing state transitions', () => {
+  it('is false immediately after starting, before acquire() resolves', async () => {
+    const { controller } = setup();
+    controller.startSessionCalibration();
+    assert.strictEqual(controller.getState().capturing, false);
+  });
+
+  it('becomes true only once acquire() resolves, beginCountdown() is called, preparation elapses, and monitoring has actually started', async () => {
+    const { controller, audio, scheduler } = setup();
+    controller.startSessionCalibration();
+    assert.strictEqual(controller.getState().capturing, false);
+    audio.resolveAcquire();
+    await tick();
+    assert.strictEqual(controller.getState().capturing, false, 'still false while waiting for beginCountdown()');
+    controller.beginCountdown();
+    assert.strictEqual(controller.getState().capturing, false, 'still false during the fixed preparation window');
+    await tick(); // let beginCountdown()'s resolve() continuation actually register the fixed-window timer
+    scheduler.flush(); // preparation timer
+    await tick();
+    assert.strictEqual(controller.getState().capturing, true);
+  });
+
+  it('resets to false on successful completion', async () => {
+    const { controller, audio, scheduler } = setup();
+    const done = controller.startSessionCalibration();
+    await runToCalibrated(controller, audio, scheduler);
+    await done;
+    assert.strictEqual(controller.getState().status, 'calibrated');
+    assert.strictEqual(controller.getState().capturing, false);
+  });
+
+  it('resets to false on a real (post-capture) failure', async () => {
+    const { controller, audio, scheduler } = setup();
+    const done = controller.startSessionCalibration();
+    await resolveAcquireAndPrepare(controller, audio, scheduler);
+    audio.emitSamples(0, 100); // silence -> failure, but only after real capture began
+    scheduler.flush(); // capture-duration timer
+    await tick();
+    await done;
+    assert.strictEqual(controller.getState().status, 'failed');
+    assert.strictEqual(controller.getState().capturing, false);
+  });
+
+  it('resets to false on cancel mid-capture', async () => {
+    const { controller, audio, scheduler } = setup();
+    controller.startSessionCalibration();
+    await resolveAcquireAndPrepare(controller, audio, scheduler);
+    assert.strictEqual(controller.getState().capturing, true);
+    controller.cancel();
+    assert.strictEqual(controller.getState().capturing, false);
+  });
+
+  it('resets to false on close mid-capture', async () => {
+    const { controller, audio, scheduler } = setup();
+    controller.startSessionCalibration();
+    await resolveAcquireAndPrepare(controller, audio, scheduler);
+    assert.strictEqual(controller.getState().capturing, true);
+    controller.close();
+    assert.strictEqual(controller.getState().capturing, false);
+  });
+
+  it('a retry after a real (post-capture) failure does not inherit capturing:true from the prior attempt', async () => {
+    const { controller, audio, scheduler } = setup();
+    const first = controller.startSessionCalibration();
+    await resolveAcquireAndPrepare(controller, audio, scheduler);
+    assert.strictEqual(controller.getState().capturing, true);
+    audio.emitSamples(0, 100); // silence -> failure
+    scheduler.flush();
+    await tick();
+    await first;
+    assert.strictEqual(controller.getState().capturing, false);
+
+    controller.retry();
+    assert.strictEqual(controller.getState().capturing, false, 'must not carry the prior attempt\'s capturing:true forward into the fresh, still-acquiring retry');
   });
 });
 
@@ -530,8 +977,7 @@ describe('cancel during sample collection', () => {
   it('returns to idle and releases the microphone', async () => {
     const { controller, audio, scheduler } = setup();
     const done = controller.startSessionCalibration();
-    audio.resolveAcquire();
-    await tick();
+    await resolveAcquireAndPrepare(controller, audio, scheduler);
     audio.emitSamples(dbToRms(-30), 10);
     assert.strictEqual(controller.getState().status, 'calibrating');
 
@@ -546,8 +992,7 @@ describe('cancel during sample collection', () => {
   it('the capture timer no longer produces a result once cancelled', async () => {
     const { controller, audio, scheduler } = setup();
     const done = controller.startSessionCalibration();
-    audio.resolveAcquire();
-    await tick();
+    await resolveAcquireAndPrepare(controller, audio, scheduler);
     audio.emitSamples(dbToRms(-30), 10);
     controller.cancel();
 
@@ -569,10 +1014,9 @@ describe('cancel during sample collection', () => {
 describe('native close during recalibration', () => {
   it('leaves the target profile completely unchanged', async () => {
     const original = { id: 'p1', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 1 };
-    const { controller, audio, profileOps } = setup([original]);
+    const { controller, audio, scheduler, profileOps } = setup([original]);
     const done = controller.startRecalibration('p1');
-    audio.resolveAcquire();
-    await tick();
+    await resolveAcquireAndPrepare(controller, audio, scheduler);
     audio.emitSamples(dbToRms(-25), 10);
 
     controller.close();
@@ -698,8 +1142,12 @@ describe('concurrency guards', () => {
 
     audio.resolveAcquire(); // now resolve the SECOND run's acquire
     await tick();
+    controller.beginCountdown();
+    await tick(); // let beginCountdown()'s resolve() continuation actually register the fixed-window timer
+    scheduler.flush(); // the second run's own preparation timer
+    await tick();
     audio.emitSamples(dbToRms(-30), 100);
-    scheduler.flush();
+    scheduler.flush(); // the second run's own capture-duration timer
     await tick();
     await secondDone;
     assert.strictEqual(controller.getState().status, 'calibrated');
@@ -714,8 +1162,7 @@ describe('concurrency guards', () => {
   it('stale async completion: an old run\'s capture timer firing after cancel does not resurrect it', async () => {
     const { controller, audio, scheduler } = setup();
     const first = controller.startSessionCalibration();
-    audio.resolveAcquire();
-    await tick();
+    await resolveAcquireAndPrepare(controller, audio, scheduler);
     audio.emitSamples(dbToRms(-30), 50);
 
     controller.cancel();
@@ -724,10 +1171,9 @@ describe('concurrency guards', () => {
 
     const secondDone = controller.startSessionCalibration();
     assert.strictEqual(controller.getState().status, 'calibrating');
-    audio.resolveAcquire();
-    await tick();
+    await resolveAcquireAndPrepare(controller, audio, scheduler); // this is the SECOND run's own preparation timer (the first's was cleared by cancel())
     audio.emitSamples(dbToRms(-30), 50);
-    scheduler.flush(); // this is the SECOND run's timer (the first's was cleared by cancel())
+    scheduler.flush(); // the second run's own capture-duration timer
     await tick();
     await secondDone;
 
@@ -741,8 +1187,7 @@ describe('concurrency guards', () => {
   it('retry releases the mic on its own completion just like a fresh run — not accumulated across attempts, not skipped', async () => {
     const { controller, audio, scheduler } = setup();
     const first = controller.startSessionCalibration();
-    audio.resolveAcquire();
-    await tick();
+    await resolveAcquireAndPrepare(controller, audio, scheduler);
     scheduler.flush(); // no samples -> failure
     await tick();
     await first;
@@ -773,8 +1218,7 @@ describe('microphone released on every exit path', () => {
   it('calibration failure', async () => {
     const { controller, audio, scheduler } = setup();
     const done = controller.startSessionCalibration();
-    audio.resolveAcquire();
-    await tick();
+    await resolveAcquireAndPrepare(controller, audio, scheduler);
     scheduler.flush(); // no samples -> failure
     await tick();
     await done;
@@ -864,8 +1308,7 @@ describe('cleanup idempotence', () => {
   it('cancelling mid-capture twice in a row is safe and does not hang', async () => {
     const { controller, audio, scheduler } = setup();
     const done = controller.startSessionCalibration();
-    audio.resolveAcquire();
-    await tick();
+    await resolveAcquireAndPrepare(controller, audio, scheduler);
     audio.emitSamples(dbToRms(-30), 10);
     controller.cancel();
     controller.cancel();

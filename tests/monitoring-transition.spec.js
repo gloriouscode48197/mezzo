@@ -11,19 +11,29 @@
  * has today, not just the one that originally exposed the bug — this file
  * exercises the two real paths into Monitoring under the current Ready-
  * screen/calibration flow (see docs/prd/ready-screen-speaking-profiles-mvp.md):
- * a freshly-calibrated unsaved profile, and a freshly-recalibrated saved one.
+ * a freshly-created Temporary profile, and a freshly-replaced saved one.
+ *
+ * Slice 2's revision removed Start monitoring from both post-creation result
+ * screens entirely (starting Monitoring is now a separate decision, made
+ * only from Ready — see CLAUDE.md's Slice 2 revision notes) — Start
+ * monitoring is now reachable only from Ready itself, regardless of which
+ * path produced the selected profile.
  */
 
 import { test, expect } from '@playwright/test';
 import { openCompanion } from './support/open-companion.js';
+import { recalibrateFromSelector } from './support/recalibrate-from-selector.js';
 
-/** Waits out the calibration controller's real ~6s capture window. */
+/** Waits out the full pre-capture window (delayed disclosure + fixed 3-2-1
+ *  countdown, see the calibration pacing revision) plus the ~6s capture
+ *  window, plus the brief "Creating your speaking profile…" completion
+ *  transition (Slice 2 revision) before a result screen appears. */
 async function waitForCapture(pipPage) {
-  await pipPage.waitForTimeout(7200);
+  await pipPage.waitForTimeout(12000);
 }
 
 test.describe('Companion: calibration -> Ready -> Monitoring -> Ready', () => {
-  test('session calibration lands on Ready with the unsaved profile selected, then Start monitoring reaches the live Monitoring screen', async ({ page, context }) => {
+  test('a freshly-created speaking profile reaches Monitoring only via Ready\'s own Start monitoring — never directly from the result screen', async ({ page, context }) => {
     const pipPage = await openCompanion(page, context);
 
     // Welcome (zero saved profiles) -> Create speaking profile -> C1 -> I'm ready -> real capture.
@@ -33,13 +43,23 @@ test.describe('Companion: calibration -> Ready -> Monitoring -> Ready', () => {
     await pipPage.locator('button:has-text("I\'m ready")').click();
     await waitForCapture(pipPage);
 
-    // No Calibrated checkpoint anymore — session-mode calibration lands
-    // directly on Ready with the freshly-calibrated unsaved profile selected.
+    // Slice 2 (revised): session-mode calibration lands on "Your new
+    // speaking profile is ready" (Variant 1), not directly on Ready — see
+    // tests/post-calibration-result-screens.spec.js for dedicated coverage
+    // of that screen's own actions and exact copy. No Start monitoring
+    // here at all (this revision's own product decision).
+    const resultScreen = pipPage.locator('.pip-screen-result');
+    await expect(resultScreen).toBeVisible({ timeout: 15000 });
+    await expect(resultScreen.locator('button', { hasText: 'Start monitoring' })).toHaveCount(0);
+
+    // Keep temporarily — resolves the new profile first (this revision's
+    // own product intent), returning to Ready with it selected. Starting
+    // Monitoring is the separate, subsequent decision made from there.
+    await resultScreen.locator('.pip-decision-secondary-btn', { hasText: 'Keep temporarily' }).click();
+
     const readyScreen = pipPage.locator('.pip-screen-ready');
-    await expect(readyScreen).toBeVisible({ timeout: 15000 });
-    await expect(readyScreen.locator('.pip-ready-heading')).toHaveText('Ready for your first conversation.');
-    await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Unsaved profile');
-    await expect(readyScreen.locator('.pip-ready-contextual-actions')).toContainText('Save profile');
+    await expect(readyScreen).toBeVisible({ timeout: 3000 });
+    await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Temporary profile');
 
     const startBtn = readyScreen.locator('.pip-ready-start-btn');
     await expect(startBtn).toBeEnabled();
@@ -57,17 +77,17 @@ test.describe('Companion: calibration -> Ready -> Monitoring -> Ready', () => {
     const statusHeading = pipPage.locator('.pip-status-heading').first();
     await expect(statusHeading).toHaveText(/Quiet|Within Range|Approaching End of Range|Outside Range/, { timeout: 5000 });
 
-    // Stop -> straight back to Ready (no forced save prompt) — the unsaved
-    // profile stays selected, and the heading is now "next conversation"
-    // since monitoring has now actually started once.
+    // Stop -> straight back to Ready (no forced save prompt) — the
+    // Temporary profile stays selected, and the heading is now "next
+    // conversation" since monitoring has now actually started once.
     await pipPage.locator('button:has-text("Stop")').first().click();
     await expect(monitoringScreen).toBeHidden();
     await expect(readyScreen).toBeVisible();
-    await expect(readyScreen.locator('.pip-ready-heading')).toHaveText('Ready for your next conversation.');
-    await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Unsaved profile');
+    await expect(readyScreen.locator('.pip-ready-heading')).toHaveText('Ready for your next conversation');
+    await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Temporary profile');
   });
 
-  test('recalibrating a saved profile -> Replace (M1) -> Start monitoring reaches the live Monitoring screen', async ({ page, context }) => {
+  test('recalibrating a saved profile -> Replace "{name}" -> Start monitoring (from Ready) reaches the live Monitoring screen', async ({ page, context }) => {
     await page.addInitScript(() => {
       localStorage.setItem('mezzoProfiles', JSON.stringify([
         { id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 200 },
@@ -79,14 +99,16 @@ test.describe('Companion: calibration -> Ready -> Monitoring -> Ready', () => {
     await expect(readyScreen).toBeVisible();
     await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Kitchen');
 
-    await readyScreen.locator('button:has-text("Recalibrate")').click();
+    await recalibrateFromSelector(pipPage, 'Kitchen');
     await waitForCapture(pipPage);
 
-    const m1Screen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Replace existing' });
+    const m1Screen = pipPage.locator('.pip-screen-m1');
     await expect(m1Screen).toBeVisible({ timeout: 15000 });
-    await expect(m1Screen.locator('.pip-decision-heading')).toHaveText('Replace existing "Kitchen" profile?');
+    await expect(m1Screen.locator('.pip-decision-heading')).toHaveText('Your new speaking profile is ready');
+    await expect(m1Screen.locator('.pip-decision-body')).toHaveText('What would you like to do with it?');
+    await expect(m1Screen.locator('button', { hasText: 'Start monitoring' })).toHaveCount(0);
 
-    await m1Screen.locator('.pip-decision-primary-btn', { hasText: 'Replace' }).click();
+    await m1Screen.locator('.pip-decision-primary-btn', { hasText: 'Replace "Kitchen"' }).click();
 
     // Replace only writes the recalibration — it never starts monitoring by
     // itself (see the PRD's M1 state, distinct from the retired Calibrated
