@@ -44,14 +44,20 @@ body {
 
 .page.is-visible { opacity: 1; }
 
-.hero,
-.editorial { position: relative; z-index: 2; }
+.hero { position: relative; z-index: 2; }
 
 /* Navigation is now shared, canonical CSS — see design-tokens/mezzo-tokens.css.
    Do not redefine .nav/.nav-link* here. */
 
 /* ═══════════════════════════════════════════
-   Hero
+   Hero — three mutually-exclusive microphone-permission sub-states (see
+   index.html's own comment on #state-home). Single centered column at every
+   width (2026-08-17 redesign) — replaces the old text-left/preview-right
+   two-column treatment, which used to apply unconditionally to all three
+   sub-states via a shared #hero-companion-preview widget. Only mic-request
+   has any visual element now (its own static illustration, scoped inside
+   that sub-state — see .hero-static-viz below); mic-granted/mic-denied are
+   copy + one action only, matching the approved design exactly.
    ═══════════════════════════════════════════ */
 
 .hero {
@@ -59,220 +65,205 @@ body {
   padding: 112px 32px 96px;
 }
 
-.hero-columns {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+.hero-inner {
+  max-width: 560px;
+  margin: 0 auto;
+  text-align: center;
 }
 
-.hero-content {
+.hero-mic-state .type-section-heading { margin-bottom: var(--space-heading-to-content); }
+
+/* mic-request/mic-granted's own heading (2026-08-17 manual-review fix) —
+   the shared .type-hero-heading token clamps up to clamp(38px, 5vw, 61px),
+   which resolves to ~51px at the 1018px desktop reference width (5vw of
+   1018 ≈ 51) — well past the ~38px the approved design actually calls for,
+   and wide enough to push "You care about how your voice affects others"
+   onto three lines instead of the intended two. .type-hero-heading is only
+   ever used here (confirmed: no other page references it), so this
+   overrides it directly rather than touching the shared token itself,
+   which other, larger hero treatments might reasonably still want.
+   max-width:520px (not the wider 560px .hero-inner itself uses, which also
+   bounds the body paragraphs) matches the approved design's own content
+   width for this specific heading. */
+.hero-mic-state .type-hero-heading {
+  font-size: 38px;
+  line-height: 1.16;
   max-width: 520px;
-  margin: 0 auto;
-  text-align: center;
-}
-
-.hero-content .type-hero-heading { margin-bottom: var(--space-heading-to-content); }
-
-.hero-body {
-  margin-bottom: 48px;
-  max-width: 500px;
   margin-inline: auto;
-}
-
-.microcopy-cta { margin-top: 24px; }
-
-/* Batch 4 (independent corrections) — makes the mic-denied state visually
-   distinct from mic-request/mic-granted, which otherwise share this exact
-   layout down to the pixel. Same schematic illustration (colors included)
-   as the Companion's own C0_ILLUSTRATION_SVG — see index.html's own
-   comment on #mic-denied — so this reads as the product's own established
-   "blocked mic" visual, not a new one invented for this page. Sized modestly
-   (not full hero-visual scale) since it's a supporting glyph above the
-   explanatory copy, not the page's own focal illustration. */
-.hero-mic-denied-illustration {
-  width: 160px;
-  margin: 0 auto 20px;
-}
-.hero-mic-denied-illustration svg { display: block; width: 100%; height: auto; }
-
-/* ── Hero visual — the Mezzo Companion preview is the visual focal point of
-   the page, so it gets generous breathing room rather than sitting flush
-   against the copy column.
-   The wrap's size must never depend on its content (the state label's text
-   width changes as monitoring state cycles) — otherwise the flex row
-   re-centers and the hero copy visibly shifts. Every rule below sizes the
-   wrap from the *outside* (fixed px / min(100%, px) + aspect-ratio) and the
-   card simply fills it at 100%/100%. ── */
-.hero-visual {
-  margin-top: 72px;
-  display: flex;
-  justify-content: center;
-  width: 100%;
-}
-
-.hero-companion-preview-wrap {
-  width: min(100%, 400px);
-  aspect-ratio: 1 / 1;
-  margin-inline: auto;
-}
-
-.hero-companion-card {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  border-radius: var(--radius-card);
-  border: 1px solid var(--border);
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.22), 0 6px 20px rgba(0, 0, 0, 0.12);
-  background: var(--surface);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: 24px;
-  box-sizing: border-box;
-}
-
-/* Batch 4 (independent corrections): matches the real Companion's own
-   typography recipe (Sora / --weight-medium — the same family+weight
-   .pip-status-heading actually renders with, see src/mezzo-session.js),
-   not the serif display font used elsewhere on this page — this label is
-   inside a live preview of the Companion itself, so it should look like
-   something the Companion could plausibly show, not read as marketing
-   display type. Muted (--text-subdued), not --text-primary (which resolves
-   to a near-white cream in this dark-surfaced card and read as flatly
-   "bright white" against it) — --text-subdued is the same muted-token
-   family .hero-companion-label just below already draws its own resting
-   (zone 0/1) color from. Font-size/letter-spacing intentionally left
-   unchanged — this corrects typeface/case/color only, not the card's
-   established layout. */
-.hero-companion-wordmark {
-  font-family: var(--font-body);
-  font-weight: var(--weight-medium);
-  font-size: 14px;
-  color: var(--text-subdued);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-/* Typography and per-zone color intentionally match the real Companion's
-   own .pip-status-heading[data-zone] exactly (src/mezzo-session.js) — this
-   demo never invents a look the product doesn't actually have. Zone colors
-   come from the same shared tokens Companion CSS itself now reads (see
-   design-tokens/mezzo-tokens.css), not duplicated raw values. */
-.hero-companion-label {
-  font-family: var(--font-body);
-  font-weight: var(--weight-medium);
-  font-size: 11px;
-  color: var(--zone-quiet-color);
-  margin-top: 2px;
-  max-width: 100%;
-}
-.hero-companion-label[data-zone="0"],
-.hero-companion-label[data-zone="1"] { color: var(--zone-quiet-color); }
-.hero-companion-label[data-zone="2"] { color: var(--zone-approaching-color); }
-.hero-companion-label[data-zone="3"] { color: var(--zone-outside-color); }
-
-.hero-companion-circle-wrap {
-  flex: 1;
-  width: 100%;
-  min-height: 0;
-}
-
-/* ── Steps ── */
-.steps {
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  text-align: left;
-}
-
-.step {
-  display: flex;
-  align-items: flex-start;
-  gap: 20px;
-  padding: 48px 0;
-  border-top: 1px solid var(--border);
-}
-
-.step:last-child { border-bottom: 1px solid var(--border); }
-
-.step .type-step-number { flex-shrink: 0; width: 44px; }
-.step .type-step-heading { margin-bottom: 6px; }
-
-/* ═══════════════════════════════════════════
-   Editorial (How it works / Philosophy / Trust)
-   Three columns replacing the old stacked sections — the page moves from
-   the hero straight into this one calm, editorial band instead of a
-   dramatic dark full-width interruption.
-   ═══════════════════════════════════════════ */
-
-.editorial {
-  background: var(--washi);
-  padding: 104px 32px 128px;
-}
-
-.editorial-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 64px;
-  max-width: 1100px;
-  margin: 0 auto;
-  text-align: left;
-}
-
-/* Both variants keep .type-section-heading's serif family/light weight —
-   only size and spacing differ, per position, never semantic level. */
-.editorial-heading {
-  font-size: clamp(28px, 7vw, 32px);
   margin-bottom: var(--space-heading-to-content);
 }
 
-.editorial-heading-sub {
-  font-size: 18px;
-  margin-bottom: 20px;
+.hero-body {
+  margin-bottom: 24px;
+  max-width: 460px;
+  margin-inline: auto;
 }
 
-.editorial-col-statement .type-body { max-width: 42ch; }
+/* The button always follows the LAST body paragraph directly (24px gap
+   above, from .hero-body), not a second, larger gap of its own — this rule
+   only adds the button's own space *below* itself, before the microcopy. */
+.hero-mic-state .btn-primary { margin-bottom: 20px; }
 
-.editorial-subheading-spaced { margin-top: 48px; }
+.microcopy-cta { max-width: 340px; margin-inline: auto; }
 
-/* ── Steps (reused inside the "How it works" column) ── */
-.editorial-col .steps { gap: 0; }
-
-/* ── Good-for list (reused inside the trust column) ── */
-.good-for-list {
-  list-style: none;
-  margin-bottom: 16px;
+/* ── Static visualization (mic-request only) — a product-owner-supplied
+   PNG preview of the Mezzo visualization (2026-08-17 pass — replaces the
+   earlier hand-authored SVG; see index.html's own comment). Fixed 220×220
+   up to 220px, shrinking to fit narrower viewports — matches the approved
+   design's own fixed-square treatment; the container itself carries no
+   background of its own since the supplied PNG already paints its own
+   dark surface. ── */
+.hero-static-viz {
+  width: min(100%, 220px);
+  aspect-ratio: 1 / 1;
+  margin: 0 auto 32px;
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(42, 32, 23, 0.25);
+}
+/* object-fit:cover (not the default "fill") — the source is itself a
+   perfect 440×440 square rendered into an equally square box, so cover
+   never actually crops anything in practice; it exists as the safety net
+   against distortion, not a real-world cropping case. */
+.hero-static-viz img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
-.good-for-list li { margin-bottom: 10px; }
+/* ── Designed for shared spaces — the three benefit items, scoped to the
+   mic-request sub-state only (2026-08-17 redesign, replacing the old
+   always-visible "How it works" / "Designed to stay out of your way" /
+   "What it's good for" / "What it doesn't do" editorial section, which is
+   retired outright — see docs/product-experience.md).
+   max-width:720px here was a no-op below (2026-08-17 manual-review fix):
+   this element is a CHILD of .hero-inner, which itself caps the whole
+   column at 560px — a child's own max-width can never exceed a parent
+   that's already narrower, so this always rendered at 560px regardless of
+   the 720px written here, which is exactly why "For calls with
+   headphones"/"Your words stay private" wrapped. The base (mobile) rule
+   below is unaffected by that bug (single column, no wrapping problem to
+   begin with) and deliberately left alone; the ≥700px override breaks the
+   benefits section out to its own, wider, viewport-centered width instead
+   of inheriting .hero-inner's — see that override's own comment. ── */
+.hero-benefits {
+  width: 100%;
+  max-width: 720px;
+  margin: 72px auto 0;
+  padding-top: 40px;
+  border-top: 1px solid var(--border);
+}
 
-.good-for-list li::before {
-  content: '—  ';
+/* Smaller than the shared .type-section-heading clamp — this is a quiet
+   sub-heading introducing three supporting items, not a second page-level
+   statement competing with the hero heading above it. Same modifier-class
+   pattern the retired editorial section's own "What it's good for" sub-
+   headings used (a fixed override layered on the shared serif/light base). */
+.hero-benefits-heading { font-size: 20px; margin-bottom: 36px; }
+
+.hero-benefits-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 40px;
+  text-align: center;
+}
+
+.hero-benefit-icon {
+  color: var(--hanko-fill);
+  margin-bottom: 12px;
+}
+
+/* Sans-serif, not the serif .type-step-heading used elsewhere for numbered
+   steps — these small card headings read as UI labels, not editorial
+   display type, matching the approved design. */
+.hero-benefit-heading {
+  font-family: var(--font-body);
+  font-weight: var(--weight-medium);
+  font-size: 14px;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+/* ── Blocked-state address-bar illustration (mic-denied only) — a static,
+   noninteractive mock of the browser's own address bar, not a functional
+   control: it exists purely to point at where the real site-controls icon
+   lives, matching the approved design. The hostname text is rendered live
+   by landing.js from window.location.host, never hard-coded (see that
+   file's own comment). ── */
+.hero-address-bar-figure {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.hero-address-bar-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.hero-address-bar-arrow { color: var(--ink); flex-shrink: 0; }
+
+/* 2026-08-17 manual-review fix: var(--paper) (#F0EBE2) is the exact same
+   value as this page's own [data-surface="light"] --surface — the mock was
+   background-identical to the page behind it, with only a faint 1px
+   border/shadow to separate the two, which read as a small chip sitting
+   flush against the page rather than a distinct, lifted address-bar
+   surface. True white (#FFFFFF, a literal value here — this mirrors a real
+   browser chrome's own near-white address bar, not this app's own warm
+   palette, so a design token doesn't apply) now gives it genuine contrast
+   against the cream page. --border (already a subtle, neutral warm-grey at
+   18% opacity) needed no change to still read as subtle once the
+   background brightened — if anything it's slightly more visible against
+   white, which is the intended direction. Shadow strengthened modestly
+   (opacity 0.08->0.14, blur 4px->8px, a 2px vertical offset) so the field
+   visibly lifts off the page; still restrained, not a heavy card shadow. */
+.hero-address-bar-mock {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px 10px 14px;
+  background: #FFFFFF;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(42, 32, 23, 0.14);
+  color: var(--ink);
+  max-width: min(70vw, 320px);
+}
+
+.hero-address-bar-icon { flex-shrink: 0; }
+
+.hero-address-bar-host {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--text-body);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hero-address-bar-caption {
+  font-family: var(--font-body);
+  font-size: 11px;
+  letter-spacing: 0.04em;
   color: var(--text-subdued);
 }
 
-.good-for-note { margin-bottom: 0; }
-
-/* Footer is now shared, canonical CSS — see design-tokens/mezzo-tokens.css.
-   Do not redefine .site-footer's structure here. Background is the one
-   intentional exception, and now genuinely state-scoped rather than one
-   flat rule: Home's footer follows directly after the Washi editorial
-   section, so it keeps matching Washi there. Dock and the unsupported
-   state have no Washi section above them — their footer sits directly on
-   the page's own Paper background (body's --surface, set via
-   data-surface="light"), so it uses that same token instead, exactly
-   matching the shared rule's own default (the one privacy/try-it use).
-   body[data-page-state] is set by src/home-dock.js's transitionToState()
-   — the base rule below is the pre-JS fallback (index.html's #state-home
-   is the only state visible by default before any script runs), and the
-   attribute-scoped rule overrides it once Dock or unsupported is shown. */
-.site-footer { background: var(--washi); }
-body[data-page-state="dock"] .site-footer,
-body[data-page-state="unsupported"] .site-footer { background: var(--surface); }
+/* Suppresses the browser's large default focus outline specifically for
+   programmatic-only heading focus targets — currently just
+   #mic-denied-heading — 2026-08-17 manual-review fix. This is purely
+   visual: outline never affects the accessibility tree, so screen readers
+   still receive the focus move and announce the heading exactly as before;
+   this only removes the rectangle a sighted user would otherwise see
+   around a heading that has no click/keyboard affordance of its own to
+   indicate. Scoped to [tabindex="-1"] specifically so it can never match a
+   real interactive control — no button or link on this page carries
+   tabindex="-1" — see design-tokens/mezzo-tokens.css's shared
+   a:focus-visible/button:focus-visible rule, deliberately untouched here,
+   for why real controls keep their own visible focus ring. */
+[tabindex="-1"]:focus { outline: none; }
 
 /* ═══════════════════════════════════════════
    Home/Dock — Unsupported browser + Dock states
@@ -280,7 +271,7 @@ body[data-page-state="unsupported"] .site-footer { background: var(--surface); }
    compatibility redirect and index.html took over as the canonical
    Home/Dock page — see CLAUDE.md's Product Architecture. Only what
    #state-unsupported and #state-dock actually use; #state-home reuses the
-   hero/editorial styles above, unchanged.
+   hero styles above, unchanged.
    ═══════════════════════════════════════════ */
 
 .state-view { transition: opacity 300ms ease; }
@@ -322,7 +313,7 @@ body[data-page-state="unsupported"] .site-footer { background: var(--surface); }
   padding: 12px 28px;
   border-color: var(--text-subdued);
   color: var(--text-body);
-  margin-bottom: 32px;
+  margin-top: 32px;
 }
 
 /* Only ever reaches .btn-close-companion on this page today — index.html
@@ -339,294 +330,31 @@ body[data-page-state="unsupported"] .site-footer { background: var(--surface); }
   transform: scale(0.98);
 }
 
-/* ── Dock status pill — a small dot + text above the Dock's heading, the
-   one live element in this state (see src/home-dock.js's renderDockStatus()).
-   Four modifiers map to the four Dock statuses (CLAUDE.md's Dock status
-   mapping): ready (hollow, calm), calibrating and attention (solid, warm
-   accent), monitoring (solid green with a slow breathing pulse — livelier
-   than the others, but never urgent). ── */
-.dock-status-pill {
-  display: flex;
-  align-items: center;
-  gap: 7px;
+/* ── Dock status — a plain text line above the Dock's heading, the one live
+   element in this state (see src/home-dock.js's renderDockStatus()).
+   2026-08-17 redesign: collapses the old four-status dot-and-pill treatment
+   down to the two externally meaningful outcomes — the wording itself
+   ("Monitoring is active" / "Monitoring is not active") is what carries the
+   meaning; this class only supplies an accent color for the active case, it
+   is never the sole way that distinction is communicated.
+   font-weight (2026-08-17 manual-review fix): var(--weight-regular)/400,
+   was var(--weight-medium)/500 — a lighter weight reads calmer, matching
+   this Companion-adjacent status line's own restrained tone rather than
+   competing visually with the heading below it. Both variants share this
+   one base rule; .dock-status-text-active only overrides color, so
+   "active" and "not active" were already, and remain, the same weight. ── */
+.dock-status-text {
   margin-bottom: 14px;
   font-family: var(--font-body);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: var(--weight-regular);
   letter-spacing: 0.02em;
   color: var(--text-body);
 }
 
-.dock-status-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: transparent;
-  border: 1.5px solid var(--text-ghost);
-}
+.dock-status-text-active { color: var(--hanko-fill); }
 
-.dock-status-dot-ready {
-  width: 9px;
-  height: 9px;
-  background: transparent;
-  border: 1.5px solid var(--text-ghost);
-}
-
-.dock-status-dot-calibrating,
-.dock-status-dot-attention {
-  width: 7px;
-  height: 7px;
-  border: none;
-  background: var(--hanko-fill);
-}
-
-.dock-status-dot-monitoring {
-  width: 7px;
-  height: 7px;
-  border: none;
-  background: #5a8a5a;
-  animation: mezzo-dock-pulse 3.3s ease-in-out infinite;
-}
-
-@keyframes mezzo-dock-pulse {
-  0%, 100% { opacity: 0.54; transform: scale(1); }
-  50%       { opacity: 0.85; transform: scale(1.22); }
-}
-
-/* ── Dock's embedded Companion preview — static illustrative imagery, not
-   live session UI (see index.html's #state-dock comment and CLAUDE.md's
-   Non-Negotiable Decisions). Distinct from — and never wired to — this
-   page's own #hero-companion-preview widget above, which is a marketing
-   decoration shown only in the Home state, not a status readout. ── */
-.anchor-preview-figure {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  margin: 0 0 28px;
-}
-
-/* Sized to the same aspect ratio as the real Monitoring Companion
-   (380×420) so this reads as a symbolic stand-in for that window's
-   proportions, not an arbitrarily-shaped icon. 199px wide is the settled,
-   approved size — the illustration is deliberately secondary, not the
-   focal point. Every internal metric below (rings, dots, bars, padding)
-   is scaled to match. */
-.anchor-preview-wrap {
-  width: 199px;
-  aspect-ratio: 380 / 420;
-  margin-bottom: 16px;
-}
-
-/* Deliberately a soft line diagram, not a realistic window — user testing
-   found a realistic, dark, screenshot-like card got mistaken for a second,
-   real Companion window floating on the desktop. Everything in this
-   illustration (through the footer icons below) is a single warm accent
-   tone at varying opacity — rgba(139,90,60,*) — on a near-paper
-   background. */
-.anchor-preview-card {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  overflow: hidden;
-  border-radius: 10px;
-  border: 1.5px solid rgba(139, 90, 60, 0.38);
-  box-shadow: 0 6px 20px rgba(139, 90, 60, 0.12);
-  background: rgba(196, 89, 58, 0.08);
-}
-
-.anchor-preview-titlebar {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  width: 100%;
-  box-sizing: border-box;
-  padding: 7px 10px;
-  border-bottom: 1px solid rgba(139, 90, 60, 0.30);
-  flex-shrink: 0;
-}
-
-.anchor-preview-dots { grid-column: 1; justify-self: start; display: flex; align-items: center; gap: 4px; }
-/* Unfilled, single-tone circles — not realistic red/yellow/green traffic
-   lights. Still reads as "this is a window" at a glance without inviting
-   the closer look a recognizable macOS control would. */
-.anchor-preview-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  border: 1.1px solid rgba(139, 90, 60, 0.55);
-  flex-shrink: 0;
-}
-
-/* An empty placeholder bar, not a literal "Mezzo Companion" label —
-   readable window-title text was one more detail that made this look like
-   a real, inspectable window rather than a symbolic stand-in for one. */
-.anchor-preview-titlebar-label {
-  grid-column: 2;
-  justify-self: center;
-  width: 42px;
-  height: 6px;
-  border-radius: 3px;
-  background: rgba(139, 90, 60, 0.36);
-}
-
-.anchor-preview-accent {
-  grid-column: 3;
-  justify-self: end;
-  width: 9px;
-  height: 2px;
-  border-radius: 1px;
-  background: rgba(139, 90, 60, 0.42);
-}
-
-.anchor-preview-status {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  width: 100%;
-  box-sizing: border-box;
-  padding: 8px 11px 0;
-  text-align: left;
-}
-
-/* Abstracted into placeholder bars rather than literal readable text
-   ("Approaching End of Range" / "Profile: Coffee Shop") — this card sits
-   directly under the real, live Dock status pill above it, and
-   literal-looking status text here read too much like a second,
-   conflicting live readout. A plain bar still evokes "there's a status
-   line and a profile line" without anything a user could mistake for
-   real data. */
-.anchor-preview-status-bar {
-  display: block;
-  height: 5px;
-  border-radius: 2.5px;
-  background: rgba(139, 90, 60, 0.38);
-}
-
-.anchor-preview-status-bar-zone { width: 64px; height: 6px; background: rgba(139, 90, 60, 0.40); }
-.anchor-preview-status-bar-profile { width: 43px; height: 5px; background: rgba(139, 90, 60, 0.30); }
-
-.anchor-preview-viz {
-  flex: 1;
-  width: 100%;
-  min-height: 0;
-  position: relative;
-  overflow: hidden;
-}
-
-/* A fixed, non-animated illustration of two concentric rings + a drift dot
-   — evoking the real visualization's "Approaching End of Range" look
-   without instantiating or driving the real (animated, live) component. */
-.anchor-preview-viz-ring {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  border-radius: 50%;
-  border: 1.3px solid rgba(139, 90, 60, 0.46);
-  transform: translate(-50%, -50%);
-}
-.anchor-preview-viz-ring-outer { width: 82px; height: 82px; }
-/* Inner ring reads slightly more present than the outer one, same as the
-   reference — closer to the center dot, not a brighter "active" cue. */
-.anchor-preview-viz-ring-inner { width: 47px; height: 47px; border-color: rgba(139, 90, 60, 0.68); }
-
-.anchor-preview-viz-dot {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: rgba(139, 90, 60, 0.68);
-  transform: translate(-50%, -50%);
-}
-
-/* Same single tone as the rest of the illustration, no glow — a glowing
-   accent-colored dot read too much like a live status indicator, which is
-   exactly the impression this illustration needs to avoid. */
-.anchor-preview-viz-edge-dot {
-  position: absolute;
-  top: 50%;
-  left: calc(50% + 41px);
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: rgba(139, 90, 60, 0.63);
-  transform: translate(-50%, -50%);
-}
-
-.anchor-preview-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  box-sizing: border-box;
-  padding: 5px 9px 7px;
-  border-top: 1px solid rgba(139, 90, 60, 0.30);
-  flex-shrink: 0;
-}
-
-.anchor-preview-footer-item {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-family: var(--font-body);
-  font-size: 8px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: rgba(139, 90, 60, 0.48);
-}
-
-.anchor-preview-footer-icon-stop {
-  width: 4px;
-  height: 4px;
-  background: currentColor;
-  border-radius: 1px;
-  flex-shrink: 0;
-}
-
-.anchor-preview-footer-icon-compact {
-  width: 7px;
-  height: 5px;
-  border: 1px solid currentColor;
-  border-radius: 1.5px;
-  flex-shrink: 0;
-}
-
-/* var(--text-ghost) (~1.52:1) failed WCAG AA outright here — this is real,
-   non-decorative body text (the figure's aria-hidden scope stops at the
-   illustration itself; the figcaption is what conveys its purpose to
-   assistive tech). var(--text-quiet) (~4.91:1) is the "lighter than body,
-   still passes 4.5:1" tier established for this kind of supporting/
-   tertiary copy. */
-.anchor-preview-caption {
-  font-family: var(--font-body);
-  font-size: 13px;
-  color: var(--text-quiet);
-  line-height: 1.5;
-  max-width: 300px;
-  text-align: center;
-}
-
-/* Close Companion owns the boundary above the divider; the divider owns
-   only the space below itself, down to the footer message. 300px
-   independent of the illustration's own width (199px) — matches the
-   button/copy column above and below it instead. */
-.anchor-preview-divider {
-  border: none;
-  border-top: 1px solid var(--border);
-  width: 300px;
-  margin: 0 auto 32px;
-}
-
-/* Same var(--text-quiet) tier as the caption above — this is a closing,
-   tertiary note, not a second status readout, so it reads quieter than the
-   live status pill at the top. */
-.dock-footer-copy {
+.dock-body-copy {
   max-width: 340px;
   margin: 0 auto;
   line-height: 1.65;
@@ -635,10 +363,10 @@ body[data-page-state="unsupported"] .site-footer { background: var(--surface); }
 
 /* Dock heading — fixed 30px/300 (not the shared .type-section-heading
    clamp(29px, 3.6vw, 42px), which grows up to 42px and then plateaus past
-   ~1167px). Meant to stay a fixed, quieter size at any width, reading
-   correctly next to the illustration below it rather than competing for
-   the "biggest thing on the page" role. font-weight already matches
-   --weight-light (300). */
+   ~1167px). Meant to stay a fixed, quieter size at any width — matches the
+   approved design's own smaller treatment for this state (distinct from
+   mic-request/mic-granted's larger hero heading). font-weight already
+   matches --weight-light (300). */
 #state-dock .state-heading { font-size: 30px; }
 
 /* Prevents an awkward mid-word wrap at wider widths, once there's room for
@@ -666,65 +394,36 @@ body[data-page-state="unsupported"] .site-footer { background: var(--surface); }
    Responsive
    ═══════════════════════════════════════════ */
 
-/* ── Tablet: hero goes 2-column as soon as there's room; editorial becomes
-   a 2-column reflow (third column wraps to its own row). ── */
 @media (min-width: 700px) {
   .hero { padding: 112px 48px 96px; }
-  .hero-columns {
-    flex-direction: row;
-    align-items: center;
-    justify-content: center;
-    gap: 48px;
-    max-width: 1100px;
-    margin-inline: auto;
+  /* Breaks the benefits section out of .hero-inner's own 560px cap
+     (2026-08-17 manual-review fix — see .hero-benefits' own comment on why
+     its max-width alone never worked). The standard "escape a centered
+     parent" technique: 100vw width centered on the real viewport via
+     margin-left:50%/translateX(-50%), independent of .hero-inner's own
+     narrower box — max-width:720px (inherited from the base rule, unchanged
+     here) still caps it exactly as intended once the viewport exceeds
+     720px. box-sizing:border-box + its own horizontal padding (rather than
+     inheriting .hero's own side padding, which this element no longer sits
+     inside the box of) keeps content off the raw viewport edge on
+     viewports narrower than 720px, where the 100vw width is still the
+     binding constraint. gap:40px (was 32px) matches the approved ~40px
+     target now that there's enough width for it not to feel cramped. */
+  .hero-benefits {
+    width: 100vw;
+    max-width: 720px;
+    margin-left: 50%;
+    margin-right: auto;
+    transform: translateX(-50%);
+    padding-left: 24px;
+    padding-right: 24px;
+    box-sizing: border-box;
   }
-  .hero-content { max-width: 420px; margin: 0; text-align: left; }
-  .hero-content .type-hero-heading { max-width: 20ch; }
-  .hero-body { margin-inline: 0; }
-  .hero-visual {
-    margin-top: 0;
-    flex: 0 0 min(100%, 400px);
-    width: min(100%, 400px);
-    justify-content: flex-end;
-  }
-
-  .editorial { padding: 104px 48px 112px; }
-  .editorial-heading { font-size: clamp(32px, 4vw, 36px); }
-  .editorial-grid { grid-template-columns: 1fr 1fr; }
-  .editorial-col:nth-child(2) {
-    padding-left: 32px;
-    border-left: 1px solid var(--border);
-  }
-  /* Third column ("trust") wraps to its own full-width row rather than
-     sitting alone beside an empty cell. */
-  .editorial-col:nth-child(3) {
-    grid-column: 1 / -1;
-    padding-top: 48px;
-    border-top: 1px solid var(--border);
-  }
+  .hero-benefits-grid { grid-template-columns: repeat(3, 1fr); gap: 40px; }
 }
 
-/* ── Desktop: full 3-column editorial layout, wider breathing room. ── */
 @media (min-width: 1100px) {
   .hero { padding: 128px 120px 104px; }
-  .hero-columns { gap: 96px; }
-  .hero-content { max-width: 480px; }
-  /* Fixed 400×400 at desktop, per spec — no min()/content sizing at all. */
-  .hero-visual { flex: 0 0 400px; width: 400px; }
-  .hero-companion-preview-wrap { width: 400px; }
-
-  .editorial { padding: 112px 120px 128px; }
-  .editorial-heading { font-size: clamp(36px, 3vw, 42px); }
-  .editorial-grid { grid-template-columns: repeat(3, 1fr); gap: 64px; }
-  .editorial-col:nth-child(3) {
-    grid-column: auto;
-    padding-top: 0;
-    border-top: none;
-  }
-  .editorial-col:not(:first-child) {
-    padding-left: 56px;
-    border-left: 1px solid var(--border);
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

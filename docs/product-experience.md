@@ -128,13 +128,12 @@ Internal term only (retired name: Anchor page) — see Canonical Terminology in 
 The Dock:
 
 * keeps the Mezzo Companion running
-* reflects whether monitoring is active or inactive, via a small status indicator
-* shows a static, illustrative preview of the Companion — not a live view — so a user who has never opened one knows roughly what to expect
+* reflects whether monitoring is active or not, via a small plain-text status line
 * explains why the page must remain open
 * offers Close Companion, a recovery action — the one thing the Dock is allowed to do beyond reporting status
 * closes the Companion if it closes itself
 
-It is not the primary monitoring interface, and it is not a second operational surface. It has no calibration UI, no profile UI, no Start monitoring, no Stop, no Save — it does not duplicate any Companion control, full stop. Its Companion preview does not run a second visualization or reflect real session data — see "Dock Experience," below, for exactly what it shows and why.
+It is not the primary monitoring interface, and it is not a second operational surface. It has no calibration UI, no profile UI, no Start monitoring, no Stop, no Save — it does not duplicate any Companion control, full stop. It does not run a second visualization or reflect real session data beyond that one status line — see "Dock Experience," below, for exactly what it shows and why.
 
 The Mezzo Companion, not the Dock, is meant to stay available across an entire meeting-filled day — monitoring starts and stops independently inside it, session by session, without the Companion needing to reopen.
 
@@ -442,23 +441,14 @@ Its responsibility is to keep the monitoring session understandable and recovera
 
 ## What It Shows
 
-Once the Companion is open — whether monitoring is active or the Companion is sitting on its own Ready screen — the Dock shows the same structure, with one thing that changes:
+Once the Companion is open — whether monitoring is active or the Companion is sitting on Welcome, Ready, Calibrating, or any decision state — the Dock shows the same structure, with one thing that changes:
 
-* a small status indicator: a filled dot and "Monitoring is active." while monitoring, or a hollow dot and "Monitoring is inactive." while the Companion is Ready — the only part of this screen that reflects real session state
-* a fixed heading: "Your Mezzo Companion is open" — shown regardless of the status above it
-* a static illustrative preview of the Companion window — see "Companion Preview" below
-* a caption explaining the preview: "The Mezzo Companion is the floating window you'll use while monitoring."
-* Close Companion — see "Recovery" below
-* a divider
+* a small status line: "Monitoring is active" while monitoring, or "Monitoring is not active" for every other Companion state — the only part of this screen that reflects real session state. Deliberately collapsed to this one externally meaningful distinction (2026-08-17 redesign) rather than surfacing every one of the Companion's own internal states (Welcome, Ready, C1, Calibrating, and every decision screen all read as "not active" here) — the wording itself carries the meaning, not color alone
+* a fixed heading: "Your Companion is open" — shown regardless of the status above it
 * guidance to keep the page open and that closing it closes the Companion too: "Keep this page open while using Mezzo." / "Closing it will also close the Mezzo Companion."
+* Close Companion — see "Recovery" below
 
-The Mezzo Companion is a Document Picture-in-Picture window and already stays above other application windows on its own — Mezzo never offers a "bring to front" / "show" / "focus" control for it, and never duplicates its Start monitoring or Stop controls here, or any profile/calibration control. Reporting status and offering Close Companion (a recovery action, not a status or monitoring control — see "Recovery") are the only jobs of this screen while the Companion is open.
-
-## Companion Preview
-
-The preview shown on the Dock is a fixed, illustrative graphic, not a live view into the real Companion. It always shows the same reference imagery — an Expanded Monitoring Companion in "Approaching End of Range" territory — regardless of the user's actual profile, actual zone, or whether the Companion is really Monitoring or sitting on Ready.
-
-This is intentional: the preview exists to show a first-time user what the Companion looks like, not to report live status (the status indicator above it already does that, accurately). It does not run a second monitoring or visualization loop, does not read the user's real profile or zone. Its status/profile text and its "Stop"/"Compact" controls are rendered as abstract placeholder bars and icons, not literal readable text — deliberately, so nothing in this illustration can be mistaken for the real, live status indicator sitting directly above it.
+The Mezzo Companion is a Document Picture-in-Picture window and already stays above other application windows on its own — Mezzo never offers a "bring to front" / "show" / "focus" control for it, and never duplicates its Start monitoring or Stop controls here, or any profile/calibration control. Reporting status and offering Close Companion (a recovery action, not a status or monitoring control — see "Recovery") are the only jobs of this screen while the Companion is open. The Dock no longer shows an illustrative preview of the Companion window (retired 2026-08-17 — the redesigned Dock is text-only) — see CLAUDE.md's Engineering Notes for the history of that decision.
 
 ## Recovery
 

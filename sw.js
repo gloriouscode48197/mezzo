@@ -3,7 +3,7 @@
  * Enables offline support and PWA installation
  */
 
-const CACHE_NAME = 'mezzo-v10';
+const CACHE_NAME = 'mezzo-v11';
 const ASSETS = [
   '/',
   '/index.html',
@@ -24,6 +24,7 @@ const ASSETS = [
   '/src/session-state.js',
   '/src/profiles.js',
   '/src/home-dock.js',
+  '/assets/home-vizx2.png',
   '/manifest.webmanifest'
 ];
 

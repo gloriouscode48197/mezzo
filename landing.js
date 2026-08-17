@@ -27,14 +27,26 @@ initHomeDock({
   micRequestEl: document.getElementById('mic-request'),
   micGrantedEl: document.getElementById('mic-granted'),
   micDeniedEl: document.getElementById('mic-denied'),
+  micDeniedHeadingEl: document.getElementById('mic-denied-heading'),
   btnEnableMicrophone: document.getElementById('btn-enable-microphone'),
   btnOpenCompanion: document.getElementById('btn-open-companion'),
-  btnMicRetry: document.getElementById('btn-mic-retry'),
   btnCloseCompanion: document.getElementById('btn-close-companion'),
-  dockStatusDot: document.getElementById('dock-status-dot'),
   dockStatusText: document.getElementById('dock-status-text'),
   baseUrl: new URL('.', window.location.href).href,
 });
+
+// =============================================================================
+// Blocked-state address-bar illustration — the hostname shown is always the
+// real, current runtime host (2026-08-17 redesign), never a hard-coded
+// production value: window.location.host is already correct in production,
+// every Vercel preview deployment, and local dev alike, with nothing to keep
+// in sync by hand. Set once at load, not re-derived per mic-state transition
+// — the host cannot change without a full page navigation, so there's
+// nothing to react to.
+// =============================================================================
+
+const heroAddressBarHost = document.getElementById('hero-address-bar-host');
+if (heroAddressBarHost) heroAddressBarHost.textContent = window.location.host;
 
 // =============================================================================
 // Scroll-triggered Reveal

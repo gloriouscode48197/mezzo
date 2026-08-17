@@ -51,21 +51,25 @@ import { createMezzoSession } from './mezzo-session.js';
 const FADE_OUT_MS = 300;
 const FADE_IN_MS = 350;
 
-// See CLAUDE.md's Dock status mapping: Welcome and Ready both report
-// COMPANION_READY here (the Dock doesn't distinguish them), and the
-// Calibrated checkpoint also reports COMPANION_READY, not a state of its
-// own — src/session-state.js's own header comment documents this same
-// collapsing from the Companion's side.
+// 2026-08-17 redesign — collapses to the one externally meaningful
+// distinction: is monitoring actually active right now, or not. Every
+// COMPANION_READY, COMPANION_CALIBRATING, and COMPANION_NEEDS_ATTENTION
+// state (Welcome, Ready, C1, Calibrating, every full-screen decision state,
+// and the mid-session recovery screens — see src/session-state.js's own
+// header comment for the full collapsing this already did from the
+// Companion's side) all read as "not active" here; only MONITORING_ACTIVE
+// reads as "active." This is a page-side display simplification only — the
+// Companion still tracks every one of those states precisely for its own
+// purposes; this mapping just no longer surfaces that detail here.
 function dockStatusCopy(session) {
+  const notActive = { text: 'Monitoring is not active', active: false };
   return {
-    [session.SESSION_STATES.COMPANION_READY]: { text: 'Ready', modifier: 'ready' },
-    [session.SESSION_STATES.COMPANION_CALIBRATING]: { text: 'Calibrating', modifier: 'calibrating' },
-    [session.SESSION_STATES.MONITORING_ACTIVE]: { text: 'Monitoring', modifier: 'monitoring' },
-    [session.SESSION_STATES.COMPANION_NEEDS_ATTENTION]: { text: 'Needs attention', modifier: 'attention' },
+    [session.SESSION_STATES.COMPANION_READY]: notActive,
+    [session.SESSION_STATES.COMPANION_CALIBRATING]: notActive,
+    [session.SESSION_STATES.COMPANION_NEEDS_ATTENTION]: notActive,
+    [session.SESSION_STATES.MONITORING_ACTIVE]: { text: 'Monitoring is active', active: true },
   };
 }
-
-const DOCK_STATUS_MODIFIERS = ['ready', 'calibrating', 'monitoring', 'attention'];
 
 /**
  * @param {object} elements
@@ -75,11 +79,12 @@ const DOCK_STATUS_MODIFIERS = ['ready', 'calibrating', 'monitoring', 'attention'
  * @param {HTMLElement} [elements.micRequestEl] - Home's not-yet-granted sub-state
  * @param {HTMLElement} [elements.micGrantedEl] - Home's permission-confirmed sub-state
  * @param {HTMLElement} [elements.micDeniedEl] - Home's recovery sub-state
+ * @param {HTMLElement} [elements.micDeniedHeadingEl] - mic-denied's own heading, focused
+ *   in place of a primary action (2026-08-17 redesign — this sub-state has no
+ *   in-page recovery control anymore; see showMicState()'s own comment).
  * @param {HTMLElement} [elements.btnEnableMicrophone] - mic-request's one action
  * @param {HTMLElement} [elements.btnOpenCompanion] - mic-granted's one action; launches the Companion
- * @param {HTMLElement} [elements.btnMicRetry] - mic-denied's one action
  * @param {HTMLElement} [elements.btnCloseCompanion]
- * @param {HTMLElement} [elements.dockStatusDot]
  * @param {HTMLElement} [elements.dockStatusText]
  * @param {string} elements.baseUrl - passed straight through to createMezzoSession().
  * @returns {{ session: object, isPipSupported: () => boolean }}
@@ -91,11 +96,10 @@ export function initHomeDock({
   micRequestEl,
   micGrantedEl,
   micDeniedEl,
+  micDeniedHeadingEl,
   btnEnableMicrophone,
   btnOpenCompanion,
-  btnMicRetry,
   btnCloseCompanion,
-  dockStatusDot,
   dockStatusText,
   baseUrl,
 }) {
@@ -181,15 +185,40 @@ export function initHomeDock({
   // understanding"). Three mutually-exclusive sub-states nested inside the
   // `home` state, toggled with a plain class swap rather than
   // transitionToState()'s fade machinery — every trigger here is a single,
-  // sequential, user-driven action (initial load, one click, or a retry),
-  // never the kind of rapid/overlapping calls that machinery exists to
-  // guard against, so there's nothing to reuse it for.
+  // sequential, user-driven action (initial load or one click), never the
+  // kind of rapid/overlapping calls that machinery exists to guard against,
+  // so there's nothing to reuse it for.
   // =============================================================================
 
   const micStates = { request: micRequestEl, granted: micGrantedEl, denied: micDeniedEl };
-  const micPrimaryButtons = { request: btnEnableMicrophone, granted: btnOpenCompanion, denied: btnMicRetry };
+  // 2026-08-17 redesign: mic-denied has no primary action anymore (recovery
+  // happens entirely through the browser's own site controls plus a manual
+  // reload — see index.html's own comment on #mic-denied) — its own heading
+  // is what receives focus instead, so a state with no action never leaves
+  // focus stranded on whatever was focused just before the transition.
+  const micFocusTargets = { request: btnEnableMicrophone, granted: btnOpenCompanion, denied: micDeniedHeadingEl };
 
-  /** Moves focus to the newly-shown sub-state's primary action, the same
+  // 2026-08-17 manual-review fix: the very first showMicState() call — the
+  // browser's own initial paint of whichever mic sub-state Home happens to
+  // land on first — must NOT move focus at all. Landing a fresh page load
+  // straight onto a visible focus ring around Enable microphone (before the
+  // user has done anything) reads as an unexplained, premature nudge, and
+  // breaks the normal expectation that a freshly loaded page starts with
+  // focus at the browser's own default position (the document/body),
+  // leaving standard Tab order to reach the button naturally. Every LATER
+  // call — a real click's own transition, or returning to Home after Close
+  // Companion — is a genuine, user-driven state change, and still gets the
+  // focus move described below; this flag distinguishes the two rather than
+  // hardcoding "skip focus for state X specifically" (the first-rendered
+  // state isn't always 'request' — a returning user can land on 'granted'
+  // or 'denied' immediately, and none of those should auto-focus on load
+  // either).
+  let isInitialMicRender = true;
+
+  /** Moves focus to the newly-shown sub-state's primary action, or — for a
+   *  sub-state with none — its own heading (micDeniedHeadingEl, given
+   *  tabIndex=-1 in index.html, the same programmatic-focus-only convention
+   *  src/mezzo-session.js's result headings already use). Same
    *  requestAnimationFrame(() => el?.focus()) convention every Companion
    *  decision-state transition already uses (see src/mezzo-session.js's
    *  showM1Screen()/showM2Screen()/showM3Screen()/openDeleteScreen()) —
@@ -198,10 +227,15 @@ export function initHomeDock({
    *  this always re-lands it somewhere useful; the requestAnimationFrame
    *  wrap gives the browser one frame to register the target as focusable
    *  again after the `hidden` class is removed, matching why the existing
-   *  convention wraps it the same way. */
+   *  convention wraps it the same way. Skips the very first call entirely —
+   *  see isInitialMicRender's own comment. */
   function showMicState(name) {
     Object.entries(micStates).forEach(([k, el]) => el?.classList.toggle('hidden', k !== name));
-    requestAnimationFrame(() => micPrimaryButtons[name]?.focus());
+    if (isInitialMicRender) {
+      isInitialMicRender = false;
+      return;
+    }
+    requestAnimationFrame(() => micFocusTargets[name]?.focus());
   }
 
   /** navigator.permissions.query() is used narrowly — only to pick which of
@@ -261,13 +295,16 @@ export function initHomeDock({
     showMicState(granted ? 'granted' : 'denied');
   }
 
-  /** mic-denied's one action — re-attempts the same acquire/release probe,
-   *  useful once the user has actually gone and flipped the browser's own
-   *  site-permission toggle. */
-  async function handleMicRetryClick() {
-    const granted = await session.requestMicrophoneAccess();
-    showMicState(granted ? 'granted' : 'denied');
-  }
+  // mic-denied's own in-page retry action was retired (2026-08-17 redesign):
+  // Chrome/Edge already provide a Reload control in the address bar itself
+  // once the user changes the site's microphone permission, and a fresh
+  // getUserMedia() call always re-checks the live permission state anyway —
+  // an in-app "Try again" duplicated a control the browser already supplies
+  // for free. Recovery now happens purely via refreshMicState() re-running
+  // on the next full page load (see setupPage()'s own initial
+  // transitionToState()/refreshMicState() calls below), exactly like every
+  // other "browser state changed since last load" case this module already
+  // handles.
 
   // =============================================================================
   // Session
@@ -305,11 +342,12 @@ export function initHomeDock({
 
   function renderDockStatus(state) {
     const copy = DOCK_STATUS_COPY[state];
-    if (!copy) return;
-    if (dockStatusText) dockStatusText.textContent = copy.text;
-    if (dockStatusDot) {
-      DOCK_STATUS_MODIFIERS.forEach((m) => dockStatusDot.classList.toggle(`dock-status-dot-${m}`, m === copy.modifier));
-    }
+    if (!copy || !dockStatusText) return;
+    dockStatusText.textContent = copy.text;
+    // Color alone never carries the meaning (see landing.css's own comment
+    // on .dock-status-text-active) — the wording itself already says
+    // "active" or "not active"; this class only supplies the accent color.
+    dockStatusText.classList.toggle('dock-status-text-active', copy.active);
   }
 
   /**
@@ -331,7 +369,6 @@ export function initHomeDock({
 
   btnEnableMicrophone?.addEventListener('click', handleEnableMicrophoneClick);
   btnOpenCompanion?.addEventListener('click', handleLaunchCompanionClick);
-  btnMicRetry?.addEventListener('click', handleMicRetryClick);
   btnCloseCompanion?.addEventListener('click', handleCloseCompanionClick);
 
   // PiP support is a static browser capability, not something that changes

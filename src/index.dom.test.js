@@ -264,17 +264,40 @@ describe('Home', () => {
 
   it('has no calibration, profile-selection, or monitoring controls anywhere in the page', async () => {
     const { document } = await setupPage();
-    // Every control from the retired dual-surface / two-page model — none
-    // of these ids/classes should exist anywhere in index.html.
+    // Every control from the retired dual-surface / two-page model, plus
+    // the 2026-08-17 redesign's own retired controls (the in-page mic
+    // recovery retry button, the old dot-and-pill Dock status, and the
+    // illustrative Companion preview) — none of these ids/classes should
+    // exist anywhere in index.html.
     const retiredIds = [
       'state-calibrating', 'state-calibration-failed', 'state-calibrated',
       'state-profile-select', 'state-fallback-monitor', 'state-a',
       'delete-dialog-overlay', 'btn-enable-mic', 'cal-ring-canvas',
       'saved-profiles-list', 'btn-profile-primary', 'toast',
+      'btn-mic-retry', 'dock-status-dot', 'hero-companion-preview',
     ];
     retiredIds.forEach((id) => {
       assert.strictEqual(document.getElementById(id), null, `#${id} should not exist on Home/Dock`);
     });
+  });
+
+  it('has no leftover editorial content, footer, or design-tool state-switcher chrome', async () => {
+    const { document } = await setupPage();
+    const pageText = document.body.textContent;
+    // Retired editorial section (2026-08-17 redesign) — replaced by the
+    // mic-request sub-state's own "Designed for shared spaces" benefits.
+    assert.doesNotMatch(pageText, /How it works/);
+    assert.doesNotMatch(pageText, /Designed to stay out of your way/);
+    assert.doesNotMatch(pageText, /What it's good for/);
+    assert.doesNotMatch(pageText, /What it doesn't do/);
+    // Footer, removed outright — Privacy remains reachable via the nav only.
+    assert.strictEqual(document.querySelector('.site-footer'), null);
+    assert.doesNotMatch(pageText, /© Mezzo/);
+    // Design-tool artifacts — never real product UI (see the design-source
+    // rules this redesign was built under).
+    assert.doesNotMatch(pageText, /FINAL - WEB/);
+    assert.doesNotMatch(pageText, /Mic permission missing/);
+    assert.doesNotMatch(pageText, /Companion launched, PiP active/);
   });
 
   it('the global navigation contains no "Try Mezzo" item', async () => {
@@ -326,27 +349,28 @@ describe('Home — microphone permission state', () => {
     assert.strictEqual(window.location.href, locationBefore);
   });
 
-  it('denied on load: shows the recovery state directly, without waiting for a click first', async () => {
+  it('denied on load: shows the recovery state directly, without waiting for a click first, with no in-page retry control (2026-08-17 redesign)', async () => {
     const { document } = await setupPage({ permissionState: 'denied' });
     assert.strictEqual(visibleMicStateId(document), 'mic-denied');
+    assert.strictEqual(document.getElementById('btn-mic-retry'), null, 'recovery is a reload, handled by the browser itself — there is no in-page retry action anymore');
   });
 
-  it('denied -> Try again -> granted: retrying re-runs the same acquire/release probe', async () => {
-    let shouldGrant = false;
-    const { document } = await setupPage({
+  it('denied, then a fresh page load (a real reload) after the user fixes the browser-level permission: resolves directly to the granted/launch state', async () => {
+    // A "reload" in this harness is a second, independent setupPage() call —
+    // each one builds a genuinely fresh DOM/module instance, exactly like a
+    // real browser reload would, rather than mutating state on the existing
+    // one. This is the ONLY recovery path from mic-denied now (see
+    // src/home-dock.js's own comment on the retired Try again button) — a
+    // getUserMedia() call always re-checks the live permission state, so
+    // the reload this screen's own copy asks for is sufficient on its own.
+    const first = await setupPage({
       permissionState: 'denied',
-      getUserMedia: async () => {
-        if (!shouldGrant) throw new DOMException('Permission denied', 'NotAllowedError');
-        return createFakeMediaStream();
-      },
+      getUserMedia: async () => { throw new DOMException('Permission denied', 'NotAllowedError'); },
     });
-    assert.strictEqual(visibleMicStateId(document), 'mic-denied');
+    assert.strictEqual(visibleMicStateId(first.document), 'mic-denied');
 
-    shouldGrant = true;
-    document.getElementById('btn-mic-retry').click();
-    await tick();
-
-    assert.strictEqual(visibleMicStateId(document), 'mic-granted');
+    const second = await setupPage({ permissionState: 'granted' });
+    assert.strictEqual(visibleMicStateId(second.document), 'mic-granted');
   });
 
   it('granted (query) but acquire() fails anyway: falls through to the recovery state, never strands the user on a launch button that cannot work', async () => {
@@ -382,6 +406,88 @@ describe('Home — microphone permission state', () => {
 
     assert.strictEqual(visibleStateId(document), 'state-home');
     assert.strictEqual(visibleMicStateId(document), 'mic-denied', 'returning to Home must reflect the current state, not the state Home happened to be in before it was last opened');
+  });
+});
+
+// =============================================================================
+// Home — each mic sub-state's own heading, copy, and focus behavior
+// (2026-08-17 redesign — previously one heading was shared, unconditionally,
+// across all three sub-states)
+// =============================================================================
+
+describe('Home — per-sub-state heading, copy, and focus', () => {
+  it('mic-request has its own accurate heading, and the "Designed for shared spaces" benefits section', async () => {
+    const { document } = await setupPage({ permissionState: 'prompt' });
+    const state = document.getElementById('mic-request');
+    assert.strictEqual(state.querySelector('h1').textContent, 'You care about how your voice affects others');
+    assert.match(state.textContent, /Designed for shared spaces/);
+    assert.match(state.textContent, /For calls with headphones/);
+    assert.match(state.textContent, /A quiet visual cue/);
+    assert.match(state.textContent, /Your words stay private/);
+  });
+
+  it('the static visualization is the supplied PNG (assets/home-vizx2.png) — a plain, inert <img>, never a <canvas> or an inline SVG, never a MezzoWaveVisualizer instance, never animated, never touching the microphone', async () => {
+    const { document } = await setupPage({ permissionState: 'prompt' });
+    const viz = document.querySelector('.hero-static-viz');
+    assert.notStrictEqual(viz, null);
+    assert.strictEqual(viz.querySelector('canvas'), null, 'a real MezzoWaveVisualizer always renders a <canvas> — this must be a plain, inert <img> instead');
+    assert.strictEqual(viz.querySelector('svg'), null, 'the earlier hand-authored contour SVG is retired — the product-owner-supplied PNG replaces it outright');
+    assert.strictEqual(viz.getAttribute('aria-hidden'), 'true');
+
+    const img = viz.querySelector('img');
+    assert.notStrictEqual(img, null);
+    assert.match(img.getAttribute('src'), /assets\/home-vizx2\.png$/);
+    assert.strictEqual(img.getAttribute('alt'), '', 'decorative only — the heading already carries the meaning');
+    assert.strictEqual(img.getAttribute('width'), '220');
+    assert.strictEqual(img.getAttribute('height'), '220');
+    assert.strictEqual(img.hasAttribute('tabindex'), false, 'a plain <img> is never a tab stop on its own — no tabindex should be added');
+  });
+
+  it('the benefits section does not appear in mic-granted or mic-denied — it is scoped to mic-request only', async () => {
+    const { document } = await setupPage({ permissionState: 'granted' });
+    assert.doesNotMatch(document.getElementById('mic-granted').textContent, /Designed for shared spaces/);
+
+    const { document: deniedDoc } = await setupPage({ permissionState: 'denied' });
+    assert.doesNotMatch(deniedDoc.getElementById('mic-denied').textContent, /Designed for shared spaces/);
+  });
+
+  it('mic-granted has its own accurate heading and copy, distinguishing permission being enabled from the microphone actually being used', async () => {
+    const { document } = await setupPage({ permissionState: 'granted' });
+    const state = document.getElementById('mic-granted');
+    assert.strictEqual(state.querySelector('h1').textContent, "You're ready to use Mezzo");
+    assert.match(state.textContent, /Microphone access is enabled\./);
+    assert.match(state.textContent, /Mezzo only uses your microphone while calibrating or monitoring\./);
+  });
+
+  it('mic-denied has its own accurate heading, generic (not browser-specific) recovery copy, and a caption — never a Try again/Reload button', async () => {
+    const { document } = await setupPage({ permissionState: 'denied' });
+    const state = document.getElementById('mic-denied');
+    assert.strictEqual(state.querySelector('h1').textContent, 'Your browser has blocked microphone access');
+    assert.match(state.textContent, /Use the site controls in your browser's address bar/);
+    assert.match(state.textContent, /Look for the site controls icon in your address bar\./);
+    assert.doesNotMatch(state.textContent, /\bChrome\b/, 'copy must be generic — Edge is also a supported browser, not Chrome-only');
+    assert.doesNotMatch(state.textContent, /Try again/);
+    assert.doesNotMatch(state.textContent, /Reload/);
+  });
+
+  it('the mic-denied heading is set up as a focus target (no primary action exists to focus instead)', async () => {
+    // Only the static setup is checked here — linkedom does not reliably
+    // track document.activeElement the way a real browser does, so the
+    // actual focus-lands-here behavior is verified by the Playwright spec
+    // instead (see tests/main-page-states.spec.js), matching this file's
+    // own established division of labor for anything a real browser is
+    // needed to verify.
+    const { document } = await setupPage({ permissionState: 'denied' });
+    const heading = document.getElementById('mic-denied-heading');
+    assert.notStrictEqual(heading, null);
+    assert.strictEqual(heading.getAttribute('tabindex'), '-1', 'programmatically focusable only, same convention as Companion result headings');
+  });
+
+  it("the blocked-state address bar reflects the real runtime host (window.location.host), never a hard-coded production hostname", async () => {
+    const { document } = await setupPage({ permissionState: 'denied' });
+    const hostEl = document.getElementById('hero-address-bar-host');
+    assert.strictEqual(hostEl.textContent, 'localhost', 'setupPage() points window.location at http://localhost/index.html — the illustration must reflect that live value');
+    assert.doesNotMatch(hostEl.textContent, /vercel\.app/);
   });
 });
 
@@ -424,7 +530,7 @@ describe('Opening the Mezzo Companion', () => {
     document.getElementById('btn-open-companion').click();
     await tick(2);
     assert.strictEqual(visibleStateId(document), 'state-dock');
-    assert.strictEqual(document.getElementById('dock-status-text').textContent, 'Ready');
+    assert.strictEqual(document.getElementById('dock-status-text').textContent, 'Monitoring is not active');
     assert.strictEqual(window.location.href, locationBefore, 'opening the Companion must never navigate this page anywhere');
   });
 
@@ -436,7 +542,7 @@ describe('Opening the Mezzo Companion', () => {
     document.getElementById('btn-open-companion').click();
     await tick(2);
     assert.strictEqual(visibleStateId(document), 'state-dock');
-    assert.strictEqual(document.getElementById('dock-status-text').textContent, 'Ready');
+    assert.strictEqual(document.getElementById('dock-status-text').textContent, 'Monitoring is not active');
   });
 
   it('the Dock shows no profile name, calibration progress, or monitoring/profile controls', async () => {
@@ -482,7 +588,7 @@ describe('Close Companion', () => {
     document.getElementById('btn-open-companion').click();
     await tick(2);
     assert.strictEqual(visibleStateId(document), 'state-dock');
-    assert.strictEqual(document.getElementById('dock-status-text').textContent, 'Ready');
+    assert.strictEqual(document.getElementById('dock-status-text').textContent, 'Monitoring is not active');
     assert.strictEqual(JSON.parse(localStorage.getItem('mezzoProfiles')).length, 1, 'reopening must never duplicate or lose the saved profile');
   });
 });

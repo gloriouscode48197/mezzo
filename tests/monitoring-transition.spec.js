@@ -70,7 +70,7 @@ test.describe('Companion: calibration -> Ready -> Monitoring -> Ready', () => {
     const monitoringScreen = pipPage.locator('.pip-screen-monitoring');
     await expect(monitoringScreen).toBeVisible();
     await expect(monitoringScreen.locator('canvas').first()).toBeVisible();
-    await expect(page.locator('#dock-status-text')).toHaveText('Monitoring');
+    await expect(page.locator('#dock-status-text')).toHaveText('Monitoring is active');
 
     // Live fake-mic levels actually reach the visualization's status text —
     // not just a screen that's technically un-hidden but never updates.
@@ -124,7 +124,7 @@ test.describe('Companion: calibration -> Ready -> Monitoring -> Ready', () => {
     const monitoringScreen = pipPage.locator('.pip-screen-monitoring');
     await expect(monitoringScreen).toBeVisible();
     await expect(monitoringScreen.locator('canvas').first()).toBeVisible();
-    await expect(page.locator('#dock-status-text')).toHaveText('Monitoring');
+    await expect(page.locator('#dock-status-text')).toHaveText('Monitoring is active');
 
     const statusHeading = pipPage.locator('.pip-status-heading').first();
     await expect(statusHeading).toHaveText(/Quiet|Within Range|Approaching End of Range|Outside Range/, { timeout: 5000 });
