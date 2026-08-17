@@ -965,14 +965,33 @@ test.describe('Accessibility, H1 consistency, and sizing — both result variant
     const bodyBg = await pipPage.evaluate(() => getComputedStyle(document.body).backgroundColor);
     expect(bodyBg).toBe(readyBg);
 
-    // The modal-surface reference value — the same one Ready's own
-    // selector trigger/overlay panel already use, confirmed directly
-    // rather than hardcoded, so this test can't silently drift from
-    // whatever that shared value actually is.
-    await readyScreen.locator('.pip-ready-selector-trigger').click();
-    const modalSurfaceBg = await pipPage.locator('.pip-ready-selector-panel').evaluate((el) => getComputedStyle(el).backgroundColor);
-    await pipPage.keyboard.press('Escape'); // close the panel back up
+    // The modal-surface reference value — confirmed directly off a real
+    // modal card rather than hardcoded, so this test can't silently drift
+    // from whatever .pip-modal-card actually renders. No longer derived
+    // from the selector panel (2026-08-20): the panel uses its own,
+    // visibly lighter #333333 surface (restored after a manual-review
+    // contrast pass found the brief #57524A lightening this replaced
+    // caused multiple AA failures — see that rule's own CSS comment) so it
+    // reads as an interactive control rather than a third thing sharing
+    // the modal system's own color — the panel and the modal-card system
+    // are intentionally different surfaces now, not an equivalence this
+    // test should assume.
+    await recalibrateFromSelector(pipPage, 'Kitchen');
+    await waitForCapture(pipPage);
+    const firstM1 = pipPage.locator('.pip-screen-m1');
+    await expect(firstM1).toBeVisible({ timeout: 15000 });
+    const modalSurfaceBg = await firstM1.locator('.pip-modal-card').evaluate((el) => getComputedStyle(el).backgroundColor);
+    await firstM1.locator('.pip-decision-discard-btn').click();
+    await expect(readyScreen).toBeVisible({ timeout: 3000 });
     expect(modalSurfaceBg).not.toBe(readyBg); // genuinely a different, darker value — not a no-op
+
+    // The selector's own surface is a third, distinct value — lighter than
+    // the modal-card system, still darker than the regular screen.
+    await readyScreen.locator('.pip-ready-selector-trigger').click();
+    const selectorSurfaceBg = await pipPage.locator('.pip-ready-selector-panel').evaluate((el) => getComputedStyle(el).backgroundColor);
+    await pipPage.keyboard.press('Escape');
+    expect(selectorSurfaceBg).not.toBe(readyBg);
+    expect(selectorSurfaceBg).not.toBe(modalSurfaceBg);
 
     // No clipping, no unnecessary scrolling in either dimension — checked
     // at the real 382x512 size specifically, since the revised hierarchy
@@ -1235,16 +1254,16 @@ test.describe('Result-screen action hierarchy spacing (2026-08-18 — Try again 
   });
 });
 
-test.describe('Shared toast restyle (2026-08-15 pass)', () => {
+test.describe('Shared toast restyle (2026-08-20 pass, supersedes 2026-08-15)', () => {
   /** Reads the toast pill's own rendered surface. */
   async function readToastSurface(pipPage) {
     return pipPage.locator('.pip-toast-card').evaluate((el) => {
       const cs = getComputedStyle(el);
-      return { backgroundColor: cs.backgroundColor, color: cs.color, borderRadius: cs.borderRadius };
+      return { backgroundColor: cs.backgroundColor, color: cs.color, borderRadius: cs.borderRadius, borderWidth: cs.borderWidth };
     });
   }
 
-  test('the discard toast no longer matches the selector panel\'s dark, highly-rounded surface — it uses the lighter washi/ink treatment with a modest rounded rectangle', async ({ page, context }) => {
+  test('the discard toast reads as a dark notification, distinct from the now-lighter selector surface — modest rounded rectangle, no border', async ({ page, context }) => {
     // A saved profile must already exist and be selected before creating,
     // so Discard restores to Ready (not Welcome — see handleResultDiscard's
     // own fallback-to-Welcome behavior for a true first-ever creation) and
@@ -1265,8 +1284,8 @@ test.describe('Shared toast restyle (2026-08-15 pass)', () => {
     const resultScreen = pipPage.locator('.pip-screen-result');
     await expect(resultScreen).toBeVisible({ timeout: 15000 });
 
-    // The selector panel's own dark, highly-rounded reference surface,
-    // confirmed directly rather than hardcoded.
+    // The selector panel's own (now visibly lighter, 2026-08-20) reference
+    // surface, confirmed directly rather than hardcoded.
     const readyScreenLater = pipPage.locator('.pip-screen-ready');
     await resultScreen.locator('.pip-decision-discard-btn').click();
     await expect(readyScreenLater).toBeVisible({ timeout: 3000 });
@@ -1279,18 +1298,27 @@ test.describe('Shared toast restyle (2026-08-15 pass)', () => {
 
     const toastSurface = await readToastSurface(pipPage);
 
-    // Genuinely a different surface — not the same dark family, just a
-    // touch lighter. (The corner radius intentionally REUSES the panel's
-    // own 10px value — a deliberate shared "modest rounded rectangle"
-    // token, not a copy of the panel's identity. Background color, the
-    // thing that actually made the two read as similar, is what must
-    // differ.)
+    // Genuinely a different, visibly darker surface than the selector —
+    // the exact confusion this restyle exists to resolve. (The corner
+    // radius intentionally REUSES the panel's own 10px value — a
+    // deliberate shared "modest rounded rectangle" token, not a copy of
+    // the panel's identity — background color is what must differ.)
     expect(toastSurface.backgroundColor).not.toBe(selectorSurface.backgroundColor);
 
-    // The approved washi-on-ink pairing specifically — existing tokens,
-    // no new color introduced.
-    expect(toastSurface.backgroundColor).toBe('rgb(230, 223, 212)'); // --washi
-    expect(toastSurface.color).toBe('rgb(60, 59, 63)'); // --ink
+    // The approved dark #222222/light-text pairing, matching the
+    // modal-card system — existing values, no new color family
+    // introduced beyond the accent border below.
+    expect(toastSurface.backgroundColor).toBe('rgb(34, 34, 34)'); // #222222
+    expect(toastSurface.color).toBe('rgba(222, 210, 194, 0.85)');
+
+    // No border at all (2026-08-20 manual-review correction — an
+    // orange-tinted accent border briefly existed here and read as an
+    // unintended warning color; removed outright rather than replaced with
+    // a different colored border). borderWidth, not borderColor: an
+    // element with no border declared can still report *some*
+    // browser-internal borderColor even though nothing renders, so width
+    // is the check that can't give a false pass.
+    expect(toastSurface.borderWidth).toBe('0px');
 
     // A modest rounded rectangle, not a capsule (the selector TRIGGER's
     // own 100px+ pill shape — a different element from the panel — stays
@@ -1318,8 +1346,9 @@ test.describe('Shared toast restyle (2026-08-15 pass)', () => {
     await expect(pipPage.locator('.pip-toast')).toHaveClass(/pip-toast-visible/);
     await expect(pipPage.locator('.pip-toast-card')).toHaveText('Speaking profile saved');
     const toastSurface = await readToastSurface(pipPage);
-    expect(toastSurface.backgroundColor).toBe('rgb(230, 223, 212)');
-    expect(toastSurface.color).toBe('rgb(60, 59, 63)');
+    expect(toastSurface.backgroundColor).toBe('rgb(34, 34, 34)');
+    expect(toastSurface.color).toBe('rgba(222, 210, 194, 0.85)');
+    expect(toastSurface.borderWidth).toBe('0px');
     expect(parseFloat(toastSurface.borderRadius)).toBeLessThan(20);
   });
 

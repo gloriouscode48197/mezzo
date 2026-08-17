@@ -595,21 +595,30 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
     await expect(panel.locator('.pip-ready-selector-row')).toHaveCount(2);
   });
 
-  test('the expanded panel renders below the trigger, never overlapping it', async ({ page, context }) => {
+  test('the expanded panel stays anchored to the trigger\'s own wrap and centered within the Companion, without being displaced sideways or resized', async ({ page, context }) => {
     // Regression coverage for a real bug caught in manual review: the panel
     // used to be positioned with a fixed pixel offset measured from the
     // whole Ready screen's own top edge — a value that happened to equal
     // the trigger's own top offset, so the panel rendered on top of the
-    // trigger instead of below it. Fixed by anchoring the panel to
-    // calc(100% + 8px) of a shared position:relative wrapper around trigger
-    // + panel, which tracks the trigger's real rendered position regardless
-    // of window height or how tall the heading/label above it render.
+    // trigger instead of below it. That specific bug (a plain calculation
+    // error) no longer applies to the current mechanism at all —
+    // positionSelectorPanel() (2026-08-20 manual-review pass) now
+    // deliberately centers the panel within the usable Companion viewport,
+    // which routinely places it ABOVE the trigger once enough rows exist
+    // (see the dedicated "extends above the trigger" test below) — "never
+    // overlapping the trigger" is no longer the guarantee this makes.
+    // What's still genuinely true, and what this test checks now: the
+    // panel stays the same width and horizontal position as the trigger
+    // (both children of the same .pip-ready-selector-wrap, both spanning
+    // its own 260px), so it always reads as belonging to that control
+    // regardless of where it lands vertically.
     await page.addInitScript(() => {
       localStorage.setItem('mezzoProfiles', JSON.stringify([
         { id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 200 },
       ]));
     });
     const pipPage = await openCompanion(page, context);
+    await pipPage.setViewportSize({ width: 382, height: 512 });
 
     const readyScreen = pipPage.locator('.pip-screen-ready');
     await expect(readyScreen).toBeVisible();
@@ -621,10 +630,24 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
     await expect(panel).toBeVisible();
     const panelBox = await panel.boundingBox();
 
-    expect(panelBox.y).toBeGreaterThanOrEqual(triggerBox.y + triggerBox.height);
+    // Same horizontal span as the trigger — still visually one component.
+    expect(Math.abs(panelBox.x - triggerBox.x)).toBeLessThan(1);
+    expect(Math.abs(panelBox.width - triggerBox.width)).toBeLessThan(1);
+    // Fully within the Companion viewport, safe margins respected.
+    expect(panelBox.y).toBeGreaterThanOrEqual(0);
+    expect(panelBox.y + panelBox.height).toBeLessThanOrEqual(512);
   });
 
-  test('the panel scrolls internally once an unsaved profile plus five saved profiles overflow it, without growing the screen', async ({ page, context }) => {
+  test('the maximum case — an unsaved profile plus five saved profiles — shows every row and the footer at 382×512 without scrolling, and never grows the screen', async ({ page, context }) => {
+    // Superseded (2026-08-20 manual-review pass): this used to assert the
+    // panel itself scrolled at this same maximal row count, at a flat
+    // max-height:260px. positionSelectorPanel() (see its own comment)
+    // computes the panel's height from its real content and the real
+    // usable viewport now — at the standard 382×512 size, all seven
+    // possible options (1 Temporary + 5 saved + Create new profile) fit
+    // without scrolling at all; see the dedicated companion-visual-
+    // system.spec.js coverage for the forced-short-viewport case where
+    // scrolling genuinely does engage.
     await page.addInitScript(() => {
       localStorage.setItem('mezzoProfiles', JSON.stringify([
         { id: 'p1', name: 'One', speakingDb: -30, spreadDb: 4, calibratedTs: 1 },
@@ -635,6 +658,7 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
       ]));
     });
     const pipPage = await openCompanion(page, context);
+    await pipPage.setViewportSize({ width: 382, height: 512 });
 
     const readyScreen = pipPage.locator('.pip-screen-ready');
     await expect(readyScreen).toBeVisible();
@@ -652,14 +676,26 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
     await expect(panel).toBeVisible();
     await expect(panel.locator('.pip-ready-selector-row')).toHaveCount(6); // 1 unsaved + 5 saved
 
-    // The panel itself overflows and scrolls internally...
-    const [scrollHeight, clientHeight] = await panel.evaluate((el) => [el.scrollHeight, el.clientHeight]);
-    expect(scrollHeight).toBeGreaterThan(clientHeight);
+    // All seven options fit at this size — every row visible, no scroll.
+    const rowsRegion = panel.locator('.pip-ready-selector-rows');
+    const [scrollHeight, clientHeight] = await rowsRegion.evaluate((el) => [el.scrollHeight, el.clientHeight]);
+    expect(scrollHeight).toBeLessThanOrEqual(clientHeight + 1);
 
-    // ...but the surrounding Ready screen never grows to accommodate it —
-    // Start monitoring stays anchored at a fixed position regardless of how
-    // many rows exist (the whole point of the overlay model over the old
-    // always-visible, window-growing list).
+    // Create new profile — the seventh option — stays visible too.
+    const footerAction = panel.locator('.pip-ready-selector-footer-action');
+    await expect(footerAction).toBeVisible();
+    await expect(footerAction).toBeInViewport();
+
+    // Fully within the Companion viewport.
+    const panelBox = await panel.boundingBox();
+    expect(panelBox.y).toBeGreaterThanOrEqual(0);
+    expect(panelBox.y + panelBox.height).toBeLessThanOrEqual(512);
+
+    // The surrounding Ready screen never grows to accommodate it — Start
+    // monitoring stays anchored at a fixed position regardless of how many
+    // rows exist (the whole point of the overlay model over the old
+    // always-visible, window-growing list) — and the Companion window
+    // itself is never resized to fit the panel either.
     const startBtn = readyScreen.locator('.pip-ready-start-btn');
     await expect(startBtn).toBeVisible();
   });

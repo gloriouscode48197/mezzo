@@ -47,9 +47,11 @@ test.describe('Companion: selector open/close and decision-state focus', () => {
     const panel = pipPage.locator('.pip-ready-selector-panel');
     await expect(panel).toBeVisible();
 
-    // The heading sits above the trigger — the panel opens *below* the
-    // trigger (see the "renders below the trigger" test in
-    // ready-screen-flows.spec.js), so this is unambiguously outside it.
+    // The heading sits above the trigger, and — with only one profile here
+    // — the panel opens below it too (positionSelectorPanel() only extends
+    // it upward once there's enough content to need that room; see
+    // companion-visual-system.spec.js's own expanded-panel positioning
+    // coverage), so clicking the heading is unambiguously outside the panel.
     await readyScreen.locator('.pip-ready-heading').click({ force: true });
     await expect(panel).toBeHidden();
   });
@@ -269,7 +271,14 @@ test.describe('Companion: selector row Recalibrate icon (2026-08-17)', () => {
     const kitchenRow = panel.locator('.pip-ready-selector-row', { hasText: 'Kitchen' });
     const recalibrateBtn = kitchenRow.getByRole('button', { name: 'Recalibrate Kitchen', exact: true });
     await expect(recalibrateBtn).toBeVisible();
-    await expect(recalibrateBtn).toHaveAttribute('title', 'Recalibrate');
+    // Native title attribute retired (2026-08-20) in favor of the custom
+    // .pip-tooltip — see tests/companion-visual-system.spec.js's own
+    // tooltip coverage for the replacement behavior (hover delay, keyboard
+    // focus, dismissal triggers, and the full aria-describedby lifecycle —
+    // attached only while this specific button's tooltip is genuinely
+    // showing, never left in place at rest).
+    await expect(recalibrateBtn).not.toHaveAttribute('title', 'Recalibrate');
+    await expect(recalibrateBtn).not.toHaveAttribute('aria-describedby');
     // Decorative SVG hidden from assistive technology — the button's own
     // aria-label is the sole accessible name, not the icon's own content.
     await expect(recalibrateBtn.locator('svg')).toHaveAttribute('aria-hidden', 'true');

@@ -320,6 +320,27 @@ const DECISION_PROCESSING_MS = 1000;
 // fade-out begins.
 const TOAST_VISIBLE_MS = 3200;
 
+// Custom row-action tooltip (2026-08-20) hover delay — the approved
+// ~200-300ms range, replacing reliance on the browser's own native
+// title-attribute tooltip (which on Chrome takes noticeably longer, and
+// duplicates this one if left in place — see buildSelectorRow()'s own
+// comment). Keyboard focus shows the tooltip immediately, unaffected by
+// this delay — see showTooltipFor()'s own callers.
+const TOOLTIP_HOVER_DELAY_MS = 250;
+
+// Expanded selector panel positioning (2026-08-20 manual-review fix) — the
+// panel used to always extend downward from the trigger at a flat
+// `top: calc(100% + 8px)`, which could push it past the Companion's own
+// visible bottom edge once enough rows existed (four saved profiles was
+// the reported threshold). positionSelectorPanel() (below) replaces that
+// fixed offset with one computed at open time: centered within the usable
+// viewport (this margin kept clear top and bottom), extending upward past
+// the trigger when centering calls for it, and height-capped to whatever
+// actually fits — see that function's own comment for the full algorithm.
+// 16px matches the toast's own top inset, already established elsewhere
+// in this file as a comfortable safe margin at this Companion size.
+const SELECTOR_PANEL_SAFE_MARGIN_PX = 16;
+
 // Brief completion transition ("Creating your speaking profile…") shown
 // between the end of capture and the post-creation result screen (Slice 2
 // revision) — see showCreatingTransition() below. The actual work this
@@ -369,8 +390,9 @@ export const MEZZO_COMPANION_READY_WIDTH = 382;
 // constant is the whole answer, unconditionally. The Ready screen's own
 // selector (both collapsed and its expanded overlay panel, up to five saved
 // profiles plus an unsaved one) fits and scrolls entirely within this fixed
-// height — see .pip-ready-selector-panel's own max-height:260px, internal
-// overflow-y:auto — never by growing the window. Opening the selector does
+// height — see positionSelectorPanel()'s own comment (the panel's height
+// and position are computed fresh on every open, not a flat constant) —
+// never by growing the window. Opening the selector does
 // not call resizeCompanionTo() or resizeCompanionToContent() at all (see
 // openSelectorPanel()).
 export const MEZZO_COMPANION_READY_BASE_HEIGHT = 512;
@@ -382,9 +404,9 @@ const MEZZO_COMPANION_READY_SIZE = { width: MEZZO_COMPANION_READY_WIDTH, height:
  * No profile-count term, no selector-state term, no addition of any kind:
  * Ready must never request more height because a saved-profile library or
  * an unsaved profile exists (Batch 2's explicit sizing requirement) — the
- * selector's own overlay panel scrolls internally within this fixed height
- * instead (see .pip-ready-selector-panel's max-height:260px/overflow-y:auto
- * below), the same way it already did before Batch 2 changed the target
+ * selector's own overlay panel is computed and height-capped to fit within
+ * this fixed height instead (see positionSelectorPanel()), the same way it
+ * already did before Batch 2 changed the target
  * from 380×364 to 382×512. Kept as an exported function, not inlined to a
  * bare constant, so every call site still reads as "the Ready screen's own
  * computed height" rather than a magic number, and so a future change that
@@ -744,6 +766,19 @@ export function createMezzoSession({
   let toastEl = null;
   let toastCardEl = null;
   let toastHideTimer = null;
+
+  // Custom row-action tooltip (2026-08-20) — a single shared element (same
+  // "one instance, one sibling of every .pip-screen" pattern the toast
+  // above already uses), reused for both the Recalibrate and Delete/
+  // Discard row icons; only one can ever be visible at once by
+  // construction, since there is only ever one DOM node. tooltipTargetEl
+  // tracks which button (if any) currently owns it, so a mouseleave/blur
+  // firing for a button that isn't the current owner (e.g. a stale event
+  // from a row already replaced by a re-render) can't hide a tooltip some
+  // other, newer interaction just showed.
+  let tooltipEl = null;
+  let tooltipShowTimer = null;
+  let tooltipTargetEl = null;
 
   let pendingDeleteProfileId = null;
 
@@ -1516,9 +1551,29 @@ export function createMezzoSession({
          panel below on click. A real <button>, not a native <select>: the
          panel's own grouped/sectioned layout (Unsaved vs. Saved profiles,
          inline delete/discard) has no equivalent in a native select.
-         Reference-matched (Batch 2): a centered, borderless dark pill —
-         border:0 explicitly, not a low-contrast border left to read as
-         invisible. */
+         Reference-matched (Batch 2): a centered, borderless pill — border:0
+         explicitly, not a low-contrast border left to read as invisible.
+         Surface (2026-08-20, restored after manual review found multiple
+         contrast failures in the #57524A lightening below — see this
+         file's own history: #222222 (Batch 2) -> #333333 (a same-day
+         "first pass," rejected then as reading too dark) -> #57524A (the
+         lightening this correction reverts). #57524A's own trigger/row
+         text contrast (5.20:1) looked fine in isolation, but several
+         *other* selector elements that keep their color unchanged when the
+         surface lightens quietly failed against it: --hanko-fill as a
+         foreground (the row-check mark, the Create new profile text, both
+         focus outlines) dropped to 1.78-2.91:1, and the row-action icons'
+         idle muted color dropped to ~1.9:1 — well under both the 4.5:1
+         text and 3:1 icon/indicator thresholds. #333333 is the confirmed,
+         re-accepted value (not #222222): row/trigger text
+         (rgba(222,210,194,0.92)) against it is 7.45:1. See the row-check/
+         footer-action/row-action rules below for the three foreground
+         colors that needed their own small, same-hue-family adjustment to
+         clear AA now that they sit on this darker surface again — those
+         adjustments are new; the surface reversion itself is not.
+         .pip-ready-selector-panel below shares this exact value so the
+         closed trigger and its expanded panel still read as one
+         component. */
       .pip-ready-selector-trigger {
         display: flex;
         align-items: center;
@@ -1529,7 +1584,7 @@ export function createMezzoSession({
         box-sizing: border-box;
         padding: 13px 32px;
         border-radius: 100px;
-        background: #222222;
+        background: #333333;
         border: 0;
         font-family: var(--font-body);
         font-weight: var(--weight-light);
@@ -1539,7 +1594,11 @@ export function createMezzoSession({
         flex-shrink: 0;
         text-align: left;
       }
-      .pip-ready-selector-trigger:hover { background: #2a2a2a; }
+      /* Lighter still on hover — #3B3B3B, the same +8-per-channel step
+         already used pre-Batch-2 (#222222 -> #2a2a2a), scaled to this
+         base. Text contrast on it: 6.65:1, still comfortably clearing
+         AA. */
+      .pip-ready-selector-trigger:hover { background: #3B3B3B; }
       .pip-ready-selector-trigger-name {
         flex: 1;
         min-width: 0;
@@ -1553,49 +1612,70 @@ export function createMezzoSession({
          positioned by its default inline baseline instead of centered in
          its declared box): one shared vertical-centering anchor for both
          the closed (downward) and expanded (upward, rotated) states — the
-         icon's own box is now genuinely 10x10 and centered on itself, so
-         the default center transform-origin rotate(180deg) already uses
-         pivots around the same visual center the closed state renders at,
-         rather than needing separate offsets per state. The parent
-         trigger's own align-items:center (unchanged) still centers this
-         whole box within the row; this rule only fixes what happens
-         *inside* the box. Shape, size, color, and the rotation transition
-         are all unchanged. */
+         icon's own box is now genuinely centered on itself, so the default
+         center transform-origin rotate(180deg) already pivots around the
+         same visual center the closed state renders at, rather than
+         needing separate offsets per state. The parent trigger's own
+         align-items:center (unchanged) still centers this whole box within
+         the row; this rule only fixes what happens *inside* the box.
+         Caret badge: the wrapper itself is the circular affordance —
+         20x20, fully round, white glyph. Enlarging the wrapper doesn't
+         move its own center: the trigger's own fixed padding/justify-
+         content are unchanged, and rotate(180deg) on a geometrically
+         circular, symmetric box is visually a no-op for the circle itself
+         — only the (non-symmetric) glyph inside visibly rotates, so "must
+         not shift vertically or horizontally" holds by construction, not
+         by extra positioning rules.
+         Color (2026-08-20, corrected same day after manual review): was
+         var(--hanko-fill), this Companion's orange accent — reserved for
+         primary/affirmative actions (Save, Create new profile) elsewhere,
+         so using it here too read as implying the caret was itself such
+         an action rather than a plain disclosure affordance. Now
+         var(--stone) (#8A827A), an existing warm neutral already defined
+         in this file's shared token set — not a new color, and nowhere
+         near the orange family, so it can't be confused with it. Checked
+         against the correct applicable standard for a graphical icon
+         (WCAG 1.4.11 Non-text Contrast, 3:1 — not the 4.5:1 text
+         threshold): white-on-stone is 3.78:1, comfortably clearing it —
+         unaffected by the 2026-08-20 trigger/panel surface reversion
+         below, since this badge carries its own explicit --stone
+         background rather than inheriting the trigger's. --stone itself
+         is 6.88x the luminance of the selector's own (restored) #333333
+         surface (see .pip-ready-selector-trigger's own contrast notes),
+         staying clearly visible against it. */
       .pip-ready-selector-chevron {
         display: inline-flex;
         align-items: center;
         justify-content: center;
         flex-shrink: 0;
-        width: 10px;
-        height: 10px;
-        color: rgba(172, 158, 136, 0.80);
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: var(--stone);
+        color: #FFFFFF;
         transition: transform 0.15s ease;
       }
-      /* Explicit 100%/100% (2026-08-16, same fix) — deterministically pins
-         the glyph itself to the wrapper's own 10x10 box regardless of
-         whatever intrinsic/default replaced-element sizing an unstyled
-         <svg viewBox> would otherwise resolve to, so this pass changes only
-         the icon's vertical position, never its rendered size. display:block
-         avoids the SVG's own inline baseline gap inside the flex box (belt
-         and suspenders alongside align-items:center above). */
+      /* Fixed 10x6 (2026-08-20: was 100%/100% of the old 10x10 wrapper,
+         which would now stretch to fill the new 20x20 badge circle far
+         too large) — the chevron SVG's own intrinsic viewBox ratio
+         (10x6), so the glyph keeps its original visual proportions and
+         weight, simply centered within the larger circular badge via the
+         wrapper's own flex centering above, rather than being resized to
+         match the badge. display:block avoids the SVG's own inline
+         baseline gap inside the flex box (belt and suspenders alongside
+         align-items:center above). */
       .pip-ready-selector-chevron svg {
         display: block;
-        width: 100%;
-        height: 100%;
+        width: 10px;
+        height: 6px;
       }
       .pip-ready-selector-trigger[aria-expanded="true"] .pip-ready-selector-chevron {
         transform: rotate(180deg);
       }
 
       /* Trigger + panel share this positioning context, not .pip-screen-ready
-         itself — anchoring the panel to calc(100% + 8px) of the WRAP's own
-         height (which always equals the trigger's real rendered height,
-         since the panel itself is absolute and doesn't contribute to it)
-         means the panel always sits just below the trigger regardless of
-         how tall the heading/label above it actually render — a fixed
-         pixel offset from the screen's own top would silently break if
-         either ever wrapped to a second line. Reference-matched (Batch 2):
-         260px, centered — not the full card width. */
+         itself. Reference-matched (Batch 2): 260px, centered — not the full
+         card width. */
       .pip-ready-selector-wrap {
         position: relative;
         width: 260px;
@@ -1610,34 +1690,64 @@ export function createMezzoSession({
          buttons, which radiogroup semantics describe honestly and listbox
          semantics don't (a listbox's option children aren't expected to
          contain their own focusable descendants). border/margin/min-width
-         reset the default fieldset chrome; everything else (position,
-         background, scrolling) is unchanged from the pre-Batch-2 panel.
-         Absolutely positioned over the card's own bounds (.pip-screen is
-         already position:relative, overflow:hidden clips this to the 14px
-         radius), so it never affects window height — opening it never
-         calls resizeCompanionTo() or resizeCompanionToContent() (see
-         openSelectorPanel()). Its own row
-         list is the one thing inside it allowed to scroll, capped at
-         max-height:260px regardless of how many profiles exist (up to five
-         saved plus one unsaved) — see MEZZO_COMPANION_READY_BASE_HEIGHT's
-         own comment. */
+         reset the default fieldset chrome. Absolutely positioned over the
+         card's own bounds (.pip-screen is already position:relative,
+         overflow:hidden clips this to the 14px radius), so it never
+         affects window height — opening it never calls
+         resizeCompanionTo() or resizeCompanionToContent() (see
+         openSelectorPanel()).
+         Position and height (2026-08-20 manual-review fix): the "top"
+         value below is only a same-tick-paint fallback —
+         positionSelectorPanel() (see its own comment) always overrides
+         both "top" and "max-height" inline, computed fresh on every open
+         from the trigger's real position and
+         the Companion's real viewport, so the panel can extend above the
+         trigger and stays within the visible Companion regardless of
+         profile count. display:flex/flex-direction:column (new) lays out
+         the legend (absolutely positioned, out of flow, unaffected), the
+         scrollable .pip-ready-selector-rows region, and the stable
+         Create-new-profile footer as a column — only the rows region
+         itself scrolls now (see that class's own comment); the panel
+         element no longer scrolls its entire content as one block the way
+         it used to at a flat max-height:260px. */
       .pip-ready-selector-panel {
         position: absolute;
         left: 0;
         right: 0;
         top: calc(100% + 8px);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
         z-index: 30;
-        background: #222222;
+        background: #333333; /* matches .pip-ready-selector-trigger's own (restored) surface — see that rule's comment */
         border: 0;
         margin: 0;
         min-width: 0;
         border-radius: 10px;
         box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
-        max-height: 260px;
-        overflow-y: auto;
-        overflow-x: hidden;
         box-sizing: border-box;
         padding: 6px 0;
+      }
+      /* Scrollable rows region (2026-08-20) — the Unsaved/Saved groups
+         only; Create new profile (a sibling of this element, appended
+         directly to .pip-ready-selector-panel — see renderSelectorPanel())
+         is deliberately outside it, so it can never be scrolled out of
+         view or clipped: min-height:0 is what actually lets a flex child
+         shrink below its own content size in the first place (the flex
+         default is content-driven, which would otherwise let this region
+         push the footer below it right out of the panel instead of
+         yielding scroll space to it). flex:1 1 auto claims whatever space
+         the panel's own JS-computed max-height leaves after the footer's
+         own fixed size. overflow-y:auto only engages when the rows
+         genuinely don't fit — positionSelectorPanel() sizes the panel
+         itself to its natural content height whenever that fits inside
+         the usable viewport, so scrolling here is the exception, not the
+         default. */
+      .pip-ready-selector-rows {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        overflow-x: hidden;
       }
       /* The <fieldset>'s <legend> — provides its one accessible name
          ("Speaking profiles"), same string the old aria-label carried.
@@ -1670,19 +1780,37 @@ export function createMezzoSession({
         height: 1px;
         background: rgba(255, 255, 255, 0.08);
         margin: 6px 10px;
+        /* Only meaningful for the footer divider — the one direct flex
+           child of .pip-ready-selector-panel's own flex column (the other
+           usage, between the Unsaved/Saved groups, lives inside
+           .pip-ready-selector-rows' own block flow, where flex-shrink is
+           simply inert). Guarantees it never shrinks away if the panel's
+           own JS-computed height is ever genuinely tight. */
+        flex-shrink: 0;
       }
       /* Create new profile — persistent selector-panel footer action
          (2026-08-18, moved here from the retired Ready-level contextual
          link). A plain, full-width text button reusing the row's own
          padding rhythm (8px 14px) rather than a filled pill — "visually
-         separated... without becoming a large marketing-style button." The
-         --hanko-fill accent color (already used for this Companion's own
-         affirmative/creation actions elsewhere) is what distinguishes it
-         from a plain profile row at a glance, not size or a filled
-         background. Sentence case in the DOM (not forced uppercase via
-         CSS, unlike .pip-ready-contextual-link/.pip-text-btn's own
-         treatment) — this reads as a persistent list action, not a
-         secondary link. */
+         separated... without becoming a large marketing-style button."
+         Sentence case in the DOM (not forced uppercase via CSS, unlike
+         .pip-ready-contextual-link/.pip-text-btn's own treatment) — this
+         reads as a persistent list action, not a secondary link.
+         Color (2026-08-20, part of the #333333 surface restoration): plain
+         var(--hanko-fill) (#C4593A), fine as a foreground everywhere else
+         it's used (paired with light text ON it as a button fill, or
+         against the lighter #3c3b3f screen surface), only reaches 2.91:1
+         used bare as TEXT here against this panel's #333333 — well under
+         the 4.5:1 normal-text minimum, and it gets worse, not better, on
+         :hover/:focus-visible (3.76:1) since their own lighter background
+         narrows the gap further. #DC9C89 is the same hue/saturation
+         (13.5°, 54%) lightened just enough to clear AA in every state this
+         button renders in: 5.51:1 at rest, 4.58:1 on :hover/:focus-visible
+         — not a new accent, the existing hanko hue tuned for legibility as
+         foreground-on-dark rather than as a fill. Reused by
+         .pip-ready-selector-row-check and both focus outlines below for
+         the same reason, so every hanko-as-foreground use in this panel
+         reads as one consistent shade. */
       .pip-ready-selector-footer-action {
         display: block;
         width: 100%;
@@ -1693,15 +1821,16 @@ export function createMezzoSession({
         font-family: var(--font-body);
         font-size: 12.5px;
         font-weight: var(--weight-medium);
-        color: var(--hanko-fill);
+        color: #DC9C89;
         text-align: center;
         cursor: pointer;
+        flex-shrink: 0; /* stays a stable footer, never squeezed by the rows region above it — see .pip-ready-selector-rows' own comment */
       }
       .pip-ready-selector-footer-action:hover {
         background: rgba(255, 255, 255, 0.06);
       }
       .pip-ready-selector-footer-action:focus-visible {
-        outline: 2px solid var(--hanko-fill);
+        outline: 2px solid #DC9C89; /* see .pip-ready-selector-footer-action's own color comment */
         outline-offset: -2px;
         background: rgba(255, 255, 255, 0.06);
       }
@@ -1764,9 +1893,14 @@ export function createMezzoSession({
       .pip-ready-selector-row-radio:checked ~ .pip-ready-selector-row-label .pip-ready-selector-row-name {
         font-weight: var(--weight-medium);
       }
+      /* Color (2026-08-20): #DC9C89, not var(--hanko-fill) — same reason
+         and same value as .pip-ready-selector-footer-action's own color
+         comment (bare hanko-fill only reaches 2.91:1 as foreground against
+         this panel's #333333, under the 3:1 icon minimum this checkmark
+         needs). */
       .pip-ready-selector-row-check {
         flex-shrink: 0;
-        color: var(--hanko-fill);
+        color: #DC9C89;
         visibility: hidden;
       }
       .pip-ready-selector-row-radio:checked ~ .pip-ready-selector-row-label .pip-ready-selector-row-check {
@@ -1774,9 +1908,13 @@ export function createMezzoSession({
       }
       /* Redirects the hidden radio's own focus ring onto the visible label
          — outline, not a background/color-only change, so the indicator
-         itself also survives forced-colors/high-contrast presentation. */
+         itself also survives forced-colors/high-contrast presentation.
+         #DC9C89 (2026-08-20), not var(--hanko-fill) — see
+         .pip-ready-selector-footer-action's own color comment; a focus
+         indicator needs 3:1 against its surroundings and bare hanko-fill
+         only reaches 2.91:1 here. */
       .pip-ready-selector-row-radio:focus-visible ~ .pip-ready-selector-row-label {
-        outline: 2px solid var(--hanko-fill);
+        outline: 2px solid #DC9C89;
         outline-offset: 2px;
         border-radius: 4px;
       }
@@ -1793,7 +1931,17 @@ export function createMezzoSession({
          radio+label, never nested inside either — selecting a row can
          never accidentally activate it, and activating it can never check
          the radio (see handleSelectorRowChange() / the row action's own
-         click handler, both unchanged from before Batch 2). */
+         click handler, both unchanged from before Batch 2).
+         Idle color alpha (2026-08-20: 0.55 -> 0.75): this icon is visible
+         (opacity:1) whenever its row is hovered, even before the icon
+         itself is hovered/focused — at 0.55 against the row's own hover
+         tint on #333333, it measured 2.34:1, under the 3:1 minimum for a
+         meaningful icon (this pre-dates the #57524A surface — it measured
+         2.67:1 against the original #222222 too, already a shortfall, so
+         it's fixed here as part of this same contrast audit rather than
+         left in place). 0.75 clears it at 3.09:1 in that same idle-visible
+         state. Its own :hover/:focus-visible color below is unchanged and
+         was already passing (6.25-5.58:1). */
       .pip-ready-selector-row-action {
         flex-shrink: 0;
         display: flex;
@@ -1805,7 +1953,7 @@ export function createMezzoSession({
         border: none;
         border-radius: 6px;
         padding: 0;
-        color: rgba(172, 158, 136, 0.55);
+        color: rgba(172, 158, 136, 0.75);
         cursor: pointer;
         opacity: 0;
         transition: opacity 0.15s ease, color 0.12s ease, background 0.12s ease;
@@ -2088,53 +2236,70 @@ export function createMezzoSession({
         gap: 14px;
         text-align: center;
       }
-      /* ── Inset modal-card treatment (2026-08-17 pass) — both
-         post-calibration result variants and the naming flow (M2/M2a) now
-         present their content inside an inset modal-style card floating
-         within the Companion's own regular #3c3b3f screen surface,
-         instead of the #222222 modal-surface color filling the entire
-         content area directly (the earlier treatment, kept for Failed/M3/
-         06b, which are deliberately NOT part of this pass — they keep the
-         original full-bleed .pip-screen-decision treatment unchanged, so
-         this overrides only the three screens named here).
+      /* ── Shared inset modal-card system (2026-08-17 pass, extended
+         2026-08-20 to cover every decision/confirmation screen) — every
+         screen that represents a decision outside the normal Ready
+         experience (both post-calibration result variants, the naming
+         flow M2/M2a, the five-profile-limit notice M3, and saved-profile
+         delete confirmation 06b) presents its content inside one inset
+         modal-style card floating within the Companion's own regular
+         #3c3b3f screen surface, instead of the #222222 modal-surface color
+         filling the entire content area directly (the pre-2026-08-17
+         treatment). Welcome, Create speaking profile (C1), Calibrating,
+         Calibration Failed, Ready, and Monitoring are deliberately NOT
+         part of this system — they stay full-bleed, unchanged.
          Purely presentational: showOnlyScreen() already hides every other
-         screen outright whenever one of these three is visible (see that
+         screen outright whenever one of these five is visible (see that
          function's own doc comment) — there is no previous Ready/
          calibration screen rendered underneath to leave visible or
          interactive, and no new dialog semantics are introduced (see
          .pip-modal-card's own comment below for why aria-modal/role=dialog
          are deliberately absent).
-         Padding here is the OUTER inset — replacing .pip-screen-decision's
-         own 28px/24px value for just these three screens with a larger
-         one (targeting ~48px of visible outer surface per side, per the
-         approved spec) — that original 28px/24px value moves onto
-         .pip-modal-card itself below, unchanged, so "how much padding
-         surrounds the actual content" hasn't changed overall, only where
-         it now sits (outer inset vs. the card's own inner padding).
+         Padding here is the OUTER inset/gutter — approximately 24px per
+         side (2026-08-20: down from 48px), the approved minimum gutter —
+         .pip-modal-card's own max-width:320px below is what actually caps
+         the card's width at the standard 382px Companion width (382 -
+         2×24 = 334px of available room, wider than the 320px cap, so the
+         cap — not this padding — is what binds there; the 24px figure is
+         a true minimum, not a fixed width-determining value). At a
+         narrower manually-resized window, this same fixed 24px gutter
+         combined with .pip-modal-card's own width:100% lets the card
+         itself shrink to fit rather than clipping.
          justify-content:center and align-items:center (both inherited,
          unchanged from .pip-screen-decision/.pip-screen) still center the
          single .pip-modal-card child within whatever room this padding
-         leaves — real content only ever measures well under 300px tall in
-         practice (see the 382x512 containment tests), so the ~48px target
-         is comfortably met on every side without needing a smaller,
-         responsive fallback value in this fixed-size window. */
+         leaves. */
       .pip-screen-result,
       .pip-screen-m1,
-      .pip-screen-m2 {
-        padding: 48px;
+      .pip-screen-m2,
+      .pip-screen-m3,
+      .pip-screen-delete {
+        padding: 24px;
       }
       /* The inset card itself — reuses .pip-screen's own established
          corner radius, border, and box-shadow elevation values verbatim
          (see that rule above) rather than inventing new ones, per "the
          established modal radius, subtle border, and elevation
-         treatment." #222222 is the same modal-surface literal already
-         used at .pip-ready-selector-trigger/.pip-ready-selector-panel and,
-         before this pass, directly on the result/M1 screens themselves —
-         the WCAG contrast figures already checked and recorded there
-         still apply unchanged (the background value itself didn't
-         change, only which element now carries it: heading 9.36:1 ->
-         13.4:1, body text 4.98:1 -> 6.62:1, Keep/Discard button text
-         against its own fill 5.01:1 -> 6.79:1).
+         treatment." #222222 was also the selector trigger/panel's own
+         surface at one point (see that rule's own comment for its
+         history), but as of the 2026-08-20 restoration the selector
+         settled on the distinct, slightly lighter #333333 — the two are
+         deliberately different surfaces now, not a shared literal to keep
+         in sync. The WCAG contrast figures already checked and recorded
+         for text against this card's own #222222 still apply unchanged:
+         heading 13.4:1, body text 6.62:1, Keep/Discard button text against
+         its own fill 6.79:1.
+         max-width:320px (2026-08-20, alongside the outer padding drop to
+         24px above) is the approved card-width cap — width:100% still
+         lets it shrink below that on anything narrower than
+         320px+2×24px=368px of available room, and box-sizing:border-box
+         (below) keeps this screen's own internal padding counted inside
+         that 320px rather than added on top of it. Height is still driven
+         by content, never fixed — no height/min-height/max-height rule
+         exists here or on any screen using this card.
+         Padding (2026-08-20: 48px 32px, up from 28px 24px) is the
+         approved internal spacing — vertical first per the CSS shorthand
+         convention (48px top/bottom, 32px left/right).
          No role="dialog"/aria-modal here: this card is purely a visual
          treatment inside a screen showOnlyScreen() already renders
          exclusively (nothing else is visible underneath to protect
@@ -2145,12 +2310,13 @@ export function createMezzoSession({
          function. */
       .pip-modal-card {
         width: 100%;
+        max-width: 320px;
         box-sizing: border-box;
         display: flex;
         flex-direction: column;
         align-items: center;
         gap: 14px;
-        padding: 28px 24px;
+        padding: 48px 32px;
         background: #222222;
         border-radius: 14px;
         border: 1px solid rgba(255, 255, 255, 0.05);
@@ -2220,35 +2386,39 @@ export function createMezzoSession({
       }
       .pip-decision-secondary-btn:hover { background: rgba(255, 255, 255, 0.12); }
 
-      /* ── Naming flow (M2/M2a) action layout (2026-08-17 pass) — Save now
-         precedes Cancel in DOM/visual/keyboard order (was Cancel, Save),
-         and the pair lays out side by side when there's room, stacked
-         otherwise. flex-wrap, not a media query: this is a fixed 382px-
-         wide Companion window, not a responsively-resized page, so
-         there is no viewport breakpoint to key off of — the actual
-         question is "do these two buttons fit side by side at their own
-         minimum comfortable width," which flex-wrap answers directly from
-         the buttons' own measured size. flex:1 1 100px on each button
-         (below) means: side by side, both grow equally to fill the row
-         (equal width, per the spec) off the same 100px basis; if the row
-         is too narrow for both at once, the second one wraps to its own
-         new line — where, alone on that line, flex-grow:1 has nothing to
-         share with, so it fills that line's own full width instead
-         (Save-above-Cancel, full-width, matching every other stacked
+      /* ── Naming flow (M2/M2a) action layout (2026-08-17 pass; shared
+         with Delete confirmation's own .pip-delete-actions, 2026-08-20) —
+         Save now precedes Cancel in DOM/visual/keyboard order (was Cancel,
+         Save) — Delete/Cancel follow the exact same pattern — and the
+         pair lays out side by side when there's room, stacked otherwise.
+         flex-wrap, not a media query: this is a fixed 382px-wide Companion
+         window, not a responsively-resized page, so there is no viewport
+         breakpoint to key off of — the actual question is "do these two
+         buttons fit side by side at their own minimum comfortable width,"
+         which flex-wrap answers directly from the buttons' own measured
+         size. flex:1 1 100px on each button (below) means: side by side,
+         both grow equally to fill the row (equal width, per the spec) off
+         the same 100px basis; if the row is too narrow for both at once,
+         the second one wraps to its own new line — where, alone on that
+         line, flex-grow:1 has nothing to share with, so it fills that
+         line's own full width instead (Save-above-Cancel or
+         Delete-above-Cancel, full-width, matching every other stacked
          decision button on this screen — no separate stacked-state rule
-         needed). gap stays the same 10px either way. max-width is
-         widened from the shared 230px (still used by every OTHER
+         needed). gap stays the same 10px either way. max-width is widened
+         from the shared 230px (still used by every OTHER
          .pip-decision-actions consumer, unaffected) to 260px here
          specifically, since two ~100px-minimum buttons plus a 10px gap
          need slightly more than 230px to ever actually sit side by side
-         at this Companion width — scoped to .pip-m2-actions alone so nothing
-         else's own 230px cap changes. */
-      .pip-m2-actions {
+         at this Companion width — scoped to this shared selector group
+         alone so nothing else's own 230px cap changes. */
+      .pip-m2-actions,
+      .pip-delete-actions {
         flex-direction: row;
         flex-wrap: wrap;
         max-width: 260px;
       }
-      .pip-m2-actions > button {
+      .pip-m2-actions > button,
+      .pip-delete-actions > button {
         flex: 1 1 100px;
         min-width: 100px;
         width: auto;
@@ -2385,20 +2555,33 @@ export function createMezzoSession({
          interactive content of its own), so it can never cover essential
          controls in any functional sense even though it visually floats
          above them.
-         Surface (2026-08-15 pass): the original near-black capsule
-         (rgba(20,19,21,.92), border-radius:50px) read too similarly to the
-         selector trigger/panel's own #222222 surface — the same dark
-         family, just a touch darker/rounder. Now uses var(--washi) (the
-         warm, light neutral this design system already defines for
-         exactly this kind of "reads as its own distinct surface, not part
-         of the dark UI" role) with var(--ink) text — both existing
-         tokens, no new color introduced — and a modest 10px rounded
-         rectangle (matching .pip-ready-selector-panel's own corner
-         radius) instead of a full capsule. Contrast checked directly:
-         washi-on-ink text is 8.4:1 (WCAG AAA for normal text), and washi
-         itself sits at 8.4:1–12:1 against the dark screen surfaces behind
-         it, so it visibly pops as an overlay without needing a heavy
-         border — a light, subtle ink-toned hairline is enough. */
+         Surface (2026-08-20 pass, supersedes the 2026-08-15 light-washi
+         treatment): the toast now shares #222222 with the modal-card
+         system — a light, warm-neutral toast sitting alongside the
+         selector surface (at the time this pass was made, briefly
+         lightened to #57524A, since restored to #333333 — see
+         .pip-ready-selector-trigger's own comment for that history)
+         reversed the exact problem the 2026-08-15 pass was trying to
+         solve, reading as its own competing surface rather than
+         recognizable, consistent transient feedback. #222222 (with light
+         text and this Companion's own established elevation shadow)
+         reads unambiguously as a notification laid over the regular
+         Companion surface, distinct from both the lighter #3c3b3f screen
+         behind it and the (now darker again) selector — never confusable
+         with a dropdown/selector surface, per the approved spec. Still a modest
+         10px rounded rectangle (matching .pip-ready-selector-panel's own
+         corner radius), never a capsule/pill. Contrast checked directly:
+         the light text below against #222222 is 13.4:1 (the exact figure
+         already recorded for .pip-decision-heading against this same
+         background elsewhere in this file).
+         No border (2026-08-20 manual-review correction): an orange-tinted
+         accent border briefly existed here and read as an unintended
+         warning/alert color rather than neutral transient feedback —
+         removed outright rather than replaced with a different colored
+         border. Separation from the regular Companion surface behind it
+         comes from the #222222 background's own contrast against #3c3b3f
+         plus the existing elevation shadow below; no border of any color
+         is needed on top of that. */
       .pip-toast {
         position: absolute;
         left: 20px;
@@ -2419,15 +2602,49 @@ export function createMezzoSession({
       }
       .pip-toast-card {
         max-width: 100%;
-        background: var(--washi);
-        border: 1px solid rgba(60, 59, 63, 0.14);
+        background: #222222;
         border-radius: 10px;
         padding: 9px 18px;
         font-family: var(--font-body);
         font-size: 12px;
-        color: var(--ink);
+        color: rgba(222, 210, 194, 0.85);
         text-align: center;
         box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+      }
+
+      /* ── Row-action tooltip (2026-08-20) — the compact, dark-surface
+         treatment for the selector panel's own Recalibrate/Delete icon
+         buttons, replacing the slow native title-attribute tooltip.
+         position:fixed, not absolute: escapes the selector panel's own
+         overflow-y:auto/overflow-x:hidden clipping entirely (no ancestor
+         between this element and the viewport sets transform/filter/
+         will-change, which would otherwise contain a fixed-position
+         descendant — confirmed by inspection of every ancestor rule in
+         this file), and is positioned in JS (see positionTooltip()) from
+         the target button's own getBoundingClientRect(), clamped to stay
+         within the real Companion viewport on every side. Same dark
+         #222222 surface as the modal-card/toast system, for one
+         consistent "this is a small piece of transient UI chrome, not
+         page content" family across all three. pointer-events:none (like
+         the toast) — it must never block clicks or pointer movement, and
+         has no interactive content of its own to receive them anyway.
+         Shown/hidden via the shared .hidden utility class (display:none),
+         not opacity — a display:none tooltip is unambiguously absent from
+         layout/hit-testing with no transition to race against a fast
+         mouseleave/blur. */
+      .pip-tooltip {
+        position: fixed;
+        z-index: 50;
+        background: #222222;
+        color: rgba(222, 210, 194, 0.92);
+        font-family: var(--font-body);
+        font-size: 11px;
+        font-weight: var(--weight-medium);
+        padding: 5px 9px;
+        border-radius: 6px;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
+        pointer-events: none;
+        white-space: nowrap;
       }
 
       /* ── Monitoring screen — the shared title bar at top, circle fills
@@ -3393,17 +3610,32 @@ export function createMezzoSession({
     // ── M3 — the five-profile limit. Close-icon-only: no delete/replacement
     //    management inside this screen (see the PRD). ──
     const m3Screen = pipDoc.createElement('div');
-    m3Screen.className = 'pip-screen pip-screen-decision hidden';
+    // pip-screen-m3 (2026-08-20, new — this screen previously had none
+    // beyond the shared pip-screen-decision) — same pattern as
+    // pip-screen-result/-m1/-m2 above: gives the shared modal-card outer-
+    // padding rule (see its own comment) a class to key off for this
+    // screen specifically, and a dedicated test hook.
+    m3Screen.className = 'pip-screen pip-screen-decision pip-screen-m3 hidden';
 
-    const m3Heading = pipDoc.createElement('p');
-    m3Heading.className = 'pip-decision-heading';
+    // Inset modal card (2026-08-20 — extends the 2026-08-17 system to
+    // this screen; see .pip-modal-card's own CSS comment).
+    const m3Card = pipDoc.createElement('div');
+    m3Card.className = 'pip-modal-card';
+    m3Screen.appendChild(m3Card);
+
+    // <h1>, not <p> (2026-08-20) — same reasoning as M2's own heading
+    // above: this is the screen's one meaningful heading, so it gets real
+    // heading semantics and the exact same typography as "Your new
+    // speaking profile is ready" via the shared pip-h1 class.
+    const m3Heading = pipDoc.createElement('h1');
+    m3Heading.className = 'pip-h1 pip-decision-heading';
     m3Heading.textContent = '5 of 5 profiles saved';
-    m3Screen.appendChild(m3Heading);
+    m3Card.appendChild(m3Heading);
 
     const m3Body = pipDoc.createElement('p');
     m3Body.className = 'pip-decision-body';
     m3Body.textContent = 'Delete a saved profile before saving this one.';
-    m3Screen.appendChild(m3Body);
+    m3Card.appendChild(m3Body);
     m3BodyEl = m3Body;
 
     const m3Close = pipDoc.createElement('button');
@@ -3412,7 +3644,7 @@ export function createMezzoSession({
     m3Close.setAttribute('aria-label', 'Close');
     m3Close.innerHTML = CLOSE_ICON_SVG;
     m3Close.addEventListener('click', handleM3Close);
-    m3Screen.appendChild(m3Close);
+    m3Card.appendChild(m3Close);
     layout.appendChild(m3Screen);
     m3ScreenEl = m3Screen;
     m3CloseBtn = m3Close;
@@ -3422,17 +3654,31 @@ export function createMezzoSession({
     //    the PRD), reached from the selector panel's own per-row delete
     //    control (see openDeleteScreen()). ──
     const deleteScreen = pipDoc.createElement('div');
-    deleteScreen.className = 'pip-screen pip-screen-decision hidden';
+    // pip-screen-delete (2026-08-20, new — same reasoning as pip-screen-m3
+    // above).
+    deleteScreen.className = 'pip-screen pip-screen-decision pip-screen-delete hidden';
 
-    const deleteHeading = pipDoc.createElement('p');
-    deleteHeading.className = 'pip-decision-heading';
-    deleteScreen.appendChild(deleteHeading);
+    // Inset modal card (2026-08-20 — extends the 2026-08-17 system to
+    // this screen; see .pip-modal-card's own CSS comment).
+    const deleteCard = pipDoc.createElement('div');
+    deleteCard.className = 'pip-modal-card';
+    deleteScreen.appendChild(deleteCard);
+
+    // <h1>, not <p> (2026-08-20) — carries the live "Delete "{name}"?" text
+    // (set in openDeleteScreen()) — same shared pip-h1 typography as every
+    // other modal heading; the profile name interpolated into it wraps
+    // safely via pip-decision-heading's own max-width:260px + this card's
+    // overflow-wrap-anywhere buttons below (long names were already
+    // exercised by this screen's own existing tests).
+    const deleteHeading = pipDoc.createElement('h1');
+    deleteHeading.className = 'pip-h1 pip-decision-heading';
+    deleteCard.appendChild(deleteHeading);
     deleteHeadingEl = deleteHeading;
 
     const deleteBody = pipDoc.createElement('p');
     deleteBody.className = 'pip-decision-body';
     deleteBody.textContent = "This permanently removes the saved speaking profile. This can't be undone.";
-    deleteScreen.appendChild(deleteBody);
+    deleteCard.appendChild(deleteBody);
 
     // Inline failure copy — same convention as M2's own m2WarningEl (hidden
     // by default, aria-live="polite", shown/hidden via handleDeleteConfirm()'s
@@ -3443,19 +3689,18 @@ export function createMezzoSession({
     deleteError.className = 'pip-decision-warning hidden';
     deleteError.id = 'delete-error';
     deleteError.setAttribute('aria-live', 'polite');
-    deleteScreen.appendChild(deleteError);
+    deleteCard.appendChild(deleteError);
     deleteErrorEl = deleteError;
 
+    // pip-delete-actions (2026-08-20, new modifier alongside the shared
+    // pip-decision-actions base — reuses the exact row/stack mechanism
+    // .pip-m2-actions already established, via a shared selector group
+    // rather than a duplicated rule; see that rule's own CSS comment).
+    // Delete first, Cancel second, in DOM order — matches the required
+    // visual/keyboard order directly, no separate reordering step needed
+    // anywhere else (mirrors M2's own Save-before-Cancel order above).
     const deleteActions = pipDoc.createElement('div');
-    deleteActions.className = 'pip-decision-actions';
-
-    const deleteCancel = pipDoc.createElement('button');
-    deleteCancel.type = 'button';
-    deleteCancel.className = 'pip-decision-secondary-btn';
-    deleteCancel.textContent = 'Cancel';
-    deleteCancel.addEventListener('click', handleDeleteCancel);
-    deleteActions.appendChild(deleteCancel);
-    deleteCancelBtn = deleteCancel;
+    deleteActions.className = 'pip-decision-actions pip-delete-actions';
 
     const deleteConfirmBtnEl = pipDoc.createElement('button');
     deleteConfirmBtnEl.type = 'button';
@@ -3465,7 +3710,15 @@ export function createMezzoSession({
     deleteActions.appendChild(deleteConfirmBtnEl);
     deleteConfirmBtn = deleteConfirmBtnEl;
 
-    deleteScreen.appendChild(deleteActions);
+    const deleteCancel = pipDoc.createElement('button');
+    deleteCancel.type = 'button';
+    deleteCancel.className = 'pip-decision-secondary-btn';
+    deleteCancel.textContent = 'Cancel';
+    deleteCancel.addEventListener('click', handleDeleteCancel);
+    deleteActions.appendChild(deleteCancel);
+    deleteCancelBtn = deleteCancel;
+
+    deleteCard.appendChild(deleteActions);
     layout.appendChild(deleteScreen);
     deleteScreenEl = deleteScreen;
 
@@ -3482,6 +3735,23 @@ export function createMezzoSession({
     layout.appendChild(toast);
     toastEl = toast;
     toastCardEl = toastCard;
+
+    // ── Row-action tooltip (2026-08-20) — a single shared element, same
+    //    sibling-of-every-screen pattern as the toast just above (see
+    //    showTooltipFor()/hideTooltip()). role="tooltip", not aria-live:
+    //    it's connected to its owning button via aria-describedby (set per
+    //    button in buildSelectorRow()), the standard accessible pattern for
+    //    a tooltip — not an independent announcement. position:fixed (see
+    //    its own CSS) means this never needs to live inside the selector
+    //    panel's own scrolling container to stay near a row's button; a
+    //    sibling of every .pip-screen keeps it un-clipped by the panel's
+    //    overflow-y/overflow-x regardless of scroll position. ──
+    const tooltip = pipDoc.createElement('div');
+    tooltip.className = 'pip-tooltip hidden';
+    tooltip.id = 'pip-row-tooltip';
+    tooltip.setAttribute('role', 'tooltip');
+    layout.appendChild(tooltip);
+    tooltipEl = tooltip;
 
     // ── Monitoring screen (Expanded + Compact share this one DOM tree —
     //    see the [data-layout] CSS above for what each hides/shows) ──
@@ -3661,6 +3931,11 @@ export function createMezzoSession({
    *  transition passes through, so that cleanup can't be missed by a
    *  handler that forgets to do it. */
   function showOnlyScreen(screenEl) {
+    // Row-action tooltip (2026-08-20): every screen transition dismisses
+    // it — the one chokepoint every transition already passes through, so
+    // this covers every origin (Recalibrate, Delete, a naming/limit
+    // decision resolving, Stop, and so on) without a per-caller hook.
+    hideTooltip();
     [
       welcomeScreenEl, c1ScreenEl, c0ScreenEl, readyScreenEl, calibratingScreenEl, creatingScreenEl,
       failedScreenEl, m1ScreenEl, resultScreenEl, m2ScreenEl, m3ScreenEl, deleteScreenEl, monitoringScreenEl,
@@ -3891,10 +4166,53 @@ export function createMezzoSession({
     else openSelectorPanel();
   }
 
+  /** Positions and height-caps the expanded selector panel — called from
+   *  openSelectorPanel() after the panel is rendered and unhidden, on
+   *  every open. See SELECTOR_PANEL_SAFE_MARGIN_PX's own comment for why
+   *  this replaced the old flat `top: calc(100% + 8px)` offset (reported:
+   *  the panel could extend past the Companion's own visible bottom edge
+   *  once enough rows existed).
+   *
+   *  Centers the panel within the usable Companion viewport — the real
+   *  window height minus a safe margin on each side — rather than
+   *  anchoring it just below the trigger; this is what lets it extend
+   *  upward past the trigger when centering calls for it, and keeps it
+   *  fully inside the Companion at every reachable profile count (up to
+   *  the full 1 Temporary + 5 saved + Create new profile) without ever
+   *  resizing the Companion window itself — opening the panel still never
+   *  calls resizeCompanionTo()/resizeCompanionToContent(), unchanged (see
+   *  openSelectorPanel()'s own comment on that).
+   *
+   *  Two inline styles only — `top` and `max-height` — both reset by
+   *  closeSelectorPanel() so a later open never inherits a stale value
+   *  computed for a different profile count or window size. max-height is
+   *  cleared and re-measured (via scrollHeight) on every call, specifically
+   *  so a later open with fewer rows — or a taller real window — isn't
+   *  silently capped by a stale value left over from a larger one. */
+  function positionSelectorPanel() {
+    if (!readySelectorPanelEl || !pipWindow) return;
+    const wrap = readySelectorPanelEl.parentElement;
+    if (!wrap) return;
+
+    const viewportHeight = pipWindow.innerHeight;
+    const usableTop = SELECTOR_PANEL_SAFE_MARGIN_PX;
+    const usableHeight = Math.max(0, viewportHeight - SELECTOR_PANEL_SAFE_MARGIN_PX * 2);
+
+    readySelectorPanelEl.style.maxHeight = '';
+    const naturalHeight = readySelectorPanelEl.scrollHeight;
+    const panelHeight = Math.min(naturalHeight, usableHeight);
+    readySelectorPanelEl.style.maxHeight = `${panelHeight}px`;
+
+    const wrapTop = wrap.getBoundingClientRect().top;
+    const desiredViewportTop = usableTop + (usableHeight - panelHeight) / 2;
+    readySelectorPanelEl.style.top = `${desiredViewportTop - wrapTop}px`;
+  }
+
   function openSelectorPanel() {
     if (!readySelectorPanelEl || !readySelectorTriggerEl || !pipDocument) return;
     renderSelectorPanel();
     readySelectorPanelEl.classList.remove('hidden');
+    positionSelectorPanel();
     readySelectorTriggerEl.setAttribute('aria-expanded', 'true');
     selectorExpanded = true;
     pipDocument.addEventListener('click', handleSelectorOutsideClick, true);
@@ -3906,9 +4224,28 @@ export function createMezzoSession({
     // screen already uses (see showM1Screen() etc.) — one frame for the
     // browser to register the just-unhidden radio as focusable before
     // focusing it.
+    //
+    // Confirmed lifecycle race (2026-08-20 fix): this rAF callback used to
+    // assign focus unconditionally, racing anything that focuses a row
+    // action immediately after the panel becomes visible — a fast keyboard
+    // user, or any caller — since a rAF scheduled here fires on the *next*
+    // paint, strictly after the synchronous click handler that scheduled
+    // it returns, but not necessarily after that caller's own next action.
+    // When this rAF lost that race, it silently stole focus back to a
+    // radio, firing blur on whatever had just been focused — which, for a
+    // row-action icon, drove hideTooltip() via its own (otherwise entirely
+    // correct) blur handler and hid a tooltip that had only just legitimately
+    // appeared. Reproduced directly (instrumented focus/blur logging, no
+    // artificial delay): 4 of 5 raw attempts. Guard: only move focus if it's
+    // still where opening the panel left it (the trigger, or nothing inside
+    // the panel yet) — if it has already moved to something inside the
+    // panel by the time this fires, the original goal ("don't strand focus
+    // on the trigger") is already satisfied, and overriding it is exactly
+    // the race above.
     requestAnimationFrame(() => {
       const radios = readySelectorPanelEl?.querySelectorAll('input[type="radio"]');
       if (!radios || radios.length === 0) return;
+      if (readySelectorPanelEl?.contains(pipDocument?.activeElement)) return;
       const checked = readySelectorPanelEl.querySelector('input[type="radio"]:checked');
       (checked || radios[0]).focus();
     });
@@ -3917,9 +4254,29 @@ export function createMezzoSession({
   function closeSelectorPanel() {
     selectorExpanded = false;
     readySelectorPanelEl?.classList.add('hidden');
+    // Positioning (2026-08-20): clears the inline top/max-height
+    // positionSelectorPanel() set on open — the collapsed selector reverts
+    // to its plain, non-positioned CSS presentation rather than carrying a
+    // stale computed value forward (which the next open would immediately
+    // overwrite anyway, but leaving it in place between opens is exactly
+    // the "stale positioning left behind" this reset avoids). No separate
+    // scroll-position reset is needed: renderSelectorPanel() rebuilds
+    // .pip-ready-selector-rows from scratch on every open (innerHTML='',
+    // a fresh element each time), so stale scroll offset can't survive a
+    // close/reopen cycle in the first place.
+    if (readySelectorPanelEl) {
+      readySelectorPanelEl.style.top = '';
+      readySelectorPanelEl.style.maxHeight = '';
+    }
     readySelectorTriggerEl?.setAttribute('aria-expanded', 'false');
     pipDocument?.removeEventListener('click', handleSelectorOutsideClick, true);
     pipDocument?.removeEventListener('keydown', handleSelectorKeydown, true);
+    // Row-action tooltip (2026-08-20): the panel closing (Escape, an
+    // outside click, or a row selection — every path already funnels
+    // through this one function) always removes the row buttons it was
+    // pointing at from view, so dismiss it here rather than leaving it to
+    // whichever dismissal trigger happens to fire next.
+    hideTooltip();
   }
 
   function handleSelectorOutsideClick(event) {
@@ -3950,6 +4307,18 @@ export function createMezzoSession({
     selectorLegend.className = 'pip-ready-selector-legend';
     selectorLegend.textContent = 'Speaking profiles';
     readySelectorPanelEl.appendChild(selectorLegend);
+
+    // Rows region (2026-08-20) — a dedicated scrollable container for just
+    // the Unsaved/Saved groups, separate from the panel element itself.
+    // Create new profile (below) is a sibling of this div, not a child of
+    // it, so it stays a stable, always-visible footer even when the rows
+    // region itself needs to scroll — see positionSelectorPanel()'s own
+    // comment for why the panel as a whole no longer scrolls its entire
+    // content as one block the way it used to.
+    const rowsContainer = pipDocument.createElement('div');
+    rowsContainer.className = 'pip-ready-selector-rows';
+    readySelectorPanelEl.appendChild(rowsContainer);
+
     const saved = getSavedProfiles();
 
     // Each section is its own role="group" + aria-labelledby, pointing at
@@ -3986,12 +4355,12 @@ export function createMezzoSession({
       note.textContent = 'Disappears when you close Mezzo';
       unsavedGroup.appendChild(note);
 
-      readySelectorPanelEl.appendChild(unsavedGroup);
+      rowsContainer.appendChild(unsavedGroup);
 
       if (saved.length > 0) {
         const divider = pipDocument.createElement('div');
         divider.className = 'pip-ready-selector-divider';
-        readySelectorPanelEl.appendChild(divider);
+        rowsContainer.appendChild(divider);
       }
     }
 
@@ -4016,7 +4385,7 @@ export function createMezzoSession({
         }));
       });
 
-      readySelectorPanelEl.appendChild(savedGroup);
+      rowsContainer.appendChild(savedGroup);
     }
 
     // Create new profile — persistent footer action (2026-08-18), moved
@@ -4102,18 +4471,57 @@ export function createMezzoSession({
 
     row.appendChild(rowLabel);
 
+    // Custom tooltip wiring (2026-08-20), shared by both row-action icons
+    // below — replaces the recalibrate icon's old native title attribute
+    // outright (a native tooltip left in place alongside this one would
+    // show twice, at two different delays — see .pip-tooltip's own CSS
+    // comment) rather than adding a second tooltip mechanism next to it.
+    // aria-describedby, not aria-labelledby: connects the visible tooltip
+    // as an accessible DESCRIPTION without touching the button's own
+    // aria-label, which stays the full "Recalibrate {name}"/"Delete
+    // {name}" accessible name passed in above. Hover shows after
+    // TOOLTIP_HOVER_DELAY_MS (cleared on mouseleave before it fires, so a
+    // quick pass-over never shows it); keyboard focus shows it
+    // immediately, matching how a sighted keyboard user expects to see
+    // what a focused control does without waiting. hideTooltip() itself
+    // guards against a stale target (see its own comment), so a leave/blur
+    // firing for a row no longer current is always safe.
+    function attachRowTooltip(btn, text) {
+      // No aria-describedby set here — see showTooltipFor()/hideTooltip()'s
+      // own comments. Setting it unconditionally at attach time would leave
+      // every row-action button permanently referencing the shared
+      // tooltip, active or not; the relationship must exist only while
+      // this specific button's own tooltip is genuinely showing.
+      btn.addEventListener('mouseenter', () => {
+        if (tooltipShowTimer) clearTimeout(tooltipShowTimer);
+        tooltipShowTimer = setTimeout(() => {
+          tooltipShowTimer = null;
+          showTooltipFor(btn, text);
+        }, TOOLTIP_HOVER_DELAY_MS);
+      });
+      btn.addEventListener('mouseleave', () => {
+        if (tooltipShowTimer) { clearTimeout(tooltipShowTimer); tooltipShowTimer = null; }
+        if (tooltipTargetEl === btn) hideTooltip();
+      });
+      btn.addEventListener('focus', () => {
+        if (tooltipShowTimer) { clearTimeout(tooltipShowTimer); tooltipShowTimer = null; }
+        showTooltipFor(btn, text);
+      });
+      btn.addEventListener('blur', () => {
+        if (tooltipTargetEl === btn) hideTooltip();
+      });
+    }
+
     const recalibrateBtn = pipDocument.createElement('button');
     recalibrateBtn.type = 'button';
     recalibrateBtn.className = 'pip-ready-selector-row-action';
     recalibrateBtn.setAttribute('aria-label', recalibrateLabel);
-    // A visible native tooltip — this glyph (unlike the trash can) has no
-    // universally self-evident meaning, so it gets one; the trash button
-    // is left exactly as it was (no title), unaffected by this addition.
-    recalibrateBtn.title = 'Recalibrate';
     recalibrateBtn.innerHTML = PENCIL_ICON_SVG;
+    attachRowTooltip(recalibrateBtn, 'Recalibrate');
     recalibrateBtn.addEventListener('click', (event) => {
       event.stopPropagation();
       event.preventDefault();
+      hideTooltip();
       onRecalibrate();
     });
     row.appendChild(recalibrateBtn);
@@ -4123,9 +4531,16 @@ export function createMezzoSession({
     actionBtn.className = 'pip-ready-selector-row-action';
     actionBtn.setAttribute('aria-label', actionLabel);
     actionBtn.innerHTML = TRASH_ICON_SVG;
+    // The visible tooltip must describe the action that will actually
+    // occur, same as the accessible name already does: Discard for the
+    // Temporary row (its own aria-label already says "Discard temporary
+    // profile", never a Delete confirmation screen — see onAction above),
+    // Delete for every saved row.
+    attachRowTooltip(actionBtn, isTemporaryProfile(profile) ? 'Discard' : 'Delete');
     actionBtn.addEventListener('click', (event) => {
       event.stopPropagation();
       event.preventDefault();
+      hideTooltip();
       onAction(actionBtn);
     });
     row.appendChild(actionBtn);
@@ -5321,6 +5736,91 @@ export function createMezzoSession({
     }, TOAST_VISIBLE_MS);
   }
 
+  /** Positions the shared tooltip against a specific target button, using
+   *  the Companion window's own real, live viewport (pipWindow.innerWidth/
+   *  innerHeight, not an assumed 382×512 — correct at whatever size the
+   *  window actually is). Prefers directly above the button (rows are
+   *  short and the icon pair sits near the row's own right edge, so above
+   *  is the common, uncluttered direction); flips to below only if there
+   *  genuinely isn't room above, and clamps horizontally so the tooltip
+   *  itself never extends past either viewport edge — both real
+   *  possibilities for a button near the panel's own top edge or the
+   *  window's left/right edges. Called only while the tooltip is already
+   *  unhidden (see showTooltipFor()) — offsetWidth/offsetHeight read 0 on
+   *  a display:none element, which would silently miscompute this. */
+  function positionTooltip(targetEl) {
+    if (!tooltipEl || !pipWindow) return;
+    const margin = 6;
+    const rect = targetEl.getBoundingClientRect();
+    const tooltipWidth = tooltipEl.offsetWidth;
+    const tooltipHeight = tooltipEl.offsetHeight;
+    const viewportWidth = pipWindow.innerWidth;
+    const viewportHeight = pipWindow.innerHeight;
+
+    let left = rect.left + rect.width / 2 - tooltipWidth / 2;
+    left = Math.max(margin, Math.min(left, viewportWidth - tooltipWidth - margin));
+
+    let top = rect.top - tooltipHeight - margin;
+    if (top < margin) top = Math.min(rect.bottom + margin, viewportHeight - tooltipHeight - margin);
+
+    tooltipEl.style.left = `${left}px`;
+    tooltipEl.style.top = `${top}px`;
+  }
+
+  /** Shows the shared tooltip for a specific button with specific text —
+   *  see .pip-tooltip's own CSS comment and buildSelectorRow()'s own
+   *  wiring for when this is actually called (hover, after
+   *  TOOLTIP_HOVER_DELAY_MS; keyboard focus, immediately). Text is set
+   *  before un-hiding so positionTooltip()'s own offsetWidth/offsetHeight
+   *  read the size the tooltip will actually render at, not a stale one
+   *  left over from whichever button last used it.
+   *
+   *  aria-describedby is attached HERE, to targetEl specifically — not at
+   *  buildSelectorRow()'s attach-time — so only the button whose tooltip
+   *  is genuinely showing right now ever references it; every other row
+   *  action stays undescribed. The `tooltipTargetEl && !== targetEl` guard
+   *  is defense-in-depth for switching directly between two triggers
+   *  without an intervening hideTooltip() call (there normally is one —
+   *  mouseleave/blur on the old trigger fires before mouseenter/focus on
+   *  the new one — but this makes the invariant "at most one button is
+   *  ever described by this element" hold unconditionally, not just on
+   *  the common event ordering). */
+  function showTooltipFor(targetEl, text) {
+    if (!tooltipEl) return;
+    if (tooltipTargetEl && tooltipTargetEl !== targetEl) {
+      tooltipTargetEl.removeAttribute('aria-describedby');
+    }
+    tooltipTargetEl = targetEl;
+    tooltipEl.textContent = text;
+    tooltipEl.classList.remove('hidden');
+    targetEl.setAttribute('aria-describedby', 'pip-row-tooltip');
+    positionTooltip(targetEl);
+  }
+
+  /** Hides the shared tooltip unconditionally — safe to call whether or
+   *  not it's currently showing, and whether or not a hover-delay timer is
+   *  still pending (cleared here too, so a mouseleave shortly after
+   *  mouseenter can't still show it moments later). Called from every
+   *  dismissal trigger the spec requires: pointer leave/blur/Escape (see
+   *  buildSelectorRow()'s own listeners and handleSelectorKeydown()),
+   *  panel close (closeSelectorPanel(), which covers Escape, an outside
+   *  click, and row selection all at once), row-action clicks themselves
+   *  (before whatever they trigger next), and every screen transition
+   *  (showOnlyScreen(), the one chokepoint every transition already
+   *  passes through — see its own doc comment).
+   *
+   *  Removes aria-describedby from whichever button currently holds it
+   *  (the only one that ever can, per showTooltipFor()'s own invariant)
+   *  before forgetting it — leaving the relationship in place on a hidden
+   *  tooltip would let its now-stale text keep surfacing as that button's
+   *  accessible description even though nothing is visibly shown. */
+  function hideTooltip() {
+    if (tooltipShowTimer) { clearTimeout(tooltipShowTimer); tooltipShowTimer = null; }
+    if (tooltipTargetEl) tooltipTargetEl.removeAttribute('aria-describedby');
+    tooltipTargetEl = null;
+    tooltipEl?.classList.add('hidden');
+  }
+
   function handlePipClose() {
     const wasActive = isMonitoringActive; // capture before teardownMonitoringEngine clears it
     const wasTemporary = isTemporaryProfile(activeProfile);
@@ -5395,6 +5895,9 @@ export function createMezzoSession({
     if (toastHideTimer) { clearTimeout(toastHideTimer); toastHideTimer = null; }
     toastEl = null;
     toastCardEl = null;
+    if (tooltipShowTimer) { clearTimeout(tooltipShowTimer); tooltipShowTimer = null; }
+    tooltipEl = null;
+    tooltipTargetEl = null;
     pendingDeleteProfileId = null;
     monitoringScreenEl = null;
     pipStatusHeadingEl = null;
