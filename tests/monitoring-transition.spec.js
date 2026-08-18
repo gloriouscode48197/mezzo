@@ -75,12 +75,12 @@ test.describe('Companion: calibration -> Ready -> Monitoring -> Ready', () => {
     // Live fake-mic levels actually reach the visualization's status text —
     // not just a screen that's technically un-hidden but never updates.
     const statusHeading = pipPage.locator('.pip-status-heading').first();
-    await expect(statusHeading).toHaveText(/Quiet|Within Range|Approaching End of Range|Outside Range/, { timeout: 5000 });
+    await expect(statusHeading).toHaveText(/Listening|Within range|Approaching end of range|Outside range/, { timeout: 5000 });
 
     // Stop -> straight back to Ready (no forced save prompt) — the
     // Temporary profile stays selected, and the heading is now "next
     // conversation" since monitoring has now actually started once.
-    await pipPage.locator('button:has-text("Stop")').first().click();
+    await pipPage.locator('button:has-text("Stop monitoring")').first().click();
     await expect(monitoringScreen).toBeHidden();
     await expect(readyScreen).toBeVisible();
     await expect(readyScreen.locator('.pip-ready-heading')).toHaveText('Ready for your next conversation');
@@ -127,10 +127,10 @@ test.describe('Companion: calibration -> Ready -> Monitoring -> Ready', () => {
     await expect(page.locator('#dock-status-text')).toHaveText('Monitoring is active');
 
     const statusHeading = pipPage.locator('.pip-status-heading').first();
-    await expect(statusHeading).toHaveText(/Quiet|Within Range|Approaching End of Range|Outside Range/, { timeout: 5000 });
+    await expect(statusHeading).toHaveText(/Listening|Within range|Approaching end of range|Outside range/, { timeout: 5000 });
 
     // Stop -> straight back to Ready with the same saved profile selected.
-    await pipPage.locator('button:has-text("Stop")').first().click();
+    await pipPage.locator('button:has-text("Stop monitoring")').first().click();
     await expect(monitoringScreen).toBeHidden();
     await expect(readyScreen).toBeVisible();
     await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Kitchen');

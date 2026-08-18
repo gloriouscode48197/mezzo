@@ -267,38 +267,44 @@ describe('replaceButtonLabel', () => {
 // =============================================================================
 
 describe('profileMetaText', () => {
-  // Batch 4 (independent corrections): the old "(Unsaved)"/"(Custom)"
-  // parenthetical qualifiers are gone from this label — every profile now
-  // reads as a plain "Profile: {name}" during Monitoring, regardless of
-  // saved/temporary status. That status is still tracked and still governs
-  // real behavior elsewhere (see profiles.js/isTemporaryProfile) — only
-  // this specific label stopped surfacing it.
-  it('reads a plain "Profile: {name}" for a temporary profile — no qualifier', () => {
+  // 2026-08-18 redesign: the leading "Profile: " prefix is gone too — this
+  // now returns just the bare profile name (position/typography on the
+  // Monitoring screen already make clear what it is). Batch 4 (independent
+  // corrections) had already dropped the old "(Unsaved)"/"(Custom)"
+  // parenthetical qualifiers before this; that status is still tracked and
+  // still governs real behavior elsewhere (see profiles.js/isTemporaryProfile)
+  // — only this label stopped surfacing any of it.
+  it('reads the bare name for a temporary profile — no prefix, no qualifier', () => {
     const temp = { name: 'Current speaking range', speakingDb: -30, spreadDb: 4, savedProfileId: null, temporary: true };
-    assert.strictEqual(profileMetaText(temp), 'Profile: Current speaking range');
+    assert.strictEqual(profileMetaText(temp), 'Current speaking range');
   });
 
-  it('reads a plain "Profile: {name}" for a saved profile using the canonical direct shape (id) — no qualifier', () => {
+  it('reads the bare name for a saved profile using the canonical direct shape (id) — no prefix, no qualifier', () => {
     const saved = { id: 'p1', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 1 };
-    assert.strictEqual(profileMetaText(saved), 'Profile: Kitchen');
+    assert.strictEqual(profileMetaText(saved), 'Kitchen');
   });
 
-  it('reads a plain "Profile: {name}" for the older wrapper-reference shape (savedProfileId, no id) too — no production caller produces this anymore', () => {
+  it('reads the bare name for the older wrapper-reference shape (savedProfileId, no id) too — no production caller produces this anymore', () => {
     const legacySelected = { name: 'Coffee Shop', speakingDb: -28, savedProfileId: 'p2' };
-    assert.strictEqual(profileMetaText(legacySelected), 'Profile: Coffee Shop');
+    assert.strictEqual(profileMetaText(legacySelected), 'Coffee Shop');
   });
 
   it('falls back to a neutral name when given no profile at all', () => {
     // This branch is unreachable from any real code path today (every real
     // profile shape carries a name) — it exists only so a missing name is a
     // strange label, not a crash.
-    assert.strictEqual(profileMetaText(null), 'Profile: Unknown Profile');
-    assert.strictEqual(profileMetaText(undefined), 'Profile: Unknown Profile');
+    assert.strictEqual(profileMetaText(null), 'Unknown Profile');
+    assert.strictEqual(profileMetaText(undefined), 'Unknown Profile');
   });
 
   it('an id alongside temporary:true still reads as a plain name — there is no qualifier left for either flag to win priority over', () => {
     const oddCase = { id: 'p1', name: 'Weird', temporary: true };
-    assert.strictEqual(profileMetaText(oddCase), 'Profile: Weird');
+    assert.strictEqual(profileMetaText(oddCase), 'Weird');
+  });
+
+  it('preserves the name exactly as stored — no case transformation of its own (sentence case is a storage-time/authoring convention, not something this function enforces)', () => {
+    const shouty = { id: 'p1', name: 'LOUD ROOM', temporary: false };
+    assert.strictEqual(profileMetaText(shouty), 'LOUD ROOM');
   });
 });
 
@@ -479,22 +485,30 @@ describe('MEZZO_COMPANION_READY_WIDTH / MEZZO_COMPANION_READY_BASE_HEIGHT', () =
 });
 
 // =============================================================================
-// Monitoring sizes — must stay untouched by Batch 2's 382×512 change to the
-// pre-monitoring constants above. A separate object, not merely a separate
-// value that happens to differ today.
+// Monitoring sizes — Expanded is a separate object from the Ready/
+// pre-monitoring constants above, even though the 2026-08-18 redesign gave
+// it the same 382 width (deliberately, so Monitoring no longer stands alone
+// as narrower than every other screen) — the two constants still aren't
+// merged into one, and their heights (480 vs. 512) still differ. Compact is
+// untouched by any of this, still its own separate 220×220 constant.
 // =============================================================================
 
-describe('Monitoring sizes remain unchanged by the Batch 2 pre-monitoring sizing change', () => {
-  it('Expanded is still 290×420', () => {
-    assert.deepStrictEqual(MEZZO_COMPANION_EXPANDED_SIZE, { width: 290, height: 420 });
+describe('Monitoring sizes', () => {
+  it('Expanded is 382×480 (2026-08-18 redesign, was 290×420)', () => {
+    assert.deepStrictEqual(MEZZO_COMPANION_EXPANDED_SIZE, { width: 382, height: 480 });
   });
 
   it('Compact is still 220×220', () => {
     assert.deepStrictEqual(MEZZO_COMPANION_COMPACT_SIZE, { width: 220, height: 220 });
   });
 
-  it('neither Monitoring size equals the Ready/pre-monitoring size', () => {
+  it('Expanded shares its width with the Ready/pre-monitoring constant (382) but is still a distinct object, not merged — heights differ (480 vs. 512)', () => {
+    assert.strictEqual(MEZZO_COMPANION_EXPANDED_SIZE.width, MEZZO_COMPANION_READY_WIDTH);
+    assert.notStrictEqual(MEZZO_COMPANION_EXPANDED_SIZE.height, MEZZO_COMPANION_READY_BASE_HEIGHT);
     assert.notDeepStrictEqual(MEZZO_COMPANION_EXPANDED_SIZE, { width: MEZZO_COMPANION_READY_WIDTH, height: MEZZO_COMPANION_READY_BASE_HEIGHT });
+  });
+
+  it('Compact does not equal the Ready/pre-monitoring size', () => {
     assert.notDeepStrictEqual(MEZZO_COMPANION_COMPACT_SIZE, { width: MEZZO_COMPANION_READY_WIDTH, height: MEZZO_COMPANION_READY_BASE_HEIGHT });
   });
 });

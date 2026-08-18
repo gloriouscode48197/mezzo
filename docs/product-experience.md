@@ -550,19 +550,21 @@ Explains what happened and how to fix it, alongside a schematic illustration poi
 
 Purpose: ambient awareness.
 
-Target size (Expanded): 290×420.
+Target size (Expanded): 382×480 (2026-08-18 redesign — was 290×420; 382 now matches every pre-monitoring screen's own width instead of standing alone as narrower). This is `applyLayoutMode()`'s own Expand target, resized to on an explicit Expand action — manual resizing is otherwise freeform, including at aspect ratios other than 382:480, and never snaps or locks to that ratio.
 
-Monitoring displays:
+The presentation is centered on the same axis Ready's and Calibrating's own heading occupies. Monitoring displays:
 
-* current monitoring state (Quiet / Within Range / Approaching End of Range / Outside Range)
-* selected profile (read only) — when the active profile is unsaved, this line says so explicitly, so the user always knows whether their range is persisted
+* current monitoring state (Listening / Within range / Approaching end of range / Outside range), in the display serif, keeping the same live per-zone color the earlier presentation used
+* selected profile name (read only), set small and low-contrast directly beneath the status, with no "Profile:" label — the position and typography already make clear what it is
 * live visualization
-* Stop
-* Compact
+* a single centered Stop monitoring pill — a quiet, low-contrast pill (the same visual language as every other secondary Companion action), never a large full-width button
+* a Compact toggle — its own icon-only "window chrome" control, permanently anchored in the top-right corner, not part of the Stop control row
 
 Users cannot change profiles, calibrate, or recalibrate while monitoring — all three require stopping first.
 
 Stopping monitoring returns directly to Ready, always — see "Monitoring Lifecycle."
+
+**Responsive behavior below the 382×480 reference** is purely presentational — it never changes which Companion mode (Expanded vs. Compact) is active, only how much of Expanded's own content fits at the window's current real size. As the window is manually resized smaller, content sheds in this order (and reappears in exact reverse order as it grows back): the profile name drops first; the Stop pill then becomes a small icon-only control anchored bottom-left (always visible at that size, unlike Compact's own hover-gated treatment below); the status text drops last, leaving only the visualization, the bottom-left Stop icon, and the top-right Compact toggle. The visualization itself is the only element that ever changes size in response to resizing — type and controls stay fixed. Resized *larger* than 382×480, the visualization's containing area caps at roughly 300×300 and the extra room becomes balanced padding around it, rather than enlarging the circle or any text/control past its normal size.
 
 ---
 
@@ -576,16 +578,19 @@ Welcome, C1, Calibrating, Microphone Access Blocked, Ready, and every profile sa
 
 Compact is an intentional product mode, not a responsive fallback for small windows.
 
-Target size: 220×220.
+Target size: 220×220 — a hard floor for this explicit mode; Compact never presents fuller content just because it happens to be manually resized larger than its own target.
 
 It exists only while monitoring. Its purpose is peripheral awareness.
 
-The Compact Companion removes most interface chrome, keeping only what's essential at a glance. It displays:
+The Compact Companion removes all interface chrome, keeping only what's essential at a glance. At rest it displays only the visualization — even the Stop and Expand controls stay hidden until the pointer hovers the window or either control receives keyboard focus, at which point both fade in (opacity only, never `display`/`visibility` — both remain real, focusable buttons the entire time, so a keyboard user tabbing through the Companion still reaches them). On touch/no-hover devices, both are shown outright rather than left reachable only by an unreliable hover state.
+
+Once revealed, it displays:
 
 * the visualization
-* Stop and Expand controls, as icon-only corner overlays (Stop bottom-left, Expand bottom-right) — no visible text label on either, same restrained treatment as the rest of Compact
+* Stop, bottom-left corner, icon-only
+* Expand, top-right corner, icon-only — deliberately the same corner Expanded's own Compact toggle occupies, so nothing appears to move across the mode switch (Stop keeps the opposite, bottom-left corner in both the shrunk-Expanded responsive tier above and here in Compact itself)
 
-It does not display:
+It does not display, even when the corner controls are revealed:
 
 * a title bar or wordmark — the real Document Picture-in-Picture window chrome is the only title bar, in both Expanded and Compact
 * monitoring status text
@@ -654,7 +659,7 @@ Renaming a saved profile does not exist as a feature yet. If it's ever built, it
 
 # Monitoring States
 
-These are the four awareness states shown while the Companion is Monitoring — distinct from the Companion's own Ready/Monitoring states above, which describe what the Companion is doing rather than how loud the user is.
+These are the four awareness states shown while the Companion is Monitoring — distinct from the Companion's own Ready/Monitoring states above, which describe what the Companion is doing rather than how loud the user is. Display labels (2026-08-18 redesign — sentence case, see `CLAUDE.md`'s Canonical Terminology): Listening, Within range, Approaching end of range, Outside range. The zone-classification logic, thresholds, and visualization behavior these headings describe are unchanged by that relabeling — only the on-screen wording and casing changed.
 
 Monitoring states describe what is happening.
 
@@ -662,9 +667,9 @@ They do not evaluate the user.
 
 They do not prescribe behavior.
 
-## Quiet
+## Listening
 
-The user is not currently speaking, or speech remains below the active speaking threshold.
+The user is not currently speaking, or speech remains below the active speaking threshold. (Display label retired from "Quiet" as of the 2026-08-18 redesign; the underlying zone is unchanged.)
 
 Visual characteristics:
 
@@ -673,11 +678,11 @@ Visual characteristics:
 * minimal propagation
 * quiet reassurance that monitoring is active
 
-Quiet is not a negative state.
+Listening is not a negative state.
 
 ---
 
-## Within Range
+## Within range
 
 The user's speaking volume is within the preferred range.
 
@@ -694,7 +699,7 @@ This state should feel calm and balanced.
 
 ---
 
-## Approaching End of Range
+## Approaching end of range
 
 The user's speaking volume is moving toward the edge of the preferred range.
 
@@ -709,11 +714,11 @@ Purpose:
 
 Provide gentle awareness before stronger visual emphasis becomes necessary.
 
-Approaching End of Range is descriptive, not corrective. It supersedes the older "Approaching Range" label — use the full name consistently.
+Approaching end of range is descriptive, not corrective. It supersedes the older "Approaching Range" label (and, as of the 2026-08-18 redesign, the Title Case "Approaching End of Range" — casing only, same term) — use this exact sentence-case form consistently.
 
 ---
 
-## Outside Range
+## Outside range
 
 The user's speaking volume is outside the preferred range.
 
@@ -732,7 +737,7 @@ Never:
 * pulse aggressively
 * simulate alarms
 
-Outside Range communicates awareness without judgment.
+Outside range communicates awareness without judgment.
 
 ---
 

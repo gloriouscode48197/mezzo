@@ -32,32 +32,51 @@
  * (MEZZO_COMPANION_READY_WIDTH × MEZZO_COMPANION_READY_BASE_HEIGHT) and is
  * always Expanded — there is no Compact variant for any of them. Monitoring
  * is the only screen with two layouts:
- *   - Expanded (MEZZO_COMPANION_EXPANDED_SIZE, 290×420): the live
- *     awareness-state label (Quiet / Within Range / Approaching End of
- *     Range / Outside Range — the most prominent text in the header),
- *     locked profile metadata, the visualization, and a restrained bottom
- *     control bar (Stop, Compact) — never a large full-width Stop
- *     Monitoring button. No in-page title bar — the real Document
- *     Picture-in-Picture window chrome is the only title bar (see
- *     `pipDoc.title` below); every other state uses the same real window
- *     chrome too, with no in-page title bar of its own.
- *   - Compact (MEZZO_COMPANION_COMPACT_SIZE, 220×220): peripheral awareness,
- *     but with the same Stop reachable as Expanded — not session management
- *     beyond that. The visualization (centered, dominant), a Stop control
- *     (bottom-left corner overlay), and an Expand control (bottom-right
- *     corner overlay) are the ONLY persistent content — no wordmark, no
- *     visible status text, no profile metadata. Both corner controls are
- *     icon-only (aria-label carries their accessible name, same as
- *     Expand already did). The awareness-state element stays in the DOM
- *     (visually hidden, still aria-live) so assistive tech keeps hearing
- *     state changes; there is no visible equivalent. Stop in Compact calls
- *     the exact same stopMonitoring() Expanded's Stop does — it returns to
- *     Ready, it does not close the Companion. The native window-close
- *     control remains a separate, always-available way to close the
- *     Companion outright from any state — see handlePipClose, which
- *     already treats any Companion close (native ✕ or programmatic) as
- *     "stop monitoring, keep Mezzo open, layout resets to Expanded for the
- *     next open" rather than a full endSession() teardown.
+ *   - Expanded (MEZZO_COMPANION_EXPANDED_SIZE, 382×480 — 2026-08-18
+ *     redesign, was 290×420; 382 now matches every other screen's own
+ *     width instead of being narrower): the live awareness-state label
+ *     (Listening / Within range / Approaching end of range / Outside
+ *     range — the most prominent text on the screen, centered on the same
+ *     axis Ready's own heading occupies), quiet profile-name text beneath
+ *     it, the visualization, and a single centered low-contrast Stop pill
+ *     — never a large full-width Stop Monitoring button. The Compact
+ *     toggle lives as its own icon-only "window chrome" control in the
+ *     top-right corner, not in the control row with Stop. No in-page
+ *     title bar — the real Document Picture-in-Picture window chrome is
+ *     the only title bar (see `pipDoc.title` below); every other state
+ *     uses the same real window chrome too, with no in-page title bar of
+ *     its own. Below 382×480, purely presentational CSS thresholds
+ *     progressively drop the profile name, then turn the Stop pill into a
+ *     bottom-left icon, then drop the status text — never touching
+ *     `layoutMode` itself; see the Monitoring CSS's own comment for the
+ *     exact breakpoints. Manual resizing is left freeform (no aspect-
+ *     ratio lock, no resizeTo() call in response to a resize event) —
+ *     382×480 is `applyLayoutMode()`'s own Expand target, not an enforced
+ *     ratio.
+ *   - Compact (MEZZO_COMPANION_COMPACT_SIZE, 220×220): peripheral
+ *     awareness, but with the same Stop reachable as Expanded — not
+ *     session management beyond that. The visualization (centered,
+ *     dominant) is the ONLY thing visible at rest — no wordmark, no
+ *     visible status text, no profile metadata, and (2026-08-18 redesign)
+ *     not even the Stop/Expand controls themselves: both fade in only on
+ *     hover or keyboard focus, so the resting window is nothing but the
+ *     visual. Stop sits bottom-left; Expand sits top-right, deliberately
+ *     the same corner Expanded's own Compact toggle occupies, so nothing
+ *     appears to jump when the mode switches. Both are real, always-
+ *     focusable `<button>`s (never focusable-while-invisible — visibility
+ *     is opacity/CSS only, driven by :hover/:focus-within, not
+ *     display/visibility) and both are icon-only (aria-label carries
+ *     their accessible name, same as before). The awareness-state element
+ *     stays in the DOM (visually hidden, still aria-live) so assistive
+ *     tech keeps hearing state changes; there is no visible equivalent.
+ *     Stop in Compact calls the exact same stopMonitoring() Expanded's
+ *     Stop does — it returns to Ready, it does not close the Companion.
+ *     The native window-close control remains a separate, always-
+ *     available way to close the Companion outright from any state — see
+ *     handlePipClose, which already treats any Companion close (native ✕
+ *     or programmatic) as "stop monitoring, keep Mezzo open, layout
+ *     resets to Expanded for the next open" rather than a full
+ *     endSession() teardown.
  *
  * Profile selection, deletion, the 5-profile limit, calibration, and
  * recalibration all happen on the Companion's own Ready screen now — Home
@@ -425,12 +444,19 @@ export function computeReadyContentHeight() {
   return MEZZO_COMPANION_READY_BASE_HEIGHT;
 }
 // Monitoring's own sizes — completely separate from the Ready/pre-monitoring
-// constants above (a different object, never MEZZO_COMPANION_READY_SIZE),
-// and untouched by Batch 2's 382×512 change. Exported, matching the Ready
-// constants' own pattern, so this separation is a directly testable fact
-// (see src/mezzo-session.test.js) rather than something only provable by
-// reading source.
-export const MEZZO_COMPANION_EXPANDED_SIZE = { width: 290, height: 420 };
+// constants above (a different object, never MEZZO_COMPANION_READY_SIZE).
+// Exported, matching the Ready constants' own pattern, so this separation
+// is a directly testable fact (see src/mezzo-session.test.js) rather than
+// something only provable by reading source.
+//
+// 382×480 (2026-08-18 redesign, was 290×420): 382 intentionally matches
+// Batch 2's own 382-wide pre-monitoring content-viewport target
+// (resizeCompanionToContent's 382×512), so Monitoring's Expanded width no
+// longer stands alone as narrower than every other screen. 480 keeps a
+// near-4:5 proportion at that width — a starting point Expand snaps to,
+// not a ratio enforced during manual resize (manual resizing stays
+// freeform; see the Monitoring CSS's own responsive-breakpoint comment).
+export const MEZZO_COMPANION_EXPANDED_SIZE = { width: 382, height: 480 };
 // 220×220 — the intentional Compact footprint: a small, square window built
 // for peripheral awareness, not a shrunk-down Expanded window (was
 // 220×260 — matched against the approved design direction and updated).
@@ -487,23 +513,35 @@ export function dbToMeterFillRatio(db) {
   return Math.min(1, Math.max(0, (db - CALIBRATION_METER_DB_MIN) / (CALIBRATION_METER_DB_MAX - CALIBRATION_METER_DB_MIN)));
 }
 
+// Sentence case (2026-08-18 redesign, was Title Case: "Quiet" / "Within
+// Range" / "Approaching End of Range" / "Outside Range") — an approved
+// wording change from the accepted Monitoring design, not incidental
+// drift. See CLAUDE.md's Canonical Terminology for the current, sole
+// approved four labels; the zone-classification logic these map from is
+// completely unchanged.
 function zoneLabel(zone) {
-  if (zone === 0) return 'Quiet';
-  if (zone === 1) return 'Within Range';
-  if (zone === 2) return 'Approaching End of Range';
-  return 'Outside Range'; // zone === OUTSIDE_ZONE
+  if (zone === 0) return 'Listening';
+  if (zone === 1) return 'Within range';
+  if (zone === 2) return 'Approaching end of range';
+  return 'Outside range'; // zone === OUTSIDE_ZONE
 }
 
-// The Monitoring screen's read-only profile line, e.g. "Profile: Coffee
-// Shop". Batch 4 (independent corrections) removed the old "(Custom)"/
-// "(Unsaved)" parenthetical qualifiers this used to append — saved-vs-
-// unsaved status is still fully tracked in the underlying profile object
-// and still governs real behavior elsewhere (Ready's selector groups,
-// save/replace/delete availability, etc.); this label just no longer
-// surfaces it during Monitoring, which is a quieter, less jargon-y moment
-// than Ready. The name itself remains the one piece of accessibility-
-// relevant information this label exists to convey, and that's preserved
-// exactly as before — only the qualifier is gone.
+// The Monitoring screen's read-only profile line — as of the 2026-08-18
+// redesign, just the profile name itself, e.g. "Coffee Shop", set small
+// and low-contrast beneath the status (see the .pip-profile-info CSS).
+// Batch 4 (independent corrections) had already removed the old
+// "(Custom)"/"(Unsaved)" parenthetical qualifiers this used to append —
+// saved-vs-unsaved status is still fully tracked in the underlying
+// profile object and still governs real behavior elsewhere (Ready's
+// selector groups, save/replace/delete availability, etc.), just never
+// surfaced here. This pass goes one step further and drops the leading
+// "Profile: " prefix too, per the accepted design ("set small and
+// low-contrast under the status — sentence case, since long names are
+// hard to read in caps") — the surrounding status/position/typography
+// already makes clear what this line is; the label no longer needs to
+// say so. The name itself, unmodified from however it was entered/
+// stored, remains the one piece of accessibility-relevant information
+// this exists to convey.
 export function profileMetaText(profile) {
   // A neutral fallback — there is no built-in default profile to fall back
   // to a label for. Every real profile shape reaching this function
@@ -511,8 +549,7 @@ export function profileMetaText(profile) {
   // branch is only reached with `profile` itself missing entirely (e.g.
   // before init() resolves an active profile), never with a real, named
   // profile lacking one.
-  const name = profile?.name || 'Unknown Profile';
-  return `Profile: ${name}`;
+  return profile?.name || 'Unknown Profile';
 }
 
 export function createMezzoSession({
@@ -1335,13 +1372,6 @@ export function createMezzoSession({
         border: 1px solid rgba(255, 255, 255, 0.05);
         box-shadow: 0 24px 56px rgba(0, 0, 0, 0.55), inset 0 0 40px rgba(0, 0, 0, 0.16);
         background: #3c3b3f;
-      }
-      .pip-status-heading {
-        font-family: var(--font-display);
-        font-weight: var(--weight-light);
-        font-size: 15px;
-        color: var(--text-subdued);
-        letter-spacing: 0.04em;
       }
       /* Shared cap for every full-width, single-column pill action in the
          Companion — every full-screen decision state's primary/secondary
@@ -2647,74 +2677,128 @@ export function createMezzoSession({
         white-space: nowrap;
       }
 
-      /* ── Monitoring screen — the shared title bar at top, circle fills
-         the middle and stays the visual hero, restrained bottom control
-         bar. The only screen that ever shows the visualization or the
-         live zone label, and the only screen with two layouts (Expanded /
+      /* ── Monitoring screen (2026-08-18 redesign, superseding the layout
+         comment history below) — the visualization fills the middle and
+         stays the visual hero; status + profile sit above it, centered on
+         the same axis Ready's/Calibrating's own heading occupies; a
+         single quiet Stop pill sits below, centered; the Compact toggle
+         is its own icon-only "window chrome" control, permanently
+         anchored top-right, entirely separate from the Stop control row.
+         The only screen that ever shows the visualization or the live
+         zone label, and the only screen with two layouts (Expanded /
          Compact), driven by [data-layout] on <body> — an explicit state,
-         never inferred from window size. ── */
+         set only by applyLayoutMode()/enterExpandedLayout()/
+         enterCompactLayout(), never inferred from window size. Everything
+         from the responsive breakpoints onward (below the [data-layout]
+         rules) is purely presentational CSS reacting to manual resize
+         *within* whichever mode is already active — none of it calls
+         resizeTo() or touches layoutMode; manual resizing stays
+         completely freeform, including at non-4:5 aspect ratios. ── */
       .pip-screen-monitoring {
         justify-content: flex-start;
         position: relative;
       }
       .pip-monitoring-header {
-        display: none;
+        display: flex;
         flex-direction: column;
         flex-shrink: 0;
         width: 100%;
         box-sizing: border-box;
       }
+      /* Centered on the shared heading axis, with a reserved min-height
+         (76px — matches real rendered metrics at this 17px/12px pairing,
+         two lines of status + one line of profile, plus the block's own
+         gap/padding) so a live status-text-length change (e.g.
+         "Listening" -> "Approaching end of range") never shifts the
+         circle below it. This reserve is about a text-length change at a
+         fixed window size, not about the block's height changing between
+         the responsive tiers further down — that's an intentional resize
+         reaction, not something this guards against. */
       .pip-monitoring-status-block {
         display: flex;
         flex-direction: column;
-        gap: 4px;
-        padding: 14px 24px 0;
+        align-items: center;
+        gap: 8px;
+        padding: 20px 28px 0;
+        min-height: 76px;
+        box-sizing: border-box;
+        text-align: center;
       }
-      /* The awareness state (Quiet / Within Range / Approaching End of
-         Range / Outside Range) is the most prominent text in the header.
-         Shared by Expanded and Compact — Compact repositions rather than
-         duplicates this element. Color is keyed off data-zone, a purely
-         presentational attribute updateHeading() sets alongside the
-         existing textContent assignment — the zone-classification and
-         label-text logic themselves are untouched. */
+      /* The awareness state (Listening / Within range / Approaching end
+         of range / Outside range) is the most prominent text on the
+         screen — display-serif, matching the visual weight of Ready's/
+         Calibrating's own heading (h1.pip-h1/p.pip-h1), but its own
+         smaller 17px size and live per-zone color rather than that
+         shared rule, since h1.pip-h1's single fixed color can't carry a
+         zone color. Shared by Expanded and Compact — Compact visually
+         hides the surrounding status block but keeps this element
+         announcing; see the [data-layout="compact"] rules below. Color
+         is keyed off data-zone, a purely presentational attribute
+         updateHeading() sets alongside the existing textContent
+         assignment — the zone-classification and label-text logic
+         themselves are untouched. The flat opacity:0.6 the accepted
+         design mock used for this label is deliberately NOT adopted here
+         — it would flatten the zone colors below into one washed-out
+         tone, erasing the color-coding that's protected product behavior
+         well outside this pass's scope; only the font metrics are taken
+         from the mock, the existing per-zone colors are kept exactly. */
       .pip-status-heading {
-        font-family: var(--font-body);
-        font-size: 11px;
-        font-weight: var(--weight-medium);
-        color: var(--text-primary);
+        font-family: var(--font-display);
+        font-weight: 300;
+        font-size: 17px;
+        line-height: 115%;
+        letter-spacing: -0.2px;
+        margin: 0;
       }
       .pip-status-heading[data-zone="0"],
       .pip-status-heading[data-zone="1"] { color: var(--zone-quiet-color); }
       .pip-status-heading[data-zone="2"] { color: var(--zone-approaching-color); }
       .pip-status-heading[data-zone="3"] { color: var(--zone-outside-color); }
+      /* The profile name alone (no "Profile:" prefix — see
+         profileMetaText()), sentence case as stored. Small and
+         low-contrast, reusing the same muted warm-cream caption family
+         already used elsewhere in this file (e.g. the Compact corner
+         controls' own resting color below) rather than inventing a new
+         one. */
       .pip-profile-info {
         font-family: var(--font-body);
-        font-size: 9px;
         font-weight: var(--weight-light);
-        color: rgba(222, 210, 194, 0.58);
-        letter-spacing: 0.06em;
+        font-size: 12px;
+        color: rgba(172, 158, 136, 0.65);
+        letter-spacing: 0.02em;
       }
+      /* flex:1 lets this absorb whatever space the header/controls don't
+         use; the max-width/max-height cap plus auto margins are what let
+         a window resized *larger* than the 382×480 Expand target "let the
+         layout breathe" instead of enlarging the circle without bound —
+         the extra room becomes balanced padding on every side (auto
+         margins on a capped flex item absorb leftover main-axis space;
+         margin:0 auto centers it on the cross axis) rather than being
+         dumped below the circle by justify-content alone. Type and chrome
+         never scale with the window at any size — this is the one
+         element that does. */
       .pip-circle-wrapper {
         flex: 1;
         width: 100%;
+        max-width: 300px;
+        max-height: 300px;
+        margin: auto;
         display: flex;
         align-items: center;
         justify-content: center;
         overflow: hidden;
       }
 
-      /* Bottom control bar — shared by Expanded and Compact. Restrained
-         icon+text buttons, never a large full-width primary button; the
-         visualization stays the focal point, controls stay discoverable
-         but visually secondary. No divider above it — the gap alone reads
-         as a separate row without adding extra visual weight. Compact
-         repositions individual buttons as corner overlays rather than
-         using this as a bar — see below. */
+      /* Bottom control row — Stop only. The Compact toggle used to share
+         this row as a second, space-between item; it's now its own
+         permanently-anchored top-right corner control (see
+         .pip-control-btn-compact below) so it reads as window chrome
+         rather than page content, per the accepted design. */
       .pip-monitoring-controls {
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        padding: 12px 20px 16px;
+        justify-content: center;
+        padding: 16px 20px 24px;
         width: 100%;
         box-sizing: border-box;
       }
@@ -2733,47 +2817,67 @@ export function createMezzoSession({
         text-transform: uppercase;
         color: var(--text-subdued);
         cursor: pointer;
-        transition: background 0.15s ease, color 0.15s ease;
+        transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, opacity 0.18s ease;
       }
       .pip-control-btn:hover { background: var(--surface-card); color: var(--text-default); }
-      /* Stop/Compact get their own literal typography/color spec rather than
-         the shared .pip-control-btn defaults above — Expand (Compact-layout
-         only) is intentionally left on the shared defaults, out of scope
-         here. Padding grows well past the shared default's hit-area padding,
-         so the negative margin grows to match, keeping the same resting
-         (non-hover) visual position instead of pushing the row wider. */
-      .pip-control-btn-stop,
-      .pip-control-btn-compact {
-        font-family: var(--font-body);
-        font-size: 10px;
-        font-weight: var(--weight-medium);
-        letter-spacing: 0.10em;
-        color: rgba(172, 158, 136, 0.75);
-        padding: 10px 16px;
-        margin: -10px -16px;
-        border-radius: 6px;
+      /* Stop — a quiet, low-contrast pill adapting the exact recipe
+         .pip-decision-secondary-btn already uses everywhere else in the
+         Companion (translucent white fill, 1px subtle border, fully
+         rounded, muted warm-cream text) rather than inventing new values
+         — "the established Companion button language" the accepted
+         design asks for. Not full-width like that shared class (this
+         row is centered, content-width, not a modal action stack), and
+         explicitly cancels the shared .pip-control-btn reset's uppercase/
+         letter-spacing above, since "Stop monitoring" reads as normal
+         sentence-case text here, not a small caps label. */
+      .pip-control-btn-stop {
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        border-radius: 50px;
+        padding: 10px 20px;
+        margin: 0;
+        font-size: 12.5px;
+        font-weight: var(--weight-regular);
+        letter-spacing: 0.02em;
+        text-transform: none;
+        color: rgba(222, 210, 194, 0.85);
       }
-      /* Background-only affordance — text/icon color (currentColor-driven
-         for the icons) deliberately stays pinned to each button's own
-         resting color on hover, no orange accent. Just omitting color
-         here does NOT mean "unchanged" — the shared .pip-control-btn:hover
-         above still sets it (equal specificity, cascade is per-property,
-         not per-rule), so color is re-declared explicitly, matching each
-         button's own resting value, to actually cancel that out (caught
-         live: hover was still recoloring text/icons even after removing
-         the orange color value, because that same fallback rule filled
-         the gap). Applies to every control button across both Monitoring
-         layouts: Stop/Compact here, Expand below (Compact's own control). */
-      .pip-control-btn-stop:hover,
+      .pip-control-btn-stop:hover {
+        background: rgba(255, 255, 255, 0.12);
+        border-color: rgba(255, 255, 255, 0.22);
+        color: rgba(222, 210, 194, 0.85);
+      }
+      /* Compact toggle — its own icon-only "window chrome" control,
+         permanently anchored top-right regardless of Expanded's current
+         responsive tier (never gated by the width/height breakpoints
+         below), so nothing appears to move when the mode later actually
+         switches to Compact — .pip-control-btn-expand below takes this
+         exact corner then, continuing the same visual position. Hidden
+         outright once already Compact (nothing to toggle to). Resting
+         background/border (2026-08-19 polish pass) reuses the same
+         translucent-white "quiet chip" recipe Stop's own pill already
+         uses (.pip-decision-secondary-btn's family) — every icon-only
+         corner control (this one, and Compact's own Stop/Expand below)
+         now shares it, so all three read as tappable controls at rest,
+         not just on hover. */
+      .pip-control-btn-compact {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        margin: 0;
+        justify-content: center;
+        z-index: 2;
+        color: rgba(172, 158, 136, 0.75);
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.10);
+      }
       .pip-control-btn-compact:hover {
         color: rgba(172, 158, 136, 0.75);
-        background: rgba(0, 0, 0, 0.36);
-        border-radius: 6px;
-      }
-      .pip-control-btn-expand:hover {
-        color: var(--text-subdued);
-        background: rgba(0, 0, 0, 0.36);
-        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.12);
+        border-color: rgba(255, 255, 255, 0.22);
       }
       .pip-control-icon-stop {
         width: 7px;
@@ -2800,38 +2904,92 @@ export function createMezzoSession({
         background: currentColor;
         border-radius: 1px;
       }
-      .pip-control-icon-expand { width: 14px; height: 14px; flex-shrink: 0; }
+      .pip-control-icon-expand { width: 12px; height: 12px; flex-shrink: 0; }
       /* Expand only ever appears in Compact — see the [data-layout] rules
          below, which are what actually reveal it. */
       .pip-control-btn-expand { display: none; }
 
-      /* A responsive fallback for the window being manually resized too
-         small to fit the header reasonably, not for the fixed default size
-         itself — min-width was 300px when MEZZO_COMPANION_EXPANDED_SIZE
-         defaulted to 380px (80px of shrink headroom); left unchanged after
-         that default became 290px, it would have hidden the header outright
-         at the new default and taken the status label/profile text with it
-         (caught live, screenshotting the new default size). Lowered to keep
-         similar headroom below the new default instead. */
-      @media (min-width: 260px) and (min-height: 350px) {
-        .pip-monitoring-header { display: flex; }
+      /* ── Progressive responsive degradation (2026-08-18 redesign) —
+         purely presentational CSS reacting to the Expanded window's own
+         real rendered size, never touching layoutMode/[data-layout]
+         itself. Each rule below only ever hides ITS OWN target — nothing
+         re-declares another rule's property — so the tiers compose
+         cleanly: a window small enough to match several of these at once
+         (e.g. a manually-shrunk near-220×220-but-still-Expanded window)
+         just sheds everything each individual rule says to shed. Every
+         condition is a comma-separated (OR) pair of a width AND a height
+         threshold — deliberately OR, not AND — so a window that's tight
+         in EITHER dimension alone (very short-but-wide, or very
+         narrow-but-tall — manual resizing is freeform, non-4:5 aspect
+         ratios included) still sheds content rather than clipping; a
+         genuinely comfortable window needs to clear both thresholds to
+         keep the fuller presentation. Four tiers, top to bottom as the
+         window shrinks (reappearing in exact reverse order as it grows
+         back): 382×480 reference (full: status, profile, circle, Stop
+         pill, Compact toggle) -> 340×425 (profile drops) -> 300×375
+         (Stop pill becomes a bottom-left icon, always visible here, not
+         hover-gated — that treatment is Compact-only, see below) ->
+         260×325 (status drops too, leaving only the circle, the icon
+         Stop, and the top-right Compact toggle). Each threshold is
+         inclusive of its own named reference point (max-width:340px, not
+         339px) — confirmed against real rendered metrics: a window at
+         exactly one of the design's own reference sizes already shows
+         that tier's shed-down presentation, not the tier above it. ── */
+      @media (max-width: 340px), (max-height: 425px) {
+        .pip-profile-info { display: none; }
+      }
+      @media (max-width: 300px), (max-height: 375px) {
+        .pip-monitoring-controls { padding: 0; }
+        .pip-control-btn-stop {
+          position: absolute;
+          bottom: 10px;
+          left: 10px;
+          width: 28px;
+          height: 28px;
+          padding: 0;
+          margin: 0;
+          justify-content: center;
+          /* Same resting chip background/border as the Compact toggle
+             (2026-08-19 polish pass, was background:none/border:none —
+             read as a bare filled square, not a control) — hover keeps
+             using the shared .pip-control-btn-stop:hover rule above
+             unchanged, which already strengthens this exact family. */
+          background: rgba(255, 255, 255, 0.06);
+          border: 1px solid rgba(255, 255, 255, 0.10);
+          z-index: 2;
+        }
+        .pip-control-btn-stop span:not(.pip-control-icon-stop) { display: none; }
+        .pip-control-btn-stop .pip-control-icon-stop { width: 12px; height: 12px; }
+      }
+      @media (max-width: 260px), (max-height: 325px) {
+        .pip-monitoring-header { display: none; }
       }
 
       /* ── Compact layout — explicit state ([data-layout="compact"]), not
-         a media query. Peripheral awareness, but Stop stays reachable: the
-         visualization (centered, dominant), Stop (bottom-left corner), and
-         Expand (bottom-right corner) are the only persistent content — no
-         in-page title bar either (the real Document PiP window chrome
-         covers that, same as Expanded), and no status text or profile
-         metadata competing for the small space. Stop here is the exact
-         same button/handler as Expanded's Stop, just repositioned and
-         icon-only — it stops monitoring and returns to Ready, it does not
-         close the Companion. The native window-close control remains a
-         separate, always-available way to close the Companion outright
-         (see handlePipClose). The awareness state stays in the DOM and
-         keeps announcing via aria-live for assistive tech; it's just
-         visually hidden, not removed, since there's no visible text status
-         in Compact. ── */
+         a media query, and every rule below is unconditional on the
+         window's actual current size: an already-Compact window keeps
+         this exact presentation even if manually resized larger — Compact
+         is a deliberate mode, never re-inferred back toward Expanded's own
+         look just because it grew. Peripheral awareness, but Stop stays
+         reachable: the visualization (centered, dominant) is the ONLY
+         thing visible at rest — no wordmark, no visible status text, no
+         profile metadata, and (2026-08-18 redesign) not even the Stop/
+         Expand controls themselves: both are opacity-only hidden (never
+         display/visibility — a control must never be focusable while
+         invisible) and fade in on hover or keyboard focus, so the resting
+         window is nothing but the visual. Stop keeps the bottom-left
+         corner it already had in the shrunk-Expanded tier above; Expand
+         takes the top-right corner Expanded's own Compact toggle occupied
+         (decision: preserves visual continuity across the mode switch, at
+         the cost of not matching Stop's own corner side — an explicit,
+         accepted trade-off). Stop here is the exact same button/handler
+         as Expanded's Stop, just repositioned — it stops monitoring and
+         returns to Ready, it does not close the Companion. The native
+         window-close control remains a separate, always-available way to
+         close the Companion outright (see handlePipClose). The awareness
+         state stays in the DOM and keeps announcing via aria-live for
+         assistive tech; it's just visually hidden, not removed, since
+         there's no visible text status in Compact. ── */
       /* Compact's card is smaller-radius, single-layer shadow (no inset
          glow) — its own distinct treatment, not just a scaled-down Ready/
          Monitoring card. */
@@ -2847,6 +3005,7 @@ export function createMezzoSession({
          keep announcing via aria-live; see below. */
       body[data-layout="compact"] .pip-monitoring-status-block {
         padding: 0;
+        min-height: 0;
       }
       body[data-layout="compact"] .pip-profile-info {
         display: none;
@@ -2874,48 +3033,96 @@ export function createMezzoSession({
          hidden below; aria-label already carries the accessible name, same
          as Expand). Same stopMonitoring() click handler as Expanded's Stop
          — this is that exact button repositioned, not a second one — so it
-         returns to Ready, it does not close the Companion. */
+         returns to Ready, it does not close the Companion. Higher
+         specificity than the plain shrunk-Expanded-tier rule above (this
+         selector adds the [data-layout="compact"] attribute), so it always
+         wins wherever both could apply, and keeps applying even if this
+         particular Compact window is manually resized past 299×374 — the
+         shrunk-Expanded rule above is purely size-gated and wouldn't fire
+         there, but this one isn't. */
       body[data-layout="compact"] .pip-control-btn-stop {
         display: flex;
         position: absolute;
-        bottom: 8px;
-        left: 8px;
+        bottom: 10px;
+        left: 10px;
+        width: 28px;
+        height: 28px;
+        padding: 0;
         margin: 0;
-        padding: 12px;
+        justify-content: center;
         border-radius: 6px;
         z-index: 2;
         color: rgba(172, 158, 136, 0.82);
+        /* Same resting chip background/border every other corner control
+           now shares (2026-08-19 polish pass, was background:none/
+           border:none — read as a bare filled square, not a control). */
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        opacity: 0;
       }
       body[data-layout="compact"] .pip-control-btn-stop span:not(.pip-control-icon-stop) {
         display: none;
       }
-      body[data-layout="compact"] .pip-control-icon-stop {
+      body[data-layout="compact"] .pip-control-btn-stop .pip-control-icon-stop {
         width: 12px;
         height: 12px;
       }
       body[data-layout="compact"] .pip-control-btn-expand {
         display: flex;
         position: absolute;
-        bottom: 8px;
-        right: 8px;
+        top: 10px;
+        right: 10px;
+        width: 28px;
+        height: 28px;
+        padding: 0;
         margin: 0;
-        padding: 12px;
+        justify-content: center;
         border-radius: 6px;
         z-index: 2;
         color: rgba(172, 158, 136, 0.82);
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        opacity: 0;
       }
-      /* Hover stays background-only here too, same as Expanded — see the
-         approved correction above (.pip-control-btn-stop:hover etc.):
-         icon color is deliberately pinned to Compact's own default (0.82,
-         not Monitoring's 0.75) rather than left to fall through to any
-         other rule, so it visibly does NOT change on hover. Scoped with
+      /* Hover strengthens the same translucent-white chip family every
+         corner control now rests on (2026-08-19 polish pass — was a flat
+         black rgba(0,0,0,0.36), independent of any resting background;
+         now a lighter/stronger version of the resting chip, matching
+         Stop's own pill hover exactly) — see the correction this comment
+         already carried: icon *color* is still deliberately pinned to
+         Compact's own default (0.82, not Monitoring's 0.85) rather than
+         left to fall through to any other rule, so it visibly does NOT
+         change on hover; only background/border strengthen. Scoped with
          [data-layout="compact"] so it doesn't affect Monitoring's own
-         hover color. */
+         hover treatment. */
       body[data-layout="compact"] .pip-control-btn-stop:hover,
       body[data-layout="compact"] .pip-control-btn-expand:hover {
         color: rgba(172, 158, 136, 0.82);
-        background: rgba(0, 0, 0, 0.36);
+        background: rgba(255, 255, 255, 0.12);
+        border-color: rgba(255, 255, 255, 0.22);
         border-radius: 6px;
+      }
+      /* Hover/keyboard-focus reveal — the only way either control ever
+         becomes visible at rest. opacity only (never display/visibility),
+         so both stay real, always-focusable <button>s the whole time; a
+         control is never focusable while invisible, it's just visually
+         transparent until revealed. :focus-within on the card (not just
+         :focus-visible on each button) means tabbing to EITHER control
+         reveals BOTH, matching :hover's own reveal-both behavior. */
+      body[data-layout="compact"] .pip-screen-monitoring:hover .pip-control-btn-stop,
+      body[data-layout="compact"] .pip-screen-monitoring:hover .pip-control-btn-expand,
+      body[data-layout="compact"] .pip-screen-monitoring:focus-within .pip-control-btn-stop,
+      body[data-layout="compact"] .pip-screen-monitoring:focus-within .pip-control-btn-expand {
+        opacity: 1;
+      }
+      /* Touch/no-hover environments have no reliable :hover to reveal
+         these controls at all — force them visible outright there rather
+         than leaving them reachable only by keyboard focus. */
+      @media (hover: none) {
+        body[data-layout="compact"] .pip-control-btn-stop,
+        body[data-layout="compact"] .pip-control-btn-expand {
+          opacity: 1;
+        }
       }
     `;
     pipDoc.head.appendChild(style);
@@ -3758,6 +3965,23 @@ export function createMezzoSession({
     const monitoringScreen = pipDoc.createElement('div');
     monitoringScreen.className = 'pip-screen pip-screen-monitoring hidden';
 
+    // Compact toggle — appended first (2026-08-18 redesign): a permanent
+    // top-right "window chrome" control, no longer part of the bottom
+    // control row, icon-only from the start (no text label to hide/show
+    // at any tier — see the CSS). aria-label is required here (added in
+    // this same pass) since, unlike before, there's no visible text
+    // content left to fall back on for its accessible name.
+    const compactBtn = pipDoc.createElement('button');
+    compactBtn.type = 'button';
+    compactBtn.className = 'pip-control-btn pip-control-btn-compact';
+    compactBtn.setAttribute('aria-label', 'Compact');
+    const compactIcon = pipDoc.createElement('span');
+    compactIcon.className = 'pip-control-icon-compact';
+    compactIcon.setAttribute('aria-hidden', 'true');
+    compactBtn.appendChild(compactIcon);
+    compactBtn.addEventListener('click', enterCompactLayout);
+    monitoringScreen.appendChild(compactBtn);
+
     const monitoringHeader = pipDoc.createElement('div');
     monitoringHeader.className = 'pip-monitoring-header';
     // No in-page title bar here (see startMonitoring()'s pipDoc.title) —
@@ -3794,44 +4018,38 @@ export function createMezzoSession({
     monitoringScreen.appendChild(circleWrapper);
     pipCircleWrapperEl = circleWrapper;
 
-    // Control bar — shared by Expanded and Compact. Expanded lays these out
-    // as a normal-flow bottom bar (Stop, Compact); Compact repositions Stop
-    // as a bottom-left corner overlay (icon-only there), hides the
-    // Compact-toggle entirely (already in Compact — nothing to toggle to),
-    // and reveals a dedicated Expand control (bottom-right corner) — see
-    // the [data-layout="compact"] CSS.
+    // Control row — Stop only now (2026-08-18 redesign moved the Compact
+    // toggle out to its own top-right corner control above). Expanded
+    // lays this out as a normal-flow centered pill; the responsive
+    // breakpoints and Compact's own [data-layout="compact"] CSS both
+    // reposition this exact button as a bottom-left icon-only corner
+    // overlay — never a second button, just repositioned/restyled.
     const controls = pipDoc.createElement('div');
     controls.className = 'pip-monitoring-controls';
 
     const pipStopBtn = pipDoc.createElement('button');
     pipStopBtn.type = 'button';
     pipStopBtn.className = 'pip-control-btn pip-control-btn-stop';
-    pipStopBtn.setAttribute('aria-label', 'Stop Monitoring');
+    pipStopBtn.setAttribute('aria-label', 'Stop monitoring');
     const stopIcon = pipDoc.createElement('span');
     stopIcon.className = 'pip-control-icon-stop';
     stopIcon.setAttribute('aria-hidden', 'true');
     const stopLabel = pipDoc.createElement('span');
-    stopLabel.textContent = 'Stop';
+    stopLabel.textContent = 'Stop monitoring';
     pipStopBtn.appendChild(stopIcon);
     pipStopBtn.appendChild(stopLabel);
     pipStopBtn.addEventListener('click', stopMonitoring);
     controls.appendChild(pipStopBtn);
 
-    const compactBtn = pipDoc.createElement('button');
-    compactBtn.type = 'button';
-    compactBtn.className = 'pip-control-btn pip-control-btn-compact';
-    const compactIcon = pipDoc.createElement('span');
-    compactIcon.className = 'pip-control-icon-compact';
-    compactIcon.setAttribute('aria-hidden', 'true');
-    const compactLabel = pipDoc.createElement('span');
-    compactLabel.textContent = 'Compact';
-    compactBtn.appendChild(compactIcon);
-    compactBtn.appendChild(compactLabel);
-    compactBtn.addEventListener('click', enterCompactLayout);
-    controls.appendChild(compactBtn);
+    monitoringScreen.appendChild(controls);
 
-    // Compact-only — a familiar expand-window icon in the bottom-right
-    // corner, restoring Expanded without stopping monitoring.
+    // Compact-only — a familiar expand-window icon, top-right (2026-08-18
+    // redesign moved this from bottom-right to top-right, deliberately
+    // the same corner the Compact toggle above occupies in Expanded, so
+    // nothing appears to move across the mode switch), restoring
+    // Expanded without stopping monitoring. Appended directly to the
+    // screen, like the Compact toggle, not into the Stop control row —
+    // it's corner chrome, independent of it.
     const expandBtn = pipDoc.createElement('button');
     expandBtn.type = 'button';
     expandBtn.className = 'pip-control-btn pip-control-btn-expand';
@@ -3841,9 +4059,7 @@ export function createMezzoSession({
       '<path d="M7.5 1.5H10.5V4.5M4.5 10.5H1.5V7.5M10.5 1.5L6.5 5.5M1.5 10.5L5.5 6.5" ' +
       'stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
     expandBtn.addEventListener('click', enterExpandedLayout);
-    controls.appendChild(expandBtn);
-
-    monitoringScreen.appendChild(controls);
+    monitoringScreen.appendChild(expandBtn);
 
     layout.appendChild(monitoringScreen);
     monitoringScreenEl = monitoringScreen;
