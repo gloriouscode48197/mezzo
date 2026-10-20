@@ -268,7 +268,7 @@ C1 explains, briefly, what the user should do before capture starts — not why 
 
 ### Active Calibration
 
-Calibration lasts six seconds and completes automatically — there is no manual "I'm done" action. It shows a live countdown ("Listening… 6s," ticking down) and a horizontal volume bar that fills proportionally to detected input, flanked by Quiet/Loud scale labels — enough to communicate active measurement without implying recording or transcription.
+Calibration lasts six seconds and completes automatically — there is no manual "I'm done" action. It shows a live countdown ("Listening… 6s," ticking down) and a horizontal volume bar that fills continuously and proportionally to detected input — no flanking scale labels (a 2026-08-12 revision deliberately dropped the earlier "Quiet"/"Loud" labels as too judgmental for a bar meant only to confirm active measurement) — enough to communicate active measurement without implying recording or transcription.
 
 If microphone access is blocked or denied at this point — access must have been revoked after the Companion already opened, since Home's own permission gate already ensured it was granted before the Companion could open at all — calibration cannot continue: a dedicated recovery screen explains what happened and how to fix it (see "Companion States → Microphone Access Blocked"), with an in-app Try again rather than requiring a manual page reload.
 
