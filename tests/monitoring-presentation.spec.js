@@ -71,7 +71,11 @@ async function reachMonitoring(page, context, { profiles = SAVED_PROFILE, size }
 async function enterCompact(pipPage, monitoringScreen) {
   await monitoringScreen.locator('.pip-control-btn-compact').click();
   await expect(pipPage.locator('body')).toHaveAttribute('data-layout', 'compact');
-  await pipPage.mouse.move(0, 0);
+  // Outside the window, not (0,0): since the Companion's screens went
+  // square-cornered (2026-10-20), (0,0) is inside the card and counts as
+  // hovering it. It only used to work because the rounded corner left
+  // that pixel outside the card's hit area.
+  await pipPage.mouse.move(-10, -10);
 }
 
 /** Drives the presentational zone attribute exactly the way updateHeading()

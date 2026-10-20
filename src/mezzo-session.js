@@ -1358,7 +1358,12 @@ export function createMezzoSession({
          position:relative so the Ready screen's profile-dropdown backdrop
          (a child of .pip-screen-ready) can use inset:0 against this card's
          own bounds, not the whole document. overflow:hidden keeps the
-         backdrop's corners and everything else clipped to the radius. */
+         backdrop's corners and everything else clipped to the radius.
+         Square, borderless edges (2026-10-20): the card fills the whole
+         window, so a rounded corner and 1px border only drew a faint
+         outline with background showing through at each corner. No outer
+         shadow either, since nothing outside the window could show it;
+         the inset glow stays. */
       .pip-screen {
         width: 100%;
         height: 100%;
@@ -1368,9 +1373,7 @@ export function createMezzoSession({
         align-items: center;
         position: relative;
         overflow: hidden;
-        border-radius: 14px;
-        border: 1px solid rgba(255, 255, 255, 0.05);
-        box-shadow: 0 24px 56px rgba(0, 0, 0, 0.55), inset 0 0 40px rgba(0, 0, 0, 0.16);
+        box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.16);
         background: #3c3b3f;
       }
       /* Shared cap for every full-width, single-column pill action in the
@@ -2990,12 +2993,10 @@ export function createMezzoSession({
          state stays in the DOM and keeps announcing via aria-live for
          assistive tech; it's just visually hidden, not removed, since
          there's no visible text status in Compact. ── */
-      /* Compact's card is smaller-radius, single-layer shadow (no inset
-         glow) — its own distinct treatment, not just a scaled-down Ready/
-         Monitoring card. */
+      /* Compact drops the inset glow — at this size it read as a dark
+         rim. Square edges, same as every other screen (2026-10-20). */
       body[data-layout="compact"] .pip-screen-monitoring {
-        border-radius: 12px;
-        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.52);
+        box-shadow: none;
       }
       body[data-layout="compact"] .pip-monitoring-header {
         display: block;

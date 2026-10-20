@@ -1083,10 +1083,10 @@ test.describe('Accessibility, H1 consistency, and sizing — both result variant
     // Border/elevation/corner-radius are unchanged from the shared
     // .pip-screen rule every other screen (including Ready) uses — the
     // exact values that rule declares, confirming only background was
-    // restated for these two screens, nothing else.
-    expect(style.borderWidth).toBe('1px');
-    expect(style.borderColor).toBe('rgba(255, 255, 255, 0.05)');
-    expect(style.borderRadius).toBe('14px');
+    // restated for these two screens, nothing else. Square and borderless
+    // since 2026-10-20 (the card fills the window), inset glow kept.
+    expect(style.borderWidth).toBe('0px');
+    expect(style.borderRadius).toBe('0px');
     expect(style.boxShadow).not.toBe('none');
   });
 
