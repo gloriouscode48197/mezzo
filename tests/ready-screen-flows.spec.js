@@ -312,6 +312,31 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
     await expect(pipPage.locator('.pip-screen-welcome')).toBeVisible({ timeout: 3000 });
   });
 
+  test('a second delete in the same Companion opens with a fresh, clickable Delete button — not one left stuck on "Deleting…" by the first', async ({ page, context }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('mezzoProfiles', JSON.stringify([
+        { id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 100 },
+        { id: 'p-coffee', name: 'Coffee Shop', speakingDb: -28, spreadDb: 4, calibratedTs: 200 },
+      ]));
+    });
+    const pipPage = await openCompanion(page, context);
+    const readyScreen = pipPage.locator('.pip-screen-ready');
+    const panel = pipPage.locator('.pip-ready-selector-panel');
+
+    for (const name of ['Coffee Shop', 'Kitchen']) {
+      await expect(readyScreen).toBeVisible();
+      await readyScreen.locator('.pip-ready-selector-trigger').click();
+      await panel.locator(`button[aria-label="Delete ${name} profile"]`).click();
+      const deleteScreen = pipPage.locator('.pip-screen-decision').filter({ hasText: `Delete "${name}"?` });
+      const confirmBtn = deleteScreen.locator('.pip-decision-primary-btn');
+      await expect(confirmBtn).toHaveText('Delete');
+      await expect(confirmBtn).toBeEnabled();
+      await confirmBtn.click();
+    }
+
+    await expect(pipPage.locator('.pip-screen-welcome')).toBeVisible({ timeout: 3000 });
+  });
+
   test('deleting a nonselected saved profile preserves the current selection and never transitions to calibration', async ({ page, context }) => {
     await page.addInitScript(() => {
       localStorage.setItem('mezzoProfiles', JSON.stringify([

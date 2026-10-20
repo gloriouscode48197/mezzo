@@ -2853,13 +2853,14 @@ export function createMezzoSession({
          below), so nothing appears to move when the mode later actually
          switches to Compact — .pip-control-btn-expand below takes this
          exact corner then, continuing the same visual position. Hidden
-         outright once already Compact (nothing to toggle to). Resting
-         background/border (2026-08-19 polish pass) reuses the same
-         translucent-white "quiet chip" recipe Stop's own pill already
-         uses (.pip-decision-secondary-btn's family) — every icon-only
-         corner control (this one, and Compact's own Stop/Expand below)
-         now shares it, so all three read as tappable controls at rest,
-         not just on hover. */
+         outright once already Compact (nothing to toggle to). No resting
+         background/border (2026-10-20, reverting the 2026-08-19 chip
+         for this control only): the icon is itself an outlined box, so a
+         chip behind it read as a box within a box within a box, and as
+         an always-on hover state. The icon is larger and lighter instead,
+         so it reads as a control on its own. Hover adds a soft fill and
+         brightens the icon to full cream, keeping clear contrast between
+         icon and background rather than muddying both. */
       .pip-control-btn-compact {
         position: absolute;
         top: 10px;
@@ -2870,14 +2871,13 @@ export function createMezzoSession({
         margin: 0;
         justify-content: center;
         z-index: 2;
-        color: rgba(172, 158, 136, 0.75);
-        background: rgba(255, 255, 255, 0.06);
-        border: 1px solid rgba(255, 255, 255, 0.10);
+        color: rgba(222, 210, 194, 0.7);
+        background: none;
+        border: none;
       }
       .pip-control-btn-compact:hover {
-        color: rgba(172, 158, 136, 0.75);
-        background: rgba(255, 255, 255, 0.12);
-        border-color: rgba(255, 255, 255, 0.22);
+        color: rgba(222, 210, 194, 1);
+        background: rgba(255, 255, 255, 0.08);
       }
       .pip-control-icon-stop {
         width: 7px;
@@ -2887,8 +2887,8 @@ export function createMezzoSession({
         flex-shrink: 0;
       }
       .pip-control-icon-compact {
-        width: 14px;
-        height: 12px;
+        width: 17px;
+        height: 14px;
         border: 1.5px solid currentColor;
         border-radius: 2px;
         position: relative;
@@ -2897,10 +2897,10 @@ export function createMezzoSession({
       .pip-control-icon-compact::after {
         content: '';
         position: absolute;
-        right: 1.5px;
-        top: 3.5px;
-        width: 5.5px;
-        height: 5px;
+        right: 1.75px;
+        top: 4.5px;
+        width: 6.5px;
+        height: 6px;
         background: currentColor;
         border-radius: 1px;
       }
@@ -5883,6 +5883,9 @@ export function createMezzoSession({
     decisionCommitInFlight = true;
     const originalLabel = button?.textContent;
     if (button) { button.disabled = true; button.textContent = processingLabel; }
+    const restoreButton = () => {
+      if (button) { button.disabled = false; button.textContent = originalLabel ?? processingLabel; }
+    };
     setTimeout(() => {
       decisionCommitInFlight = false;
       // The Companion (and everything module-level state a commitFn reads —
@@ -5894,6 +5897,17 @@ export function createMezzoSession({
       // commitSavePromptName() throwing on a null unsavedProfile) — there is
       // no Companion left to show the result in anyway.
       if (!pipWindow) return;
+      // Restore the button BEFORE commitFn, not after (2026-10-20 fix):
+      // every decision screen is built once per Companion open and reused,
+      // so a button left disabled on its processing label after a
+      // successful commit is what the NEXT visit to that screen opens
+      // with (e.g. a second delete in the same Companion stuck on
+      // "Deleting…" before it was ever clicked). Restoring first, rather
+      // than in a finally, lets a commitFn's own handled-failure branch
+      // still set the final state it wants: M2's blocked path re-renders
+      // its button as disabled via renderM2State(), which a later restore
+      // would wrongly undo.
+      restoreButton();
       try {
         commitFn();
       } catch (err) {
@@ -5907,7 +5921,7 @@ export function createMezzoSession({
         // no way to recover. A caught error here should be treated as a bug
         // to fix at its source, not relied on as the primary safeguard.
         console.error('[Decision] commitFn threw during processing:', err);
-        if (button) { button.disabled = false; button.textContent = originalLabel ?? processingLabel; }
+        restoreButton();
         onError?.();
       }
     }, DECISION_PROCESSING_MS);
