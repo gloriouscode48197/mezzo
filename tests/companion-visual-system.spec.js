@@ -20,6 +20,7 @@ import { openCompanion } from './support/open-companion.js';
 import { recalibrateFromSelector } from './support/recalibrate-from-selector.js';
 import { createNewProfileFromSelector } from './support/create-new-profile-from-selector.js';
 import { reachReadyAfterSessionCalibration } from './support/reach-ready-after-calibration.js';
+import { normalizeColor } from './support/normalize-color.js';
 
 async function waitForCapture(pipPage) {
   await pipPage.waitForTimeout(12000);
@@ -495,7 +496,7 @@ test.describe('Companion: selector surface and caret badge (2026-08-20)', () => 
     // Warm off-white — genuinely light text, not a near-invisible dark
     // tone. 7.45:1 against #333333 (unchanged value, unaffected by the
     // surface restoration — see .pip-ready-selector-trigger's own comment).
-    expect(nameColor).toBe('rgba(222, 210, 194, 0.92)');
+    expect(normalizeColor(nameColor)).toBe('rgba(222, 210, 194, 0.92)');
 
     // Selected checkmark (2026-08-20 fix): #DC9C89, not the bare
     // --hanko-fill orange, which only reached 2.91:1 as a foreground here
@@ -524,7 +525,7 @@ test.describe('Companion: selector surface and caret badge (2026-08-20)', () => 
     const kitchenRow = panel.locator('.pip-ready-selector-row', { hasText: 'Kitchen' });
     await kitchenRow.hover();
     const rowActionColor = await kitchenRow.locator('.pip-ready-selector-row-action').first().evaluate((el) => getComputedStyle(el).color);
-    expect(rowActionColor).toBe('rgba(172, 158, 136, 0.75)');
+    expect(normalizeColor(rowActionColor)).toBe('rgba(172, 158, 136, 0.75)');
 
     // Real keyboard navigation, not .focus() — opening the panel already
     // auto-focuses a radio programmatically (openSelectorPanel()'s own
@@ -567,7 +568,7 @@ test.describe('Companion: toast styling completeness (2026-08-20)', () => {
       return { backgroundColor: cs.backgroundColor, color: cs.color, borderWidth: cs.borderWidth };
     });
     expect(style.backgroundColor).toBe('rgb(34, 34, 34)');
-    expect(style.color).toBe('rgba(222, 210, 194, 0.85)');
+    expect(normalizeColor(style.color)).toBe('rgba(222, 210, 194, 0.85)');
     // No border at all (2026-08-20 manual-review correction) — borderWidth
     // is the unambiguous check here: an element with no border declared
     // can still report *some* browser-internal borderColor value even

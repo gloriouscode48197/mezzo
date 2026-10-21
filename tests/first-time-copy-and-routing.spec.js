@@ -16,6 +16,7 @@ import { openCompanion } from './support/open-companion.js';
 import { reachReadyAfterSessionCalibration } from './support/reach-ready-after-calibration.js';
 import { recalibrateFromSelector } from './support/recalibrate-from-selector.js';
 import { createNewProfileFromSelector } from './support/create-new-profile-from-selector.js';
+import { normalizeColor } from './support/normalize-color.js';
 
 test.describe('First-time copy and calibration-entry routing', () => {
   test('Welcome shows the approved copy and has no secondary dismiss action', async ({ page, context }) => {
@@ -895,7 +896,7 @@ test.describe('Companion-wide visual-language consistency (2026-08-14 pass)', ()
     expect(parseFloat(countdownStyle.fontSize)).toBeGreaterThan(11);
     expect(parseFloat(countdownStyle.fontSize)).toBeLessThan(24);
     expect(countdownStyle.fontWeight).toBe('500');
-    expect(countdownStyle.color).toBe('rgba(210, 155, 75, 0.9)');
+    expect(normalizeColor(countdownStyle.color)).toBe('rgba(210, 155, 75, 0.9)');
 
     const countdownObservedAt = Date.now();
     await expect(status).toHaveText('Start speaking in 2', { timeout: 3000 });

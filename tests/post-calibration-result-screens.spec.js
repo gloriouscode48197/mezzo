@@ -42,6 +42,7 @@ import { test, expect } from '@playwright/test';
 import { openCompanion } from './support/open-companion.js';
 import { recalibrateFromSelector } from './support/recalibrate-from-selector.js';
 import { createNewProfileFromSelector } from './support/create-new-profile-from-selector.js';
+import { normalizeColor } from './support/normalize-color.js';
 
 /** Waits out the full pre-capture window (delayed disclosure + fixed 3-2-1
  *  countdown, see the calibration pacing revision) plus the ~6s capture
@@ -1309,7 +1310,7 @@ test.describe('Shared toast restyle (2026-08-20 pass, supersedes 2026-08-15)', (
     // modal-card system — existing values, no new color family
     // introduced beyond the accent border below.
     expect(toastSurface.backgroundColor).toBe('rgb(34, 34, 34)'); // #222222
-    expect(toastSurface.color).toBe('rgba(222, 210, 194, 0.85)');
+    expect(normalizeColor(toastSurface.color)).toBe('rgba(222, 210, 194, 0.85)');
 
     // No border at all (2026-08-20 manual-review correction — an
     // orange-tinted accent border briefly existed here and read as an
@@ -1347,7 +1348,7 @@ test.describe('Shared toast restyle (2026-08-20 pass, supersedes 2026-08-15)', (
     await expect(pipPage.locator('.pip-toast-card')).toHaveText('Speaking profile saved');
     const toastSurface = await readToastSurface(pipPage);
     expect(toastSurface.backgroundColor).toBe('rgb(34, 34, 34)');
-    expect(toastSurface.color).toBe('rgba(222, 210, 194, 0.85)');
+    expect(normalizeColor(toastSurface.color)).toBe('rgba(222, 210, 194, 0.85)');
     expect(toastSurface.borderWidth).toBe('0px');
     expect(parseFloat(toastSurface.borderRadius)).toBeLessThan(20);
   });
