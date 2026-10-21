@@ -335,7 +335,7 @@ A conservative later candidate, only once real usage data exists: a passive, pos
 3. Switch back to the built-in mic: no note.
 4. Inspect real label formats, including the `Default - ` prefix and USB vendor/product suffixes (input for §11 Q2).
 
-**Before implementation (answers §11 Q3, no Mezzo code needed):** a throwaway test page, kept outside the repo, opens the mic briefly with Mezzo's exact constraints and shows the live track's label next to every `enumerateDevices()` entry, both from the page and from a Document Picture-in-Picture window (the way Ready would read it). Run it after choosing a non-default mic in Chrome's prompt. Decision rule:
+**Before implementation (answers §11 Q3, no Mezzo code needed):** a throwaway test page, kept outside the repo at `~/Documents/mezzo-tools/mic-label-check/index.html` (serve it with `python3 -m http.server 8990` from that folder), opens the mic briefly with Mezzo's exact constraints and shows the live track's label next to every `enumerateDevices()` entry, both from the page and from a Document Picture-in-Picture window (the way Ready would read it). Run it after choosing a non-default mic in Chrome's prompt. Decision rule:
 
 - Track label matches the chosen mic **and** the `default` entry → Ready compares against `default`, as written.
 - Track matches the chosen mic but `default` shows the OS default → Ready must compare against whichever entry does match (e.g. the first entry). Revise §6.1 before building.
