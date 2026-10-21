@@ -356,8 +356,6 @@ const TOOLTIP_HOVER_DELAY_MS = 250;
 // 16px matches the toast's own top inset, already established elsewhere
 // in this file as a comfortable safe margin at this Companion size.
 const SELECTOR_PANEL_SAFE_MARGIN_PX = 16;
-// Gap between the selector trigger and its attached panel (PRD §7).
-const SELECTOR_PANEL_GAP_PX = 4;
 
 // Brief completion transition ("Creating your speaking profile…") shown
 // between the end of capture and the post-creation result screen (Slice 2
@@ -4368,18 +4366,18 @@ export function createMezzoSession({
    *  the panel could extend past the Companion's own visible bottom edge
    *  once enough rows existed).
    *
-   *  Lantern menu layer (PRD §7): the panel is attached to its trigger —
-   *  directly below it when it fits there, otherwise directly above it.
-   *  Only when it fits on neither side does it fall back to the earlier
-   *  behavior: centered within the usable Companion viewport (the real
-   *  window height minus a safe margin on each side), overlapping the
-   *  trigger, with the rows scrolling internally. That fallback is what
-   *  keeps every reachable profile count (up to the full 1 Temporary + 5
-   *  saved + Create new profile) fully inside the Companion without ever
+   *  Lantern menu layer, native-select style (PRD §7): the panel opens
+   *  over its trigger, its top edge starting at the trigger's top, and
+   *  shifts up only as far as it must to stay inside the usable Companion
+   *  viewport (the real window height minus a safe margin on each side).
+   *  If it is taller than that, it fills the usable height and its rows
+   *  scroll internally. One behavior for every profile count, up to the
+   *  full 1 Temporary + 5 saved + Create new profile, without ever
    *  resizing the Companion window itself — opening the panel still never
    *  calls resizeCompanionTo()/resizeCompanionToContent(), unchanged (see
-   *  openSelectorPanel()'s own comment on that). The chosen placement is
-   *  recorded as data-placement ("below" | "above" | "overlay").
+   *  openSelectorPanel()'s own comment on that). Library order and the
+   *  Unsaved/Saved grouping are unchanged; the selected row is marked by
+   *  its sage dot.
    *
    *  Two inline styles only — `top` and `max-height` — both reset by
    *  closeSelectorPanel() so a later open never inherits a stale value
@@ -4404,27 +4402,12 @@ export function createMezzoSession({
     const naturalHeight = readySelectorPanelEl.scrollHeight + borderY;
 
     const wrapTop = wrap.getBoundingClientRect().top;
-    const triggerRect = (readySelectorTriggerEl || wrap).getBoundingClientRect();
-    const spaceBelow = viewportHeight - SELECTOR_PANEL_SAFE_MARGIN_PX - (triggerRect.bottom + SELECTOR_PANEL_GAP_PX);
-    const spaceAbove = triggerRect.top - SELECTOR_PANEL_GAP_PX - SELECTOR_PANEL_SAFE_MARGIN_PX;
-
-    let placement;
-    let panelHeight = naturalHeight;
-    let viewportTop;
-    if (naturalHeight <= spaceBelow) {
-      placement = 'below';
-      viewportTop = triggerRect.bottom + SELECTOR_PANEL_GAP_PX;
-    } else if (naturalHeight <= spaceAbove) {
-      placement = 'above';
-      viewportTop = triggerRect.top - SELECTOR_PANEL_GAP_PX - naturalHeight;
-    } else {
-      placement = 'overlay';
-      panelHeight = Math.min(naturalHeight, usableHeight);
-      viewportTop = usableTop + (usableHeight - panelHeight) / 2;
-    }
+    const triggerTop = (readySelectorTriggerEl || wrap).getBoundingClientRect().top;
+    const panelHeight = Math.min(naturalHeight, usableHeight);
+    const usableBottom = usableTop + usableHeight;
+    const viewportTop = Math.max(usableTop, Math.min(triggerTop, usableBottom - panelHeight));
     readySelectorPanelEl.style.maxHeight = `${panelHeight}px`;
     readySelectorPanelEl.style.top = `${viewportTop - wrapTop}px`;
-    readySelectorPanelEl.dataset.placement = placement;
   }
 
   function openSelectorPanel() {
@@ -4488,7 +4471,6 @@ export function createMezzoSession({
     if (readySelectorPanelEl) {
       readySelectorPanelEl.style.top = '';
       readySelectorPanelEl.style.maxHeight = '';
-      delete readySelectorPanelEl.dataset.placement;
     }
     readySelectorTriggerEl?.setAttribute('aria-expanded', 'false');
     pipDocument?.removeEventListener('click', handleSelectorOutsideClick, true);
@@ -4679,7 +4661,6 @@ export function createMezzoSession({
     rowName.className = 'pip-ready-selector-row-name';
     rowName.textContent = label;
     rowName.title = label;
-    rowLabel.appendChild(rowName);
 
     // Decorative only — aria-hidden, since the radio itself already
     // announces its own checked state to assistive tech; this glyph would
@@ -4689,7 +4670,10 @@ export function createMezzoSession({
     rowCheck.className = 'pip-ready-selector-row-check';
     rowCheck.setAttribute('aria-hidden', 'true');
     rowCheck.classList.add('pip-dot'); // 8px sage dot (PRD §9a)
+    // Before the name, like the trigger's own dot (PRD §9a). Hidden (not
+    // removed) on unselected rows, so every name keeps the same indent.
     rowLabel.appendChild(rowCheck);
+    rowLabel.appendChild(rowName);
 
     row.appendChild(rowLabel);
 

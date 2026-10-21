@@ -1067,19 +1067,23 @@ test.describe('Companion: expanded-panel positioning and overflow (2026-08-20)',
     });
   }
 
-  test('the panel is vertically centered within the usable viewport (equal margin above/below) once it needs room above the trigger — 4 saved profiles', async ({ page, context }) => {
-    const { pipPage, readyScreen } = await openReadyWithProfiles(page, context, 4);
+  test('native-select placement: with few rows, the panel opens over the trigger starting exactly at the trigger\'s top (PRD §7)', async ({ page, context }) => {
+    const { pipPage, readyScreen } = await openReadyWithProfiles(page, context, 1);
     await pipPage.setViewportSize({ width: 382, height: 512 });
+    const triggerBox = await readyScreen.locator('.pip-ready-selector-trigger').boundingBox();
     const panel = await openPanel(pipPage, readyScreen);
     const panelBox = await panel.boundingBox();
+    expect(Math.abs(panelBox.y - triggerBox.y)).toBeLessThan(1);
+  });
 
-    // Centered within the usable viewport (SELECTOR_PANEL_SAFE_MARGIN_PX
-    // on each side) — the gap above and below the panel itself should be
-    // equal, confirming this is genuine viewport centering, not merely
-    // "not clipped."
-    const gapAbove = panelBox.y;
-    const gapBelow = 512 - (panelBox.y + panelBox.height);
-    expect(Math.abs(gapAbove - gapBelow)).toBeLessThan(2);
+  test('native-select placement: with more rows than fit below the trigger, the panel shifts up only as far as needed, its bottom at the 16px safe margin', async ({ page, context }) => {
+    const { pipPage, readyScreen } = await openReadyWithProfiles(page, context, 5);
+    await pipPage.setViewportSize({ width: 382, height: 364 });
+    const triggerBox = await readyScreen.locator('.pip-ready-selector-trigger').boundingBox();
+    const panel = await openPanel(pipPage, readyScreen);
+    const panelBox = await panel.boundingBox();
+    expect(panelBox.y).toBeLessThan(triggerBox.y);
+    expect(Math.abs((panelBox.y + panelBox.height) - (364 - 16))).toBeLessThan(1);
   });
 
   test('the maximum combination — 1 Temporary + 5 saved + Create new profile, all seven options — fits at 382×512 without scrolling, extending above the trigger', async ({ page, context }) => {
