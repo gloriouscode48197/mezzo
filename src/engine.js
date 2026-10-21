@@ -387,6 +387,39 @@ export class MezzoEngine {
   }
 
   /**
+   * The zone boundaries this calibration classifies against, as dB offsets
+   * from the calibrated baseline — the exact values _computeZone() uses
+   * (same spread floor, same multipliers). Read-only, for presentation: the
+   * Range Ring (src/range-ring.js) maps the level against these instead of
+   * re-deriving its own, so it can never disagree with classification.
+   *
+   * @returns {{ silenceDb: number, targetDb: number, endDb: number }}
+   *   silenceDb: Listening/Within boundary; targetDb: Within/Approaching;
+   *   endDb: the end of range (Approaching/Outside)
+   */
+  getRangeBoundsDb() {
+    const spread = Math.max(this.spreadDb || 0, MIN_SPREAD_DB);
+    return {
+      silenceDb: ZONE_SILENCE_SPREAD_MULT * spread,
+      targetDb: ZONE_TARGET_SPREAD_MULT * spread,
+      endDb: ZONE_ACCEPTABLE_SPREAD_MULT * spread,
+    };
+  }
+
+  /**
+   * A level relative to the calibrated baseline, in dB — the same diffDb
+   * _computeZone() compares against getRangeBoundsDb(). Returns -Infinity
+   * for silence or before calibration.
+   *
+   * @param {number} rmsValue
+   * @returns {number}
+   */
+  getLevelOffsetDb(rmsValue) {
+    if (!this.baselineRMS || this.baselineRMS <= 0 || !rmsValue || rmsValue <= 0) return -Infinity;
+    return MezzoEngine.rmsToDb(rmsValue) - MezzoEngine.rmsToDb(this.baselineRMS);
+  }
+
+  /**
    * Load an already-computed calibration directly — for starting a
    * monitoring session from a saved profile's stored speakingDb/spreadDb,
    * as opposed to calibrate(), which validates a fresh batch of raw

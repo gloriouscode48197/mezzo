@@ -69,13 +69,15 @@ test.describe('Companion: calibration -> Ready -> Monitoring -> Ready', () => {
     await expect(readyScreen).toBeHidden();
     const monitoringScreen = pipPage.locator('.pip-screen-monitoring');
     await expect(monitoringScreen).toBeVisible();
-    await expect(monitoringScreen.locator('canvas').first()).toBeVisible();
+    await expect(monitoringScreen.locator('.mezzo-ring')).toBeVisible();
     await expect(page.locator('#dock-status-text')).toHaveText('Monitoring is active');
 
-    // Live fake-mic levels actually reach the visualization's status text —
-    // not just a screen that's technically un-hidden but never updates.
-    const statusHeading = pipPage.locator('.pip-status-heading').first();
-    await expect(statusHeading).toHaveText(/Listening|Within range|Approaching end of range|Outside range/, { timeout: 5000 });
+    // Live fake-mic levels actually reach the Range Ring — not just a screen
+    // that's technically un-hidden but never updates: the ring carries a
+    // committed zone and is writing its per-frame voice size.
+    const ring = monitoringScreen.locator('.mezzo-ring');
+    await expect(ring).toHaveAttribute('data-zone', /^[0-3]$/);
+    await expect.poll(() => ring.evaluate((el) => el.style.getPropertyValue('--voice-size')), { timeout: 5000 }).not.toBe('');
 
     // Stop -> straight back to Ready (no forced save prompt) — the
     // Temporary profile stays selected, and the heading is now "next
@@ -123,11 +125,12 @@ test.describe('Companion: calibration -> Ready -> Monitoring -> Ready', () => {
     await expect(readyScreen).toBeHidden();
     const monitoringScreen = pipPage.locator('.pip-screen-monitoring');
     await expect(monitoringScreen).toBeVisible();
-    await expect(monitoringScreen.locator('canvas').first()).toBeVisible();
+    await expect(monitoringScreen.locator('.mezzo-ring')).toBeVisible();
     await expect(page.locator('#dock-status-text')).toHaveText('Monitoring is active');
 
-    const statusHeading = pipPage.locator('.pip-status-heading').first();
-    await expect(statusHeading).toHaveText(/Listening|Within range|Approaching end of range|Outside range/, { timeout: 5000 });
+    const ring = monitoringScreen.locator('.mezzo-ring');
+    await expect(ring).toHaveAttribute('data-zone', /^[0-3]$/);
+    await expect.poll(() => ring.evaluate((el) => el.style.getPropertyValue('--voice-size')), { timeout: 5000 }).not.toBe('');
 
     // Stop -> straight back to Ready with the same saved profile selected.
     await pipPage.locator('button:has-text("Stop monitoring")').first().click();

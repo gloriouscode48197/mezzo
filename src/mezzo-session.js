@@ -114,7 +114,8 @@
 
 import { AudioProcessor } from './audio.js?v=2';
 import { MezzoEngine } from './engine.js?v=5';
-import { MezzoWaveVisualizer } from './wave-visualizer.js';
+import { MezzoRangeRing } from './range-ring.js';
+import { createZoneAnnouncer, ZONE_LABELS } from './zone-announcer.js';
 import { createCalibrationController } from './calibration-controller.js';
 import { createCalibrationLock } from './calibration-lock.js';
 import { trackMonitoringStarted, trackMonitoringSession, trackCalibrationCompleted } from './analytics.js';
@@ -517,11 +518,14 @@ export function dbToMeterFillRatio(db) {
 // approved four labels; the zone-classification logic these map from is
 // completely unchanged.
 function zoneLabel(zone) {
-  if (zone === 0) return 'Listening';
-  if (zone === 1) return 'Within range';
-  if (zone === 2) return 'Approaching end of range';
-  return 'Outside range'; // zone === OUTSIDE_ZONE
+  return ZONE_LABELS[zone] ?? ZONE_LABELS[OUTSIDE_ZONE];
 }
+
+// Range Ring edge diameters (PRD §5.5): constant per layout mode, never
+// scaled by zone or volume. src/range-ring.js lowers the band's maximum
+// (never the edge) so band and glow stay inside the window.
+const RANGE_RING_EDGE_EXPANDED_PX = 236;
+const RANGE_RING_EDGE_COMPACT_PX = 140;
 
 // The Monitoring screen's read-only profile line — as of the 2026-08-18
 // redesign, just the profile name itself, e.g. "Coffee Shop", set small
@@ -819,7 +823,12 @@ export function createMezzoSession({
 
   // Monitoring-screen DOM refs
   let monitoringScreenEl = null;
-  let pipStatusHeadingEl = null;
+  // Visually hidden live region (PRD §6): the four status labels are
+  // screen-reader-only now, announced through zoneAnnouncer.
+  let pipZoneLiveEl = null;
+  const zoneAnnouncer = createZoneAnnouncer({
+    announce: (text) => { if (pipZoneLiveEl) pipZoneLiveEl.textContent = text; },
+  });
   let monitoringProfileNameEl = null;
   let pipCircleWrapperEl = null;
 
@@ -902,15 +911,10 @@ export function createMezzoSession({
     isSustained = false;
   }
 
+  /** No visible text changes during monitoring (PRD §6): zone changes only
+   *  reach the debounced screen-reader announcer. */
   function updateHeading(zone) {
-    const text = zoneLabel(zone);
-    if (pipStatusHeadingEl && sessionState.get() === SESSION_STATES.MONITORING_ACTIVE) {
-      pipStatusHeadingEl.textContent = text;
-      // Presentational only — drives the status label's per-zone color (see
-      // the .pip-status-heading[data-zone] CSS). Doesn't change what zone is
-      // computed or when the label updates, both still decided above.
-      pipStatusHeadingEl.dataset.zone = String(zone);
-    }
+    if (sessionState.get() === SESSION_STATES.MONITORING_ACTIVE) zoneAnnouncer.update(zone);
   }
 
   function onAudioFrame({ rms }) {
@@ -940,8 +944,12 @@ export function createMezzoSession({
       }
     }
 
+    // The Range Ring reads the committed zone and where the smoothed level
+    // sits against the engine's own boundaries; it never classifies.
+    // isSustained (SUSTAINED_DRIFT_MS) is no longer a visual input — it
+    // still feeds sessionAlertTriggered above.
     if (activeCircle) {
-      activeCircle.update(currentZone, isSustained);
+      activeCircle.update({ zone: currentZone, offsetDb: engine.getLevelOffsetDb(rms), bounds: engine.getRangeBoundsDb() });
       markPipUpdate(pipWindow); // TEMPORARY — see docs/monitoring-runtime-investigation.md
     }
 
@@ -979,7 +987,8 @@ export function createMezzoSession({
 
     currentZone = 0;
     clearSustained();
-    updateHeading(0);
+    zoneAnnouncer.reset();
+    if (pipZoneLiveEl) pipZoneLiveEl.textContent = '';
 
     try {
       await audio.acquire();
@@ -1158,6 +1167,7 @@ export function createMezzoSession({
     layoutMode = mode;
     if (pipDocument?.body) pipDocument.body.setAttribute('data-layout', mode);
     resizeCompanionTo(mode === LAYOUT_MODES.COMPACT ? MEZZO_COMPANION_COMPACT_SIZE : MEZZO_COMPANION_EXPANDED_SIZE);
+    pipCircle?.relayout(); // the ring's preferred edge depends on the mode
   }
 
   function enterExpandedLayout() {
@@ -2665,42 +2675,22 @@ export function createMezzoSession({
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 8px;
         padding: 20px 28px 0;
-        min-height: 76px;
         box-sizing: border-box;
         text-align: center;
       }
-      /* The awareness state (Listening / Within range / Approaching end
-         of range / Outside range) is the most prominent text on the
-         screen — display-serif, matching the visual weight of Ready's/
-         Calibrating's own heading (h1.pip-h1/p.pip-h1), but its own
-         smaller 17px size and live per-zone color rather than that
-         shared rule, since h1.pip-h1's single fixed color can't carry a
-         zone color. Shared by Expanded and Compact — Compact visually
-         hides the surrounding status block but keeps this element
-         announcing; see the [data-layout="compact"] rules below. Color
-         is keyed off data-zone, a purely presentational attribute
-         updateHeading() sets alongside the existing textContent
-         assignment — the zone-classification and label-text logic
-         themselves are untouched. The flat opacity:0.6 the accepted
-         design mock used for this label is deliberately NOT adopted here
-         — it would flatten the zone colors below into one washed-out
-         tone, erasing the color-coding that's protected product behavior
-         well outside this pass's scope; only the font metrics are taken
-         from the mock, the existing per-zone colors are kept exactly. */
-      .pip-status-heading {
-        font-family: var(--font-display);
-        font-weight: 300;
-        font-size: 17px;
-        line-height: 115%;
-        letter-spacing: -0.2px;
-        margin: 0;
+      /* Visually hidden but announced: the zone live region (PRD §6). */
+      .pip-sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        margin: -1px;
+        padding: 0;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
       }
-      .pip-status-heading[data-zone="0"],
-      .pip-status-heading[data-zone="1"] { color: var(--zone-quiet-color); }
-      .pip-status-heading[data-zone="2"] { color: var(--zone-approaching-color); }
-      .pip-status-heading[data-zone="3"] { color: var(--zone-outside-color); }
       /* The profile name alone (no "Profile:" prefix — see
          profileMetaText()), sentence case as stored. Small and
          low-contrast, reusing the same muted warm-cream caption family
@@ -2715,25 +2705,18 @@ export function createMezzoSession({
         letter-spacing: 0.02em;
       }
       /* flex:1 lets this absorb whatever space the header/controls don't
-         use; the max-width/max-height cap plus auto margins are what let
-         a window resized *larger* than the 382×480 Expand target "let the
-         layout breathe" instead of enlarging the circle without bound —
-         the extra room becomes balanced padding on every side (auto
-         margins on a capped flex item absorb leftover main-axis space;
-         margin:0 auto centers it on the cross axis) rather than being
-         dumped below the circle by justify-content alone. Type and chrome
-         never scale with the window at any size — this is the one
-         element that does. */
+         use. The Range Ring inside it is a fixed size per layout mode
+         (236px Expanded, 140px Compact — src/range-ring.js fits it to the
+         window), so a larger window only adds balanced space around it.
+         overflow stays visible: the over-range band and its glow extend
+         past the edge, and the ring itself keeps them inside the window. */
       .pip-circle-wrapper {
         flex: 1;
+        min-height: 0;
         width: 100%;
-        max-width: 300px;
-        max-height: 300px;
-        margin: auto;
         display: flex;
         align-items: center;
         justify-content: center;
-        overflow: hidden;
       }
 
       /* Bottom control row — Stop only. The Compact toggle used to share
@@ -2943,29 +2926,11 @@ export function createMezzoSession({
       body[data-layout="compact"] .pip-screen-monitoring {
         box-shadow: none;
       }
+      /* Compact shows only the ring and its hover/focus-revealed corner
+         controls; the zone live region is outside the header, so hiding
+         the header never silences it. */
       body[data-layout="compact"] .pip-monitoring-header {
-        display: block;
-      }
-      /* Collapses the block's own padding rather than hiding it outright —
-         .pip-status-heading (inside it) needs display other than none to
-         keep announcing via aria-live; see below. */
-      body[data-layout="compact"] .pip-monitoring-status-block {
-        padding: 0;
-        min-height: 0;
-      }
-      body[data-layout="compact"] .pip-profile-info {
         display: none;
-      }
-      /* Visually hidden, not display:none — screen readers still need
-         this element's aria-live announcements even though Compact shows
-         no visible status text. */
-      body[data-layout="compact"] .pip-status-heading {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip: rect(0, 0, 0, 0);
-        white-space: nowrap;
       }
       body[data-layout="compact"] .pip-monitoring-controls {
         position: static;
@@ -3968,18 +3933,17 @@ export function createMezzoSession({
     const statusBlock = pipDoc.createElement('div');
     statusBlock.className = 'pip-monitoring-status-block';
 
-    // aria-live so assistive tech hears state changes without the
-    // interruption a stronger "assertive" politeness would cause. Shared
-    // by Expanded and Compact — Compact visually hides the surrounding
-    // status block but keeps this element announcing (see the
-    // [data-layout="compact"] CSS).
-    const statusHeading = pipDoc.createElement('span');
-    statusHeading.className = 'pip-status-heading';
-    statusHeading.textContent = zoneLabel(currentZone);
-    statusHeading.dataset.zone = String(currentZone);
-    statusHeading.setAttribute('aria-live', 'polite');
-    statusBlock.appendChild(statusHeading);
-    pipStatusHeadingEl = statusHeading;
+    // The status labels are screen-reader-only (PRD §6): a visually hidden,
+    // polite live region, written only by zoneAnnouncer (into or out of
+    // Outside range, after it has held ~1s). A direct child of the screen,
+    // not the header, so no responsive tier or Compact rule that hides the
+    // header can ever silence it.
+    const zoneLive = pipDoc.createElement('p');
+    zoneLive.className = 'pip-sr-only pip-zone-live';
+    zoneLive.setAttribute('role', 'status');
+    zoneLive.setAttribute('aria-live', 'polite');
+    monitoringScreen.appendChild(zoneLive);
+    pipZoneLiveEl = zoneLive;
 
     const profileInfo = pipDoc.createElement('span');
     profileInfo.className = 'pip-profile-info';
@@ -4081,7 +4045,6 @@ export function createMezzoSession({
     // top-level screen, not just whichever one happened to be visible
     // before Start monitoring was clicked.
     showOnlyScreen(monitoringScreenEl);
-    updateHeading(currentZone);
   }
 
   /**
@@ -4099,7 +4062,9 @@ export function createMezzoSession({
     if (!ok) return false; // stay in Ready mode; nothing else to clean up
 
     if (!pipCircle && pipCircleWrapperEl) {
-      pipCircle = new MezzoWaveVisualizer(pipCircleWrapperEl);
+      pipCircle = new MezzoRangeRing(pipCircleWrapperEl, {
+        preferredEdgePx: () => (layoutMode === LAYOUT_MODES.COMPACT ? RANGE_RING_EDGE_COMPACT_PX : RANGE_RING_EDGE_EXPANDED_PX),
+      });
     }
     activeCircle = pipCircle;
 
@@ -6064,6 +6029,7 @@ export function createMezzoSession({
       pipCircle.destroy();
       pipCircle = null;
     }
+    zoneAnnouncer.reset();
     pipWindow = null;
     pipDocument = null;
     welcomeScreenEl = null;
@@ -6121,7 +6087,7 @@ export function createMezzoSession({
     tooltipTargetEl = null;
     pendingDeleteProfileId = null;
     monitoringScreenEl = null;
-    pipStatusHeadingEl = null;
+    pipZoneLiveEl = null;
     monitoringProfileNameEl = null;
     pipCircleWrapperEl = null;
     calibratingScreenEl = null;

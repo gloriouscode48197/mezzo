@@ -888,3 +888,34 @@ describe('Success Criteria', () => {
     }
   });
 });
+
+// =============================================================================
+// getRangeBoundsDb() / getLevelOffsetDb() — read-only boundaries for the
+// Range Ring (src/range-ring.js); must agree with _computeZone() exactly.
+// =============================================================================
+
+describe('MezzoEngine — range bounds for presentation', () => {
+  for (const spreadDb of [4, 1]) { // 1 exercises the MIN_SPREAD_DB floor
+    it(`boundaries match classification exactly (spread ${spreadDb} dB)`, () => {
+      const engine = new MezzoEngine();
+      engine.loadCalibration({ baselineRMS: Math.pow(10, -30 / 20), spreadDb });
+      const { silenceDb, targetDb, endDb } = engine.getRangeBoundsDb();
+      const rmsAt = (offsetDb) => Math.pow(10, (-30 + offsetDb) / 20);
+      const e = 0.01;
+      assert.strictEqual(engine._computeZone(rmsAt(silenceDb - e)), 0);
+      assert.strictEqual(engine._computeZone(rmsAt(silenceDb + e)), 1);
+      assert.strictEqual(engine._computeZone(rmsAt(targetDb - e)), 1);
+      assert.strictEqual(engine._computeZone(rmsAt(targetDb + e)), 2);
+      assert.strictEqual(engine._computeZone(rmsAt(endDb - e)), 2);
+      assert.strictEqual(engine._computeZone(rmsAt(endDb + e)), 3);
+      assert.ok(Math.abs(engine.getLevelOffsetDb(rmsAt(endDb)) - endDb) < 1e-6); // rmsToDb adds a 1e-10 epsilon
+    });
+  }
+
+  it('reports silence and an uncalibrated engine as -Infinity, never a number', () => {
+    const engine = new MezzoEngine();
+    assert.strictEqual(engine.getLevelOffsetDb(0.1), -Infinity);
+    engine.loadCalibration({ baselineRMS: 0.03, spreadDb: 4 });
+    assert.strictEqual(engine.getLevelOffsetDb(0), -Infinity);
+  });
+});

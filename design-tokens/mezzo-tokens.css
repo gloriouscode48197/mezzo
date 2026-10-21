@@ -90,16 +90,6 @@
   --surface: var(--color-bg-slate);
 }
 
-/* Monitoring awareness-state label colors. Still used by the Companion's
-   visible status label until the Range Ring replaces it (PRD §6); retire
-   these with that label. */
-:root {
-  --zone-quiet-color: rgba(222, 210, 194, 0.58);
-  --zone-approaching-color: rgba(210, 155, 75, 0.85);
-  --zone-outside-color: rgba(248, 130, 65, 0.80);
-}
-
-
 /* ── Shared (surface-independent) ── */
 :root {
   /* Radius — 3px corners on buttons and inputs, no pills (PRD §4.4) */

@@ -110,21 +110,6 @@
         "$type": "color",
         "$description": "1px cream outline at 30%"
       }
-    },
-    "zone": {
-      "$description": "Monitoring status-label colors, kept only until the Range Ring replaces the visible label (PRD §6).",
-      "quiet": {
-        "$value": "rgba(222, 210, 194, 0.58)",
-        "$type": "color"
-      },
-      "approaching": {
-        "$value": "rgba(210, 155, 75, 0.85)",
-        "$type": "color"
-      },
-      "outside": {
-        "$value": "rgba(248, 130, 65, 0.80)",
-        "$type": "color"
-      }
     }
   },
   "font": {

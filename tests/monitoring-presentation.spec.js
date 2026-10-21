@@ -19,25 +19,24 @@
  * — the same established workaround every other visual test in this suite
  * already uses.
  *
- * Status-label presentation is verified by directly driving
- * .pip-status-heading's textContent/dataset.zone via page.evaluate() — the
- * exact same two properties updateHeading() itself sets — rather than
- * trying to coax the fake audio device into a specific zone on demand.
- * This deliberately never touches onAudioFrame()/zone-classification/engine
- * logic (all protected, unchanged, already covered by src/engine.test.js);
- * it only exercises what a given zone RENDERS as, which is this file's own
- * job. tests/monitoring-transition.spec.js separately confirms a real,
- * live audio-driven update still lands one of the four approved labels.
+ * Range Ring (docs/prd/range-ring-and-lantern-refresh.md §5, §6): zones
+ * are driven through the real engine with tests/support/drive-level.js,
+ * which feeds a chosen level (dB relative to the profile's calibration)
+ * into audio.js. Classification, the 500ms Outside-range dwell, the
+ * announcer, and the ring all run unchanged; nothing here sets a zone
+ * directly.
  */
 
 import { test, expect } from '@playwright/test';
 import { openCompanion } from './support/open-companion.js';
+import { installLevelDriver, setLevelDb, rangeBoundsDb } from './support/drive-level.js';
 
 const SAVED_PROFILE = [{ id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 100 }];
 const LONG_NAME = 'The Kitchen And Dining Room Combined Open-Plan Space';
 const LONG_PROFILE = [{ id: 'p-long', name: LONG_NAME, speakingDb: -30, spreadDb: 4, calibratedTs: 100 }];
 
-const STATUS_LABELS = ['Listening', 'Within range', 'Approaching end of range', 'Outside range'];
+const CHARTREUSE = 'rgb(222, 222, 101)'; // --color-accent
+const SAGE = 'rgb(206, 226, 196)';       // --color-link
 
 /**
  * Opens the Companion with a saved profile already seeded (so it lands
@@ -49,16 +48,17 @@ const STATUS_LABELS = ['Listening', 'Within range', 'Approaching end of range', 
  * @param {import('@playwright/test').BrowserContext} context
  * @param {{profiles?: object[], size?: {width: number, height: number}}} [options]
  */
-async function reachMonitoring(page, context, { profiles = SAVED_PROFILE, size } = {}) {
+async function reachMonitoring(page, context, { profiles = SAVED_PROFILE, size, driven = false } = {}) {
   await page.addInitScript((p) => localStorage.setItem('mezzoProfiles', JSON.stringify(p)), profiles);
   const pipPage = await openCompanion(page, context);
+  if (driven) await installLevelDriver(page, profiles[0]);
   if (size) await pipPage.setViewportSize(size);
   const readyScreen = pipPage.locator('.pip-screen-ready');
   await expect(readyScreen).toBeVisible({ timeout: 10000 });
   await readyScreen.locator('.pip-ready-start-btn').click();
   const monitoringScreen = pipPage.locator('.pip-screen-monitoring');
   await expect(monitoringScreen).toBeVisible({ timeout: 5000 });
-  await expect(monitoringScreen.locator('canvas').first()).toBeVisible({ timeout: 5000 });
+  await expect(monitoringScreen.locator('.mezzo-ring')).toBeVisible({ timeout: 5000 });
   return { pipPage, monitoringScreen };
 }
 
@@ -78,15 +78,33 @@ async function enterCompact(pipPage, monitoringScreen) {
   await pipPage.mouse.move(-10, -10);
 }
 
-/** Drives the presentational zone attribute exactly the way updateHeading()
- *  itself does (textContent + dataset.zone) — see this file's own header
- *  comment for why this is the right boundary to test at. */
-async function setZone(pipPage, zone, label) {
-  await pipPage.evaluate(({ zone, label }) => {
-    const el = document.querySelector('.pip-status-heading');
-    el.textContent = label;
-    el.dataset.zone = String(zone);
-  }, { zone, label });
+/** Reads what the ring is showing right now. */
+async function readRing(pipPage) {
+  return pipPage.evaluate(() => {
+    const ring = document.querySelector('.mezzo-ring');
+    const band = ring.querySelector('.mezzo-ring-band');
+    const edge = ring.querySelector('.mezzo-ring-edge');
+    const voice = ring.querySelector('.mezzo-ring-voice');
+    const box = ring.getBoundingClientRect();
+    return {
+      zone: Number(ring.dataset.zone),
+      edgePx: box.width,
+      bandPx: parseFloat(ring.style.getPropertyValue('--band')) || 0,
+      bandOpacity: parseFloat(getComputedStyle(band).opacity),
+      edgeShadow: getComputedStyle(edge).boxShadow,
+      edgeOpacity: parseFloat(getComputedStyle(edge).opacity),
+      voiceScale: parseFloat(ring.style.getPropertyValue('--voice-size')),
+      voiceOpacity: parseFloat(getComputedStyle(voice).opacity),
+      glowScale: parseFloat(ring.style.getPropertyValue('--glow-scale')),
+    };
+  });
+}
+
+/** Sets a level and waits for audio.js's smoothing, the engine, and the
+ *  ring's easing to settle. */
+async function settleAt(page, pipPage, levelDb, ms = 1200) {
+  await setLevelDb(page, levelDb);
+  await pipPage.waitForTimeout(ms);
 }
 
 async function assertNoOverflow(pipPage) {
@@ -100,39 +118,172 @@ async function assertNoOverflow(pipPage) {
   expect(scrollHeight).toBeLessThanOrEqual(clientHeight + 1);
 }
 
-test.describe('Monitoring presentation: status labels and typography', () => {
-  test('all four approved sentence-case labels render at 17px in the display font, with the existing per-zone colors preserved (not the design mock\'s flat opacity)', async ({ page, context }) => {
-    const { pipPage, monitoringScreen } = await reachMonitoring(page, context);
-    const heading = monitoringScreen.locator('.pip-status-heading');
+test.describe('Monitoring presentation: the Range Ring', () => {
+  test('all four states, driven through the real engine: attention rises in steps of size and brightness, and the band appears only Over range', async ({ page, context }) => {
+    const { pipPage } = await reachMonitoring(page, context, { size: { width: 382, height: 480 }, driven: true });
+    const b = await rangeBoundsDb(page, SAVED_PROFILE[0].spreadDb);
 
-    const expectedColors = [
-      'rgba(222, 210, 194, 0.58)', // zone 0 (Listening) and zone 1 (Within range) share this
-      'rgba(222, 210, 194, 0.58)',
-      'rgba(210, 155, 75, 0.85)',  // zone 2 (Approaching end of range)
-      'rgba(248, 130, 65, 0.8)',   // zone 3 (Outside range)
-    ];
+    await settleAt(page, pipPage, b.silenceDb - 8);
+    const listening = await readRing(pipPage);
+    expect(listening.zone).toBe(0);
+    expect(listening.edgePx).toBeCloseTo(236, 0);
+    expect(listening.voiceScale).toBeLessThan(0.2);
+    expect(listening.voiceOpacity).toBeCloseTo(0.4, 1);
+    expect(listening.edgeShadow).toContain('1.5px');
+    expect(listening.bandOpacity).toBeLessThan(0.01);
 
-    for (let zone = 0; zone < STATUS_LABELS.length; zone++) {
-      await setZone(pipPage, zone, STATUS_LABELS[zone]);
-      await expect(heading).toHaveText(STATUS_LABELS[zone]);
-      await expect(heading).toHaveCSS('font-size', '17px');
-      const fontFamily = await heading.evaluate((el) => getComputedStyle(el).fontFamily);
-      expect(fontFamily).toMatch(/Geist/); // Lantern; the label itself is removed with the Range Ring (PRD §6)
-      await expect(heading).toHaveCSS('color', expectedColors[zone]);
-    }
+    await settleAt(page, pipPage, 0);
+    const within = await readRing(pipPage);
+    expect(within.zone).toBe(1);
+    expect(within.voiceScale).toBeGreaterThan(listening.voiceScale);
+    expect(within.voiceOpacity).toBeCloseTo(0.4, 1);
+    expect(within.bandOpacity).toBeLessThan(0.01);
+
+    await settleAt(page, pipPage, b.endDb - 1);
+    const approaching = await readRing(pipPage);
+    expect(approaching.zone).toBe(2);
+    expect(approaching.voiceScale).toBeGreaterThan(0.85);
+    expect(approaching.voiceOpacity).toBeGreaterThan(0.8);
+    expect(approaching.edgeShadow).toContain(SAGE);
+    expect(approaching.edgeShadow).toContain('3px');
+    expect(approaching.bandOpacity).toBeLessThan(0.01);
+
+    await settleAt(page, pipPage, b.endDb + 2, 1600);
+    const outside = await readRing(pipPage);
+    expect(outside.zone).toBe(3);
+    expect(outside.voiceScale).toBeGreaterThan(0.99);
+    expect(outside.bandOpacity).toBeGreaterThan(0.99);
+    expect(outside.bandPx).toBeGreaterThan(0.065 * 236);
+    expect(outside.edgeOpacity).toBeLessThan(0.01); // hidden under the band
   });
 
-  test('a live status-length change does not shift the visualization\'s position', async ({ page, context }) => {
-    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 382, height: 480 } });
-    const circle = monitoringScreen.locator('.pip-circle-wrapper');
+  test('the band grows with how far over the end of range, and stays inside the window at its maximum', async ({ page, context }) => {
+    const { pipPage } = await reachMonitoring(page, context, { size: { width: 382, height: 480 }, driven: true });
+    const b = await rangeBoundsDb(page, SAVED_PROFILE[0].spreadDb);
+    await settleAt(page, pipPage, b.endDb + 0.5, 1600);
+    const justOver = await readRing(pipPage);
+    await settleAt(page, pipPage, b.endDb + 6);
+    const farOver = await readRing(pipPage);
+    expect(farOver.bandPx).toBeGreaterThan(justOver.bandPx);
+    // Band plus glow (outer glow spread + half its blur, scaled) never reaches the window edge.
+    const reach = farOver.edgePx / 2 + farOver.bandPx + (10 + 38 / 2) * farOver.glowScale;
+    expect(reach).toBeLessThanOrEqual(382 / 2 + 0.5);
+  });
 
-    await setZone(pipPage, 0, 'Listening');
-    const shortBox = await circle.boundingBox();
-    await setZone(pipPage, 2, 'Approaching end of range');
-    const longBox = await circle.boundingBox();
+  test('a spike shorter than the 500ms dwell never shows the band', async ({ page, context }) => {
+    const { pipPage } = await reachMonitoring(page, context, { size: { width: 382, height: 480 }, driven: true });
+    const b = await rangeBoundsDb(page, SAVED_PROFILE[0].spreadDb);
+    await settleAt(page, pipPage, 0);
+    await setLevelDb(page, b.endDb + 3);
+    let maxBandOpacity = 0;
+    let maxZone = 0;
+    const until = Date.now() + 300;
+    while (Date.now() < until) {
+      const r = await readRing(pipPage);
+      maxBandOpacity = Math.max(maxBandOpacity, r.bandOpacity);
+      maxZone = Math.max(maxZone, r.zone);
+    }
+    await setLevelDb(page, 0);
+    for (let i = 0; i < 20; i++) {
+      const r = await readRing(pipPage);
+      maxBandOpacity = Math.max(maxBandOpacity, r.bandOpacity);
+      maxZone = Math.max(maxZone, r.zone);
+      await pipPage.waitForTimeout(40);
+    }
+    expect(maxZone).toBeLessThan(3);
+    expect(maxBandOpacity).toBeLessThan(0.01);
+  });
 
-    expect(Math.abs(shortBox.y - longBox.y)).toBeLessThanOrEqual(1);
-    expect(Math.abs(shortBox.x - longBox.x)).toBeLessThanOrEqual(1);
+  test('no visible text changes while talking — the profile name and Stop are the only text, in every state', async ({ page, context }) => {
+    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 382, height: 480 }, driven: true });
+    const b = await rangeBoundsDb(page, SAVED_PROFILE[0].spreadDb);
+    const texts = new Set();
+    for (const db of [b.silenceDb - 8, 0, b.endDb - 1, b.endDb + 2]) {
+      await settleAt(page, pipPage, db, db > b.endDb ? 1600 : 900);
+      // Visible text only: the visually hidden live region is screen-reader
+      // output, covered by its own test below.
+      texts.add(await monitoringScreen.evaluate((el) => {
+        const clone = el.cloneNode(true);
+        clone.querySelectorAll('.pip-sr-only').forEach((n) => n.remove());
+        el.after(clone);
+        const text = clone.innerText;
+        clone.remove();
+        return text;
+      }));
+    }
+    expect(texts.size).toBe(1);
+    expect([...texts][0]).not.toMatch(/Listening|Within range|Approaching|Outside range/);
+  });
+
+  test('a visually hidden live region announces only changes into and out of Outside range, after about a second', async ({ page, context }) => {
+    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 382, height: 480 }, driven: true });
+    const b = await rangeBoundsDb(page, SAVED_PROFILE[0].spreadDb);
+    const live = monitoringScreen.locator('.pip-zone-live');
+    await expect(live).toHaveAttribute('aria-live', 'polite');
+    await expect(live).toHaveAttribute('role', 'status');
+    const box = await live.boundingBox();
+    expect(box.width).toBeLessThanOrEqual(1);
+    expect(box.height).toBeLessThanOrEqual(1);
+
+    // Moves among Listening, Within range, and Approaching are never announced.
+    for (const db of [b.silenceDb - 8, 0, b.endDb - 1, 0]) await settleAt(page, pipPage, db, 1300);
+    await expect(live).toHaveText('');
+
+    // Into Outside range: silent until it has held ~1s after committing.
+    await setLevelDb(page, b.endDb + 2);
+    await expect.poll(async () => (await readRing(pipPage)).zone, { timeout: 3000 }).toBe(3);
+    const committedAt = Date.now();
+    await expect(live).toHaveText('Outside range', { timeout: 2500 });
+    expect(Date.now() - committedAt).toBeGreaterThanOrEqual(800);
+
+    // Out of it: announced once the new state has held, with that state's label.
+    await setLevelDb(page, 0);
+    await expect(live).toHaveText('Within range', { timeout: 3500 });
+  });
+
+  test('chartreuse appears only in the over-range band', async ({ page, context }) => {
+    const { pipPage } = await reachMonitoring(page, context, { size: { width: 382, height: 480 }, driven: true });
+    const b = await rangeBoundsDb(page, SAVED_PROFILE[0].spreadDb);
+    await settleAt(page, pipPage, b.endDb + 2, 1600);
+    const offenders = await pipPage.evaluate((accent) => {
+      const found = [];
+      for (const el of document.querySelectorAll('.pip-screen-monitoring *')) {
+        if (el.closest('.mezzo-ring-band')) continue;
+        const cs = getComputedStyle(el);
+        for (const prop of ['color', 'backgroundColor', 'borderTopColor', 'boxShadow', 'outlineColor']) {
+          if (String(cs[prop]).includes(accent)) found.push(`${el.className}: ${prop}`);
+        }
+      }
+      return found;
+    }, CHARTREUSE);
+    expect(offenders).toEqual([]);
+    expect(await pipPage.locator('.mezzo-ring-band').evaluate((el) => getComputedStyle(el).boxShadow)).toContain(CHARTREUSE);
+  });
+
+  test('Compact: a ~140px edge, and band plus glow scaled down so they never touch the window edge at maximum', async ({ page, context }) => {
+    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 220, height: 220 }, driven: true });
+    await enterCompact(pipPage, monitoringScreen);
+    const b = await rangeBoundsDb(page, SAVED_PROFILE[0].spreadDb);
+    await settleAt(page, pipPage, b.endDb + 8, 1800);
+    const r = await readRing(pipPage);
+    expect(r.zone).toBe(3);
+    expect(r.edgePx).toBeCloseTo(140, 0);
+    expect(r.glowScale).toBeLessThan(1);
+    const reach = r.edgePx / 2 + r.bandPx + (10 + 38 / 2) * r.glowScale;
+    expect(reach).toBeLessThanOrEqual(110 + 0.5);
+  });
+
+  test('respects prefers-reduced-motion: the band stays a fixed thickness instead of growing with the level', async ({ page, context }) => {
+    const { pipPage } = await reachMonitoring(page, context, { size: { width: 382, height: 480 }, driven: true });
+    await pipPage.emulateMedia({ reducedMotion: 'reduce' });
+    const b = await rangeBoundsDb(page, SAVED_PROFILE[0].spreadDb);
+    await settleAt(page, pipPage, b.endDb + 0.5, 1600);
+    const justOver = await readRing(pipPage);
+    await settleAt(page, pipPage, b.endDb + 6);
+    const farOver = await readRing(pipPage);
+    expect(justOver.zone).toBe(3);
+    expect(farOver.bandPx).toBeCloseTo(justOver.bandPx, 0);
+    expect(farOver.bandPx).toBeCloseTo(0.065 * 236, 0);
   });
 });
 
@@ -163,12 +314,11 @@ test.describe('Monitoring presentation: retired content', () => {
 });
 
 test.describe('Monitoring presentation: responsive tiers (Expanded)', () => {
-  test('382×480 reference: status, profile, visualization, Stop pill, and the top-right Compact toggle are all present', async ({ page, context }) => {
+  test('382×480 reference: profile, Range Ring, Stop pill, and the top-right Compact toggle are all present', async ({ page, context }) => {
     const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 382, height: 480 } });
 
-    await expect(monitoringScreen.locator('.pip-status-heading')).toBeVisible();
     await expect(monitoringScreen.locator('.pip-profile-info')).toBeVisible();
-    await expect(monitoringScreen.locator('canvas').first()).toBeVisible();
+    await expect(monitoringScreen.locator('.mezzo-ring')).toBeVisible();
     const stop = monitoringScreen.locator('.pip-control-btn-stop');
     await expect(stop).toBeVisible();
     await expect(stop).toContainText('Stop monitoring');
@@ -176,10 +326,10 @@ test.describe('Monitoring presentation: responsive tiers (Expanded)', () => {
     await assertNoOverflow(pipPage);
   });
 
-  test('~340×425: profile name drops; status, visualization, Stop pill, and Compact toggle remain', async ({ page, context }) => {
+  test('~340×425: profile name drops; the Range Ring, Stop pill, and Compact toggle remain', async ({ page, context }) => {
     const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 340, height: 425 } });
 
-    await expect(monitoringScreen.locator('.pip-status-heading')).toBeVisible();
+    await expect(monitoringScreen.locator('.mezzo-ring')).toBeVisible();
     await expect(monitoringScreen.locator('.pip-profile-info')).toBeHidden();
     // Still the full pill here (with its "Stop monitoring" text) — the
     // icon-only Stop treatment doesn't start until the next tier down
@@ -191,10 +341,10 @@ test.describe('Monitoring presentation: responsive tiers (Expanded)', () => {
     await assertNoOverflow(pipPage);
   });
 
-  test('~300×375: the Stop pill becomes an always-visible bottom-left icon; status, visualization, and Compact toggle remain', async ({ page, context }) => {
+  test('~300×375: the Stop pill becomes an always-visible bottom-left icon; the Range Ring and Compact toggle remain', async ({ page, context }) => {
     const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 300, height: 375 } });
 
-    await expect(monitoringScreen.locator('.pip-status-heading')).toBeVisible();
+    await expect(monitoringScreen.locator('.mezzo-ring')).toBeVisible();
     await expect(monitoringScreen.locator('.pip-profile-info')).toBeHidden();
     const stop = monitoringScreen.locator('.pip-control-btn-stop');
     await expect(stop).toBeVisible();
@@ -208,11 +358,11 @@ test.describe('Monitoring presentation: responsive tiers (Expanded)', () => {
     await assertNoOverflow(pipPage);
   });
 
-  test('~260×325: status text also drops, leaving only the visualization, the bottom-left Stop icon, and the top-right Compact toggle', async ({ page, context }) => {
+  test('~260×325: the header drops, leaving only the Range Ring, the bottom-left Stop icon, and the top-right Compact toggle', async ({ page, context }) => {
     const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 260, height: 325 } });
 
     await expect(monitoringScreen.locator('.pip-monitoring-header')).toBeHidden();
-    await expect(monitoringScreen.locator('canvas').first()).toBeVisible();
+    await expect(monitoringScreen.locator('.mezzo-ring')).toBeVisible();
     await expect(monitoringScreen.locator('.pip-control-btn-stop')).toBeVisible();
     await expect(monitoringScreen.locator('.pip-control-btn-compact')).toBeVisible();
     await assertNoOverflow(pipPage);
@@ -220,12 +370,12 @@ test.describe('Monitoring presentation: responsive tiers (Expanded)', () => {
 });
 
 test.describe('Monitoring presentation: explicit Compact', () => {
-  test('220×220 at rest: only the visualization is visible — status/profile hidden, Stop/Expand not yet revealed', async ({ page, context }) => {
+  test('220×220 at rest: only the Range Ring is visible — profile hidden, Stop/Expand not yet revealed', async ({ page, context }) => {
     const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 220, height: 220 } });
     await enterCompact(pipPage, monitoringScreen);
 
     await expect(monitoringScreen.locator('.pip-profile-info')).toBeHidden();
-    await expect(monitoringScreen.locator('canvas').first()).toBeVisible();
+    await expect(monitoringScreen.locator('.mezzo-ring')).toBeVisible();
     const stop = monitoringScreen.locator('.pip-control-btn-stop');
     const expandBtn = monitoringScreen.locator('.pip-control-btn-expand');
     await expect(stop).toHaveCSS('opacity', '0');
@@ -302,8 +452,8 @@ test.describe('Monitoring presentation: explicit Compact', () => {
     const expandBtn = monitoringScreen.locator('.pip-control-btn-expand');
     await expandBtn.click({ force: true }); // opacity:0 doesn't block a real click target — this exercises the handler directly, not the hover animation
     await expect(pipPage.locator('body')).toHaveAttribute('data-layout', 'expanded');
-    // Monitoring is still active — canvas and Stop pill are back.
-    await expect(monitoringScreen.locator('canvas').first()).toBeVisible();
+    // Monitoring is still active — the ring and Stop pill are back.
+    await expect(monitoringScreen.locator('.mezzo-ring')).toBeVisible();
     await expect(monitoringScreen.locator('.pip-control-btn-stop')).toContainText('Stop monitoring');
 
     await monitoringScreen.locator('.pip-control-btn-compact').click();
@@ -312,15 +462,13 @@ test.describe('Monitoring presentation: explicit Compact', () => {
 });
 
 test.describe('Monitoring presentation: manual resize, larger windows, and non-reference aspect ratios', () => {
-  test('a larger window (480×600) caps the visualization slot at roughly 300×300 instead of enlarging it, and does not enlarge typography or controls', async ({ page, context }) => {
+  test('a larger window (480×600) does not enlarge the ring past its 236px edge, or enlarge typography or controls', async ({ page, context }) => {
     const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 480, height: 600 } });
 
-    const circle = monitoringScreen.locator('.pip-circle-wrapper');
-    const box = await circle.boundingBox();
-    expect(box.width).toBeLessThanOrEqual(301);
-    expect(box.height).toBeLessThanOrEqual(301);
-
-    await expect(monitoringScreen.locator('.pip-status-heading')).toHaveCSS('font-size', '17px');
+    const box = await monitoringScreen.locator('.mezzo-ring').boundingBox();
+    expect(box.width).toBeCloseTo(236, 0);
+    expect(box.height).toBeCloseTo(236, 0);
+    await expect(monitoringScreen.locator('.pip-profile-info')).toHaveCSS('font-size', '12px');
     await assertNoOverflow(pipPage);
   });
 
@@ -339,7 +487,7 @@ test.describe('Monitoring presentation: manual resize, larger windows, and non-r
     const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 240, height: 480 } });
 
     await expect(monitoringScreen.locator('.pip-monitoring-header')).toBeHidden();
-    await expect(monitoringScreen.locator('canvas').first()).toBeVisible();
+    await expect(monitoringScreen.locator('.mezzo-ring')).toBeVisible();
     await assertNoOverflow(pipPage);
   });
 
@@ -356,22 +504,19 @@ test.describe('Monitoring presentation: manual resize, larger windows, and non-r
 });
 
 test.describe('Monitoring presentation: visualization stability', () => {
-  test('the canvas element persists — never destroyed/recreated — across a status change and every responsive resize tier', async ({ page, context }) => {
-    const { pipPage, monitoringScreen } = await reachMonitoring(page, context);
-    const canvas = monitoringScreen.locator('canvas').first();
-    const canvasId = await canvas.evaluate((el) => {
-      if (!el.dataset.testStableId) el.dataset.testStableId = 'still-here';
-      return el.dataset.testStableId;
-    });
-    expect(canvasId).toBe('still-here');
+  test('the ring element persists — never destroyed/recreated — across a zone change and every responsive resize tier', async ({ page, context }) => {
+    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { driven: true });
+    const ring = monitoringScreen.locator('.mezzo-ring');
+    await ring.evaluate((el) => { el.dataset.testStableId = 'still-here'; });
 
-    await setZone(pipPage, 3, 'Outside range');
+    const b = await rangeBoundsDb(page, SAVED_PROFILE[0].spreadDb);
+    await settleAt(page, pipPage, b.endDb + 2, 1600);
     for (const size of [{ width: 340, height: 425 }, { width: 300, height: 375 }, { width: 260, height: 325 }, { width: 480, height: 600 }]) {
       await pipPage.setViewportSize(size);
     }
 
-    await expect(canvas).toBeVisible();
-    const stillStable = await canvas.evaluate((el) => el.dataset.testStableId);
-    expect(stillStable).toBe('still-here');
+    await expect(ring).toBeVisible();
+    expect(await ring.evaluate((el) => el.dataset.testStableId)).toBe('still-here');
+    await expect(monitoringScreen.locator('.mezzo-ring')).toHaveCount(1);
   });
 });
