@@ -40,7 +40,7 @@
         "$description": "Sage: text links, focus rings, bullets"
       },
       "text-muted": {
-        "$value": "#ABA698",
+        "$value": "#B0AB9E",
         "$type": "color",
         "$description": "Body, captions, labels"
       },

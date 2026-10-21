@@ -1810,7 +1810,7 @@ export function createMezzoSession({
         font-weight: var(--weight-regular);
         letter-spacing: var(--tracking-label);
         text-transform: uppercase;
-        color: color-mix(in srgb, var(--color-text-muted) 90%, var(--color-text)); /* 4.8:1 on the menu panel */
+        color: color-mix(in srgb, var(--color-text-muted) 90%, var(--color-text)); /* 5.1:1 on the menu panel, 4.5:1 on a hovered row */
         padding: 8px 14px 4px;
       }
       .pip-ready-selector-divider {
@@ -1958,7 +1958,7 @@ export function createMezzoSession({
       .pip-ready-selector-row-note {
         font-family: var(--font-body);
         font-size: 10px;
-        color: color-mix(in srgb, var(--color-text-muted) 90%, var(--color-text)); /* 4.8:1 on the menu panel */
+        color: color-mix(in srgb, var(--color-text-muted) 90%, var(--color-text)); /* 5.1:1 on the menu panel, 4.5:1 on a hovered row */
         padding: 0 14px 6px;
         margin: -6px 0 0;
       }

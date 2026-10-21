@@ -124,11 +124,11 @@ body {
   position: absolute;
   inset: 0;
   z-index: -1;
-  background-image: radial-gradient(circle, color-mix(in srgb, var(--color-text) 26%, transparent) 1px, transparent 1.5px);
+  background-image: radial-gradient(circle, color-mix(in srgb, var(--color-text) 12%, transparent) 1px, transparent 1.5px);
   background-size: 18px 18px;
   background-position: center;
-  -webkit-mask-image: radial-gradient(circle at center, transparent 30%, #000 100%);
-  mask-image: radial-gradient(circle at center, transparent 30%, #000 100%);
+  -webkit-mask-image: radial-gradient(circle at center, transparent 45%, #000 100%);
+  mask-image: radial-gradient(circle at center, transparent 45%, #000 100%);
 }
 
 /* Over range: the voice circle fills the range edge, and a flat chartreuse
@@ -140,7 +140,7 @@ body {
   width: var(--edge);
   aspect-ratio: 1 / 1;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--color-voice) 70%, var(--color-text));
+  background: var(--color-voice);
   box-shadow:
     0 0 0 var(--band) var(--color-accent),
     0 0 18px calc(var(--band) + 6px) color-mix(in srgb, var(--color-accent) 65%, transparent),
@@ -167,8 +167,6 @@ body {
   display: grid;
   grid-template-columns: 1fr;
   gap: 32px;
-  border-top: 1px solid var(--border);
-  padding-top: 40px;
 }
 
 .home-benefit {
@@ -208,7 +206,9 @@ body {
   margin: 0 auto;
 }
 
-.home-start-heading { margin-bottom: 40px; }
+.home-start-heading { margin-bottom: 12px; }
+
+.home-start-lede { margin-bottom: 40px; }
 
 .home-steps {
   list-style: none;

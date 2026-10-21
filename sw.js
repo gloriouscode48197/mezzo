@@ -24,7 +24,6 @@ const ASSETS = [
   '/src/session-state.js',
   '/src/profiles.js',
   '/src/home-dock.js',
-  '/assets/home-vizx2.png',
   '/manifest.webmanifest'
 ];
 
