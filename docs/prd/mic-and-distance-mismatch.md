@@ -104,7 +104,7 @@ Conclusions:
 - **The `"default"` label carries a prefix.** Chrome and Edge prefix the default entry's label (`Default - `, and on Windows also a `Communications - ` entry). It must be normalized before storing or comparing (§6.2).
 - **Labels need permission.** Before microphone permission is granted, `enumerateDevices()` returns empty labels in real browsers. The probe returned labels before granting, but that's an artifact of `--use-fake-ui-for-media-stream`, not real behavior. In practice Home's permission gate guarantees permission before the Companion opens, so labels should be available on Ready. If they aren't, the state is **unknown** and Mezzo shows nothing.
 - **The current default can be read without acquiring the mic.** `enumerateDevices()` needs no active capture. Reading the `"default"` entry's label on Ready tells Mezzo which device the next Start monitoring will get, without turning the mic indicator on.
-- **Chrome's per-site mic choice may override the OS default.** Chrome's permission prompt and site settings let the user pick a mic for this site specifically. Unverified: whether an unconstrained `getUserMedia` then returns that chosen mic, and whether `enumerateDevices()`'s `"default"` entry (or first audio input) reflects it. If it doesn't, Ready would compare against the wrong device. Before building, verify which entry matches the track Mezzo actually gets after choosing a non-default mic in that prompt, and compare against that entry (§11 Q4). The picker itself is browser UI: Mezzo can't style, label, or pre-select it, only show the result afterwards.
+- **Chrome's per-site mic choice may override the OS default.** Chrome's permission prompt and site settings let the user pick a mic for this site specifically. Unverified: whether an unconstrained `getUserMedia` then returns that chosen mic, and whether `enumerateDevices()`'s `"default"` entry (or first audio input) reflects it. If it doesn't, Ready would compare against the wrong device. Before building, verify which entry matches the track Mezzo actually gets after choosing a non-default mic in that prompt, and compare against that entry (§11 Q3). The picker itself is browser UI: Mezzo can't style, label, or pre-select it, only show the result afterwards.
 
 ### 4.3 Hardware events (background only, not designed for)
 
@@ -184,7 +184,7 @@ Copy must never use: warning, alert, mismatch, wrong, incorrect, error, "for acc
 
 ### 6.6 Tradeoffs
 
-- **Pro:** catches the dominant failure (OS default changed underneath) at the only point it can still be acted on, at near-zero UI cost, without acquiring the mic.
+- **Pro:** catches the common failure (the user is on a different mic than the one they calibrated with, without noticing) at the only point it can still be acted on, at near-zero UI cost, without acquiring the mic.
 - **Con:** can't catch distance changes or same-label devices. The default seen on Ready could also change in the seconds before Start monitoring. Acceptable; the Calibrating line (Proposal 2) and C1 guidance (Proposal 3) cover the rest.
 - **Con:** touches the canonical saved-profile shape. CLAUDE.md's "Canonical Runtime Profile Shapes" must be updated in the same change.
 
@@ -289,8 +289,8 @@ A conservative later candidate, only once real usage data exists: a passive, pos
 
 ## 11. Open Questions
 
-1. **Plain label vs. hash** for `calibratedMic` (§6.5). Recommendation: plain label, local only.
-2. **Two-name copy vs. fallback copy** at 380px (§6.4). Decide with real long labels, e.g. `MacBook Pro Microphone` vs. `Jabra Evolve2 65 (0b0e:030c)`.
+1. **Plain label vs. hash** for `calibratedMic` (§6.5). Recommendation: plain label, local only. **On hold:** product owner leaning plain label, pending their confirmation.
+2. **Two-name copy vs. fallback copy** at 380px (§6.4). **On hold:** product owner decides after the Q3 hardware test, using their real mic labels.
 3. **Chrome's per-site mic choice** (§4.1–4.2): after picking a non-default mic in Chrome's permission prompt or site settings, which `enumerateDevices()` entry matches the track Mezzo actually gets? Ready must compare against that one. Blocking for implementation.
 4. **Windows `Communications - ` entry:** confirm Chrome/Edge on Windows pick the `default`, not `communications`, device for an unconstrained `getUserMedia`, so Ready compares against the right entry.
 5. **Unknown on Ready but known at Start monitoring:** if Ready couldn't read labels, should anything happen once the track's label becomes known? Recommendation: no. Monitoring stays untouched.
@@ -333,16 +333,13 @@ A conservative later candidate, only once real usage data exists: a passive, pos
 1. Calibrate "Office" on the built-in mic. Switch to the USB mic in OS settings, reopen the Companion: note appears on Ready.
 2. Switch instead via Chrome's site mic setting (the same picker the permission prompt shows): note appears and names the mic Mezzo actually hears (answers §11 Q3).
 3. Switch back to the built-in mic: no note.
-
-Before implementation, §11 Q3 can be answered without any Mezzo code. With two or more mics connected, set Chrome's site Microphone setting to a non-default mic, then run this in DevTools on the Mezzo page. If the track label matches the chosen mic and the `default` row, Ready can compare against `default` as written.
-
-```js
-const s = await navigator.mediaDevices.getUserMedia({ audio: true });
-console.log('Mezzo would hear:', s.getAudioTracks()[0].label);
-s.getTracks().forEach(t => t.stop());
-console.table((await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput').map(d => ({ id: d.deviceId.slice(0, 10), label: d.label })));
-```
 4. Inspect real label formats, including the `Default - ` prefix and USB vendor/product suffixes (input for §11 Q2).
+
+**Before implementation (answers §11 Q3, no Mezzo code needed):** a throwaway test page, kept outside the repo, opens the mic briefly with Mezzo's exact constraints and shows the live track's label next to every `enumerateDevices()` entry, both from the page and from a Document Picture-in-Picture window (the way Ready would read it). Run it after choosing a non-default mic in Chrome's prompt. Decision rule:
+
+- Track label matches the chosen mic **and** the `default` entry → Ready compares against `default`, as written.
+- Track matches the chosen mic but `default` shows the OS default → Ready must compare against whichever entry does match (e.g. the first entry). Revise §6.1 before building.
+- Track doesn't match the chosen mic → Chrome's picker doesn't steer Mezzo. Drop the picker from §2's causes.
 
 ---
 
