@@ -333,6 +333,15 @@ A conservative later candidate, only once real usage data exists: a passive, pos
 1. Calibrate "Office" on the built-in mic. Switch to the USB mic in OS settings, reopen the Companion: note appears on Ready.
 2. Switch instead via Chrome's site mic setting (the same picker the permission prompt shows): note appears and names the mic Mezzo actually hears (answers §11 Q3).
 3. Switch back to the built-in mic: no note.
+
+Before implementation, §11 Q3 can be answered without any Mezzo code. With two or more mics connected, set Chrome's site Microphone setting to a non-default mic, then run this in DevTools on the Mezzo page. If the track label matches the chosen mic and the `default` row, Ready can compare against `default` as written.
+
+```js
+const s = await navigator.mediaDevices.getUserMedia({ audio: true });
+console.log('Mezzo would hear:', s.getAudioTracks()[0].label);
+s.getTracks().forEach(t => t.stop());
+console.table((await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput').map(d => ({ id: d.deviceId.slice(0, 10), label: d.label })));
+```
 4. Inspect real label formats, including the `Default - ` prefix and USB vendor/product suffixes (input for §11 Q2).
 
 ---
