@@ -1,8 +1,8 @@
 /**
- * Mezzo — Landing Page Styles
+ * Mezzo — Landing Page Styles (Lantern, docs/prd/range-ring-and-lantern-refresh.md §9)
  * Uses design token custom properties exclusively for colors, fonts, spacing.
- * Nav is a solid light (Paper) bar across the whole site — sections below it
- * still alternate their own surface (light/dark) independently.
+ * One dark theme; chartreuse is the website's brand accent (primary button,
+ * highlighted words, text selection).
  */
 
 /* ── Reset ── */
@@ -22,11 +22,18 @@ html {
 }
 
 body {
-  background: var(--surface);
+  background: var(--color-bg);
+  color: var(--color-text);
   min-height: 100vh;
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
 }
 
 .page {
@@ -46,23 +53,187 @@ body {
 
 .hero { position: relative; z-index: 2; }
 
-/* Navigation is now shared, canonical CSS — see design-tokens/mezzo-tokens.css.
+/* Navigation is shared, canonical CSS — see design-tokens/mezzo-tokens.css.
    Do not redefine .nav/.nav-link* here. */
 
 /* ═══════════════════════════════════════════
-   Hero — three mutually-exclusive microphone-permission sub-states (see
-   index.html's own comment on #state-home). Single centered column at every
-   width (2026-08-17 redesign) — replaces the old text-left/preview-right
-   two-column treatment, which used to apply unconditionally to all three
-   sub-states via a shared #hero-companion-preview widget. Only mic-request
-   has any visual element now (its own static illustration, scoped inside
-   that sub-state — see .hero-static-viz below); mic-granted/mic-denied are
-   copy + one action only, matching the approved design exactly.
+   Home, mic-request — hero (PRD §9). Text on the left; one still Over range
+   ring in a slate tile on the right. Stacks below 900px.
    ═══════════════════════════════════════════ */
 
-.hero {
-  background: var(--paper);
-  padding: 112px 32px 96px;
+.home-hero {
+  padding: 72px 24px 64px;
+}
+
+.home-hero-inner {
+  max-width: 1080px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 48px;
+  align-items: center;
+}
+
+.home-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  margin-bottom: 20px;
+}
+
+.home-hero-heading {
+  font-size: clamp(36px, 9vw, 64px);
+  max-width: 12ch;
+  margin-bottom: 24px;
+}
+
+.home-hero-subhead {
+  max-width: 30rem;
+  margin-bottom: 36px;
+}
+
+.home-highlight { color: var(--color-accent); }
+
+.home-hero-figure {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  max-width: 460px;
+  justify-self: center;
+}
+
+/* Slate tile with a faint dot grid that fades in toward the corners. The
+   dots live on ::before so the mask fades them without touching the ring. */
+.home-ring-tile {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  max-height: 60vh;
+  border-radius: 6px;
+  background: var(--color-bg-slate);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  isolation: isolate;
+  container-type: inline-size;
+}
+.home-ring-tile::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image: radial-gradient(circle, color-mix(in srgb, var(--color-text) 26%, transparent) 1px, transparent 1.5px);
+  background-size: 18px 18px;
+  background-position: center;
+  -webkit-mask-image: radial-gradient(circle at center, transparent 30%, #000 100%);
+  mask-image: radial-gradient(circle at center, transparent 30%, #000 100%);
+}
+
+/* Over range: the voice circle fills the range edge, and a flat chartreuse
+   band sits outside it with a tight glow on the band's outer edge (PRD §5).
+   Band and glow sizes are relative to the edge so the ring scales as one. */
+.home-ring {
+  --edge: min(44cqi, 200px); /* container units: box-shadow spreads can't take % */
+  --band: calc(var(--edge) * 0.13);
+  width: var(--edge);
+  aspect-ratio: 1 / 1;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--color-voice) 70%, var(--color-text));
+  box-shadow:
+    0 0 0 var(--band) var(--color-accent),
+    0 0 18px calc(var(--band) + 6px) color-mix(in srgb, var(--color-accent) 65%, transparent),
+    0 0 38px calc(var(--band) + 10px) color-mix(in srgb, var(--color-accent) 30%, transparent);
+}
+
+.home-ring-caption {
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+  max-width: 34rem;
+}
+
+/* ── Benefits: plain page background, sage dot bullets ── */
+.home-benefits {
+  padding: 32px 24px 80px;
+}
+
+.home-benefits-list {
+  list-style: none;
+  max-width: 1080px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 32px;
+  border-top: 1px solid var(--border);
+  padding-top: 40px;
+}
+
+.home-benefit {
+  position: relative;
+  padding-left: 22px;
+}
+.home-benefit::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.45em;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-link);
+}
+
+.home-benefit-heading {
+  font-family: var(--font-display);
+  font-weight: var(--weight-medium);
+  font-size: 17px;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+  color: var(--color-text);
+  margin-bottom: 8px;
+}
+
+/* ── Get started: full-bleed slate band ── */
+.home-start {
+  background: var(--color-bg-slate);
+  padding: 72px 24px 80px;
+  scroll-margin-top: 76px; /* lands below the sticky nav */
+}
+
+.home-start-inner {
+  max-width: 1080px;
+  margin: 0 auto;
+}
+
+.home-start-heading { margin-bottom: 40px; }
+
+.home-steps {
+  list-style: none;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 28px;
+  margin-bottom: 44px;
+}
+
+.home-step .type-step-heading { margin: 10px 0 6px; }
+
+.home-step-number { display: block; }
+
+.home-start-privacy {
+  margin-top: 18px;
+  max-width: 34rem;
+}
+
+/* ═══════════════════════════════════════════
+   Home, mic-granted and mic-denied — one centered column, copy + one
+   action (or none), restyled for Lantern. Copy and behavior unchanged.
+   ═══════════════════════════════════════════ */
+
+.home-status {
+  padding: 112px 24px 96px;
 }
 
 .hero-inner {
@@ -71,131 +242,34 @@ body {
   text-align: center;
 }
 
-.hero-mic-state .type-section-heading { margin-bottom: var(--space-heading-to-content); }
-
-/* mic-request/mic-granted's own heading (2026-08-17 manual-review fix) —
-   the shared .type-hero-heading token clamps up to clamp(38px, 5vw, 61px),
-   which resolves to ~51px at the 1018px desktop reference width (5vw of
-   1018 ≈ 51) — well past the ~38px the approved design actually calls for,
-   and wide enough to push "You care about how your voice affects others"
-   onto three lines instead of the intended two. .type-hero-heading is only
-   ever used here (confirmed: no other page references it), so this
-   overrides it directly rather than touching the shared token itself,
-   which other, larger hero treatments might reasonably still want.
-   max-width:520px (not the wider 560px .hero-inner itself uses, which also
-   bounds the body paragraphs) matches the approved design's own content
-   width for this specific heading. */
-.hero-mic-state .type-hero-heading {
-  font-size: 38px;
-  line-height: 1.16;
-  max-width: 520px;
+.home-status-heading {
+  font-size: clamp(32px, 7vw, 44px);
   margin-inline: auto;
-  margin-bottom: var(--space-heading-to-content);
+  margin-bottom: 32px;
 }
 
 .hero-body {
-  margin-bottom: 24px;
+  margin-bottom: 20px;
   max-width: 460px;
   margin-inline: auto;
 }
 
-/* The button always follows the LAST body paragraph directly (24px gap
-   above, from .hero-body), not a second, larger gap of its own — this rule
-   only adds the button's own space *below* itself, before the microcopy. */
-.hero-mic-state .btn-primary { margin-bottom: 20px; }
+.hero-body strong { color: var(--color-text); font-weight: var(--weight-medium); }
+
+.hero-mic-state .hero-inner .btn-primary { margin: 8px 0 20px; }
 
 .microcopy-cta { max-width: 340px; margin-inline: auto; }
 
-/* ── Static visualization (mic-request only) — a product-owner-supplied
-   PNG preview of the Mezzo visualization (2026-08-17 pass — replaces the
-   earlier hand-authored SVG; see index.html's own comment). Fixed 220×220
-   up to 220px, shrinking to fit narrower viewports — matches the approved
-   design's own fixed-square treatment; the container itself carries no
-   background of its own since the supplied PNG already paints its own
-   dark surface. ── */
-.hero-static-viz {
-  width: min(100%, 220px);
-  aspect-ratio: 1 / 1;
-  margin: 0 auto 32px;
-  border-radius: 20px;
-  overflow: hidden;
-  box-shadow: 0 20px 60px color-mix(in srgb, var(--color-shadow-warm) 25%, transparent);
-}
-/* object-fit:cover (not the default "fill") — the source is itself a
-   perfect 440×440 square rendered into an equally square box, so cover
-   never actually crops anything in practice; it exists as the safety net
-   against distortion, not a real-world cropping case. */
-.hero-static-viz img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-/* ── Designed for shared spaces — the three benefit items, scoped to the
-   mic-request sub-state only (2026-08-17 redesign, replacing the old
-   always-visible "How it works" / "Designed to stay out of your way" /
-   "What it's good for" / "What it doesn't do" editorial section, which is
-   retired outright — see docs/product-experience.md).
-   max-width:720px here was a no-op below (2026-08-17 manual-review fix):
-   this element is a CHILD of .hero-inner, which itself caps the whole
-   column at 560px — a child's own max-width can never exceed a parent
-   that's already narrower, so this always rendered at 560px regardless of
-   the 720px written here, which is exactly why "For calls with
-   headphones"/"Your words stay private" wrapped. The base (mobile) rule
-   below is unaffected by that bug (single column, no wrapping problem to
-   begin with) and deliberately left alone; the ≥700px override breaks the
-   benefits section out to its own, wider, viewport-centered width instead
-   of inheriting .hero-inner's — see that override's own comment. ── */
-.hero-benefits {
-  width: 100%;
-  max-width: 720px;
-  margin: 72px auto 0;
-  padding-top: 40px;
-  border-top: 1px solid var(--border);
-}
-
-/* Smaller than the shared .type-section-heading clamp — this is a quiet
-   sub-heading introducing three supporting items, not a second page-level
-   statement competing with the hero heading above it. Same modifier-class
-   pattern the retired editorial section's own "What it's good for" sub-
-   headings used (a fixed override layered on the shared serif/light base). */
-.hero-benefits-heading { font-size: 20px; margin-bottom: 36px; }
-
-.hero-benefits-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 40px;
-  text-align: center;
-}
-
-.hero-benefit-icon {
-  color: var(--hanko-fill);
-  margin-bottom: 12px;
-}
-
-/* Sans-serif, not the serif .type-step-heading used elsewhere for numbered
-   steps — these small card headings read as UI labels, not editorial
-   display type, matching the approved design. */
-.hero-benefit-heading {
-  font-family: var(--font-body);
-  font-weight: var(--weight-medium);
-  font-size: 14px;
-  color: var(--text-primary);
-  margin-bottom: 8px;
-}
-
 /* ── Blocked-state address-bar illustration (mic-denied only) — a static,
-   noninteractive mock of the browser's own address bar, not a functional
-   control: it exists purely to point at where the real site-controls icon
-   lives, matching the approved design. The hostname text is rendered live
-   by landing.js from window.location.host, never hard-coded (see that
-   file's own comment). ── */
+   noninteractive mock of the browser's address bar, pointing at where the
+   real site-controls icon lives. The hostname is rendered live by
+   landing.js from window.location.host, never hard-coded. ── */
 .hero-address-bar-figure {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 10px;
+  margin-top: 12px;
 }
 
 .hero-address-bar-row {
@@ -204,32 +278,17 @@ body {
   gap: 10px;
 }
 
-.hero-address-bar-arrow { color: var(--ink); flex-shrink: 0; }
+.hero-address-bar-arrow { color: var(--color-link); flex-shrink: 0; }
 
-/* 2026-08-17 manual-review fix: var(--paper) (#F0EBE2) is the exact same
-   value as this page's own [data-surface="light"] --surface — the mock was
-   background-identical to the page behind it, with only a faint 1px
-   border/shadow to separate the two, which read as a small chip sitting
-   flush against the page rather than a distinct, lifted address-bar
-   surface. True white (#FFFFFF, a literal value here — this mirrors a real
-   browser chrome's own near-white address bar, not this app's own warm
-   palette, so a design token doesn't apply) now gives it genuine contrast
-   against the cream page. --border (already a subtle, neutral warm-grey at
-   18% opacity) needed no change to still read as subtle once the
-   background brightened — if anything it's slightly more visible against
-   white, which is the intended direction. Shadow strengthened modestly
-   (opacity 0.08->0.14, blur 4px->8px, a 2px vertical offset) so the field
-   visibly lifts off the page; still restrained, not a heavy card shadow. */
 .hero-address-bar-mock {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 10px 20px 10px 14px;
-  background: var(--color-surface-white);
+  background: var(--color-bg-menu);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--color-shadow-warm) 14%, transparent);
-  color: var(--ink);
+  border-radius: var(--radius-control);
+  color: var(--color-text);
   max-width: min(70vw, 320px);
 }
 
@@ -238,7 +297,7 @@ body {
 .hero-address-bar-host {
   font-family: var(--font-body);
   font-size: 13px;
-  color: var(--text-body);
+  color: var(--color-text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -246,32 +305,18 @@ body {
 
 .hero-address-bar-caption {
   font-family: var(--font-body);
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  color: var(--text-subdued);
+  font-size: 12px;
+  color: var(--color-text-muted);
 }
 
-/* Suppresses the browser's large default focus outline specifically for
-   programmatic-only heading focus targets — currently just
-   #mic-denied-heading — 2026-08-17 manual-review fix. This is purely
-   visual: outline never affects the accessibility tree, so screen readers
-   still receive the focus move and announce the heading exactly as before;
-   this only removes the rectangle a sighted user would otherwise see
-   around a heading that has no click/keyboard affordance of its own to
-   indicate. Scoped to [tabindex="-1"] specifically so it can never match a
-   real interactive control — no button or link on this page carries
-   tabindex="-1" — see design-tokens/mezzo-tokens.css's shared
-   a:focus-visible/button:focus-visible rule, deliberately untouched here,
-   for why real controls keep their own visible focus ring. */
+/* Programmatic-only heading focus targets (#mic-denied-heading): no visible
+   ring, since the heading has no click or keyboard affordance. Screen
+   readers still receive the focus move. Real controls keep the shared
+   :focus-visible ring. */
 [tabindex="-1"]:focus { outline: none; }
 
 /* ═══════════════════════════════════════════
    Home/Dock — Unsupported browser + Dock states
-   Ported from the retired try-it.css when try-it.html became a
-   compatibility redirect and index.html took over as the canonical
-   Home/Dock page — see CLAUDE.md's Product Architecture. Only what
-   #state-unsupported and #state-dock actually use; #state-home reuses the
-   hero styles above, unchanged.
    ═══════════════════════════════════════════ */
 
 .state-view { transition: opacity 300ms ease; }
@@ -284,14 +329,14 @@ body {
   flex-direction: column;
   align-items: center;
   text-align: center;
-  padding: 10vh 32px 32px;
+  padding: 10vh 24px 32px;
 }
 
 .state-heading {
   max-width: 560px;
   margin-left: auto;
   margin-right: auto;
-  margin-bottom: var(--space-heading-to-content);
+  margin-bottom: 28px;
 }
 
 .state-body {
@@ -301,76 +346,34 @@ body {
   margin-bottom: var(--space-circle-to-button);
 }
 
-/* ── Close Companion (Dock's one lifecycle exception — see index.html's
-   #state-dock comment and CLAUDE.md) — reads at normal case/weight like
-   this page's other outline buttons rather than the app's compact
-   uppercase default. var(--text-subdued) border clears the 3:1 non-text
-   minimum; var(--text-body) label clears 4.5:1. ── */
-.btn-close-companion {
-  text-transform: none;
-  letter-spacing: normal;
-  font-size: 14px;
-  padding: 12px 28px;
-  border-color: var(--text-subdued);
-  color: var(--text-body);
-  margin-top: 32px;
-}
+/* Close Companion — the Dock's one lifecycle exception (see index.html's
+   #state-dock comment and CLAUDE.md). Secondary button. */
+.btn-close-companion { margin-top: 32px; }
 
-/* Only ever reaches .btn-close-companion on this page today — index.html
-   has no other .btn-outline usage — but scoped generically to match how
-   try-it.css originally established it, in case a second outline button
-   is ever added here. */
-.btn-outline:hover {
-  border-color: var(--text-body);
-  background: color-mix(in srgb, var(--ink) 6%, transparent);
-}
-.btn-outline:active {
-  border-color: var(--ink);
-  background: color-mix(in srgb, var(--ink) 12%, transparent);
-  transform: scale(0.98);
-}
+.btn-outline:active { transform: scale(0.98); }
 
 /* ── Dock status — a plain text line above the Dock's heading, the one live
-   element in this state (see src/home-dock.js's renderDockStatus()).
-   2026-08-17 redesign: collapses the old four-status dot-and-pill treatment
-   down to the two externally meaningful outcomes — the wording itself
-   ("Monitoring is active" / "Monitoring is not active") is what carries the
-   meaning; this class only supplies an accent color for the active case, it
-   is never the sole way that distinction is communicated.
-   font-weight (2026-08-17 manual-review fix): var(--weight-regular)/400,
-   was var(--weight-medium)/500 — a lighter weight reads calmer, matching
-   this Companion-adjacent status line's own restrained tone rather than
-   competing visually with the heading below it. Both variants share this
-   one base rule; .dock-status-text-active only overrides color, so
-   "active" and "not active" were already, and remain, the same weight. ── */
+   element in this state (see src/home-dock.js's renderDockStatus()). The
+   wording carries the meaning; color only accents the active case. ── */
 .dock-status-text {
   margin-bottom: 14px;
-  font-family: var(--font-body);
+  font-family: var(--font-mono);
   font-size: 12px;
-  font-weight: var(--weight-regular);
-  letter-spacing: 0.02em;
-  color: var(--text-body);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--color-text-muted);
 }
 
-.dock-status-text-active { color: var(--hanko-fill); }
+.dock-status-text-active { color: var(--color-accent); }
 
 .dock-body-copy {
   max-width: 340px;
   margin: 0 auto;
   line-height: 1.65;
-  color: var(--text-quiet);
 }
 
-/* Dock heading — fixed 30px/300 (not the shared .type-section-heading
-   clamp(29px, 3.6vw, 42px), which grows up to 42px and then plateaus past
-   ~1167px). Meant to stay a fixed, quieter size at any width — matches the
-   approved design's own smaller treatment for this state (distinct from
-   mic-request/mic-granted's larger hero heading). font-weight already
-   matches --weight-light (300). */
-#state-dock .state-heading { font-size: 30px; }
+#state-dock .state-heading { font-size: 32px; }
 
-/* Prevents an awkward mid-word wrap at wider widths, once there's room for
-   it to comfortably fit on one line — mobile widths still wrap normally. */
 @media (min-width: 480px) {
   #state-dock .state-heading { white-space: nowrap; }
 }
@@ -395,38 +398,32 @@ body {
    ═══════════════════════════════════════════ */
 
 @media (min-width: 700px) {
-  .hero { padding: 112px 48px 96px; }
-  /* Breaks the benefits section out of .hero-inner's own 560px cap
-     (2026-08-17 manual-review fix — see .hero-benefits' own comment on why
-     its max-width alone never worked). The standard "escape a centered
-     parent" technique: 100vw width centered on the real viewport via
-     margin-left:50%/translateX(-50%), independent of .hero-inner's own
-     narrower box — max-width:720px (inherited from the base rule, unchanged
-     here) still caps it exactly as intended once the viewport exceeds
-     720px. box-sizing:border-box + its own horizontal padding (rather than
-     inheriting .hero's own side padding, which this element no longer sits
-     inside the box of) keeps content off the raw viewport edge on
-     viewports narrower than 720px, where the 100vw width is still the
-     binding constraint. gap:40px (was 32px) matches the approved ~40px
-     target now that there's enough width for it not to feel cramped. */
-  .hero-benefits {
-    width: 100vw;
-    max-width: 720px;
-    margin-left: 50%;
-    margin-right: auto;
-    transform: translateX(-50%);
-    padding-left: 24px;
-    padding-right: 24px;
-    box-sizing: border-box;
-  }
-  .hero-benefits-grid { grid-template-columns: repeat(3, 1fr); gap: 40px; }
+  .home-benefits-list { grid-template-columns: repeat(3, 1fr); gap: 40px; }
+  .home-steps { grid-template-columns: repeat(3, 1fr); gap: 40px; }
+  .home-hero, .home-benefits, .home-start { padding-left: 48px; padding-right: 48px; }
+}
+
+@media (min-width: 900px) {
+  .home-hero { padding-top: 96px; padding-bottom: 88px; }
+  .home-hero-inner { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 64px; }
+  .home-hero-figure { justify-self: end; }
+  .home-ring-tile { max-height: none; }
 }
 
 @media (min-width: 1100px) {
-  .hero { padding: 128px 120px 104px; }
+  .home-hero, .home-benefits, .home-start { padding-left: 120px; padding-right: 120px; }
+}
+
+/* Phones: keep the hero tile from dominating the first screen. */
+@media (max-width: 599px) {
+  .home-hero { padding-top: 48px; }
+  .home-hero-inner { gap: 36px; }
+  .home-hero-figure { max-width: none; justify-self: stretch; }
+  .home-ring-tile { max-height: 260px; aspect-ratio: auto; height: 260px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
   .page { transition: none; }
   .reveal { transition: none; }
 }

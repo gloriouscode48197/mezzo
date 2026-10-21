@@ -1323,7 +1323,7 @@ export function createMezzoSession({
 
     const fontLink = pipDoc.createElement('link');
     fontLink.rel = 'stylesheet';
-    fontLink.href = 'https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;400&family=Sora:wght@300;400;500&display=swap';
+    fontLink.href = 'https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap';
     pipDoc.head.appendChild(fontLink);
 
     const link = pipDoc.createElement('link');
@@ -1338,6 +1338,11 @@ export function createMezzoSession({
 
     const style = pipDoc.createElement('style');
     style.textContent = `
+      /* Lantern (PRD §4.5): Companion primary buttons are cream, not the
+         website's chartreuse. Inside the Companion, chartreuse only ever
+         means the over-range band. */
+      :root { --color-btn-primary-bg: var(--color-text); }
+
       .hidden { display: none !important; }
 
       body {
@@ -1425,10 +1430,10 @@ export function createMezzoSession({
       h1.pip-h1,
       p.pip-h1 {
         font-family: var(--font-display);
-        font-weight: var(--weight-light);
+        font-weight: var(--weight-semibold);
         font-size: 24px;
         line-height: 1.15;
-        letter-spacing: -0.2px;
+        letter-spacing: var(--tracking-heading);
         color: var(--color-text);
         text-align: center;
         margin: 0;
@@ -1454,7 +1459,7 @@ export function createMezzoSession({
         font-family: var(--font-body);
         font-size: 10.5px;
         line-height: 1.4;
-        color: color-mix(in srgb, var(--color-text-muted) 70%, transparent);
+        color: var(--color-text-muted);
         margin: 2px 0 4px;
         max-width: 240px;
       }
@@ -1503,15 +1508,14 @@ export function createMezzoSession({
         justify-content: center;
         gap: 8px;
         width: 100%;
-        background: var(--hanko-fill);
+        background: var(--color-btn-primary-bg);
         border: none;
-        border-radius: 50px;
+        border-radius: var(--radius-control);
         padding: 12px;
         font-family: var(--font-body);
-        font-size: 13px;
+        font-size: 14px;
         font-weight: var(--weight-medium);
-        color: color-mix(in srgb, var(--color-on-accent) 92%, transparent);
-        letter-spacing: 0.04em;
+        color: var(--color-btn-primary-text);
         cursor: pointer;
         transition: opacity 0.15s ease;
         box-sizing: border-box;
@@ -1568,10 +1572,10 @@ export function createMezzoSession({
          at the screen's own base 10px gap, since that pairing should stay
          tight. */
       .pip-ready-profile-label {
-        font-family: var(--font-body);
+        font-family: var(--font-mono);
         font-size: 10px;
-        font-weight: var(--weight-medium);
-        letter-spacing: 0.10em;
+        font-weight: var(--weight-regular);
+        letter-spacing: var(--tracking-label);
         text-transform: uppercase;
         color: var(--color-label);
         text-align: center;
@@ -1615,12 +1619,12 @@ export function createMezzoSession({
         width: 100%;
         min-height: 44px;
         box-sizing: border-box;
-        padding: 13px 32px;
-        border-radius: 100px;
+        padding: 13px 18px;
+        border-radius: var(--radius-control);
         background: var(--color-bg-menu);
         border: 0;
         font-family: var(--font-body);
-        font-weight: var(--weight-light);
+        font-weight: var(--weight-regular);
         font-size: 17px;
         color: color-mix(in srgb, var(--color-text-soft) 92%, transparent);
         cursor: pointer;
@@ -1684,8 +1688,8 @@ export function createMezzoSession({
         width: 20px;
         height: 20px;
         border-radius: 50%;
-        background: var(--stone);
-        color: var(--color-overlay);
+        background: color-mix(in srgb, var(--color-text) 14%, transparent);
+        color: var(--color-text);
         transition: transform 0.15s ease;
       }
       /* Fixed 10x6 (2026-08-20: was 100%/100% of the old 10x10 wrapper,
@@ -1801,12 +1805,12 @@ export function createMezzoSession({
         border: 0;
       }
       .pip-ready-selector-group-label {
-        font-family: var(--font-body);
+        font-family: var(--font-mono);
         font-size: 10px;
-        font-weight: var(--weight-medium);
-        letter-spacing: 0.12em;
+        font-weight: var(--weight-regular);
+        letter-spacing: var(--tracking-label);
         text-transform: uppercase;
-        color: color-mix(in srgb, var(--color-text-muted) 60%, transparent);
+        color: color-mix(in srgb, var(--color-text-muted) 90%, var(--color-text)); /* 4.8:1 on the menu panel */
         padding: 8px 14px 4px;
       }
       .pip-ready-selector-divider {
@@ -1954,7 +1958,7 @@ export function createMezzoSession({
       .pip-ready-selector-row-note {
         font-family: var(--font-body);
         font-size: 10px;
-        color: color-mix(in srgb, var(--color-text-muted) 60%, transparent);
+        color: color-mix(in srgb, var(--color-text-muted) 90%, var(--color-text)); /* 4.8:1 on the menu panel */
         padding: 0 14px 6px;
         margin: -6px 0 0;
       }
@@ -1984,7 +1988,7 @@ export function createMezzoSession({
         height: 26px;
         background: none;
         border: none;
-        border-radius: 6px;
+        border-radius: var(--radius-control);
         padding: 0;
         color: color-mix(in srgb, var(--color-text-muted) 75%, transparent);
         cursor: pointer;
@@ -2060,7 +2064,7 @@ export function createMezzoSession({
       .pip-text-btn:hover { color: color-mix(in srgb, var(--color-text-soft) 92%, transparent); }
       .pip-ready-contextual-link:focus-visible,
       .pip-text-btn:focus-visible {
-        outline: 2px solid var(--hanko-fill);
+        outline: 2px solid var(--color-link);
         outline-offset: 2px;
         border-radius: 2px;
       }
@@ -2117,7 +2121,7 @@ export function createMezzoSession({
         font-family: var(--font-body);
         font-size: 11px;
         line-height: 1.4;
-        color: color-mix(in srgb, var(--color-text-muted) 65%, transparent);
+        color: var(--color-text-muted);
         text-align: center;
         margin: 14px 0 0;
         max-width: 260px;
@@ -2136,11 +2140,11 @@ export function createMezzoSession({
         gap: 16px;
       }
       .pip-calibrating-subheading {
-        font-family: var(--font-body);
+        font-family: var(--font-mono);
         font-size: 10px;
-        letter-spacing: 0.10em;
+        letter-spacing: var(--tracking-label);
         text-transform: uppercase;
-        color: color-mix(in srgb, var(--color-text-muted) 70%, transparent);
+        color: var(--color-text-muted);
         text-align: center;
         min-height: 12px;
       }
@@ -2202,7 +2206,7 @@ export function createMezzoSession({
       .pip-calibrating-meter-fill {
         height: 100%;
         width: 0%;
-        background: var(--hanko-fill);
+        background: var(--color-link);
         transition: width 0.08s linear;
       }
       @media (prefers-reduced-motion: reduce) {
@@ -2225,7 +2229,7 @@ export function createMezzoSession({
         font-family: var(--font-body);
         font-size: 11px;
         line-height: 1.4;
-        color: color-mix(in srgb, var(--color-text-muted) 65%, transparent);
+        color: var(--color-text-muted);
         text-align: center;
         max-width: 220px;
       }
@@ -2357,13 +2361,14 @@ export function createMezzoSession({
       }
       .pip-decision-heading {
         font-family: var(--font-display);
-        font-weight: var(--weight-light);
+        font-weight: var(--weight-semibold);
         font-size: 15px;
         line-height: 1.5;
         color: color-mix(in srgb, var(--color-text-soft) 85%, transparent);
         text-align: center;
         margin: 0;
         max-width: 260px;
+        letter-spacing: var(--tracking-heading);
       }
       .pip-decision-body {
         font-family: var(--font-body);
@@ -2390,14 +2395,14 @@ export function createMezzoSession({
       .pip-decision-actions { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 230px; }
       .pip-decision-primary-btn {
         width: 100%;
-        background: var(--hanko-fill);
+        background: var(--color-btn-primary-bg);
         border: none;
-        border-radius: 50px;
+        border-radius: var(--radius-control);
         padding: 12px;
         font-family: var(--font-body);
-        font-size: 12.5px;
+        font-size: 14px;
         font-weight: var(--weight-medium);
-        color: color-mix(in srgb, var(--color-on-accent) 92%, transparent);
+        color: var(--color-btn-primary-text);
         cursor: pointer;
         overflow-wrap: anywhere;
         line-height: 1.3;
@@ -2406,18 +2411,19 @@ export function createMezzoSession({
       .pip-decision-primary-btn:disabled { opacity: 0.5; cursor: default; }
       .pip-decision-secondary-btn {
         width: 100%;
-        background: color-mix(in srgb, var(--color-overlay) 6%, transparent);
-        border: 1px solid color-mix(in srgb, var(--color-overlay) 10%, transparent);
-        border-radius: 50px;
-        padding: 10px 14px;
+        background: transparent;
+        border: 1px solid var(--color-btn-secondary-border);
+        border-radius: var(--radius-control);
+        padding: 11px 14px;
         font-family: var(--font-body);
-        font-size: 12.5px;
-        color: color-mix(in srgb, var(--color-text-soft) 85%, transparent);
+        font-size: 14px;
+        font-weight: var(--weight-medium);
+        color: var(--color-text);
         cursor: pointer;
         overflow-wrap: anywhere;
         line-height: 1.3;
       }
-      .pip-decision-secondary-btn:hover { background: color-mix(in srgb, var(--color-overlay) 12%, transparent); }
+      .pip-decision-secondary-btn:hover { background: color-mix(in srgb, var(--color-text) 6%, transparent); border-color: color-mix(in srgb, var(--color-text) 55%, transparent); }
 
       /* ── Naming flow (M2/M2a) action layout (2026-08-17 pass; shared
          with Delete confirmation's own .pip-delete-actions, 2026-08-20) —
@@ -2526,7 +2532,7 @@ export function createMezzoSession({
         height: 22px;
         border-radius: 50%;
         border: 2px solid color-mix(in srgb, var(--color-text) 18%, transparent);
-        border-top-color: var(--hanko-fill);
+        border-top-color: var(--color-link);
         animation: pip-creating-spin 0.8s linear infinite;
       }
       @keyframes pip-creating-spin { to { transform: rotate(360deg); } }
@@ -2552,7 +2558,7 @@ export function createMezzoSession({
         height: 32px;
         background: color-mix(in srgb, var(--color-overlay) 6%, transparent);
         border: 1px solid color-mix(in srgb, var(--color-overlay) 10%, transparent);
-        border-radius: 50%;
+        border-radius: var(--radius-control);
         color: color-mix(in srgb, var(--color-text-soft) 85%, transparent);
         cursor: pointer;
       }
@@ -2562,7 +2568,7 @@ export function createMezzoSession({
         width: 100%;
         box-sizing: border-box;
         padding: 11px 14px;
-        border-radius: 8px;
+        border-radius: var(--radius-control);
         background: color-mix(in srgb, var(--color-overlay) 6%, transparent);
         border: 1px solid color-mix(in srgb, var(--color-overlay) 14%, transparent);
         font-family: var(--font-body);
@@ -2767,7 +2773,7 @@ export function createMezzoSession({
         font-family: var(--font-body);
         font-weight: var(--weight-light);
         font-size: 12px;
-        color: color-mix(in srgb, var(--color-text-muted) 65%, transparent);
+        color: var(--color-text-muted);
         letter-spacing: 0.02em;
       }
       /* flex:1 lets this absorb whatever space the header/controls don't
@@ -2811,12 +2817,12 @@ export function createMezzoSession({
         gap: 7px;
         background: none;
         border: none;
-        border-radius: 6px;
+        border-radius: var(--radius-control);
         padding: 6px 8px;
         margin: -6px -8px;
-        font-family: var(--font-body);
+        font-family: var(--font-mono);
         font-size: 11px;
-        letter-spacing: 0.08em;
+        letter-spacing: var(--tracking-label);
         text-transform: uppercase;
         color: var(--text-subdued);
         cursor: pointer;
@@ -2836,12 +2842,13 @@ export function createMezzoSession({
       .pip-control-btn-stop {
         background: color-mix(in srgb, var(--color-overlay) 6%, transparent);
         border: 1px solid color-mix(in srgb, var(--color-overlay) 10%, transparent);
-        border-radius: 50px;
+        border-radius: var(--radius-control);
         padding: 10px 20px;
         margin: 0;
-        font-size: 12.5px;
-        font-weight: var(--weight-regular);
-        letter-spacing: 0.02em;
+        font-family: var(--font-body);
+        font-size: 14px;
+        font-weight: var(--weight-medium);
+        letter-spacing: normal;
         text-transform: none;
         color: color-mix(in srgb, var(--color-text-soft) 85%, transparent);
       }
@@ -3051,7 +3058,7 @@ export function createMezzoSession({
         padding: 0;
         margin: 0;
         justify-content: center;
-        border-radius: 6px;
+        border-radius: var(--radius-control);
         z-index: 2;
         color: color-mix(in srgb, var(--color-text-muted) 82%, transparent);
         /* Same resting chip background/border every other corner control
@@ -3078,7 +3085,7 @@ export function createMezzoSession({
         padding: 0;
         margin: 0;
         justify-content: center;
-        border-radius: 6px;
+        border-radius: var(--radius-control);
         z-index: 2;
         color: color-mix(in srgb, var(--color-text-muted) 82%, transparent);
         background: color-mix(in srgb, var(--color-overlay) 6%, transparent);
@@ -3101,7 +3108,7 @@ export function createMezzoSession({
         color: color-mix(in srgb, var(--color-text-muted) 82%, transparent);
         background: color-mix(in srgb, var(--color-overlay) 12%, transparent);
         border-color: color-mix(in srgb, var(--color-overlay) 22%, transparent);
-        border-radius: 6px;
+        border-radius: var(--radius-control);
       }
       /* Hover/keyboard-focus reveal — the only way either control ever
          becomes visible at rest. opacity only (never display/visibility),

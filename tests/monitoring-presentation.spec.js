@@ -101,7 +101,7 @@ async function assertNoOverflow(pipPage) {
 }
 
 test.describe('Monitoring presentation: status labels and typography', () => {
-  test('all four approved sentence-case labels render at 17px display-serif, with the existing per-zone colors preserved (not the design mock\'s flat opacity)', async ({ page, context }) => {
+  test('all four approved sentence-case labels render at 17px in the display font, with the existing per-zone colors preserved (not the design mock\'s flat opacity)', async ({ page, context }) => {
     const { pipPage, monitoringScreen } = await reachMonitoring(page, context);
     const heading = monitoringScreen.locator('.pip-status-heading');
 
@@ -117,7 +117,7 @@ test.describe('Monitoring presentation: status labels and typography', () => {
       await expect(heading).toHaveText(STATUS_LABELS[zone]);
       await expect(heading).toHaveCSS('font-size', '17px');
       const fontFamily = await heading.evaluate((el) => getComputedStyle(el).fontFamily);
-      expect(fontFamily).toMatch(/Noto Serif JP/);
+      expect(fontFamily).toMatch(/Geist/); // Lantern; the label itself is removed with the Range Ring (PRD §6)
       await expect(heading).toHaveCSS('color', expectedColors[zone]);
     }
   });

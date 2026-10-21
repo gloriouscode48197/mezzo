@@ -861,12 +861,12 @@ test.describe('Companion-wide visual-language consistency (2026-08-14 pass)', ()
       return { fontFamily: s.fontFamily, fontSize: s.fontSize, fontWeight: s.fontWeight, lineHeight: s.lineHeight, letterSpacing: s.letterSpacing, color: s.color };
     });
     expect(style).toEqual({
-      fontFamily: '"Noto Serif JP", serif',
+      fontFamily: 'Geist, system-ui, sans-serif',
       fontSize: '24px',
-      fontWeight: '300',
+      fontWeight: '600',
       lineHeight: '27.6px',
-      letterSpacing: '-0.2px',
-      color: 'rgb(240, 235, 226)',
+      letterSpacing: '-0.96px',
+      color: 'rgb(243, 235, 222)',
     });
     await expect(failedMessage).toHaveText("Didn't catch enough clear speech — let's try again");
 
@@ -892,11 +892,12 @@ test.describe('Companion-wide visual-language consistency (2026-08-14 pass)', ()
       return { fontSize: s.fontSize, fontWeight: s.fontWeight, color: s.color };
     });
     // Larger than the old 11px treatment, still clearly smaller than the
-    // 24px heading, medium weight for readability, amber color unchanged.
+    // 24px heading, medium weight for readability. Lantern: the notice
+    // color is sage, never chartreuse or the retired amber.
     expect(parseFloat(countdownStyle.fontSize)).toBeGreaterThan(11);
     expect(parseFloat(countdownStyle.fontSize)).toBeLessThan(24);
     expect(countdownStyle.fontWeight).toBe('500');
-    expect(normalizeColor(countdownStyle.color)).toBe('rgba(210, 155, 75, 0.9)');
+    expect(normalizeColor(countdownStyle.color)).toBe('rgba(206, 226, 196, 0.9)');
 
     const countdownObservedAt = Date.now();
     await expect(status).toHaveText('Start speaking in 2', { timeout: 3000 });

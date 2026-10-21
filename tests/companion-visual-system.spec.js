@@ -322,7 +322,7 @@ test.describe('Companion: shared modal-card system (2026-08-20)', () => {
 // =============================================================================
 
 test.describe('Companion: selector surface and caret badge (2026-08-20)', () => {
-  test('the closed trigger and expanded panel are visibly lighter than the #222222 modal/toast surface, and are the same surface as each other', async ({ page, context }) => {
+  test('the closed trigger and expanded panel use the menu surface, distinct from the slate toast/decision surface, and are the same surface as each other', async ({ page, context }) => {
     await page.addInitScript(() => {
       localStorage.setItem('mezzoProfiles', JSON.stringify([
         { id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 100 },
@@ -341,16 +341,17 @@ test.describe('Companion: selector surface and caret badge (2026-08-20)', () => 
     // comment for the full history and .pip-ready-selector-row-check's/
     // .pip-ready-selector-footer-action's own comments for the specific
     // foreground fixes this restoration required).
-    expect(triggerBg).toBe('rgb(51, 51, 51)');
-    expect(triggerBg).not.toBe('rgb(34, 34, 34)'); // never the modal/toast #222222
-    expect(triggerBg).not.toBe('rgb(87, 82, 74)'); // never the superseded #57524A lightening
+    // Lantern (PRD §7): the selector is the menu layer, --color-bg-menu
+    // #3C3D40, not the slate decision/toast layer #38393C.
+    expect(triggerBg).toBe('rgb(60, 61, 64)');
+    expect(triggerBg).not.toBe('rgb(56, 57, 60)'); // never the slate toast/decision surface
 
     await readyScreen.locator('.pip-ready-selector-trigger').click();
     const panelBg = await pipPage.locator('.pip-ready-selector-panel').evaluate((el) => getComputedStyle(el).backgroundColor);
     expect(panelBg).toBe(triggerBg); // trigger and panel read as one component
   });
 
-  test('the caret sits inside a small non-orange circular badge with a white glyph, visible against the lighter selector surface', async ({ page, context }) => {
+  test('the caret sits inside a small neutral circular badge with a cream glyph, never chartreuse, visible against the selector surface', async ({ page, context }) => {
     await page.addInitScript(() => {
       localStorage.setItem('mezzoProfiles', JSON.stringify([
         { id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 100 },
@@ -368,9 +369,11 @@ test.describe('Companion: selector surface and caret badge (2026-08-20)', () => 
     // --stone (#8A827A), not the orange --hanko-fill (2026-08-20
     // manual-review correction) — an existing warm neutral from the same
     // shared token set, reserved elsewhere for primary/affirmative actions.
-    expect(style.backgroundColor).toBe('rgb(138, 130, 122)');
-    expect(style.backgroundColor).not.toBe('rgb(196, 89, 58)'); // never the orange --hanko-fill
-    expect(style.color).toBe('rgb(255, 255, 255)'); // white caret (currentColor on the SVG stroke)
+    // Lantern: a faint cream badge with a cream caret. Chartreuse is
+    // reserved for the over-range band inside the Companion.
+    expect(normalizeColor(style.backgroundColor)).toBe('rgba(243, 235, 222, 0.14)');
+    expect(normalizeColor(style.color)).toBe('rgb(243, 235, 222)'); // cream caret (currentColor on the SVG stroke)
+    expect(normalizeColor(style.color)).not.toBe('rgb(222, 222, 101)'); // never chartreuse
     expect(style.width).toBe('20px');
     expect(style.height).toBe('20px');
     // Fully round — a circle, not a rounded square.
@@ -496,15 +499,15 @@ test.describe('Companion: selector surface and caret badge (2026-08-20)', () => 
     // Warm off-white — genuinely light text, not a near-invisible dark
     // tone. 7.45:1 against #333333 (unchanged value, unaffected by the
     // surface restoration — see .pip-ready-selector-trigger's own comment).
-    expect(normalizeColor(nameColor)).toBe('rgba(222, 210, 194, 0.92)');
+    expect(normalizeColor(nameColor)).toBe('rgba(243, 235, 222, 0.92)');
 
     // Selected checkmark (2026-08-20 fix): #DC9C89, not the bare
     // --hanko-fill orange, which only reached 2.91:1 as a foreground here
     // — under the 3:1 icon minimum. #DC9C89 clears it (5.51:1) — see
     // .pip-ready-selector-row-check's own comment.
     const checkColor = await panel.locator('.pip-ready-selector-row-check').first().evaluate((el) => getComputedStyle(el).color);
-    expect(checkColor).toBe('rgb(220, 156, 137)');
-    expect(checkColor).not.toBe('rgb(196, 89, 58)'); // never the bare, under-contrast --hanko-fill
+    expect(checkColor).toBe('rgb(206, 226, 196)'); // sage --color-link
+    expect(checkColor).not.toBe('rgb(222, 222, 101)'); // never chartreuse inside the Companion
 
     // Create new profile footer text — same #DC9C89 fix, same reasoning
     // (bare --hanko-fill measured 2.91:1 at rest / 3.76:1 on hover here,
@@ -512,7 +515,7 @@ test.describe('Companion: selector surface and caret badge (2026-08-20)', () => 
     // / 4.58:1 — see .pip-ready-selector-footer-action's own comment).
     const footerAction = panel.locator('.pip-ready-selector-footer-action');
     const footerColor = await footerAction.evaluate((el) => getComputedStyle(el).color);
-    expect(footerColor).toBe('rgb(220, 156, 137)');
+    expect(footerColor).toBe('rgb(206, 226, 196)');
 
     // Row-action icons (Recalibrate/Delete/Discard) — idle-but-visible
     // color (shown via the row's own :hover, before the icon itself is
@@ -525,7 +528,7 @@ test.describe('Companion: selector surface and caret badge (2026-08-20)', () => 
     const kitchenRow = panel.locator('.pip-ready-selector-row', { hasText: 'Kitchen' });
     await kitchenRow.hover();
     const rowActionColor = await kitchenRow.locator('.pip-ready-selector-row-action').first().evaluate((el) => getComputedStyle(el).color);
-    expect(normalizeColor(rowActionColor)).toBe('rgba(172, 158, 136, 0.75)');
+    expect(normalizeColor(rowActionColor)).toBe('rgba(171, 166, 152, 0.75)');
 
     // Real keyboard navigation, not .focus() — opening the panel already
     // auto-focuses a radio programmatically (openSelectorPanel()'s own
@@ -542,7 +545,7 @@ test.describe('Companion: selector surface and caret badge (2026-08-20)', () => 
     // the 3:1 focus-indicator minimum; #DC9C89 clears it at 5.51:1) — see
     // .pip-ready-selector-row-radio:focus-visible's own comment.
     const outlineColor = await focusedLabel.evaluate((el) => getComputedStyle(el).outlineColor);
-    expect(outlineColor).toBe('rgb(220, 156, 137)');
+    expect(outlineColor).toBe('rgb(206, 226, 196)');
   });
 });
 
@@ -567,8 +570,8 @@ test.describe('Companion: toast styling completeness (2026-08-20)', () => {
       const cs = getComputedStyle(el);
       return { backgroundColor: cs.backgroundColor, color: cs.color, borderWidth: cs.borderWidth };
     });
-    expect(style.backgroundColor).toBe('rgb(34, 34, 34)');
-    expect(normalizeColor(style.color)).toBe('rgba(222, 210, 194, 0.85)');
+    expect(style.backgroundColor).toBe('rgb(56, 57, 60)'); // slate decision layer, --color-bg-raised
+    expect(normalizeColor(style.color)).toBe('rgba(243, 235, 222, 0.85)');
     // No border at all (2026-08-20 manual-review correction) — borderWidth
     // is the unambiguous check here: an element with no border declared
     // can still report *some* browser-internal borderColor value even
@@ -970,13 +973,17 @@ test.describe('Companion: row-action tooltips (2026-08-20)', () => {
     expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
     expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
 
-    // Not clipped by the panel's own overflow — position:fixed puts it
-    // outside the panel's box entirely, so its computed position must not
-    // sit strictly inside the panel's clipped bounds.
-    const panelBox = await panel.boundingBox();
-    const tooltipFullyInsidePanel = box.x >= panelBox.x && box.y >= panelBox.y
-      && (box.x + box.width) <= (panelBox.x + panelBox.width) && (box.y + box.height) <= (panelBox.y + panelBox.height);
-    expect(tooltipFullyInsidePanel).toBe(false);
+    // Not clipped by the panel's own overflow: the tooltip lives outside the
+    // panel in the DOM and is position:fixed, so the panel's overflow box
+    // can never clip it. (A geometric "not entirely inside the panel's
+    // bounds" check used to stand in for this; it depended on the label's
+    // text width and broke when the font changed, without any clipping.)
+    const structure = await tooltip.evaluate((el) => ({
+      insidePanel: !!el.closest('.pip-ready-selector-panel'),
+      position: getComputedStyle(el).position,
+    }));
+    expect(structure.insidePanel).toBe(false);
+    expect(structure.position).toBe('fixed');
   });
 
   test('Recalibrate and Delete still target the exact profile and behavior they always did — the tooltip change is presentation-only', async ({ page, context }) => {
@@ -1015,7 +1022,7 @@ test.describe('Companion: row-action tooltips (2026-08-20)', () => {
       const cs = getComputedStyle(el);
       return { backgroundColor: cs.backgroundColor, color: cs.color, borderRadius: cs.borderRadius, fontSize: cs.fontSize };
     });
-    expect(style.backgroundColor).toBe('rgb(34, 34, 34)'); // matches modal/toast #222222
+    expect(style.backgroundColor).toBe('rgb(56, 57, 60)'); // matches the slate toast/decision layer
     expect(parseFloat(style.fontSize)).toBeLessThan(13); // compact, smaller than body text
     expect(parseFloat(style.borderRadius)).toBeGreaterThan(0);
   });

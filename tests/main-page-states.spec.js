@@ -41,40 +41,31 @@ async function blockMicrophone(context) {
 }
 
 test.describe('Main page: permission not yet granted', () => {
-  test('shows the approved heading, static visualization, benefits section, and primary action — and never requests the microphone merely by rendering', async ({ page }) => {
+  test('shows the Lantern hero, ring tile, benefits, and Get started band, and never requests the microphone merely by rendering', async ({ page }) => {
     await page.goto('/index.html');
     const state = page.locator('#mic-request');
     await expect(state).toBeVisible();
-    await expect(state.locator('h1')).toHaveText('You care about how your voice affects others');
+    await expect(state.locator('h1')).toHaveText('Be heard without filling the room.');
+    await expect(state.locator('.home-eyebrow')).toHaveText('Voice awareness for calls');
+    await expect(state.locator('.home-highlight')).toHaveText('outside your intended range');
 
-    // The static visualization is the product-owner-supplied PNG
-    // (assets/home-vizx2.png), never a live MezzoWaveVisualizer instance
-    // and never the earlier hand-authored inline SVG — confirmed
-    // structurally (no <canvas>, which a real instance always renders; no
-    // <svg>, which the retired version used) rather than by trying to
-    // detect "no animation" directly.
-    const viz = state.locator('.hero-static-viz');
-    await expect(viz).toBeVisible();
-    await expect(viz.locator('canvas')).toHaveCount(0);
-    await expect(viz.locator('svg')).toHaveCount(0);
-    const vizImg = viz.locator('img');
-    await expect(vizImg).toHaveCount(1);
-    await expect(vizImg).toHaveAttribute('src', /assets\/home-vizx2\.png$/);
-    await expect(vizImg).toHaveAttribute('alt', '');
-    await expect(vizImg).not.toHaveAttribute('tabindex', /.*/);
-    // Decorative-only: no accessible name at all, and never reachable by
-    // keyboard — matches alt="" plus the wrapping aria-hidden.
-    const vizAccName = await vizImg.evaluate((el) => el.getAttribute('alt'));
-    expect(vizAccName).toBe('');
+    // The hero ring is a still CSS illustration: no <canvas> (a real
+    // visualizer always renders one), no image, decorative only.
+    const tile = state.locator('.home-ring-tile');
+    await expect(tile).toBeVisible();
+    await expect(tile).toHaveAttribute('aria-hidden', 'true');
+    await expect(tile.locator('canvas')).toHaveCount(0);
+    await expect(tile.locator('img')).toHaveCount(0);
+    await expect(state.locator('.home-ring-caption')).toHaveText('When your voice travels past your range, a soft chartreuse glow appears. That’s the nudge.');
 
-    await expect(state.getByText('Designed for shared spaces.')).toBeVisible();
-    await expect(state.getByText('For calls with headphones')).toBeVisible();
-    await expect(state.getByText('A quiet visual cue')).toBeVisible();
-    await expect(state.getByText('Your words stay private')).toBeVisible();
+    for (const heading of ['For calls with headphones', 'Calibrated to you', 'Your words stay private']) {
+      await expect(state.locator('.home-benefit-heading', { hasText: heading })).toBeVisible();
+    }
 
     const enableBtn = page.locator('#btn-enable-microphone');
     await expect(enableBtn).toBeVisible();
     await expect(enableBtn).toHaveText('Enable microphone');
+    await expect(page.locator('#get-started .home-step')).toHaveCount(3);
 
     // Rendering this state alone must never itself acquire the microphone —
     // still showing the not-yet-granted state after load (not silently
@@ -83,34 +74,26 @@ test.describe('Main page: permission not yet granted', () => {
     await expect(page.locator('#mic-denied')).toBeHidden();
   });
 
-  test('the supplied PNG loads successfully and renders at exactly 220x220 CSS pixels at the desktop reference width, with no horizontal overflow at the narrow reference width', async ({ page }) => {
-    await page.setViewportSize({ width: 1018, height: 900 });
-    const [response] = await Promise.all([
-      page.waitForResponse((res) => res.url().endsWith('assets/home-vizx2.png')),
-      page.goto('/index.html'),
-    ]);
-    expect(response.ok()).toBe(true);
+  test('Get started jumps to the band, and the page never scrolls sideways at phone width', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 860 });
+    await page.goto('/index.html');
+    await page.locator('.home-get-started').click();
+    await expect(page).toHaveURL(/#get-started$/);
+    await expect(page.locator('#btn-enable-microphone')).toBeInViewport();
 
-    const vizImg = page.locator('.hero-static-viz img');
-    await expect(vizImg).toBeVisible();
-    const box = await vizImg.boundingBox();
-    expect(box.width).toBeCloseTo(220, 0);
-    expect(box.height).toBeCloseTo(220, 0);
-
-    // Narrow reference width — the image must never render larger than
-    // 220x220 there either (width:min(100%,220px) on the wrapper), and
-    // must never push the page into horizontal scroll.
-    await page.setViewportSize({ width: 375, height: 900 });
-    await page.reload();
-    await expect(vizImg).toBeVisible();
-    const narrowBox = await vizImg.boundingBox();
-    expect(narrowBox.width).toBeLessThanOrEqual(220);
-    expect(narrowBox.height).toBeLessThanOrEqual(220);
-    const { scrollWidth, clientWidth } = await page.evaluate(() => ({
-      scrollWidth: document.documentElement.scrollWidth,
-      clientWidth: document.documentElement.clientWidth,
-    }));
-    expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
+    for (const width of [375, 320]) {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto('/index.html');
+      await expect(page.locator('#mic-request')).toBeVisible();
+      const { scrollWidth, clientWidth } = await page.evaluate(() => ({
+        scrollWidth: document.documentElement.scrollWidth,
+        clientWidth: document.documentElement.clientWidth,
+      }));
+      expect(scrollWidth, `no horizontal scroll at ${width}px`).toBeLessThanOrEqual(clientWidth);
+      // The hero tile must not take over the first screen on a phone.
+      const tileBox = await page.locator('.home-ring-tile').boundingBox();
+      expect(tileBox.height).toBeLessThanOrEqual(260);
+    }
   });
 
   test('does not automatically focus Enable microphone on the very first page load (2026-08-17 manual-review fix)', async ({ page }) => {

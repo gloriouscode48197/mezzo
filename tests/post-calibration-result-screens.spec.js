@@ -1140,7 +1140,8 @@ test.describe('Accessibility, H1 consistency, and sizing — both result variant
       primaryBtn.evaluate((el) => getComputedStyle(el).backgroundColor),
     ]);
     expect(discardStyle).toEqual(keepStyle);
-    expect(discardStyle.backgroundColor).not.toBe('rgba(0, 0, 0, 0)'); // a real, filled-looking surface, not a ghost/ ransparent button
+    // Lantern secondary (PRD §4.5): no fill, a 1px cream outline at 30%.
+    expect(normalizeColor(discardStyle.borderColor)).toBe('rgba(243, 235, 222, 0.3)');
     expect(discardStyle.backgroundColor).not.toBe(primaryBg); // still visually distinct from the primary decision above it
 
     // No icon.
@@ -1309,8 +1310,8 @@ test.describe('Shared toast restyle (2026-08-20 pass, supersedes 2026-08-15)', (
     // The approved dark #222222/light-text pairing, matching the
     // modal-card system — existing values, no new color family
     // introduced beyond the accent border below.
-    expect(toastSurface.backgroundColor).toBe('rgb(34, 34, 34)'); // #222222
-    expect(normalizeColor(toastSurface.color)).toBe('rgba(222, 210, 194, 0.85)');
+    expect(toastSurface.backgroundColor).toBe('rgb(56, 57, 60)'); // slate, --color-bg-raised
+    expect(normalizeColor(toastSurface.color)).toBe('rgba(243, 235, 222, 0.85)');
 
     // No border at all (2026-08-20 manual-review correction — an
     // orange-tinted accent border briefly existed here and read as an
@@ -1347,8 +1348,8 @@ test.describe('Shared toast restyle (2026-08-20 pass, supersedes 2026-08-15)', (
     await expect(pipPage.locator('.pip-toast')).toHaveClass(/pip-toast-visible/);
     await expect(pipPage.locator('.pip-toast-card')).toHaveText('Speaking profile saved');
     const toastSurface = await readToastSurface(pipPage);
-    expect(toastSurface.backgroundColor).toBe('rgb(34, 34, 34)');
-    expect(normalizeColor(toastSurface.color)).toBe('rgba(222, 210, 194, 0.85)');
+    expect(toastSurface.backgroundColor).toBe('rgb(56, 57, 60)');
+    expect(normalizeColor(toastSurface.color)).toBe('rgba(243, 235, 222, 0.85)');
     expect(toastSurface.borderWidth).toBe('0px');
     expect(parseFloat(toastSurface.borderRadius)).toBeLessThan(20);
   });

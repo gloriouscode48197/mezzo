@@ -1,147 +1,113 @@
 /* ═══════════════════════════════════════════
    Mezzo Design Tokens — CSS Custom Properties
-   Generated from typography stylesheets
+   Lantern visual system (docs/prd/range-ring-and-lantern-refresh.md §4):
+   one dark theme for the website and the Companion, Geist type, a small
+   palette with one job per color, 3px corners.
    ═══════════════════════════════════════════ */
 
 
 /* ── Fonts ── */
 :root {
-  --font-display: 'Noto Serif JP', serif;
-  --font-body: 'Sora', sans-serif;
+  --font-display: 'Geist', system-ui, sans-serif;
+  --font-body: 'Geist', system-ui, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, monospace; /* small uppercase labels only */
 
   --weight-light: 300;
   --weight-regular: 400;
   --weight-medium: 500;
+  --weight-semibold: 600;
+
+  --tracking-heading: -0.04em;
+  --tracking-label: 0.12em;  /* Geist Mono uppercase labels */
 }
 
 
-/* ── Ink (shared, surface-independent)
-   The near-black neutral used for headings, interactive labels, and primary
-   UI text/surfaces, replacing the old pure-black-leaning values (#111111,
-   #1A1A1A, #2A2A2A). Ink Soft is a lighter tint of the same hue, used only
-   for body copy so headings and body text keep a visible hierarchy without
-   falling back to near-black. ── */
+/* ── Semantic color roles (PRD §4.2, §10). One job per token; pages and the
+   Companion use these, never literal colors. Translucent uses mix a role
+   with transparent rather than adding a token, e.g.
+   color-mix(in srgb, var(--color-text) 30%, transparent).
+   Chartreuse (--color-accent) is the website's brand color; inside the
+   Companion it only ever means the over-range band. ── */
 :root {
-  --ink: #3C3B3F;
-  --ink-soft: #4E4C51;
+  /* PRD §4.2 roles */
+  --color-bg: #2D2E31;               /* Page and Companion screen background */
+  --color-bg-slate: #38393C;         /* Raised slate: decision states, hero tile, Get started band */
+  --color-bg-decision: var(--color-bg-slate);
+  --color-bg-menu: #3C3D40;          /* Menu panel (Ready's profile selector) */
+  --color-accent: #DEDE65;           /* Chartreuse */
+  --color-text: #F3EBDE;             /* Cream: headings, main text */
+  --color-link: #CEE2C4;             /* Sage: text links, focus rings, bullets */
+  --color-text-muted: #ABA698;       /* Body, captions, labels */
+  --color-voice: #8E897B;            /* Range Ring voice circle */
+
+  /* Supporting roles */
+  --color-text-soft: var(--color-text);      /* Companion body text, controls */
+  --color-label: var(--color-text-muted);    /* Small uppercase labels */
+  --color-link-quiet: var(--color-link);     /* Low-emphasis text actions (Cancel, Back) */
+  --color-notice: var(--color-link);         /* Calibration status, name-collision notice; never chartreuse */
+  --color-on-accent: #2D2E31;                /* Charcoal text on chartreuse or cream fills */
+  --color-bg-menu-hover: #46474A;            /* Selector trigger hover */
+  --color-bg-raised: var(--color-bg-decision); /* Result card, toast, tooltip: the decision layer, not a darker card */
+  --color-overlay: #FFFFFF;                  /* Translucent fills and hairlines on dark */
+  --color-shadow: #000000;                   /* Shadows and scrims */
+
+  /* Buttons (PRD §4.5). The website's primary is chartreuse; the Companion
+     overrides --color-btn-primary-bg to cream in its own stylesheet. */
+  --color-btn-primary-bg: var(--color-accent);
+  --color-btn-primary-text: var(--color-on-accent);
+  --color-btn-secondary-border: color-mix(in srgb, var(--color-text) 30%, transparent);
 }
 
-/* ── Surface: Dark (Ink) ── */
+
+/* ── Surfaces. Lantern has one dark theme, so every data-surface value
+   resolves to it; the attribute stays only so existing markup keeps
+   working. Mid is the slate layer. ── */
+:root,
 [data-surface="dark"],
-.surface-dark {
-  --surface: var(--ink);
-  --surface-nav: rgba(60, 59, 63, 0.88);
-  --surface-card: rgba(240, 235, 226, 0.04);
+[data-surface="light"],
+[data-surface="mid"],
+.surface-dark,
+.surface-light,
+.surface-mid {
+  --surface: var(--color-bg);
+  --surface-nav: color-mix(in srgb, var(--color-bg) 92%, transparent);
+  --surface-card: color-mix(in srgb, var(--color-text) 4%, transparent);
 
-  --text-primary: #F0EBE2;
-  --text-default: #E8E3DA;
-  --text-body: #B8A99A;
-  --text-subdued: #B2ADA8;
-  --text-ghost: #5A5550;
+  --text-primary: var(--color-text);
+  --text-default: var(--color-text);
+  --text-body: var(--color-text-muted);
+  --text-quiet: var(--color-text-muted);
+  --text-subdued: var(--color-text-muted);
+  --text-ghost: color-mix(in srgb, var(--color-text-muted) 55%, transparent);
 
-  --hanko-text: #C4593A;
-  --hanko-glow: rgba(196, 89, 58, 0.12);
+  --border: color-mix(in srgb, var(--color-text) 12%, transparent);
+  --border-outline: var(--color-btn-secondary-border);
+  --border-pip: color-mix(in srgb, var(--color-text) 10%, transparent);
+}
 
-  --border: rgba(240, 235, 226, 0.08);
-  --border-outline: rgba(196, 89, 58, 0.4);
-  --border-pip: rgba(240, 235, 226, 0.10);
+[data-surface="mid"],
+.surface-mid {
+  --surface: var(--color-bg-slate);
+}
 
-  /* Monitoring awareness-state colors — single source of truth for the
-     Companion's own .pip-status-heading[data-zone] (src/mezzo-session.js)
-     and the homepage hero preview's .hero-companion-label[data-zone]
-     (landing.css), so the two can never drift apart again. Quiet and
-     Within Range intentionally share one value — see mezzo-session.js's
-     colorProgressFromEnergy() for why the product treats them as visually
-     identical. */
+/* Monitoring awareness-state label colors. Still used by the Companion's
+   visible status label until the Range Ring replaces it (PRD §6); retire
+   these with that label. */
+:root {
   --zone-quiet-color: rgba(222, 210, 194, 0.58);
   --zone-approaching-color: rgba(210, 155, 75, 0.85);
   --zone-outside-color: rgba(248, 130, 65, 0.80);
-
-  --grain-opacity: 0.018;
-}
-
-
-/* ── Surface: Light (#F0EBE2) ── */
-[data-surface="light"],
-.surface-light {
-  --surface: #F0EBE2;
-  --surface-nav: rgba(240, 235, 226, 0.9);
-  --surface-card: rgba(60, 59, 63, 0.03);
-
-  --text-primary: var(--ink);
-  --text-default: var(--ink);
-  --text-body: var(--ink-soft);
-  /* Sits between --text-body (7.14:1) and --text-subdued (3.18:1, fails
-     AA) — for content that needs to read as visibly quieter than body
-     text while staying accessible at normal sizes (~4.9:1). No dark- or
-     mid-surface equivalent defined yet; add one only when a real use case
-     on those surfaces needs it. */
-  --text-quiet: #696463;
-  --text-subdued: #8A827A;
-  --text-ghost: #C8C0B5;
-
-  --hanko-text: #C4593A;
-  --hanko-glow: rgba(196, 89, 58, 0.10);
-
-  --border: rgba(138, 130, 122, 0.18);
-  --border-outline: rgba(196, 89, 58, 0.4);
-  --border-pip: #D8D0C3;
-
-  --grain-opacity: 0.022;
-}
-
-
-/* ── Surface: Mid-dark (#3A3A3A) ── */
-[data-surface="mid"],
-.surface-mid {
-  --surface: #3A3A3A;
-  --surface-nav: rgba(58, 58, 58, 0.9);
-  --surface-card: #444444;
-
-  --text-primary: #F0EBE2;
-  --text-default: #E8E3DA;
-  --text-body: #C8BEB2;
-  --text-subdued: #A89E94;
-  --text-ghost: #6B6560;
-
-  --hanko-text: #D4694A;
-  --hanko-glow: rgba(212, 105, 74, 0.12);
-
-  --border: rgba(240, 235, 226, 0.10);
-  --border-outline: rgba(212, 105, 74, 0.4);
-  --border-pip: rgba(240, 235, 226, 0.10);
-
-  --grain-opacity: 0.018;
 }
 
 
 /* ── Shared (surface-independent) ── */
 :root {
-  /* Hanko */
-  --hanko-fill: #C4593A;
-  --hanko-hover: #AE4D31;
-  --hanko-on-fill: #F0EBE2;
-
-  /* Palette — named section-background tones for the marketing pages
-     (index/privacy/try-it). Used as literal backgrounds on data-surface-
-     scoped section wrappers, not as a second theming mechanism — the
-     existing [data-surface] text/border tokens still drive foreground
-     colors. Paper and Unbleached alias existing light-surface values;
-     Sumi and Washi are new. */
-  --sumi: var(--ink);
-  --washi: #E6DFD4;
-  --paper: #F0EBE2;
-  --unbleached: #D8D0C3;
-  --warm-grey: #B8A99A;
-  --dark-wash: #3A3A3A;
-  --mid-wash: #6B6B6B;
-  --stone: #8A827A;
-
-  /* Radius */
-  --radius-cta: 100px;
-  --radius-pill: 100px;
+  /* Radius — 3px corners on buttons and inputs, no pills (PRD §4.4) */
+  --radius-control: 3px;
+  --radius-cta: var(--radius-control);
+  --radius-pill: var(--radius-control);
   --radius-card: 10px;
-  --radius-icon-btn: 6px;
+  --radius-icon-btn: var(--radius-control);
 
   /* Spacing */
   --space-nav: 24px 32px;
@@ -153,17 +119,13 @@
   --space-footer: 20px 32px;
 
   /* Shadows */
-  --shadow-cta-hover: 0 4px 20px var(--hanko-glow);
-  --shadow-pip-window: 0 4px 24px rgba(0, 0, 0, 0.25);
+  --shadow-pip-window: 0 4px 24px color-mix(in srgb, var(--color-shadow) 25%, transparent);
 
   /* Transitions */
-  --transition-hover: all 0.3s ease;
+  --transition-hover: all 0.2s ease;
   --transition-nav: background 0.4s, box-shadow 0.4s;
   --transition-reveal: 0.7s ease;
   --reveal-offset: 16px;
-
-  /* Grain */
-  --grain-size: 256px;
 
   /* Feedback circle */
   --circle-container: 280px;
@@ -174,105 +136,84 @@
 }
 
 
-/* ── Semantic color roles (docs/prd/range-ring-and-lantern-refresh.md §4.2,
-   §10). One job per token. Values below are today's colors, so swapping
-   to these tokens changes nothing visually; the Lantern refresh then
-   changes values here, not in each stylesheet.
-   Translucent uses mix a role with transparent instead of a new token:
-   color-mix(in srgb, var(--color-text-soft) 85%, transparent) renders
-   exactly as rgba(222, 210, 194, 0.85). ── */
-:root {
-  /* PRD §4.2 roles */
-  --color-bg: #3C3B3F;            /* Companion screen background */
-  --color-bg-decision: #3C3B3F;   /* Decision states (same as screens today) */
-  --color-bg-menu: #333333;       /* Profile selector trigger and panel */
-  --color-accent: var(--hanko-fill); /* Brand accent */
-  --color-text: #F0EBE2;          /* Headings */
-  --color-link: #DC9C89;          /* Accent links and marks on menu surfaces */
-  --color-text-muted: #AC9E88;    /* Hints, disclaimers, group labels */
-  --color-voice: #8E897B;         /* Range Ring voice circle (unused until the ring ships) */
+/* ═══════════════════════════════════════════
+   Global text and focus (PRD §9a)
+   ═══════════════════════════════════════════ */
 
-  /* Supporting roles, needed to keep today's look exact */
-  --color-text-soft: #DED2C2;     /* Companion body text, controls */
-  --color-label: #9A9289;         /* Small uppercase labels */
-  --color-link-quiet: #B8A99A;    /* Low-emphasis text actions (Cancel, Back) */
-  --color-notice: #D29B4B;        /* Calibration status, name-collision notice */
-  --color-on-accent: #FFFFFF;     /* Text on accent-filled buttons */
-  --color-bg-menu-hover: #3B3B3B; /* Selector trigger hover */
-  --color-bg-raised: #222222;     /* Result card, toast, tooltip */
-  --color-overlay: #FFFFFF;       /* Translucent fills and hairlines on dark */
-  --color-shadow: #000000;        /* Shadows and scrims on dark */
-  --color-shadow-warm: #2A2017;   /* Shadows on the light homepage */
-  --color-surface-white: #FFFFFF; /* Homepage window illustration */
+h1, h2, h3 { text-wrap: balance; }
+p, li, figcaption, label { text-wrap: pretty; }
+
+:focus-visible {
+  outline: 2px solid var(--color-link);
+  outline-offset: 2px;
 }
 
 
 /* ═══════════════════════════════════════════
-   Typography Tokens
+   Typography Tokens — Geist
    ═══════════════════════════════════════════ */
-
-/* ── Display — Noto Serif JP ── */
 
 .type-hero-heading {
   font-family: var(--font-display);
-  font-weight: var(--weight-light);
+  font-weight: var(--weight-semibold);
   font-size: clamp(38px, 5vw, 61px);
-  line-height: 115%;
-  letter-spacing: -0.2px;
+  line-height: 1.05;
+  letter-spacing: var(--tracking-heading);
   color: var(--text-primary);
 }
 
 .type-section-heading {
   font-family: var(--font-display);
-  font-weight: var(--weight-light);
-  font-size: clamp(29px, 3.6vw, 42px);
-  line-height: 115%;
-  letter-spacing: -0.2px;
+  font-weight: var(--weight-semibold);
+  font-size: clamp(28px, 3.4vw, 40px);
+  line-height: 1.1;
+  letter-spacing: var(--tracking-heading);
   color: var(--text-primary);
 }
 
 .type-step-heading {
   font-family: var(--font-display);
-  font-weight: var(--weight-regular);
+  font-weight: var(--weight-medium);
   font-size: 18px;
-  line-height: 130%;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
   color: var(--text-primary);
 }
 
 .type-step-number {
-  font-family: var(--font-display);
-  font-weight: var(--weight-light);
-  font-size: 48px;
-  line-height: 100%;
-  color: #C25C41;
+  font-family: var(--font-mono);
+  font-weight: var(--weight-regular);
+  font-size: 12px;
+  line-height: 1;
+  letter-spacing: var(--tracking-label);
+  color: var(--color-link);
 }
 
 .type-statement {
   font-family: var(--font-display);
-  font-weight: var(--weight-regular);
+  font-weight: var(--weight-medium);
   font-size: 17px;
-  line-height: 150%;
+  line-height: 1.5;
   color: var(--text-primary);
 }
 
 .type-sub-hero {
   font-family: var(--font-display);
-  font-weight: var(--weight-light);
+  font-weight: var(--weight-regular);
   font-size: 17px;
-  line-height: 170%;
+  line-height: 1.6;
   color: var(--text-subdued);
 }
 
+/* Lowercase "mezzo" wordmark, text only (PRD §4.4) */
 .type-nav-wordmark {
-  font-family: var(--font-body);
-  font-weight: var(--weight-medium);
-  font-size: 13px;
-  line-height: 100%;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  /* Ink — the wordmark is a brand/interactive element, so it uses the same
-     near-black as headings rather than the softer body tint. */
-  color: var(--ink);
+  font-family: var(--font-display);
+  font-weight: var(--weight-semibold);
+  font-size: 22px;
+  line-height: 1;
+  letter-spacing: var(--tracking-heading);
+  text-transform: lowercase;
+  color: var(--color-text);
   text-decoration: none;
 }
 
@@ -293,8 +234,8 @@
   position: sticky;
   top: 0;
   z-index: 10;
-  background: var(--paper);
-  border-bottom: 1px solid rgba(138, 130, 122, 0.15);
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--border);
 }
 
 .nav-links {
@@ -310,20 +251,17 @@
   font-size: 14px;
   border-bottom: 2px solid transparent;
   padding-bottom: 3px;
-  transition: opacity 0.2s ease;
+  transition: color 0.2s ease;
 }
 
-.nav-link:hover { opacity: 0.7; }
-
-.nav-link-quiet { color: var(--mid-wash); }
+.nav-link-quiet { color: var(--color-text-muted); }
+.nav-link-quiet:hover { color: var(--color-text); }
 
 .nav-link-active {
-  color: var(--text-primary);
+  color: var(--color-text);
   cursor: default;
-  border-bottom: 2px solid var(--hanko-fill);
+  border-bottom: 2px solid var(--color-accent);
 }
-
-.nav-link-active:hover { opacity: 1; }
 
 @media (min-width: 1100px) {
   .nav { padding-left: 120px; padding-right: 120px; }
@@ -352,95 +290,72 @@
   .site-footer { padding-left: 120px; padding-right: 120px; }
 }
 
-/* ── Shared focus-visible treatment for interactive elements (nav links,
-   footer link, buttons) — moved here from a page-specific stylesheet so
-   every page gets a visible keyboard-focus ring, not just the homepage.
-   Batch 4 (independent corrections): no border-radius override here
-   anymore — this used to force every focused element's OWN border-radius
-   to a flat 4px, which is fine for plain-text links (no radius of their
-   own to begin with) but was actively wrong for every pill-shaped button
-   (.btn-primary/.btn-outline/etc. all use --radius-cta/--radius-pill,
-   100px) — focusing one visibly squared its corners off to 4px and drew
-   the outline around that near-rectangular shape instead of the pill,
-   exactly the "unrelated rectangular outline" this correction was scoped
-   to fix. Removing the override lets the outline follow each element's own
-   actual, already-correct border-radius (current Chrome/Edge already trace
-   outlines to the element's real shape without any extra CSS) — a plain
-   link still gets a normal square-ish outline (nothing here ever gave it
-   one on purpose), and a pill button's outline now genuinely traces the
-   pill. ── */
-a:focus-visible,
-button:focus-visible {
-  outline: 2px solid var(--hanko-fill);
-  outline-offset: 3px;
-}
-
 .type-monitoring-within {
   font-family: var(--font-display);
-  font-weight: var(--weight-light);
+  font-weight: var(--weight-medium);
   font-size: 24px;
-  line-height: 115%;
-  letter-spacing: -0.2px;
+  line-height: 1.15;
+  letter-spacing: var(--tracking-heading);
   color: var(--text-primary);
 }
 
 .type-monitoring-outside {
   font-family: var(--font-display);
-  font-weight: var(--weight-light);
+  font-weight: var(--weight-medium);
   font-size: 41px;
-  line-height: 115%;
-  letter-spacing: -0.2px;
+  line-height: 1.15;
+  letter-spacing: var(--tracking-heading);
   color: var(--text-primary);
 }
 
 .type-privacy-h2 {
   font-family: var(--font-display);
-  font-weight: var(--weight-light);
-  font-size: 28px;
-  line-height: 125%;
-  letter-spacing: -0.2px;
+  font-weight: var(--weight-semibold);
+  font-size: 26px;
+  line-height: 1.2;
+  letter-spacing: var(--tracking-heading);
   color: var(--text-primary);
 }
 
-/* ── Body — Sora ── */
+/* ── Body ── */
 
 .type-hero-body {
   font-family: var(--font-body);
-  font-weight: var(--weight-light);
-  font-size: 16px;
-  line-height: 180%;
+  font-weight: var(--weight-regular);
+  font-size: 17px;
+  line-height: 1.6;
   color: var(--text-body);
 }
 
 .type-body {
   font-family: var(--font-body);
-  font-weight: var(--weight-light);
-  font-size: 14px;
-  line-height: 170%;
+  font-weight: var(--weight-regular);
+  font-size: 15px;
+  line-height: 1.6;
   color: var(--text-body);
 }
 
 .type-situation {
   font-family: var(--font-body);
-  font-weight: var(--weight-light);
+  font-weight: var(--weight-regular);
   font-size: 15px;
-  line-height: 150%;
+  line-height: 1.5;
   color: var(--text-body);
 }
 
 .type-note {
   font-family: var(--font-body);
-  font-weight: var(--weight-light);
+  font-weight: var(--weight-regular);
   font-size: 14px;
-  line-height: 170%;
+  line-height: 1.6;
   color: var(--text-subdued);
 }
 
 .type-microcopy {
   font-family: var(--font-body);
-  font-weight: var(--weight-light);
-  font-size: 12px;
-  line-height: 150%;
+  font-weight: var(--weight-regular);
+  font-size: 13px;
+  line-height: 1.5;
   color: var(--text-subdued);
 }
 
@@ -449,180 +364,150 @@ button:focus-visible {
 
 .type-cta-primary {
   font-family: var(--font-body);
-  font-weight: var(--weight-regular);
-  font-size: 13px;
-  letter-spacing: 0.3px;
-  color: var(--hanko-on-fill);
+  font-weight: var(--weight-medium);
+  font-size: 14px;
+  color: var(--color-btn-primary-text);
 }
 
 .type-cta-outline {
   font-family: var(--font-body);
-  font-weight: var(--weight-regular);
-  font-size: 12px;
-  letter-spacing: 0.8px;
-  text-transform: uppercase;
-  color: var(--hanko-text);
+  font-weight: var(--weight-medium);
+  font-size: 14px;
+  color: var(--color-text);
 }
 
-.type-tag {
-  font-family: var(--font-body);
-  font-weight: var(--weight-regular);
-  font-size: 11px;
-  letter-spacing: 2.2px;
-  text-transform: uppercase;
-  color: var(--hanko-text);
-}
-
-.type-pip-pill {
-  font-family: var(--font-body);
-  font-weight: var(--weight-regular);
-  font-size: 11px;
-  letter-spacing: 0.8px;
-  text-transform: uppercase;
-  color: var(--text-subdued);
-}
-
+/* Geist Mono uppercase: small labels only */
+.type-tag,
+.type-pip-pill,
 .type-state-label {
-  font-family: var(--font-body);
-  font-weight: var(--weight-light);
-  font-size: 8px;
-  letter-spacing: 1.3px;
+  font-family: var(--font-mono);
+  font-weight: var(--weight-regular);
+  letter-spacing: var(--tracking-label);
   text-transform: uppercase;
-  color: var(--text-ghost);
 }
+.type-tag { font-size: 12px; color: var(--color-text-muted); }
+.type-pip-pill { font-size: 11px; color: var(--text-subdued); }
+.type-state-label { font-size: 10px; color: var(--text-ghost); }
 
-/* Both footer tokens use Ink — ~9.3:1 against Paper, comfortably clearing
-   WCAG AA (4.5:1) for normal-size text. Neither --text-ghost nor
-   --text-subdued clear that threshold here (measured ~1.9:1 and ~3.2:1
-   against Paper respectively), which is why the footer read as too faint.
-   Restraint comes from the smaller size, lighter weight, and
-   letter-spacing here — not from a low-contrast color. */
 .type-footer-brand {
   font-family: var(--font-body);
-  font-weight: var(--weight-light);
-  font-size: 11px;
-  letter-spacing: 1.3px;
-  color: var(--ink);
+  font-weight: var(--weight-regular);
+  font-size: 12px;
+  color: var(--color-text-muted);
 }
 
 .type-footer-link {
   font-family: var(--font-body);
-  font-weight: var(--weight-light);
+  font-weight: var(--weight-regular);
   font-size: 12px;
-  color: var(--ink);
+  color: var(--color-text-muted);
   text-decoration: none;
   transition: var(--transition-hover);
 }
 
-.type-footer-link:hover { color: var(--hanko-text); }
+.type-footer-link:hover { color: var(--color-link); }
 
 
 /* ═══════════════════════════════════════════
-   Component Tokens
+   Component Tokens — buttons (PRD §4.5)
    ═══════════════════════════════════════════ */
 
 .btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-family: var(--font-body);
-  font-weight: var(--weight-regular);
-  font-size: 16px;
-  letter-spacing: 0.3px;
-  color: var(--hanko-on-fill);
-  background: var(--hanko-fill);
-  padding: 13px 28px;
-  border-radius: var(--radius-cta);
+  font-weight: var(--weight-medium);
+  font-size: 15px;
+  line-height: 1.2;
+  color: var(--color-btn-primary-text);
+  background: var(--color-btn-primary-bg);
+  padding: 13px 24px;
+  border-radius: var(--radius-control);
   border: none;
   cursor: pointer;
+  text-decoration: none;
   transition: var(--transition-hover);
 }
 .btn-primary:hover {
-  background: var(--hanko-hover);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-cta-hover);
+  background: color-mix(in srgb, var(--color-btn-primary-bg) 86%, var(--color-text));
 }
 
 .btn-outline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-family: var(--font-body);
-  font-weight: var(--weight-regular);
-  font-size: 12px;
-  letter-spacing: 0.8px;
-  text-transform: uppercase;
-  color: var(--hanko-text);
+  font-weight: var(--weight-medium);
+  font-size: 14px;
+  color: var(--color-text);
   background: transparent;
-  padding: 6px 16px;
-  border-radius: var(--radius-cta);
-  border: 1px solid var(--border-outline);
+  padding: 11px 20px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--color-btn-secondary-border);
   cursor: pointer;
   transition: var(--transition-hover);
 }
 .btn-outline:hover {
-  background: var(--hanko-fill);
-  border-color: var(--hanko-fill);
-  color: var(--hanko-on-fill);
-}
-
-/* Secondary/ghost buttons on light surfaces are neutral (Stone border, Ink
-   text) — Hanko stays accent-only, reserved for the hover fill above.
-   Scoped to [data-surface="light"] specifically so it never reaches the
-   Floating Companion, which forces data-surface="dark" on its own document
-   and keeps the original Hanko-tinted .btn-outline look. */
-[data-surface="light"] .btn-outline {
-  color: var(--ink);
-  border-color: rgba(138, 130, 122, 0.30);
+  border-color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  background: color-mix(in srgb, var(--color-text) 6%, transparent);
 }
 
 .btn-stop {
   font-family: var(--font-body);
-  font-weight: var(--weight-regular);
+  font-weight: var(--weight-medium);
   font-size: 15px;
-  color: var(--hanko-on-fill);
-  background: var(--hanko-fill);
-  padding: 14px 48px;
-  border-radius: var(--radius-cta);
+  color: var(--color-btn-primary-text);
+  background: var(--color-btn-primary-bg);
+  padding: 14px 40px;
+  border-radius: var(--radius-control);
   border: none;
   cursor: pointer;
   transition: var(--transition-hover);
 }
 
 .pip-pill {
-  font-family: var(--font-body);
+  font-family: var(--font-mono);
   font-weight: var(--weight-regular);
   font-size: 11px;
-  letter-spacing: 0.8px;
+  letter-spacing: var(--tracking-label);
   text-transform: uppercase;
   color: var(--text-subdued);
   background: var(--surface-card);
   padding: 6px 14px;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-control);
   border: 1px solid var(--border-pip);
   cursor: pointer;
   transition: var(--transition-hover);
 }
 .pip-pill:hover {
-  color: var(--hanko-text);
+  color: var(--color-link);
   border-color: var(--border-outline);
 }
 
-/* ── Theme Toggle (Light / Dark / Auto) ── */
+/* ── Theme Toggle (Light / Dark / Auto) — not loaded by any page since the
+   Lantern single dark theme; restyled only so nothing still references a
+   retired token. ── */
 .theme-toggle {
   display: inline-flex;
   align-items: center;
   gap: 2px;
   padding: 2px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-control);
 }
 
 .theme-toggle-btn {
-  font-family: var(--font-body);
+  font-family: var(--font-mono);
   font-weight: var(--weight-regular);
   font-size: 11px;
-  letter-spacing: 0.5px;
+  letter-spacing: var(--tracking-label);
   text-transform: uppercase;
   color: var(--text-subdued);
   background: none;
   border: none;
   padding: 5px 10px;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-control);
   cursor: pointer;
   transition: var(--transition-hover);
 }
@@ -632,6 +517,6 @@ button:focus-visible {
 }
 
 .theme-toggle-btn.active {
-  color: var(--hanko-on-fill);
-  background: var(--hanko-fill);
+  color: var(--color-btn-primary-text);
+  background: var(--color-btn-primary-bg);
 }

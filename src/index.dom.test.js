@@ -285,7 +285,7 @@ describe('Home', () => {
     const { document } = await setupPage();
     const pageText = document.body.textContent;
     // Retired editorial section (2026-08-17 redesign) — replaced by the
-    // mic-request sub-state's own "Designed for shared spaces" benefits.
+    // mic-request sub-state's own benefits list.
     assert.doesNotMatch(pageText, /How it works/);
     assert.doesNotMatch(pageText, /Designed to stay out of your way/);
     assert.doesNotMatch(pageText, /What it's good for/);
@@ -416,39 +416,48 @@ describe('Home — microphone permission state', () => {
 // =============================================================================
 
 describe('Home — per-sub-state heading, copy, and focus', () => {
-  it('mic-request has its own accurate heading, and the "Designed for shared spaces" benefits section', async () => {
+  it('mic-request has its own heading, eyebrow, highlighted subhead, benefits, and Get started band (Lantern, PRD §9)', async () => {
     const { document } = await setupPage({ permissionState: 'prompt' });
     const state = document.getElementById('mic-request');
-    assert.strictEqual(state.querySelector('h1').textContent, 'You care about how your voice affects others');
-    assert.match(state.textContent, /Designed for shared spaces/);
-    assert.match(state.textContent, /For calls with headphones/);
-    assert.match(state.textContent, /A quiet visual cue/);
-    assert.match(state.textContent, /Your words stay private/);
+    assert.strictEqual(state.querySelector('h1').textContent, 'Be heard without filling the room.');
+    assert.strictEqual(state.querySelector('.home-eyebrow').textContent, 'Voice awareness for calls');
+    assert.strictEqual(state.querySelector('.home-hero-subhead').textContent, 'Mezzo gently nudges you when your voice travels outside your intended range.');
+    assert.strictEqual(state.querySelector('.home-highlight').textContent, 'outside your intended range');
+    const benefits = [...state.querySelectorAll('.home-benefit-heading')].map((h) => h.textContent);
+    assert.deepStrictEqual(benefits, ['For calls with headphones', 'Calibrated to you', 'Your words stay private']);
+
+    // "Get started" jumps to the band; the band holds the only control that
+    // can trigger the browser's permission prompt.
+    const getStarted = state.querySelector('.home-get-started');
+    assert.strictEqual(getStarted.textContent, 'Get started');
+    assert.strictEqual(getStarted.getAttribute('href'), '#get-started');
+    const band = document.getElementById('get-started');
+    assert.ok(state.contains(band), 'the Get started band belongs to mic-request');
+    assert.strictEqual(band.querySelectorAll('.home-step').length, 3);
+    assert.ok(band.contains(document.getElementById('btn-enable-microphone')));
   });
 
-  it('the static visualization is the supplied PNG (assets/home-vizx2.png) — a plain, inert <img>, never a <canvas> or an inline SVG, never a MezzoWaveVisualizer instance, never animated, never touching the microphone', async () => {
+  it('the hero ring is a plain, decorative CSS illustration: no <canvas>, <img>, script, or microphone wiring', async () => {
     const { document } = await setupPage({ permissionState: 'prompt' });
-    const viz = document.querySelector('.hero-static-viz');
-    assert.notStrictEqual(viz, null);
-    assert.strictEqual(viz.querySelector('canvas'), null, 'a real MezzoWaveVisualizer always renders a <canvas> — this must be a plain, inert <img> instead');
-    assert.strictEqual(viz.querySelector('svg'), null, 'the earlier hand-authored contour SVG is retired — the product-owner-supplied PNG replaces it outright');
-    assert.strictEqual(viz.getAttribute('aria-hidden'), 'true');
-
-    const img = viz.querySelector('img');
-    assert.notStrictEqual(img, null);
-    assert.match(img.getAttribute('src'), /assets\/home-vizx2\.png$/);
-    assert.strictEqual(img.getAttribute('alt'), '', 'decorative only — the heading already carries the meaning');
-    assert.strictEqual(img.getAttribute('width'), '220');
-    assert.strictEqual(img.getAttribute('height'), '220');
-    assert.strictEqual(img.hasAttribute('tabindex'), false, 'a plain <img> is never a tab stop on its own — no tabindex should be added');
+    const tile = document.querySelector('.home-ring-tile');
+    assert.notStrictEqual(tile, null);
+    assert.strictEqual(tile.getAttribute('aria-hidden'), 'true');
+    assert.notStrictEqual(tile.querySelector('.home-ring'), null);
+    assert.strictEqual(tile.querySelector('canvas'), null, 'a real visualizer renders a <canvas>; the hero is a still illustration');
+    assert.strictEqual(tile.querySelector('img'), null);
+    assert.strictEqual(document.querySelector('.hero-static-viz'), null, 'the retired PNG preview is gone');
+    assert.strictEqual(
+      document.querySelector('.home-ring-caption').textContent,
+      'When your voice travels past your range, a soft chartreuse glow appears. That’s the nudge.',
+    );
   });
 
   it('the benefits section does not appear in mic-granted or mic-denied — it is scoped to mic-request only', async () => {
     const { document } = await setupPage({ permissionState: 'granted' });
-    assert.doesNotMatch(document.getElementById('mic-granted').textContent, /Designed for shared spaces/);
+    assert.doesNotMatch(document.getElementById('mic-granted').textContent, /Calibrated to you|Get started/);
 
     const { document: deniedDoc } = await setupPage({ permissionState: 'denied' });
-    assert.doesNotMatch(deniedDoc.getElementById('mic-denied').textContent, /Designed for shared spaces/);
+    assert.doesNotMatch(deniedDoc.getElementById('mic-denied').textContent, /Calibrated to you|Get started/);
   });
 
   it('mic-granted has its own accurate heading and copy, distinguishing permission being enabled from the microphone actually being used', async () => {
