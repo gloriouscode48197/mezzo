@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "mezzo-static",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["tests/support/static-server.mjs"],
+      "env": { "PORT": "8975" },
+      "port": 8975
+    }
+  ]
+}

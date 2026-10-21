@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ring Experiment</title>
+<!--
+  Monitoring visual experiment (2026-10-20) — exploration only, not wired
+  into the app.
+
+  Current: today's Monitoring visual, driven exactly the way the Companion
+  drives it (audio.js's 0.2 EMA on RMS → engine.js zones → MezzoWaveVisualizer).
+  Range: a circle that grows with your voice inside an end-of-range
+  boundary set a fixed number of decibels above your calibrated level.
+  Past the boundary, a soft light band grows outside it, reaching full
+  thickness a set number of decibels over. Four palettes; the over-range band
+  is the one accent color, and it stays lighter than everything else.
+
+  Audio is processed locally in this page and never recorded, stored or
+  sent anywhere — same as the app.
+
+  Serve from the repo root (it imports ../../src/*.js), e.g.
+    PORT=8975 node tests/support/static-server.mjs
+  then open http://localhost:8975/design/prototypes/ring-experiment.html
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;400&family=Sora:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --page: #2a292c;
+    --card: #3c3b3f;
+    --cream: rgb(222, 210, 194);
+    --muted: rgba(222, 210, 194, 0.62);
+    --line: rgba(255, 255, 255, 0.10);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--cream);
+    font-family: 'Sora', sans-serif;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  main { max-width: 860px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-family: 'Noto Serif JP', serif; font-weight: 300; font-size: 24px; margin: 0 0 4px; }
+  .lede { color: var(--muted); margin: 0 0 18px; max-width: 62ch; }
+  .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; }
+  button {
+    font: inherit; color: var(--cream); cursor: pointer;
+    background: rgba(255, 255, 255, 0.06); border: 1px solid var(--line);
+    border-radius: 50px; padding: 8px 16px;
+  }
+  button:hover { background: rgba(255, 255, 255, 0.12); }
+  button:disabled { opacity: 0.5; cursor: default; }
+  button.primary { background: rgba(222, 210, 194, 0.16); border-color: rgba(222, 210, 194, 0.3); }
+  #status { color: var(--muted); }
+  .shared {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 20px;
+    padding: 14px 0 18px; margin-bottom: 18px; border-bottom: 1px solid var(--line);
+  }
+  .panels { display: flex; flex-wrap: wrap; gap: 28px 20px; }
+  .panel { flex: 1 1 300px; min-width: 0; }
+  .panel h2 { font-size: 12px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
+  .stage {
+    position: relative; width: 100%; max-width: 382px; aspect-ratio: 382 / 480;
+    background: var(--card); overflow: hidden;
+    box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.16);
+  }
+  .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .readout {
+    position: absolute; left: 10px; bottom: 8px; font-size: 11px; color: var(--muted);
+    font-variant-numeric: tabular-nums; pointer-events: none;
+  }
+  .readout[hidden] { display: none; }
+  .controls { margin-top: 14px; max-width: 382px; display: grid; gap: 10px; }
+  .control label { display: flex; justify-content: space-between; gap: 8px; }
+  .control output { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .control input[type="range"] { width: 100%; accent-color: var(--cream); }
+  .hint { color: var(--muted); font-size: 11px; }
+  .check { display: flex; align-items: center; gap: 8px; }
+  .check input { accent-color: var(--cream); }
+  select {
+    font: inherit; color: var(--cream); background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; width: 100%; margin-top: 4px;
+  }
+  select option { background: var(--card); }
+  .palettes { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+  .palettes button { display: flex; align-items: center; gap: 8px; padding: 6px 12px 6px 6px; }
+  .palettes button[aria-pressed="true"] { border-color: rgba(222, 210, 194, 0.6); background: rgba(222, 210, 194, 0.12); }
+  .swatch { width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0; }
+  .notes { margin-top: 28px; color: var(--muted); max-width: 70ch; }
+  .notes b { color: var(--cream); font-weight: 500; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Ring experiment</h1>
+  <p class="lede">Calibrate, then talk. Current is today's Monitoring visual; Range is the alternative. Try silence, normal speech, getting loud briefly, and getting loud and staying loud.</p>
+
+  <div class="bar">
+    <button id="btn-calibrate" class="primary" type="button">Calibrate (6s)</button>
+    <button id="btn-defaults" type="button">Skip, use typical values</button>
+    <label class="check"><input id="c-numbers" type="checkbox"> Show numbers</label>
+    <span id="status" role="status">Microphone off. Audio stays in this page — nothing is recorded or sent.</span>
+  </div>
+
+  <div class="shared" aria-label="Voice tracking">
+    <div class="control">
+      <label for="s-attack">Follow speed (rise) <output id="o-attack"></output></label>
+      <input id="s-attack" type="range" min="20" max="500" step="10" value="90">
+      <span class="hint">How quickly the circle grows when you speak up. Lower is more responsive, and more twitchy.</span>
+    </div>
+    <div class="control">
+      <label for="s-release">Settle speed (fall) <output id="o-release"></output></label>
+      <input id="s-release" type="range" min="60" max="1500" step="20" value="320">
+      <span class="hint">How quickly it shrinks back between words.</span>
+    </div>
+    <div class="control">
+      <label for="s-edge">End of range <output id="o-edge"></output></label>
+      <input id="s-edge" type="range" min="1" max="12" step="0.5" value="6">
+      <span class="hint">How far above your normal speaking level your range ends. About +10 dB sounds twice as loud. <span id="edge-today">Calibrate to see where the app puts it today.</span></span>
+    </div>
+    <div class="control">
+      <label for="mic">Microphone</label>
+      <select id="mic" disabled><option>Available after you calibrate</option></select>
+      <span class="hint">Switch to compare mics. Recalibrate after switching: a calibration only fits the mic, and the distance, it was made with.</span>
+    </div>
+  </div>
+
+  <div class="panels">
+    <section class="panel" aria-label="Current visual">
+      <h2>Current</h2>
+      <div class="stage" id="stage-current"><span class="readout" id="readout-current" hidden></span></div>
+    </section>
+
+    <section class="panel" aria-label="Range visual">
+      <h2>Range</h2>
+      <div class="stage">
+        <canvas id="canvas-range"></canvas>
+        <span class="readout" id="readout-range" hidden></span>
+      </div>
+      <div class="controls">
+        <div class="control">
+          <span>Palette</span>
+          <div class="palettes" id="palettes" role="group" aria-label="Palette"></div>
+        </div>
+        <div class="control">
+          <label for="s-rsize">Range size <output id="o-rsize"></output></label>
+          <input id="s-rsize" type="range" min="35" max="85" step="1" value="65">
+          <span class="hint">Where the end-of-range boundary sits, as a share of the window. Smaller leaves more room for the band.</span>
+        </div>
+        <div class="control">
+          <label for="s-rstyle">Boundary style</label>
+          <select id="s-rstyle">
+            <option value="disc" selected>Faint disc (the whole target area)</option>
+            <option value="solid">Solid line</option>
+            <option value="dashed">Dashed line</option>
+          </select>
+        </div>
+        <div class="control">
+          <label for="s-rbright">Boundary brightness <output id="o-rbright"></output></label>
+          <input id="s-rbright" type="range" min="10" max="100" step="5" value="100">
+        </div>
+        <div class="control">
+          <label for="s-rshade">Circle contrast <output id="o-rshade"></output></label>
+          <input id="s-rshade" type="range" min="5" max="45" step="1" value="22">
+          <span class="hint">How much lighter your voice circle is than the background.</span>
+        </div>
+        <div class="control">
+          <label for="s-rfull">Full band at <output id="o-rfull"></output></label>
+          <input id="s-rfull" type="range" min="1" max="10" step="0.5" value="4">
+          <span class="hint">How far past the boundary you have to go for the band to reach its full thickness. It grows in proportion until then.</span>
+        </div>
+        <div class="control">
+          <label for="s-rmax">Band thickness <output id="o-rmax"></output></label>
+          <input id="s-rmax" type="range" min="8" max="80" step="2" value="36">
+        </div>
+        <div class="control">
+          <label for="s-rblur">Band blur <output id="o-rblur"></output></label>
+          <input id="s-rblur" type="range" min="0" max="30" step="1" value="10">
+          <span class="hint">Softens the band's outer edge, at most this much; a thin band stays crisp so being just over is still easy to see. The boundary itself stays crisp.</span>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <p class="notes">
+    <b>How Range reads:</b> the circle is your voice and the boundary is the end of your range, so you can always see how much room you have. Inside the boundary your voice stays the circle's own color. Past it, a soft light band grows outside the boundary, in proportion to how far over you are, and shrinks as you ease off. Stone keeps it muted with a white band; Lime and Pink keep the gray but make the band an accent color; Night changes the background too. In every palette the voice circle stays neutral, so the accent means only one thing, and the band stays lighter than everything around it, so it still reads for color-blind viewers.
+  </p>
+</main>
+
+<script type="module">
+  import { MezzoEngine, MIN_SPREAD_DB, ZONE_ACCEPTABLE_SPREAD_MULT } from '../../src/engine.js';
+  import { MezzoWaveVisualizer } from '../../src/wave-visualizer.js';
+
+  // Same capture settings and cadence as src/audio.js.
+  const SAMPLE_MS = 50;
+  const FFT_SIZE = 2048;
+  const APP_EMA_ALPHA = 0.2;         // audio.js's own RMS smoothing, used for the Current panel
+  const SUSTAINED_DRIFT_MS = 1000;   // mezzo-session.js's value, used for the Current panel
+  const CALIBRATION_MS = 6000;
+  const TYPICAL = { baselineRMS: Math.pow(10, -30 / 20), spreadDb: 4 };
+  const ZONE_LABELS = ['Listening', 'Within range', 'Approaching end of range', 'Outside range'];
+
+  // Each palette: background; "soft", the neutral light the voice circle,
+  // target disc and boundary line are mixed toward; and "band", the one
+  // color reserved for being over range. Contrast checked against the
+  // background and the voice circle, including simulated red-green color
+  // blindness — pink is the weakest against the circle (about 2.2–2.6:1),
+  // so it's a lighter bubblegum rather than a saturated hot pink.
+  const STONE_BG = [60, 59, 63];
+  const WARM_WHITE = [240, 236, 230];
+  const PALETTES = [
+    { name: 'Stone', bg: STONE_BG, soft: WARM_WHITE, band: WARM_WHITE },
+    { name: 'Lime',  bg: STONE_BG, soft: WARM_WHITE, band: [196, 240, 64] },
+    { name: 'Pink',  bg: STONE_BG, soft: WARM_WHITE, band: [255, 150, 215] },
+    { name: 'Night', bg: [24, 32, 56], soft: [220, 228, 255], band: [255, 196, 72] },
+  ];
+  let palette = PALETTES[0];
+
+  const $ = (id) => document.getElementById(id);
+  const statusEl = $('status');
+
+  // ── Controls ────────────────────────────────────────────────────────────
+  const px = (v) => `${v}px`, ms = (v) => `${v}ms`, pct = (v) => `${v}%`;
+  const controls = {
+    attack: ms, release: ms, edge: (v) => `+${v} dB`,
+    rsize: pct, rbright: pct, rshade: pct, rfull: (v) => `+${v} dB over`, rmax: px, rblur: px,
+  };
+  for (const [k, fmt] of Object.entries(controls)) {
+    const el = $(`s-${k}`), out = $(`o-${k}`);
+    const sync = () => { out.textContent = fmt(el.value); };
+    el.addEventListener('input', sync);
+    sync();
+  }
+  const val = (k) => Number($(`s-${k}`).value);
+  const showNumbers = () => $('c-numbers').checked;
+  $('c-numbers').addEventListener('change', () => {
+    for (const id of ['readout-current', 'readout-range']) $(id).hidden = !showNumbers();
+  });
+
+  const mixRgb = (a, b, k) => a.map((c, i) => Math.round(c + (b[i] - c) * k));
+  const css = (rgb, a = 1) => `rgba(${rgb.join(',')},${a})`;
+  for (const p of PALETTES) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.setAttribute('aria-pressed', String(p === palette));
+    const sw = document.createElement('span');
+    sw.className = 'swatch';
+    sw.style.background = `radial-gradient(circle, ${css(mixRgb(p.bg, p.soft, 0.3))} 0 45%, ${css(p.band)} 46% 58%, ${css(p.bg)} 59%)`;
+    b.append(sw, p.name);
+    b.addEventListener('click', () => {
+      palette = p;
+      for (const other of $('palettes').children) other.setAttribute('aria-pressed', String(other === b));
+    });
+    $('palettes').appendChild(b);
+  }
+
+  // ── Microphone (local only) ─────────────────────────────────────────────
+  let audioCtx = null;
+  let analyser = null;
+  let source = null;
+  let stream = null;
+  let buf = null;
+  async function ensureMic(deviceId) {
+    if (analyser && !deviceId) return;
+    stream?.getTracks().forEach((t) => t.stop());
+    source?.disconnect();
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, ...(deviceId ? { deviceId: { exact: deviceId } } : {}) },
+    });
+    audioCtx ??= new AudioContext();
+    if (!analyser) {
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = FFT_SIZE;
+      analyser.smoothingTimeConstant = 0;
+      buf = new Float32Array(analyser.fftSize);
+    }
+    source = audioCtx.createMediaStreamSource(stream);
+    source.connect(analyser);
+    await listMics();
+  }
+  async function listMics() {
+    const sel = $('mic');
+    const current = stream?.getAudioTracks()[0]?.getSettings().deviceId;
+    const mics = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput' && d.deviceId !== 'default' && d.deviceId !== 'communications');
+    sel.replaceChildren(...mics.map((d, i) => {
+      const o = document.createElement('option');
+      o.value = d.deviceId;
+      o.textContent = d.label || `Microphone ${i + 1}`;
+      o.selected = d.deviceId === current;
+      return o;
+    }));
+    sel.disabled = mics.length === 0;
+  }
+  $('mic').addEventListener('change', async (e) => {
+    try {
+      await ensureMic(e.target.value);
+      statusEl.textContent = 'Switched microphone. Your calibration was made with a different mic, so recalibrate for a fair reading.';
+    } catch {
+      statusEl.textContent = 'Couldn’t switch to that microphone.';
+    }
+  });
+  function readRms() {
+    analyser.getFloatTimeDomainData(buf);
+    let s = 0;
+    for (let i = 0; i < buf.length; i++) s += buf[i] * buf[i];
+    return Math.sqrt(s / buf.length);
+  }
+  const toDb = (rms) => 20 * Math.log10(Math.max(rms, 1e-10));
+  const BLOCKED = 'Microphone access was blocked. Allow it in your browser’s address bar, then reload.';
+
+  // ── Shared calibration ──────────────────────────────────────────────────
+  let calib = null;          // { baselineRMS, spreadDb }
+  let appSmoothedRms = 0;    // Current panel's input, smoothed exactly like audio.js
+  let rawRms = 0;            // Range's input, before its own smoothing
+
+  async function calibrate() {
+    $('btn-calibrate').disabled = true;
+    try { await ensureMic(); } catch { statusEl.textContent = BLOCKED; $('btn-calibrate').disabled = false; return; }
+    const samples = [];
+    const started = performance.now();
+    await new Promise((resolve) => {
+      const t = setInterval(() => {
+        appSmoothedRms = APP_EMA_ALPHA * readRms() + (1 - APP_EMA_ALPHA) * appSmoothedRms;
+        samples.push(appSmoothedRms);
+        const left = Math.ceil((CALIBRATION_MS - (performance.now() - started)) / 1000);
+        statusEl.textContent = `Speak normally, as you would in a meeting… ${Math.max(left, 0)}s`;
+        if (performance.now() - started >= CALIBRATION_MS) { clearInterval(t); resolve(); }
+      }, SAMPLE_MS);
+    });
+    const probe = new MezzoEngine();
+    try {
+      probe.calibrate(samples);
+      start({ baselineRMS: probe.baselineRMS, spreadDb: probe.spreadDb }, 'Calibrated');
+    } catch (err) {
+      statusEl.textContent = `Couldn’t calibrate (${err.message.replace(/^Calibration failed:\s*/i, '')}). Try again and keep talking the whole time.`;
+    }
+    $('btn-calibrate').disabled = false;
+  }
+
+  async function startWithDefaults() {
+    try { await ensureMic(); } catch { statusEl.textContent = BLOCKED; return; }
+    start(TYPICAL, 'Using typical values (calibrate for a fair test)');
+  }
+
+  // ── Current panel: the real pipeline ────────────────────────────────────
+  const engine = new MezzoEngine();
+  const currentViz = new MezzoWaveVisualizer($('stage-current'));
+  let currentZone = 0;
+  let outsideSince = null;
+
+  function stepCurrent(now) {
+    engine.processFrame(appSmoothedRms, now);
+    const zone = engine.getZone();
+    if (zone === 3 && currentZone !== 3) outsideSince = now;
+    if (zone !== 3) outsideSince = null;
+    currentZone = zone;
+    const sustained = outsideSince !== null && now - outsideSince >= SUSTAINED_DRIFT_MS;
+    currentViz.update(zone, sustained);
+    if (showNumbers()) $('readout-current').textContent = `zone ${zone} · ${ZONE_LABELS[zone]}`;
+  }
+
+  // ── Voice level ─────────────────────────────────────────────────────────
+  // rel: decibels relative to your calibrated speaking level (0 = normal).
+  // The circle runs from LOW_DB (quiet; anything softer is the smallest
+  // size) up to the "End of range" slider. (The app instead ends the range
+  // at 2.5x your calibration's own variation — usually around +10 dB, close
+  // to shouting; that's what this slider is testing against.)
+  // t: 0 at LOW_DB, 1 at the end of range, eased ~60ms per frame.
+  const LOW_DB = -15;
+  const T_MAX = 3;
+  const voice = { liveRms: 0, rel: LOW_DB, t: 0 };
+  const edgeDb = () => val('edge');
+
+  function stepVoice(dtMs) {
+    const tau = rawRms > voice.liveRms ? val('attack') : val('release');
+    voice.liveRms += (rawRms - voice.liveRms) * (1 - Math.exp(-dtMs / tau));
+    voice.rel = toDb(voice.liveRms) - toDb(calib.baselineRMS);
+  }
+  function easeVoice(dt) {
+    const target = calib ? Math.max(0, Math.min(T_MAX, (voice.rel - LOW_DB) / (edgeDb() - LOW_DB))) : 0;
+    voice.t += (target - voice.t) * (1 - Math.exp(-dt / 0.06));
+  }
+  const relText = () => `${voice.rel >= 0 ? '+' : ''}${voice.rel.toFixed(1)} dB vs normal`;
+
+  function setupCanvas(cv) {
+    const ctx = cv.getContext('2d');
+    new ResizeObserver(() => {
+      const r = cv.getBoundingClientRect();
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      cv.width = Math.round(r.width * dpr);
+      cv.height = Math.round(r.height * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }).observe(cv);
+    return ctx;
+  }
+  const mix = (a, b, k) => a + (b - a) * k;
+
+  // ── Range ───────────────────────────────────────────────────────────────
+  // Draw order: background, target disc (disc style), soft band (blurred,
+  // only outward — the voice circle is drawn crisp over its inner edge),
+  // voice circle (capped at the boundary), boundary line (line styles).
+  const rCanvas = $('canvas-range');
+  const rg = setupCanvas(rCanvas);
+  function drawRange() {
+    const w = rCanvas.clientWidth, h = rCanvas.clientHeight;
+    const { bg, soft, band: bandColor } = palette;
+    rg.filter = 'none';
+    rg.fillStyle = css(bg);
+    rg.fillRect(0, 0, w, h);
+
+    const cx = w / 2, cy = h / 2;
+    const R = Math.min(w, h) / 2 - 6;
+    const rMin = R * 0.08;
+    const rEdge = R * (val('rsize') / 100);
+    const t = voice.t;
+    const overDb = Math.max(0, (t - 1) * (edgeDb() - LOW_DB));
+    const band = Math.min(R - rEdge, val('rmax') * Math.min(1, overDb / val('rfull')));
+    const r = mix(rMin, rEdge, Math.min(1, t));
+    const style = $('s-rstyle').value;
+    const bright = val('rbright') / 100;
+    const discK = style === 'disc' ? 0.08 * bright : 0;
+
+    if (discK > 0) {
+      rg.fillStyle = css(mixRgb(bg, soft, discK));
+      rg.beginPath(); rg.arc(cx, cy, rEdge, 0, Math.PI * 2); rg.fill();
+    }
+
+    if (band > 0.5) {
+      rg.save();
+      // Blur scales with thickness, so a thin band (just over) stays crisp
+      // and visible; only a thick band gets the full softness.
+      const blur = Math.min(val('rblur'), band * 0.35);
+      if (blur > 0.3) rg.filter = `blur(${blur.toFixed(1)}px)`;
+      rg.fillStyle = css(bandColor);
+      rg.beginPath();
+      rg.arc(cx, cy, rEdge + band, 0, Math.PI * 2);
+      rg.arc(cx, cy, rEdge, 0, Math.PI * 2, true);
+      rg.fill();
+      rg.restore();
+      rg.filter = 'none';
+    }
+
+    if (r > 0.5) {
+      rg.fillStyle = css(mixRgb(bg, soft, discK + val('rshade') / 100));
+      rg.beginPath(); rg.arc(cx, cy, r, 0, Math.PI * 2); rg.fill();
+    }
+
+    if (style !== 'disc' && band <= 0.5) {
+      rg.save();
+      if (style === 'dashed') rg.setLineDash([9, 6]);
+      rg.lineWidth = style === 'dashed' ? 2 : 1.5;
+      rg.strokeStyle = css(soft, bright.toFixed(2));
+      rg.beginPath(); rg.arc(cx, cy, rEdge, 0, Math.PI * 2); rg.stroke();
+      rg.restore();
+    }
+
+    if (showNumbers() && calib) {
+      $('readout-range').textContent = `${relText()}${band > 0.5 ? ` · band ${Math.round(band)}px` : ''}`;
+    }
+  }
+
+  // ── Loops ───────────────────────────────────────────────────────────────
+  let audioTimer = null;
+  function start(c, label) {
+    calib = c;
+    engine.loadCalibration(c);
+    engine.startMonitoring();
+    engine.gracePeriodActive = false; // the app's 5–8s start-up grace would only get in the way here
+    statusEl.textContent = `${label}. Talk, pause, get loud — compare them.`;
+    const appEdge = ZONE_ACCEPTABLE_SPREAD_MULT * Math.max(c.spreadDb, MIN_SPREAD_DB);
+    $('edge-today').textContent = `For this calibration the app puts it at +${appEdge.toFixed(1)} dB (Current panel).`;
+    if (audioTimer) return;
+    let last = performance.now();
+    audioTimer = setInterval(() => {
+      const now = performance.now();
+      const rms = readRms();
+      rawRms = rms;
+      appSmoothedRms = APP_EMA_ALPHA * rms + (1 - APP_EMA_ALPHA) * appSmoothedRms;
+      stepCurrent(now);
+      stepVoice(now - last);
+      last = now;
+    }, SAMPLE_MS);
+  }
+
+  let lastFrame = performance.now();
+  function frame(now) {
+    const dt = Math.min((now - lastFrame) / 1000, 0.05);
+    lastFrame = now;
+    easeVoice(dt);
+    drawRange();
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  $('btn-calibrate').addEventListener('click', calibrate);
+  $('btn-defaults').addEventListener('click', startWithDefaults);
+</script>
+</body>
+</html>
