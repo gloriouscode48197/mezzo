@@ -174,6 +174,39 @@
 }
 
 
+/* ── Semantic color roles (docs/prd/range-ring-and-lantern-refresh.md §4.2,
+   §10). One job per token. Values below are today's colors, so swapping
+   to these tokens changes nothing visually; the Lantern refresh then
+   changes values here, not in each stylesheet.
+   Translucent uses mix a role with transparent instead of a new token:
+   color-mix(in srgb, var(--color-text-soft) 85%, transparent) renders
+   exactly as rgba(222, 210, 194, 0.85). ── */
+:root {
+  /* PRD §4.2 roles */
+  --color-bg: #3C3B3F;            /* Companion screen background */
+  --color-bg-decision: #3C3B3F;   /* Decision states (same as screens today) */
+  --color-bg-menu: #333333;       /* Profile selector trigger and panel */
+  --color-accent: var(--hanko-fill); /* Brand accent */
+  --color-text: #F0EBE2;          /* Headings */
+  --color-link: #DC9C89;          /* Accent links and marks on menu surfaces */
+  --color-text-muted: #AC9E88;    /* Hints, disclaimers, group labels */
+  --color-voice: #8E897B;         /* Range Ring voice circle (unused until the ring ships) */
+
+  /* Supporting roles, needed to keep today's look exact */
+  --color-text-soft: #DED2C2;     /* Companion body text, controls */
+  --color-label: #9A9289;         /* Small uppercase labels */
+  --color-link-quiet: #B8A99A;    /* Low-emphasis text actions (Cancel, Back) */
+  --color-notice: #D29B4B;        /* Calibration status, name-collision notice */
+  --color-on-accent: #FFFFFF;     /* Text on accent-filled buttons */
+  --color-bg-menu-hover: #3B3B3B; /* Selector trigger hover */
+  --color-bg-raised: #222222;     /* Result card, toast, tooltip */
+  --color-overlay: #FFFFFF;       /* Translucent fills and hairlines on dark */
+  --color-shadow: #000000;        /* Shadows and scrims on dark */
+  --color-shadow-warm: #2A2017;   /* Shadows on the light homepage */
+  --color-surface-white: #FFFFFF; /* Homepage window illustration */
+}
+
+
 /* ═══════════════════════════════════════════
    Typography Tokens
    ═══════════════════════════════════════════ */

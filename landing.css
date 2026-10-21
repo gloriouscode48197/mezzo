@@ -119,7 +119,7 @@ body {
   margin: 0 auto 32px;
   border-radius: 20px;
   overflow: hidden;
-  box-shadow: 0 20px 60px rgba(42, 32, 23, 0.25);
+  box-shadow: 0 20px 60px color-mix(in srgb, var(--color-shadow-warm) 25%, transparent);
 }
 /* object-fit:cover (not the default "fill") — the source is itself a
    perfect 440×440 square rendered into an equally square box, so cover
@@ -225,10 +225,10 @@ body {
   align-items: center;
   gap: 8px;
   padding: 10px 20px 10px 14px;
-  background: #FFFFFF;
+  background: var(--color-surface-white);
   border: 1px solid var(--border);
   border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(42, 32, 23, 0.14);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--color-shadow-warm) 14%, transparent);
   color: var(--ink);
   max-width: min(70vw, 320px);
 }
@@ -322,11 +322,11 @@ body {
    is ever added here. */
 .btn-outline:hover {
   border-color: var(--text-body);
-  background: rgba(60, 59, 63, 0.06);
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
 }
 .btn-outline:active {
   border-color: var(--ink);
-  background: rgba(60, 59, 63, 0.12);
+  background: color-mix(in srgb, var(--ink) 12%, transparent);
   transform: scale(0.98);
 }
 

@@ -63,6 +63,29 @@
       "outline-dark":  { "$value": "rgba(196, 89, 58, 0.4)", "$type": "color", "$description": "Outline CTA border" },
       "outline-light": { "$value": "rgba(196, 89, 58, 0.4)", "$type": "color" },
       "outline-mid":   { "$value": "rgba(212, 105, 74, 0.4)", "$type": "color" }
+    },
+
+    "role": {
+      "$description": "Semantic color roles (docs/prd/range-ring-and-lantern-refresh.md §4.2, §10). Values are today's colors; the Lantern refresh changes values here. Translucent uses mix a role with transparent via color-mix().",
+      "bg":            { "$value": "#3C3B3F", "$type": "color", "$description": "Companion screen background" },
+      "bg-decision":   { "$value": "#3C3B3F", "$type": "color", "$description": "Decision states (same as screens today)" },
+      "bg-menu":       { "$value": "#333333", "$type": "color", "$description": "Profile selector trigger and panel" },
+      "accent":        { "$value": "{color.hanko.fill}", "$type": "color", "$description": "Brand accent" },
+      "text":          { "$value": "#F0EBE2", "$type": "color", "$description": "Headings" },
+      "link":          { "$value": "#DC9C89", "$type": "color", "$description": "Accent links and marks on menu surfaces" },
+      "text-muted":    { "$value": "#AC9E88", "$type": "color", "$description": "Hints, disclaimers, group labels" },
+      "voice":         { "$value": "#8E897B", "$type": "color", "$description": "Range Ring voice circle (unused until the ring ships)" },
+      "text-soft":     { "$value": "#DED2C2", "$type": "color", "$description": "Companion body text, controls" },
+      "label":         { "$value": "#9A9289", "$type": "color", "$description": "Small uppercase labels" },
+      "link-quiet":    { "$value": "#B8A99A", "$type": "color", "$description": "Low-emphasis text actions (Cancel, Back)" },
+      "notice":        { "$value": "#D29B4B", "$type": "color", "$description": "Calibration status, name-collision notice" },
+      "on-accent":     { "$value": "#FFFFFF", "$type": "color", "$description": "Text on accent-filled buttons" },
+      "bg-menu-hover": { "$value": "#3B3B3B", "$type": "color", "$description": "Selector trigger hover" },
+      "bg-raised":     { "$value": "#222222", "$type": "color", "$description": "Result card, toast, tooltip" },
+      "overlay":       { "$value": "#FFFFFF", "$type": "color", "$description": "Translucent fills and hairlines on dark" },
+      "shadow":        { "$value": "#000000", "$type": "color", "$description": "Shadows and scrims on dark" },
+      "shadow-warm":   { "$value": "#2A2017", "$type": "color", "$description": "Shadows on the light homepage" },
+      "surface-white": { "$value": "#FFFFFF", "$type": "color", "$description": "Homepage window illustration" }
     }
   },
 
