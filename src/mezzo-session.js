@@ -283,7 +283,6 @@ export function isTemporaryProfile(profile) {
 // below — module-level so they're not rebuilt on every Companion open.
 // aria-hidden in every use site; the button/control's own text or
 // aria-label is always the real accessible name.
-const MIC_ICON_SVG = '<svg class="pip-intro-btn-icon" viewBox="0 0 12 12" fill="none" aria-hidden="true"><rect x="4" y="1" width="4" height="6" rx="2" stroke="currentColor" stroke-width="1.2"/><path d="M2.5 6.5a3.5 3.5 0 0 0 7 0M6 10v1.2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>';
 const CHEVRON_ICON_SVG = '<span class="pip-ready-selector-chevron" aria-hidden="true"><svg viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
 const TRASH_ICON_SVG = '<svg width="13" height="14" viewBox="0 0 13 14" fill="none" aria-hidden="true"><path d="M1 3.5h11M4.5 3.5V2h4v1.5M5.5 6.5v4M7.5 6.5v4M2 3.5l.8 8.5h7.4l.8-8.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 // A clean pencil/edit glyph — visual shorthand for "modify this speaking
@@ -292,11 +291,9 @@ const TRASH_ICON_SVG = '<svg width="13" height="14" viewBox="0 0 13 14" fill="no
 // (1.3), decorative only (aria-hidden — the button's own aria-label, set
 // per row in buildSelectorRow(), is the real accessible name).
 const PENCIL_ICON_SVG = '<svg width="13" height="14" viewBox="0 0 13 14" fill="none" aria-hidden="true"><path d="M9.3 1.8l2 2-6.7 6.7-2.8.6.6-2.8 6.9-6.5z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M8.1 3l2 2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-const CLOSE_ICON_SVG = '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>';
-// Schematic, not photorealistic — enough to point at "the icon in your
-// browser's address bar" without claiming to be a literal screenshot of
-// any specific browser.
-const C0_ILLUSTRATION_SVG = '<svg viewBox="0 0 200 60" fill="none" aria-hidden="true"><rect x="1" y="1" width="198" height="34" rx="8" style="stroke: color-mix(in srgb, var(--color-text-muted) 40%, transparent)" stroke-width="1.5"/><circle cx="20" cy="18" r="6" style="stroke: color-mix(in srgb, var(--color-notice) 90%, transparent)" stroke-width="1.5"/><path d="M17 15l6 6M23 15l-6 6" style="stroke: color-mix(in srgb, var(--color-notice) 90%, transparent)" stroke-width="1.5" stroke-linecap="round"/><rect x="34" y="13" width="140" height="10" rx="5" style="fill: color-mix(in srgb, var(--color-text-muted) 15%, transparent)"/><path d="M60 50l-14 -14M46 50l14 -14" style="stroke: color-mix(in srgb, var(--color-notice) 70%, transparent)" stroke-width="1.5" stroke-linecap="round"/></svg>';
+// Microphone blocked (PRD §9a): a solid circle with a slash. The body copy
+// says where to restore access; the icon only marks the state.
+const C0_BLOCKED_ICON_SVG = '<svg width="44" height="44" viewBox="0 0 44 44" fill="none" aria-hidden="true"><circle cx="22" cy="22" r="20" style="fill: var(--color-text-muted)"/><path d="M10.5 10.5l23 23" style="stroke: var(--color-bg-decision)" stroke-width="3.5" stroke-linecap="round"/></svg>';
 
 // Mirrors calibration-controller.js's own DEFAULT_CAPTURE_DURATION_MS
 // (6000ms), which isn't exported — kept in sync here for the countdown
@@ -359,6 +356,8 @@ const TOOLTIP_HOVER_DELAY_MS = 250;
 // 16px matches the toast's own top inset, already established elsewhere
 // in this file as a comfortable safe margin at this Companion size.
 const SELECTOR_PANEL_SAFE_MARGIN_PX = 16;
+// Gap between the selector trigger and its attached panel (PRD §7).
+const SELECTOR_PANEL_GAP_PX = 4;
 
 // Brief completion transition ("Creating your speaking profile…") shown
 // between the end of capture and the post-creation result screen (Slice 2
@@ -720,6 +719,7 @@ export function createMezzoSession({
   let readySelectorTriggerEl = null;
   let readySelectorTriggerNameEl = null;
   let readySelectorPanelEl = null;
+  let readyScrimEl = null;
   let readyContextualActionsEl = null;
   let readyStartBtn = null;
   let readyDisclaimerEl = null;
@@ -1367,8 +1367,8 @@ export function createMezzoSession({
          Square, borderless edges (2026-10-20): the card fills the whole
          window, so a rounded corner and 1px border only drew a faint
          outline with background showing through at each corner. No outer
-         shadow either, since nothing outside the window could show it;
-         the inset glow stays. */
+         shadow either, since nothing outside the window could show it.
+         Lantern (PRD §7): screens are flat; the inset glow is gone too. */
       .pip-screen {
         width: 100%;
         height: 100%;
@@ -1378,8 +1378,7 @@ export function createMezzoSession({
         align-items: center;
         position: relative;
         overflow: hidden;
-        box-shadow: inset 0 0 40px color-mix(in srgb, var(--color-shadow) 16%, transparent);
-        background: var(--color-bg);
+        background: var(--color-bg); /* flat screen layer (PRD §7) */
       }
       /* Shared cap for every full-width, single-column pill action in the
          Companion — every full-screen decision state's primary/secondary
@@ -1447,6 +1446,16 @@ export function createMezzoSession({
       .pip-intro-heading {
         margin: 0;
       }
+      /* Text-only lowercase wordmark on Welcome (PRD §9a). */
+      .pip-wordmark {
+        margin: 0 0 4px;
+        font-family: var(--font-display);
+        font-weight: var(--weight-semibold);
+        font-size: 20px;
+        line-height: 1;
+        letter-spacing: var(--tracking-heading);
+        color: var(--color-text);
+      }
       .pip-intro-body {
         font-family: var(--font-body);
         font-size: 12px;
@@ -1463,10 +1472,6 @@ export function createMezzoSession({
         margin: 2px 0 4px;
         max-width: 240px;
       }
-      /* Mic glyph inside the Welcome/01 primary action — decorative only
-         (the button's own text is the full accessible name), aria-hidden
-         in the DOM below. */
-      .pip-intro-btn-icon { width: 13px; height: 13px; flex-shrink: 0; }
 
       /* ── Welcome/01, C1, C0 — all reached before any usable speaking
          profile exists, all share Ready's fixed size (see
@@ -1530,7 +1535,7 @@ export function createMezzoSession({
          claiming to be a literal screenshot of any specific browser. */
       .pip-c0-illustration {
         width: 100%;
-        max-width: 220px;
+        max-width: 44px;
         margin: 4px 0;
       }
 
@@ -1636,6 +1641,32 @@ export function createMezzoSession({
          base. Text contrast on it: 6.65:1, still comfortably clearing
          AA. */
       .pip-ready-selector-trigger:hover { background: var(--color-bg-menu-hover); }
+      /* Open state (PRD §7): the trigger stays above the scrim, lifted to
+         the hover surface with a faint sage edge while its panel is open. */
+      .pip-ready-selector-trigger[aria-expanded="true"] {
+        background: var(--color-bg-menu-hover);
+        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-link) 45%, transparent);
+      }
+
+      /* Menu-layer scrim (PRD §7): dims everything behind the open
+         selector; .pip-ready-selector-wrap (z-index 26) sits above it. */
+      .pip-ready-scrim {
+        position: absolute;
+        inset: 0;
+        z-index: 25;
+        background: color-mix(in srgb, var(--color-shadow) 60%, transparent);
+      }
+
+      /* 8px sage dot (PRD §9a): the trigger's bullet before the selected
+         name, and the selected-row marker inside the panel. */
+      .pip-dot {
+        display: inline-block;
+        flex-shrink: 0;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--color-link);
+      }
       .pip-ready-selector-trigger-name {
         flex: 1;
         min-width: 0;
@@ -1719,6 +1750,7 @@ export function createMezzoSession({
         max-width: 100%;
         margin-inline: auto;
         flex-shrink: 0;
+        z-index: 26;
       }
 
       /* Expanded panel — a native <fieldset> now (Batch 2), not a
@@ -1757,11 +1789,11 @@ export function createMezzoSession({
         overflow: hidden;
         z-index: 30;
         background: var(--color-bg-menu); /* matches .pip-ready-selector-trigger's own (restored) surface — see that rule's comment */
-        border: 0;
+        border: 1px solid var(--border);
         margin: 0;
         min-width: 0;
-        border-radius: 10px;
-        box-shadow: 0 16px 40px color-mix(in srgb, var(--color-shadow) 55%, transparent);
+        border-radius: 6px;
+        box-shadow: 0 12px 32px color-mix(in srgb, var(--color-shadow) 50%, transparent);
         box-sizing: border-box;
         padding: 6px 0;
       }
@@ -1937,8 +1969,9 @@ export function createMezzoSession({
          needs). */
       .pip-ready-selector-row-check {
         flex-shrink: 0;
-        color: var(--color-link);
         visibility: hidden;
+        width: 8px;
+        height: 8px;
       }
       .pip-ready-selector-row-radio:checked ~ .pip-ready-selector-row-label .pip-ready-selector-row-check {
         visibility: visible;
@@ -2062,6 +2095,7 @@ export function createMezzoSession({
       }
       .pip-ready-contextual-link:hover,
       .pip-text-btn:hover { color: color-mix(in srgb, var(--color-text-soft) 92%, transparent); }
+      .pip-text-btn:disabled { opacity: 0.5; cursor: default; }
       .pip-ready-contextual-link:focus-visible,
       .pip-text-btn:focus-visible {
         outline: 2px solid var(--color-link);
@@ -2266,98 +2300,65 @@ export function createMezzoSession({
          "do not use a floating dialog" requirement), so each of the four
          gets its own top-level screen element built from this same
          vocabulary rather than four near-duplicate rule sets. ── */
+      /* ── Decision layer (Lantern, PRD §7). Every decision state (both
+         post-calibration result variants, naming M2/M2a, the five-profile
+         limit M3, delete confirmation 06b) turns the whole window slate,
+         with a 44px header bar naming the decision in Geist Mono (Cancel in
+         its corner where the state has one), the content in the middle,
+         and the actions pinned to the bottom. Still full-screen states,
+         never modals: no dialog semantics, nothing underneath stays
+         visible or interactive. This retires the 2026-08-17 inset
+         modal-card system, including the result screen's one-off card. ── */
       .pip-screen-decision {
-        justify-content: center;
-        padding: 28px 24px;
+        justify-content: flex-start;
+        padding: 0;
         box-sizing: border-box;
-        gap: 14px;
         text-align: center;
+        background: var(--color-bg-decision);
       }
-      /* ── Shared inset modal-card system (2026-08-17 pass, extended
-         2026-08-20 to cover every decision/confirmation screen) — every
-         screen that represents a decision outside the normal Ready
-         experience (both post-calibration result variants, the naming
-         flow M2/M2a, the five-profile-limit notice M3, and saved-profile
-         delete confirmation 06b) presents its content inside one inset
-         modal-style card floating within the Companion's own regular
-         #3c3b3f screen surface, instead of the #222222 modal-surface color
-         filling the entire content area directly (the pre-2026-08-17
-         treatment). Welcome, Create speaking profile (C1), Calibrating,
-         Calibration Failed, Ready, and Monitoring are deliberately NOT
-         part of this system — they stay full-bleed, unchanged.
-         Purely presentational: showOnlyScreen() already hides every other
-         screen outright whenever one of these five is visible (see that
-         function's own doc comment) — there is no previous Ready/
-         calibration screen rendered underneath to leave visible or
-         interactive, and no new dialog semantics are introduced (see
-         .pip-modal-card's own comment below for why aria-modal/role=dialog
-         are deliberately absent).
-         Padding here is the OUTER inset/gutter — approximately 24px per
-         side (2026-08-20: down from 48px), the approved minimum gutter —
-         .pip-modal-card's own max-width:320px below is what actually caps
-         the card's width at the standard 382px Companion width (382 -
-         2×24 = 334px of available room, wider than the 320px cap, so the
-         cap — not this padding — is what binds there; the 24px figure is
-         a true minimum, not a fixed width-determining value). At a
-         narrower manually-resized window, this same fixed 24px gutter
-         combined with .pip-modal-card's own width:100% lets the card
-         itself shrink to fit rather than clipping.
-         justify-content:center and align-items:center (both inherited,
-         unchanged from .pip-screen-decision/.pip-screen) still center the
-         single .pip-modal-card child within whatever room this padding
-         leaves. */
-      .pip-screen-result,
-      .pip-screen-m1,
-      .pip-screen-m2,
-      .pip-screen-m3,
-      .pip-screen-delete {
-        padding: 24px;
-      }
-      /* The inset card itself — reuses .pip-screen's own established
-         corner radius, border, and box-shadow elevation values verbatim
-         (see that rule above) rather than inventing new ones, per "the
-         established modal radius, subtle border, and elevation
-         treatment." #222222 was also the selector trigger/panel's own
-         surface at one point (see that rule's own comment for its
-         history), but as of the 2026-08-20 restoration the selector
-         settled on the distinct, slightly lighter #333333 — the two are
-         deliberately different surfaces now, not a shared literal to keep
-         in sync. The WCAG contrast figures already checked and recorded
-         for text against this card's own #222222 still apply unchanged:
-         heading 13.4:1, body text 6.62:1, Keep/Discard button text against
-         its own fill 6.79:1.
-         max-width:320px (2026-08-20, alongside the outer padding drop to
-         24px above) is the approved card-width cap — width:100% still
-         lets it shrink below that on anything narrower than
-         320px+2×24px=368px of available room, and box-sizing:border-box
-         (below) keeps this screen's own internal padding counted inside
-         that 320px rather than added on top of it. Height is still driven
-         by content, never fixed — no height/min-height/max-height rule
-         exists here or on any screen using this card.
-         Padding (2026-08-20: 48px 32px, up from 28px 24px) is the
-         approved internal spacing — vertical first per the CSS shorthand
-         convention (48px top/bottom, 32px left/right).
-         No role="dialog"/aria-modal here: this card is purely a visual
-         treatment inside a screen showOnlyScreen() already renders
-         exclusively (nothing else is visible underneath to protect
-         against), so introducing dialog semantics would claim a focus-
-         trap/modal contract this code doesn't actually implement.
-         Heading focus, commit handlers, and navigation are all completely
-         unchanged by this — see each screen's own showXScreen()
-         function. */
-      .pip-modal-card {
+      .pip-decision-bar {
+        flex: 0 0 44px;
         width: 100%;
-        max-width: 320px;
+        box-sizing: border-box;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 0 16px;
+        border-bottom: 1px solid var(--border);
+      }
+      .pip-decision-bar-title {
+        margin: 0;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        letter-spacing: var(--tracking-label);
+        text-transform: uppercase;
+        color: var(--color-text-muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .pip-decision-bar-cancel { flex-shrink: 0; }
+      .pip-decision-content {
+        flex: 1 1 auto;
+        min-height: 0;
+        width: 100%;
         box-sizing: border-box;
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 14px;
-        padding: 48px 32px;
-        background: var(--color-bg-raised);
-        border-radius: 14px;
-        border: 1px solid color-mix(in srgb, var(--color-overlay) 5%, transparent);
-        box-shadow: 0 24px 56px color-mix(in srgb, var(--color-shadow) 55%, transparent), inset 0 0 40px color-mix(in srgb, var(--color-shadow) 16%, transparent);
+        justify-content: center;
+        gap: 12px;
+        padding: 16px 24px;
+      }
+      /* M2: the form spans content and actions, so it takes the remaining
+         height the way content and actions do on the other screens. */
+      .pip-decision-form {
+        flex: 1 1 auto;
+        min-height: 0;
+        width: 100%;
+        display: flex;
+        flex-direction: column;
       }
       .pip-decision-heading {
         font-family: var(--font-display);
@@ -2393,6 +2394,16 @@ export function createMezzoSession({
         max-width: 240px;
       }
       .pip-decision-actions { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 230px; }
+      /* Bottom-pinned actions on decision states; the shared 320px button
+         cap (see .pip-decision-primary-btn above) still applies. */
+      .pip-screen-decision .pip-decision-actions {
+        flex: 0 0 auto;
+        max-width: none;
+        box-sizing: border-box;
+        padding: 0 24px 20px;
+        align-items: center;
+      }
+      .pip-name-input { max-width: 260px; }
       .pip-decision-primary-btn {
         width: 100%;
         background: var(--color-btn-primary-bg);
@@ -2425,61 +2436,6 @@ export function createMezzoSession({
       }
       .pip-decision-secondary-btn:hover { background: color-mix(in srgb, var(--color-text) 6%, transparent); border-color: color-mix(in srgb, var(--color-text) 55%, transparent); }
 
-      /* ── Naming flow (M2/M2a) action layout (2026-08-17 pass; shared
-         with Delete confirmation's own .pip-delete-actions, 2026-08-20) —
-         Save now precedes Cancel in DOM/visual/keyboard order (was Cancel,
-         Save) — Delete/Cancel follow the exact same pattern — and the
-         pair lays out side by side when there's room, stacked otherwise.
-         flex-wrap, not a media query: this is a fixed 382px-wide Companion
-         window, not a responsively-resized page, so there is no viewport
-         breakpoint to key off of — the actual question is "do these two
-         buttons fit side by side at their own minimum comfortable width,"
-         which flex-wrap answers directly from the buttons' own measured
-         size. flex:1 1 100px on each button (below) means: side by side,
-         both grow equally to fill the row (equal width, per the spec) off
-         the same 100px basis; if the row is too narrow for both at once,
-         the second one wraps to its own new line — where, alone on that
-         line, flex-grow:1 has nothing to share with, so it fills that
-         line's own full width instead (Save-above-Cancel or
-         Delete-above-Cancel, full-width, matching every other stacked
-         decision button on this screen — no separate stacked-state rule
-         needed). gap stays the same 10px either way. max-width is widened
-         from the shared 230px (still used by every OTHER
-         .pip-decision-actions consumer, unaffected) to 260px here
-         specifically, since two ~100px-minimum buttons plus a 10px gap
-         need slightly more than 230px to ever actually sit side by side
-         at this Companion width — scoped to this shared selector group
-         alone so nothing else's own 230px cap changes. */
-      .pip-m2-actions,
-      .pip-delete-actions {
-        flex-direction: row;
-        flex-wrap: wrap;
-        max-width: 260px;
-      }
-      .pip-m2-actions > button,
-      .pip-delete-actions > button {
-        flex: 1 1 100px;
-        min-width: 100px;
-        width: auto;
-      }
-
-      /* Input-to-actions spacing (2026-08-17 pass) — the heading-to-input
-         relationship stays at the form's own unchanged base 10px gap
-         (m2Form's own inline flex gap, untouched), and the warning stays
-         directly beneath the input it describes via that same unchanged
-         gap — only the space ABOVE the action group is widened, via
-         margin-top on .pip-m2-actions itself (present whether or not the
-         warning is currently visible, since flexbox gap excludes
-         display:none siblings from spacing entirely — a hidden warning
-         never leaves a stray double-gap). 14px on top of the existing
-         10px base reuses the same "add margin-top over an unchanged base
-         gap" pattern used elsewhere in this file (see .pip-decision-body's
-         own margin-top above) rather than a new, isolated arbitrary
-         value — ~24px total between the input (or warning, when shown)
-         and the action group. */
-      .pip-screen-m2 .pip-m2-actions {
-        margin-top: 14px;
-      }
 
       /* ── Result-screen action hierarchy — M1/Result answer one question:
          "what do I want to do with it?" (the body/question introduces the
@@ -2547,22 +2503,6 @@ export function createMezzoSession({
         margin: 0;
       }
 
-      /* M3 — close icon only, no other action (see the PRD: "no
-         management controls appear inside M3"). Reuses the same icon-
-         button treatment the selector's own row actions use. */
-      .pip-decision-close-btn {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 32px;
-        height: 32px;
-        background: color-mix(in srgb, var(--color-overlay) 6%, transparent);
-        border: 1px solid color-mix(in srgb, var(--color-overlay) 10%, transparent);
-        border-radius: var(--radius-control);
-        color: color-mix(in srgb, var(--color-text-soft) 85%, transparent);
-        cursor: pointer;
-      }
-      .pip-decision-close-btn:hover { background: color-mix(in srgb, var(--color-overlay) 12%, transparent); }
 
       .pip-name-input {
         width: 100%;
@@ -3155,6 +3095,13 @@ export function createMezzoSession({
     const welcomeScreen = pipDoc.createElement('div');
     welcomeScreen.className = 'pip-screen pip-screen-welcome hidden';
 
+    // Lantern (PRD §9a): the text-only "mezzo" wordmark marks Welcome; no
+    // icon on the screen or its primary action.
+    const welcomeWordmark = pipDoc.createElement('p');
+    welcomeWordmark.className = 'pip-wordmark';
+    welcomeWordmark.textContent = 'mezzo';
+    welcomeScreen.appendChild(welcomeWordmark);
+
     const welcomeHeading = pipDoc.createElement('h1');
     welcomeHeading.className = 'pip-h1 pip-intro-heading';
     welcomeHeading.textContent = 'Welcome';
@@ -3173,7 +3120,7 @@ export function createMezzoSession({
     const welcomePrimaryBtn = pipDoc.createElement('button');
     welcomePrimaryBtn.type = 'button';
     welcomePrimaryBtn.className = 'pip-intro-primary-btn';
-    welcomePrimaryBtn.innerHTML = `${MIC_ICON_SVG}<span>Create speaking profile</span>`;
+    welcomePrimaryBtn.textContent = 'Create speaking profile';
     welcomePrimaryBtn.addEventListener('click', handleWelcomeCalibrateClick);
     welcomeScreen.appendChild(welcomePrimaryBtn);
 
@@ -3252,9 +3199,8 @@ export function createMezzoSession({
     c0Screen.className = 'pip-screen pip-screen-c0 hidden';
 
     // Text content is set per failure code in showC0Screen() below, not
-    // here — this is only the empty skeleton, built once. Same shared
-    // illustration either way (a generic, schematic mic graphic — accurate
-    // context for both "blocked" and "timed out").
+    // here — this is only the empty skeleton, built once. Same icon either
+    // way (a solid circle with a slash).
     const c0Heading = pipDoc.createElement('h1');
     c0Heading.className = 'pip-h1 pip-intro-heading';
     c0Screen.appendChild(c0Heading);
@@ -3262,7 +3208,7 @@ export function createMezzoSession({
 
     const c0Illustration = pipDoc.createElement('div');
     c0Illustration.className = 'pip-c0-illustration';
-    c0Illustration.innerHTML = C0_ILLUSTRATION_SVG;
+    c0Illustration.innerHTML = C0_BLOCKED_ICON_SVG;
     c0Screen.appendChild(c0Illustration);
 
     const c0Body = pipDoc.createElement('p');
@@ -3318,6 +3264,16 @@ export function createMezzoSession({
     // screen — so the panel always anchors just below the trigger's real
     // rendered position, regardless of how tall the heading/label above it
     // happen to render.
+    // Menu-layer scrim (PRD §7): dims the screen behind the open selector.
+    // Sits under .pip-ready-selector-wrap, so the trigger and its panel stay
+    // undimmed. Clicks on it fall through to handleSelectorOutsideClick(),
+    // which already closes the panel for any click outside it.
+    const selectorScrim = pipDoc.createElement('div');
+    selectorScrim.className = 'pip-ready-scrim hidden';
+    selectorScrim.setAttribute('aria-hidden', 'true');
+    readyScreen.appendChild(selectorScrim);
+    readyScrimEl = selectorScrim;
+
     const selectorWrap = pipDoc.createElement('div');
     selectorWrap.className = 'pip-ready-selector-wrap';
     readyScreen.appendChild(selectorWrap);
@@ -3345,6 +3301,11 @@ export function createMezzoSession({
     // — no separate aria-label to keep in sync. The chevron stays
     // aria-hidden (see CHEVRON_ICON_SVG) so it never contributes text.
     selectorTrigger.setAttribute('aria-labelledby', 'pip-ready-profile-label pip-ready-selector-trigger-name');
+    // Sage dot bullet before the selected name (PRD §9a). Decorative.
+    const selectorTriggerDot = pipDoc.createElement('span');
+    selectorTriggerDot.className = 'pip-dot';
+    selectorTriggerDot.setAttribute('aria-hidden', 'true');
+    selectorTrigger.appendChild(selectorTriggerDot);
     selectorTrigger.appendChild(selectorTriggerName);
     selectorTrigger.insertAdjacentHTML('beforeend', CHEVRON_ICON_SVG);
     selectorTrigger.addEventListener('click', handleSelectorTriggerClick);
@@ -3591,12 +3552,30 @@ export function createMezzoSession({
     // is what tests use instead.
     m1Screen.className = 'pip-screen pip-screen-decision pip-screen-m1 hidden';
 
-    // Inset modal card (2026-08-17) — see .pip-modal-card's own CSS
-    // comment. All of this screen's actual content lives inside it; the
-    // outer m1Screen itself now only supplies the larger outer inset via
-    // its own overridden padding.
+    // ── Decision-state header bar (Lantern layers, PRD §7) — shared by
+    //    every decision state below: a 44px bar naming the decision in
+    //    Geist Mono and, where the state has a way out, holding Cancel in
+    //    its corner. The <h1> inside the content stays the screen's real
+    //    heading; this title is a plain label. ──
+    const buildDecisionBar = (title, cancelBtn = null) => {
+      const bar = pipDoc.createElement('div');
+      bar.className = 'pip-decision-bar';
+      const label = pipDoc.createElement('p');
+      label.className = 'pip-decision-bar-title';
+      label.textContent = title;
+      bar.appendChild(label);
+      if (cancelBtn) {
+        cancelBtn.classList.add('pip-decision-bar-cancel');
+        bar.appendChild(cancelBtn);
+      }
+      return bar;
+    };
+
+    // Content block between the header bar and the bottom-pinned actions
+    // (the 2026-08-17 inset modal card is retired — PRD §7).
+    m1Screen.appendChild(buildDecisionBar('Recalibration'));
     const m1Card = pipDoc.createElement('div');
-    m1Card.className = 'pip-modal-card';
+    m1Card.className = 'pip-decision-content';
     m1Screen.appendChild(m1Card);
 
     const m1Heading = pipDoc.createElement('h1');
@@ -3647,7 +3626,7 @@ export function createMezzoSession({
     m1Actions.appendChild(m1Discard);
     m1DiscardBtn = m1Discard;
 
-    m1Card.appendChild(m1Actions);
+    m1Screen.appendChild(m1Actions);
 
     layout.appendChild(m1Screen);
     m1ScreenEl = m1Screen;
@@ -3669,10 +3648,11 @@ export function createMezzoSession({
     const resultScreen = pipDoc.createElement('div');
     resultScreen.className = 'pip-screen pip-screen-decision pip-screen-result hidden';
 
-    // Inset modal card (2026-08-17) — see .pip-modal-card's own CSS
-    // comment (M1's own construction site above has the fuller writeup).
+    // The one-off result card is removed (PRD §2.3, §7): same header bar,
+    // content block, and bottom-pinned actions as every decision state.
+    resultScreen.appendChild(buildDecisionBar('New profile'));
     const resultCard = pipDoc.createElement('div');
-    resultCard.className = 'pip-modal-card';
+    resultCard.className = 'pip-decision-content';
     resultScreen.appendChild(resultCard);
 
     const resultHeading = pipDoc.createElement('h1');
@@ -3727,7 +3707,7 @@ export function createMezzoSession({
     resultActions.appendChild(resultDiscard);
     resultDiscardBtn = resultDiscard;
 
-    resultCard.appendChild(resultActions);
+    resultScreen.appendChild(resultActions);
 
     layout.appendChild(resultScreen);
     resultScreenEl = resultScreen;
@@ -3745,11 +3725,10 @@ export function createMezzoSession({
     // which still share the plain pip-screen-decision treatment.
     m2Screen.className = 'pip-screen pip-screen-decision pip-screen-m2 hidden';
 
-    // Inset modal card (2026-08-17) — see .pip-modal-card's own CSS
-    // comment (M1's own construction site above has the fuller writeup).
+    // Content block (heading, field, warning); see the header bar and the
+    // form assembly below for where it sits.
     const m2Card = pipDoc.createElement('div');
-    m2Card.className = 'pip-modal-card';
-    m2Screen.appendChild(m2Card);
+    m2Card.className = 'pip-decision-content';
 
     // <h1>, not <p> (2026-08-17) — this is the naming screen's one
     // meaningful heading, so it now gets real heading semantics and the
@@ -3768,7 +3747,7 @@ export function createMezzoSession({
     m2Card.appendChild(m2Heading);
 
     const m2Form = pipDoc.createElement('form');
-    m2Form.style.cssText = 'width:100%;max-width:230px;display:flex;flex-direction:column;gap:10px;';
+    m2Form.className = 'pip-decision-form';
 
     const m2Input = pipDoc.createElement('input');
     m2Input.type = 'text';
@@ -3777,7 +3756,7 @@ export function createMezzoSession({
     m2Input.placeholder = 'e.g. Coffee Shop';
     m2Input.setAttribute('aria-label', 'Profile name');
     m2Input.addEventListener('input', renderM2State);
-    m2Form.appendChild(m2Input);
+    m2Card.appendChild(m2Input);
     m2NameInput = m2Input;
 
     // Live, non-error-toned warning — an existing-name match is an
@@ -3790,15 +3769,11 @@ export function createMezzoSession({
     m2Warning.className = 'pip-decision-warning hidden';
     m2Warning.id = 'm2-name-warning';
     m2Warning.setAttribute('aria-live', 'polite');
-    m2Form.appendChild(m2Warning);
+    m2Card.appendChild(m2Warning);
     m2WarningEl = m2Warning;
 
-    // pip-m2-actions (2026-08-17, new modifier alongside the shared
-    // pip-decision-actions base) — side-by-side when there's room, stacked
-    // otherwise, via flex-wrap rather than a media query (see its own CSS
-    // comment for the mechanism). Save first, Cancel second, in DOM order
-    // — matches the required visual/keyboard order directly, no separate
-    // reordering step needed anywhere else.
+    // Save (or Replace) is the one bottom-pinned action; Cancel lives in
+    // the header bar (PRD §7). pip-m2-actions stays as a hook class.
     const m2Actions = pipDoc.createElement('div');
     m2Actions.className = 'pip-decision-actions pip-m2-actions';
 
@@ -3811,14 +3786,17 @@ export function createMezzoSession({
 
     const m2Cancel = pipDoc.createElement('button');
     m2Cancel.type = 'button';
-    m2Cancel.className = 'pip-decision-secondary-btn';
+    m2Cancel.className = 'pip-text-btn';
     m2Cancel.textContent = 'Cancel';
     m2Cancel.addEventListener('click', handleM2Cancel);
-    m2Actions.appendChild(m2Cancel);
 
+    // The form spans content and actions so Save stays a real submit
+    // button while the actions sit pinned to the bottom.
+    m2Form.appendChild(m2Card);
     m2Form.appendChild(m2Actions);
     m2Form.addEventListener('submit', handleM2Submit);
-    m2Card.appendChild(m2Form);
+    m2Screen.appendChild(buildDecisionBar('Save profile', m2Cancel));
+    m2Screen.appendChild(m2Form);
     layout.appendChild(m2Screen);
     m2ScreenEl = m2Screen;
 
@@ -3832,10 +3810,17 @@ export function createMezzoSession({
     // screen specifically, and a dedicated test hook.
     m3Screen.className = 'pip-screen pip-screen-decision pip-screen-m3 hidden';
 
-    // Inset modal card (2026-08-20 — extends the 2026-08-17 system to
-    // this screen; see .pip-modal-card's own CSS comment).
+    // M3's one way out is Cancel in the header bar (formerly a close icon
+    // inside the card; same handler, same behavior).
+    const m3Close = pipDoc.createElement('button');
+    m3Close.type = 'button';
+    m3Close.className = 'pip-text-btn';
+    m3Close.textContent = 'Cancel';
+    m3Close.addEventListener('click', handleM3Close);
+    m3Screen.appendChild(buildDecisionBar('Profile limit', m3Close));
+
     const m3Card = pipDoc.createElement('div');
-    m3Card.className = 'pip-modal-card';
+    m3Card.className = 'pip-decision-content';
     m3Screen.appendChild(m3Card);
 
     // <h1>, not <p> (2026-08-20) — same reasoning as M2's own heading
@@ -3853,13 +3838,6 @@ export function createMezzoSession({
     m3Card.appendChild(m3Body);
     m3BodyEl = m3Body;
 
-    const m3Close = pipDoc.createElement('button');
-    m3Close.type = 'button';
-    m3Close.className = 'pip-decision-close-btn';
-    m3Close.setAttribute('aria-label', 'Close');
-    m3Close.innerHTML = CLOSE_ICON_SVG;
-    m3Close.addEventListener('click', handleM3Close);
-    m3Card.appendChild(m3Close);
     layout.appendChild(m3Screen);
     m3ScreenEl = m3Screen;
     m3CloseBtn = m3Close;
@@ -3873,10 +3851,16 @@ export function createMezzoSession({
     // above).
     deleteScreen.className = 'pip-screen pip-screen-decision pip-screen-delete hidden';
 
-    // Inset modal card (2026-08-20 — extends the 2026-08-17 system to
-    // this screen; see .pip-modal-card's own CSS comment).
+    const deleteCancel = pipDoc.createElement('button');
+    deleteCancel.type = 'button';
+    deleteCancel.className = 'pip-text-btn';
+    deleteCancel.textContent = 'Cancel';
+    deleteCancel.addEventListener('click', handleDeleteCancel);
+    deleteCancelBtn = deleteCancel;
+    deleteScreen.appendChild(buildDecisionBar('Delete profile', deleteCancel));
+
     const deleteCard = pipDoc.createElement('div');
-    deleteCard.className = 'pip-modal-card';
+    deleteCard.className = 'pip-decision-content';
     deleteScreen.appendChild(deleteCard);
 
     // <h1>, not <p> (2026-08-20) — carries the live "Delete "{name}"?" text
@@ -3907,13 +3891,8 @@ export function createMezzoSession({
     deleteCard.appendChild(deleteError);
     deleteErrorEl = deleteError;
 
-    // pip-delete-actions (2026-08-20, new modifier alongside the shared
-    // pip-decision-actions base — reuses the exact row/stack mechanism
-    // .pip-m2-actions already established, via a shared selector group
-    // rather than a duplicated rule; see that rule's own CSS comment).
-    // Delete first, Cancel second, in DOM order — matches the required
-    // visual/keyboard order directly, no separate reordering step needed
-    // anywhere else (mirrors M2's own Save-before-Cancel order above).
+    // Delete is the one bottom-pinned action; Cancel lives in the header
+    // bar (PRD §7). pip-delete-actions stays as a hook class.
     const deleteActions = pipDoc.createElement('div');
     deleteActions.className = 'pip-decision-actions pip-delete-actions';
 
@@ -3925,15 +3904,7 @@ export function createMezzoSession({
     deleteActions.appendChild(deleteConfirmBtnEl);
     deleteConfirmBtn = deleteConfirmBtnEl;
 
-    const deleteCancel = pipDoc.createElement('button');
-    deleteCancel.type = 'button';
-    deleteCancel.className = 'pip-decision-secondary-btn';
-    deleteCancel.textContent = 'Cancel';
-    deleteCancel.addEventListener('click', handleDeleteCancel);
-    deleteActions.appendChild(deleteCancel);
-    deleteCancelBtn = deleteCancel;
-
-    deleteCard.appendChild(deleteActions);
+    deleteScreen.appendChild(deleteActions);
     layout.appendChild(deleteScreen);
     deleteScreenEl = deleteScreen;
 
@@ -4397,15 +4368,18 @@ export function createMezzoSession({
    *  the panel could extend past the Companion's own visible bottom edge
    *  once enough rows existed).
    *
-   *  Centers the panel within the usable Companion viewport — the real
-   *  window height minus a safe margin on each side — rather than
-   *  anchoring it just below the trigger; this is what lets it extend
-   *  upward past the trigger when centering calls for it, and keeps it
-   *  fully inside the Companion at every reachable profile count (up to
-   *  the full 1 Temporary + 5 saved + Create new profile) without ever
+   *  Lantern menu layer (PRD §7): the panel is attached to its trigger —
+   *  directly below it when it fits there, otherwise directly above it.
+   *  Only when it fits on neither side does it fall back to the earlier
+   *  behavior: centered within the usable Companion viewport (the real
+   *  window height minus a safe margin on each side), overlapping the
+   *  trigger, with the rows scrolling internally. That fallback is what
+   *  keeps every reachable profile count (up to the full 1 Temporary + 5
+   *  saved + Create new profile) fully inside the Companion without ever
    *  resizing the Companion window itself — opening the panel still never
    *  calls resizeCompanionTo()/resizeCompanionToContent(), unchanged (see
-   *  openSelectorPanel()'s own comment on that).
+   *  openSelectorPanel()'s own comment on that). The chosen placement is
+   *  recorded as data-placement ("below" | "above" | "overlay").
    *
    *  Two inline styles only — `top` and `max-height` — both reset by
    *  closeSelectorPanel() so a later open never inherits a stale value
@@ -4423,19 +4397,41 @@ export function createMezzoSession({
     const usableHeight = Math.max(0, viewportHeight - SELECTOR_PANEL_SAFE_MARGIN_PX * 2);
 
     readySelectorPanelEl.style.maxHeight = '';
-    const naturalHeight = readySelectorPanelEl.scrollHeight;
-    const panelHeight = Math.min(naturalHeight, usableHeight);
-    readySelectorPanelEl.style.maxHeight = `${panelHeight}px`;
+    // scrollHeight excludes the panel's own border, but max-height applies
+    // to its border box (box-sizing: border-box), so add the border back or
+    // the rows lose 2px and scroll.
+    const borderY = readySelectorPanelEl.offsetHeight - readySelectorPanelEl.clientHeight;
+    const naturalHeight = readySelectorPanelEl.scrollHeight + borderY;
 
     const wrapTop = wrap.getBoundingClientRect().top;
-    const desiredViewportTop = usableTop + (usableHeight - panelHeight) / 2;
-    readySelectorPanelEl.style.top = `${desiredViewportTop - wrapTop}px`;
+    const triggerRect = (readySelectorTriggerEl || wrap).getBoundingClientRect();
+    const spaceBelow = viewportHeight - SELECTOR_PANEL_SAFE_MARGIN_PX - (triggerRect.bottom + SELECTOR_PANEL_GAP_PX);
+    const spaceAbove = triggerRect.top - SELECTOR_PANEL_GAP_PX - SELECTOR_PANEL_SAFE_MARGIN_PX;
+
+    let placement;
+    let panelHeight = naturalHeight;
+    let viewportTop;
+    if (naturalHeight <= spaceBelow) {
+      placement = 'below';
+      viewportTop = triggerRect.bottom + SELECTOR_PANEL_GAP_PX;
+    } else if (naturalHeight <= spaceAbove) {
+      placement = 'above';
+      viewportTop = triggerRect.top - SELECTOR_PANEL_GAP_PX - naturalHeight;
+    } else {
+      placement = 'overlay';
+      panelHeight = Math.min(naturalHeight, usableHeight);
+      viewportTop = usableTop + (usableHeight - panelHeight) / 2;
+    }
+    readySelectorPanelEl.style.maxHeight = `${panelHeight}px`;
+    readySelectorPanelEl.style.top = `${viewportTop - wrapTop}px`;
+    readySelectorPanelEl.dataset.placement = placement;
   }
 
   function openSelectorPanel() {
     if (!readySelectorPanelEl || !readySelectorTriggerEl || !pipDocument) return;
     renderSelectorPanel();
     readySelectorPanelEl.classList.remove('hidden');
+    readyScrimEl?.classList.remove('hidden');
     positionSelectorPanel();
     readySelectorTriggerEl.setAttribute('aria-expanded', 'true');
     selectorExpanded = true;
@@ -4478,6 +4474,7 @@ export function createMezzoSession({
   function closeSelectorPanel() {
     selectorExpanded = false;
     readySelectorPanelEl?.classList.add('hidden');
+    readyScrimEl?.classList.add('hidden');
     // Positioning (2026-08-20): clears the inline top/max-height
     // positionSelectorPanel() set on open — the collapsed selector reverts
     // to its plain, non-positioned CSS presentation rather than carrying a
@@ -4491,6 +4488,7 @@ export function createMezzoSession({
     if (readySelectorPanelEl) {
       readySelectorPanelEl.style.top = '';
       readySelectorPanelEl.style.maxHeight = '';
+      delete readySelectorPanelEl.dataset.placement;
     }
     readySelectorTriggerEl?.setAttribute('aria-expanded', 'false');
     pipDocument?.removeEventListener('click', handleSelectorOutsideClick, true);
@@ -4690,7 +4688,7 @@ export function createMezzoSession({
     const rowCheck = pipDocument.createElement('span');
     rowCheck.className = 'pip-ready-selector-row-check';
     rowCheck.setAttribute('aria-hidden', 'true');
-    rowCheck.textContent = '✓';
+    rowCheck.classList.add('pip-dot'); // 8px sage dot (PRD §9a)
     rowLabel.appendChild(rowCheck);
 
     row.appendChild(rowLabel);
@@ -6096,6 +6094,7 @@ export function createMezzoSession({
     readySelectorTriggerEl = null;
     readySelectorTriggerNameEl = null;
     readySelectorPanelEl = null;
+    readyScrimEl = null;
     readyContextualActionsEl = null;
     readyStartBtn = null;
     readyDisclaimerEl = null;

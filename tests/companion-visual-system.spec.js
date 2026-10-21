@@ -1,7 +1,8 @@
 /**
- * Regression coverage — Companion modal/selector/toast/tooltip visual
- * system (2026-08-20 pass). See src/mezzo-session.js's own CSS comments
- * (`.pip-modal-card`, `.pip-ready-selector-trigger`, `.pip-ready-selector-
+ * Regression coverage — Companion decision-layer/selector/toast/tooltip
+ * visual system (2026-08-20 pass; decision layer per the Lantern refresh,
+ * docs/prd/range-ring-and-lantern-refresh.md §7). See src/mezzo-session.js's
+ * own CSS comments (`.pip-screen-decision`, `.pip-ready-selector-trigger`, `.pip-ready-selector-
  * chevron`, `.pip-toast-card`, `.pip-tooltip`) for the full rationale
  * behind each value asserted here.
  *
@@ -82,11 +83,37 @@ const FIVE_PROFILES = [
 ];
 
 // =============================================================================
-// Modal system
+// Decision layer (Lantern, docs/prd/range-ring-and-lantern-refresh.md §7)
 // =============================================================================
 
-test.describe('Companion: shared modal-card system (2026-08-20)', () => {
-  test('M3 (five-profile limit) and Delete confirmation now use the shared modal card, same as the result/naming screens', async ({ page, context }) => {
+/** Reads the decision-layer structure the PRD asks for: the whole window
+ *  slate, a 44px header bar with a Geist Mono title, content, and bottom-
+ *  pinned actions. */
+async function readDecisionLayer(screen) {
+  return screen.evaluate((el) => {
+    const bar = el.querySelector(':scope > .pip-decision-bar');
+    const title = bar?.querySelector('.pip-decision-bar-title');
+    const r = el.getBoundingClientRect();
+    const actions = el.querySelector('.pip-decision-actions');
+    return {
+      background: getComputedStyle(el).backgroundColor,
+      barIsFirst: el.firstElementChild === bar,
+      barHeight: bar?.getBoundingClientRect().height,
+      barTop: bar ? bar.getBoundingClientRect().top - r.top : null,
+      title: title?.textContent,
+      titleFont: title ? getComputedStyle(title).fontFamily : null,
+      titleTransform: title ? getComputedStyle(title).textTransform : null,
+      cancelInBar: !!bar?.querySelector('button.pip-decision-bar-cancel'),
+      cancelText: bar?.querySelector('button.pip-decision-bar-cancel')?.textContent ?? null,
+      actionsBottomGap: actions ? r.bottom - actions.getBoundingClientRect().bottom : null,
+      modalCards: el.querySelectorAll('.pip-modal-card').length,
+      dialogRole: el.querySelector('[role="dialog"], [aria-modal]') !== null,
+    };
+  });
+}
+
+test.describe('Companion: decision layer (Lantern)', () => {
+  test('M3 (five-profile limit) and Delete confirmation: slate window, 44px Geist Mono header bar with Cancel in its corner, no modal card', async ({ page, context }) => {
     // FIVE_PROFILES is a Node-side constant — addInitScript() stringifies
     // the function itself to run in the browser page, it does not capture
     // outer-scope closures, so the data must be passed explicitly as this
@@ -97,9 +124,16 @@ test.describe('Companion: shared modal-card system (2026-08-20)', () => {
     }, FIVE_PROFILES);
     const pipPage = await openCompanion(page, context);
     const m3Screen = await openM3(pipPage);
-    await expect(m3Screen.locator('.pip-modal-card')).toBeVisible();
-    await expect(m3Screen.locator('.pip-modal-card h1')).toHaveText('5 of 5 profiles saved');
-    await m3Screen.locator('.pip-decision-close-btn').click();
+    const m3 = await readDecisionLayer(m3Screen);
+    expect(m3).toMatchObject({
+      background: 'rgb(56, 57, 60)', // --color-bg-decision (slate)
+      barIsFirst: true, barTop: 0, title: 'Profile limit', titleTransform: 'uppercase',
+      cancelInBar: true, cancelText: 'Cancel', modalCards: 0, dialogRole: false,
+    });
+    expect(m3.barHeight).toBeCloseTo(44, 0);
+    expect(m3.titleFont).toMatch(/Geist Mono/);
+    await expect(m3Screen.locator('.pip-decision-content h1')).toHaveText('5 of 5 profiles saved');
+    await m3Screen.locator('.pip-decision-bar-cancel').click();
 
     const readyScreen = pipPage.locator('.pip-screen-ready');
     await expect(readyScreen).toBeVisible({ timeout: 3000 });
@@ -108,16 +142,15 @@ test.describe('Companion: shared modal-card system (2026-08-20)', () => {
     await readyScreen.locator('.pip-ready-selector-trigger').click();
     await pipPage.locator('.pip-ready-selector-panel button[aria-label="Delete One profile"]').click();
     const deleteScreen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Delete "One"?' });
-    await expect(deleteScreen.locator('.pip-modal-card')).toBeVisible();
-    await expect(deleteScreen.locator('.pip-modal-card h1')).toHaveText('Delete "One"?');
+    const del = await readDecisionLayer(deleteScreen);
+    expect(del).toMatchObject({
+      background: 'rgb(56, 57, 60)', barIsFirst: true, title: 'Delete profile',
+      cancelInBar: true, cancelText: 'Cancel', modalCards: 0, dialogRole: false,
+    });
+    await expect(deleteScreen.locator('.pip-decision-content h1')).toHaveText('Delete "One"?');
   });
 
-  test('every modal heading (result, naming, five-profile limit, delete) shares the exact same h1 typography as "Your new speaking profile is ready"', async ({ page, context }) => {
-    // FIVE_PROFILES is a Node-side constant — addInitScript() stringifies
-    // the function itself to run in the browser page, it does not capture
-    // outer-scope closures, so the data must be passed explicitly as this
-    // second argument (Playwright's own supported mechanism) rather than
-    // referenced directly inside the function body.
+  test('every decision heading (five-profile limit, delete) shares the exact same h1 typography as "Your new speaking profile is ready"', async ({ page, context }) => {
     await page.addInitScript((profiles) => {
       localStorage.setItem('mezzoProfiles', JSON.stringify(profiles));
     }, FIVE_PROFILES);
@@ -128,24 +161,19 @@ test.describe('Companion: shared modal-card system (2026-08-20)', () => {
     });
 
     const m3Screen = await openM3(pipPage);
-    const reference = await readStyle(m3Screen.locator('.pip-modal-card h1'));
+    const reference = await readStyle(m3Screen.locator('.pip-decision-content h1'));
     expect(reference.fontSize).toBe('24px');
-    await m3Screen.locator('.pip-decision-close-btn').click();
+    await m3Screen.locator('.pip-decision-bar-cancel').click();
 
     const readyScreen = pipPage.locator('.pip-screen-ready');
     await expect(readyScreen).toBeVisible({ timeout: 3000 });
     await readyScreen.locator('.pip-ready-selector-trigger').click();
     await pipPage.locator('.pip-ready-selector-panel button[aria-label="Delete One profile"]').click();
     const deleteScreen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Delete "One"?' });
-    expect(await readStyle(deleteScreen.locator('.pip-modal-card h1'))).toEqual(reference);
+    expect(await readStyle(deleteScreen.locator('.pip-decision-content h1'))).toEqual(reference);
   });
 
-  test('every applicable screen has exactly one real h1 inside its modal card — semantic heading structure, not decorative styling on a <p>', async ({ page, context }) => {
-    // FIVE_PROFILES is a Node-side constant — addInitScript() stringifies
-    // the function itself to run in the browser page, it does not capture
-    // outer-scope closures, so the data must be passed explicitly as this
-    // second argument (Playwright's own supported mechanism) rather than
-    // referenced directly inside the function body.
+  test('every applicable screen has exactly one real h1 — the header bar title is a plain label, not a second heading', async ({ page, context }) => {
     await page.addInitScript((profiles) => {
       localStorage.setItem('mezzoProfiles', JSON.stringify(profiles));
     }, FIVE_PROFILES);
@@ -153,7 +181,8 @@ test.describe('Companion: shared modal-card system (2026-08-20)', () => {
     const m3Screen = await openM3(pipPage);
     await expect(m3Screen.locator('h1')).toHaveCount(1);
     expect(await m3Screen.locator('.pip-decision-heading').evaluate((el) => el.tagName)).toBe('H1');
-    await m3Screen.locator('.pip-decision-close-btn').click();
+    expect(await m3Screen.locator('.pip-decision-bar-title').evaluate((el) => el.tagName)).toBe('P');
+    await m3Screen.locator('.pip-decision-bar-cancel').click();
 
     const readyScreen = pipPage.locator('.pip-screen-ready');
     await expect(readyScreen).toBeVisible({ timeout: 3000 });
@@ -164,7 +193,7 @@ test.describe('Companion: shared modal-card system (2026-08-20)', () => {
     expect(await deleteScreen.locator('.pip-decision-heading').evaluate((el) => el.tagName)).toBe('H1');
   });
 
-  test('a long profile name in the delete heading wraps safely, contained within the modal card at 382x512, no clipping or scrolling', async ({ page, context }) => {
+  test('a long profile name in the delete heading wraps safely at 382x512, with no clipping or scrolling, and both actions stay visible', async ({ page, context }) => {
     await page.addInitScript(() => {
       localStorage.setItem('mezzoProfiles', JSON.stringify([
         { id: 'p-long', name: 'A Genuinely Very Long Speaking Profile Name For This Room', speakingDb: -30, spreadDb: 4, calibratedTs: 100 },
@@ -181,41 +210,34 @@ test.describe('Companion: shared modal-card system (2026-08-20)', () => {
     expect(scrollWidth).toBeLessThanOrEqual(clientWidth + 1);
     expect(scrollHeight).toBeLessThanOrEqual(clientHeight + 1);
 
-    const card = deleteScreen.locator('.pip-modal-card');
-    const [screenBox, cardBox] = await Promise.all([deleteScreen.boundingBox(), card.boundingBox()]);
-    expect(cardBox.x).toBeGreaterThanOrEqual(screenBox.x);
-    expect(cardBox.x + cardBox.width).toBeLessThanOrEqual(screenBox.x + screenBox.width + 1);
-    await expect(deleteScreen.locator('button:has-text("Delete")')).toBeVisible();
-    await expect(deleteScreen.locator('button:has-text("Cancel")')).toBeVisible();
+    const [screenBox, headingBox] = await Promise.all([deleteScreen.boundingBox(), deleteScreen.locator('h1').boundingBox()]);
+    expect(headingBox.x).toBeGreaterThanOrEqual(screenBox.x);
+    expect(headingBox.x + headingBox.width).toBeLessThanOrEqual(screenBox.x + screenBox.width + 1);
+    await expect(deleteScreen.locator('button:has-text("Delete")')).toBeInViewport();
+    await expect(deleteScreen.locator('.pip-decision-bar-cancel')).toBeInViewport();
   });
 
-  test('the modal card measures approximately the approved 320px max-width and 48px/32px internal padding at 382x512', async ({ page, context }) => {
+  test('actions are pinned to the bottom of the window and keep the shared 320px button cap', async ({ page, context }) => {
     await page.addInitScript(() => {
       localStorage.setItem('mezzoProfiles', JSON.stringify([
         { id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 100 },
       ]));
     });
     const pipPage = await openCompanion(page, context);
-    await pipPage.setViewportSize({ width: 382, height: 512 });
-    const deleteScreen = await openDeleteScreen(pipPage, 'Kitchen');
-    const card = deleteScreen.locator('.pip-modal-card');
-    const style = await card.evaluate((el) => {
-      const cs = getComputedStyle(el);
-      return { width: el.getBoundingClientRect().width, paddingTop: cs.paddingTop, paddingLeft: cs.paddingLeft, borderRadius: cs.borderRadius, boxSizing: cs.boxSizing };
-    });
-    expect(style.width).toBeLessThanOrEqual(320.5);
-    expect(style.paddingTop).toBe('48px');
-    expect(style.paddingLeft).toBe('32px');
-    expect(style.borderRadius).toBe('14px');
-    expect(style.boxSizing).toBe('border-box');
-
-    // The outer gutter is at least the approved ~24px minimum on every side.
-    const [screenBox, cardBox] = await Promise.all([deleteScreen.boundingBox(), card.boundingBox()]);
-    expect(cardBox.x - screenBox.x).toBeGreaterThanOrEqual(23);
-    expect((screenBox.x + screenBox.width) - (cardBox.x + cardBox.width)).toBeGreaterThanOrEqual(23);
+    for (const height of [364, 512]) {
+      await pipPage.setViewportSize({ width: 382, height });
+      const deleteScreen = await openDeleteScreen(pipPage, 'Kitchen');
+      const layer = await readDecisionLayer(deleteScreen);
+      expect(layer.actionsBottomGap).toBeGreaterThanOrEqual(0);
+      expect(layer.actionsBottomGap).toBeLessThanOrEqual(24); // the actions' own 20px bottom padding, not floating mid-screen
+      const deleteBox = await deleteScreen.locator('button:has-text("Delete")').boundingBox();
+      expect(deleteBox.width).toBeLessThanOrEqual(320.5);
+      await deleteScreen.locator('.pip-decision-bar-cancel').click();
+      await expect(pipPage.locator('.pip-screen-ready')).toBeVisible({ timeout: 3000 });
+    }
   });
 
-  test('Delete precedes Cancel in DOM order, matching Save-before-Cancel on the naming screen', async ({ page, context }) => {
+  test('Delete confirmation opens with focus on Cancel, and Tab moves from Cancel (header) to Delete (bottom)', async ({ page, context }) => {
     await page.addInitScript(() => {
       localStorage.setItem('mezzoProfiles', JSON.stringify([
         { id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 100 },
@@ -223,54 +245,13 @@ test.describe('Companion: shared modal-card system (2026-08-20)', () => {
     });
     const pipPage = await openCompanion(page, context);
     const deleteScreen = await openDeleteScreen(pipPage, 'Kitchen');
-    const allButtons = await deleteScreen.locator('.pip-delete-actions button').allTextContents();
-    expect(allButtons).toEqual(['Delete', 'Cancel']);
-  });
-
-  test('Delete and Cancel appear side by side with equal widths at 382x512, and stack Delete-above-Cancel at a narrower supported width', async ({ page, context }) => {
-    await page.addInitScript(() => {
-      localStorage.setItem('mezzoProfiles', JSON.stringify([
-        { id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 100 },
-      ]));
-    });
-    const pipPage = await openCompanion(page, context);
-    await pipPage.setViewportSize({ width: 382, height: 512 });
-    const deleteScreen = await openDeleteScreen(pipPage, 'Kitchen');
-    const deleteBtn = deleteScreen.locator('button:has-text("Delete")');
-    const cancelBtn = deleteScreen.locator('button:has-text("Cancel")');
-    const [deleteBox, cancelBox] = await Promise.all([deleteBtn.boundingBox(), cancelBtn.boundingBox()]);
-    // Side by side: same row (y overlaps), Delete strictly to the left.
-    expect(Math.abs(deleteBox.y - cancelBox.y)).toBeLessThan(2);
-    expect(deleteBox.x).toBeLessThan(cancelBox.x);
-    expect(Math.abs(deleteBox.width - cancelBox.width)).toBeLessThan(2);
-
-    // Narrower supported width — stacks, Delete above Cancel, full width.
-    await pipPage.setViewportSize({ width: 220, height: 512 });
-    const [deleteBoxNarrow, cancelBoxNarrow] = await Promise.all([deleteBtn.boundingBox(), cancelBtn.boundingBox()]);
-    expect(deleteBoxNarrow.y).toBeLessThan(cancelBoxNarrow.y);
-    expect(Math.abs(deleteBoxNarrow.x - cancelBoxNarrow.x)).toBeLessThan(2);
-  });
-
-  test('real keyboard Tab order reaches Delete before Cancel', async ({ page, context }) => {
-    await page.addInitScript(() => {
-      localStorage.setItem('mezzoProfiles', JSON.stringify([
-        { id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 100 },
-      ]));
-    });
-    const pipPage = await openCompanion(page, context);
-    const deleteScreen = await openDeleteScreen(pipPage, 'Kitchen');
-    // Cancel is the initial focus target (openDeleteScreen()'s own
-    // requestAnimationFrame(() => deleteCancelBtn?.focus())) — wait for
-    // that to actually land before driving the keyboard, or a Shift+Tab
-    // fired first could still be racing against a focus still sitting on
-    // the (now-hidden) selector row that was just clicked. Shift+Tab
-    // backward then Tab forward confirms Delete really precedes Cancel in
-    // the real, browser-computed tab sequence, not just DOM source order.
-    await expect(deleteScreen.locator('button:has-text("Cancel")')).toBeFocused();
-    await pipPage.keyboard.press('Shift+Tab');
-    await expect(deleteScreen.locator('button:has-text("Delete")')).toBeFocused();
+    // Cancel is still the safe initial focus target (openDeleteScreen()'s
+    // own requestAnimationFrame(() => deleteCancelBtn?.focus())).
+    await expect(deleteScreen.locator('.pip-decision-bar-cancel')).toBeFocused();
     await pipPage.keyboard.press('Tab');
-    await expect(deleteScreen.locator('button:has-text("Cancel")')).toBeFocused();
+    await expect(deleteScreen.locator('button:has-text("Delete")')).toBeFocused();
+    await pipPage.keyboard.press('Shift+Tab');
+    await expect(deleteScreen.locator('.pip-decision-bar-cancel')).toBeFocused();
   });
 
   test('Save (naming) and Delete (confirmation) both use the standard primary-button font weight, not an extra-bold treatment', async ({ page, context }) => {
@@ -505,7 +486,9 @@ test.describe('Companion: selector surface and caret badge (2026-08-20)', () => 
     // --hanko-fill orange, which only reached 2.91:1 as a foreground here
     // — under the 3:1 icon minimum. #DC9C89 clears it (5.51:1) — see
     // .pip-ready-selector-row-check's own comment.
-    const checkColor = await panel.locator('.pip-ready-selector-row-check').first().evaluate((el) => getComputedStyle(el).color);
+    // The selected marker is an 8px sage dot (PRD §9a), drawn by its
+    // background rather than a text glyph's color.
+    const checkColor = await panel.locator('.pip-ready-selector-row-check').first().evaluate((el) => getComputedStyle(el).backgroundColor);
     expect(checkColor).toBe('rgb(206, 226, 196)'); // sage --color-link
     expect(checkColor).not.toBe('rgb(222, 222, 101)'); // never chartreuse inside the Companion
 
@@ -528,7 +511,7 @@ test.describe('Companion: selector surface and caret badge (2026-08-20)', () => 
     const kitchenRow = panel.locator('.pip-ready-selector-row', { hasText: 'Kitchen' });
     await kitchenRow.hover();
     const rowActionColor = await kitchenRow.locator('.pip-ready-selector-row-action').first().evaluate((el) => getComputedStyle(el).color);
-    expect(normalizeColor(rowActionColor)).toBe('rgba(171, 166, 152, 0.75)');
+    expect(normalizeColor(rowActionColor)).toBe('rgba(176, 171, 158, 0.75)');
 
     // Real keyboard navigation, not .focus() — opening the panel already
     // auto-focuses a radio programmatically (openSelectorPanel()'s own
@@ -784,7 +767,9 @@ test.describe('Companion: row-action tooltips (2026-08-20)', () => {
     await recalibrateBtn.focus();
     await expect(tooltip).toBeVisible({ timeout: 8000 });
     await expect(recalibrateBtn).toHaveAttribute('aria-describedby', 'pip-row-tooltip');
-    await pipPage.locator('.pip-ready-heading').click();
+    // The open selector dims the screen with a scrim (PRD §7), so the
+    // outside click lands on it, not on the heading underneath.
+    await pipPage.locator('.pip-ready-scrim').click({ position: { x: 10, y: 10 } });
     await expect(panel).toBeHidden();
     await expect(tooltip).toBeHidden();
     await expect(recalibrateBtn).not.toHaveAttribute('aria-describedby');

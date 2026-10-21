@@ -168,7 +168,7 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
     await expect(m3Screen).toBeVisible();
     await expect(m3Screen).toContainText('Delete a saved profile before saving this one.');
 
-    await m3Screen.locator('.pip-decision-close-btn').click();
+    await m3Screen.locator('.pip-decision-bar-cancel').click(); // M3's way out is the header bar's Cancel
     await expect(readyScreen).toBeVisible();
     await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Temporary profile');
   });
@@ -208,7 +208,7 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
     await expect(pipPage.locator('.pip-screen-c1')).toBeHidden();
     await expect(pipPage.locator('.pip-screen-calibrating')).toBeHidden();
 
-    await m3Screen.locator('.pip-decision-close-btn').click();
+    await m3Screen.locator('.pip-decision-bar-cancel').click(); // M3's way out is the header bar's Cancel
     await expect(readyScreen).toBeVisible();
   });
 
@@ -422,7 +422,7 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
     // "Deleting…" the moment it's clicked, which a text:"Delete" locator
     // would stop matching.
     const confirmBtn = deleteScreen.locator('.pip-decision-primary-btn');
-    const cancelBtn = deleteScreen.locator('.pip-decision-secondary-btn');
+    const cancelBtn = deleteScreen.locator('.pip-decision-bar-cancel'); // Cancel lives in the header bar (PRD §7)
 
     await confirmBtn.click();
     await expect(confirmBtn).toHaveText('Deleting…');
@@ -514,7 +514,7 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
     await panel.locator('button[aria-label="Delete Kitchen profile"]').click();
     const deleteScreen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Delete "Kitchen"?' });
     const confirmBtn = deleteScreen.locator('.pip-decision-primary-btn');
-    const cancelBtn = deleteScreen.locator('.pip-decision-secondary-btn');
+    const cancelBtn = deleteScreen.locator('.pip-decision-bar-cancel'); // Cancel lives in the header bar (PRD §7)
     await confirmBtn.click();
 
     // Recovers exactly like the handled-failure path: the confirm button is
@@ -726,7 +726,7 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
   });
 });
 
-test.describe('Naming flow (M2/M2a) polish — inset modal card, heading typography, spacing, Save/Cancel reorder (2026-08-17)', () => {
+test.describe('Naming flow (M2/M2a) polish — decision layer, heading typography, spacing, Save/Cancel placement', () => {
   /** Opens M2 from a freshly-created Temporary profile — the same entry
    *  point most of this describe block's tests use. */
   async function openM2(pipPage) {
@@ -741,7 +741,7 @@ test.describe('Naming flow (M2/M2a) polish — inset modal card, heading typogra
     return m2Screen;
   }
 
-  test('the naming flow uses the same inset-modal-card treatment as the result screens — a real h1 heading matching the approved result-heading typography exactly, and no terminal punctuation', async ({ page, context }) => {
+  test('the naming flow uses the same decision-layer treatment as the result screens — a real h1 heading matching the approved result-heading typography exactly, and no terminal punctuation', async ({ page, context }) => {
     const pipPage = await openCompanion(page, context);
     await pipPage.setViewportSize({ width: 382, height: 512 });
     await pipPage.locator('button:has-text("Create speaking profile")').click();
@@ -771,22 +771,20 @@ test.describe('Naming flow (M2/M2a) polish — inset modal card, heading typogra
     await expect(m2Screen.locator('input[type="text"]')).toBeFocused();
   });
 
-  test('the naming flow presents inside an inset modal card like the result screens — outer surface visible around it', async ({ page, context }) => {
+  test('the naming flow uses the decision layer like the result screens — slate window, "Save profile" header bar with Cancel, no modal card', async ({ page, context }) => {
     const pipPage = await openCompanion(page, context);
     await pipPage.setViewportSize({ width: 382, height: 512 });
     const m2Screen = await openM2(pipPage);
 
-    const outerBg = await m2Screen.evaluate((el) => getComputedStyle(el).backgroundColor);
-    const card = m2Screen.locator('.pip-modal-card');
-    await expect(card).toBeVisible();
-    const cardBg = await card.evaluate((el) => getComputedStyle(el).backgroundColor);
-    expect(cardBg).not.toBe(outerBg);
-
-    const [screenBox, cardBox] = await Promise.all([m2Screen.boundingBox(), card.boundingBox()]);
-    expect(cardBox.x).toBeGreaterThan(screenBox.x);
-    expect(cardBox.y).toBeGreaterThan(screenBox.y);
-    expect(cardBox.x + cardBox.width).toBeLessThan(screenBox.x + screenBox.width);
-    expect(cardBox.y + cardBox.height).toBeLessThan(screenBox.y + screenBox.height);
+    // Lantern (PRD §7): the whole window is the slate decision surface.
+    expect(await m2Screen.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe('rgb(56, 57, 60)');
+    await expect(m2Screen.locator('.pip-modal-card')).toHaveCount(0);
+    const bar = m2Screen.locator('.pip-decision-bar');
+    await expect(bar.locator('.pip-decision-bar-title')).toHaveText('Save profile');
+    await expect(bar.locator('button.pip-decision-bar-cancel')).toHaveText('Cancel');
+    const [screenBox, barBox] = await Promise.all([m2Screen.boundingBox(), bar.boundingBox()]);
+    expect(barBox.y).toBeCloseTo(screenBox.y, 0);
+    expect(barBox.height).toBeCloseTo(44, 0);
 
     // No dialog/modal semantics were introduced.
     await expect(m2Screen).not.toHaveAttribute('role', 'dialog');
@@ -842,63 +840,51 @@ test.describe('Naming flow (M2/M2a) polish — inset modal card, heading typogra
     expect(gapWarningToActions).toBeGreaterThan(gapInputToWarning);
   });
 
-  test('Save precedes Cancel in DOM, visual, and keyboard order, and both sit side by side at the full 382px Companion width with equal width and a consistent gap', async ({ page, context }) => {
+  test('Save is the one bottom-pinned action and Cancel sits in the header bar; keyboard order runs input, then Save, with Cancel before the input', async ({ page, context }) => {
     const pipPage = await openCompanion(page, context);
     await pipPage.setViewportSize({ width: 382, height: 512 });
     const m2Screen = await openM2(pipPage);
     const actions = m2Screen.locator('.pip-m2-actions');
 
-    // DOM order.
     const order = await actions.evaluate((el) => Array.from(el.children).map((c) => c.textContent));
-    expect(order).toEqual(['Save', 'Cancel']);
+    expect(order).toEqual(['Save']);
 
     const saveBtn = m2Screen.locator('button[type="submit"]');
-    const cancelBtn = m2Screen.locator('button:has-text("Cancel")');
+    const cancelBtn = m2Screen.locator('.pip-decision-bar-cancel');
     await expect(saveBtn).toHaveText('Save');
     await expect(cancelBtn).toHaveText('Cancel');
 
-    // Visual order — side by side at this width, Save (left) before Cancel
-    // (right), same row (equal y), equal width, consistent gap.
-    const [saveBox, cancelBox] = await Promise.all([saveBtn.boundingBox(), cancelBtn.boundingBox()]);
-    expect(Math.abs(saveBox.y - cancelBox.y)).toBeLessThan(2); // same row
-    expect(saveBox.x).toBeLessThan(cancelBox.x); // Save left of Cancel
-    expect(Math.abs(saveBox.width - cancelBox.width)).toBeLessThan(2); // equal width
-    const gap = cancelBox.x - (saveBox.x + saveBox.width);
-    expect(gap).toBeGreaterThan(4);
-    expect(gap).toBeLessThan(20);
+    // Visual placement: Cancel at the top (header bar), Save at the bottom.
+    const [screenBox, saveBox, cancelBox] = await Promise.all([m2Screen.boundingBox(), saveBtn.boundingBox(), cancelBtn.boundingBox()]);
+    expect(cancelBox.y).toBeLessThan(screenBox.y + 44);
+    expect((screenBox.y + screenBox.height) - (saveBox.y + saveBox.height)).toBeLessThanOrEqual(24);
 
     // Keyboard order — input already has focus (showM2Screen() focuses it).
-    // A disabled button is never a native tab stop, so the input must
-    // actually have a name typed in first (enabling Save) for this to
-    // meaningfully test the Save-then-Cancel order rather than Save being
-    // silently skipped.
+    // A disabled button is never a native tab stop, so a name is typed
+    // first (enabling Save).
     const input = m2Screen.locator('input[type="text"]');
     await expect(input).toBeFocused();
     await input.fill('Coffee Shop');
     await expect(saveBtn).toBeEnabled();
     await pipPage.keyboard.press('Tab');
     await expect(saveBtn).toBeFocused();
-    await pipPage.keyboard.press('Tab');
+    await pipPage.keyboard.press('Shift+Tab');
+    await expect(input).toBeFocused();
+    await pipPage.keyboard.press('Shift+Tab');
     await expect(cancelBtn).toBeFocused();
   });
 
-  test('Save and Cancel stack Save-above-Cancel, each full-width, at a narrower supported width', async ({ page, context }) => {
+  test('at a narrower supported width, Save stays full-width at the bottom and Cancel stays in the header, with no horizontal scrolling', async ({ page, context }) => {
     const pipPage = await openCompanion(page, context);
-    // Narrower than 382 — below the ~210px (2×100px basis + gap) threshold
-    // .pip-m2-actions needs to fit both side by side, forcing the wrap.
     await pipPage.setViewportSize({ width: 220, height: 512 });
     const m2Screen = await openM2(pipPage);
 
     const saveBtn = m2Screen.locator('button[type="submit"]');
-    const cancelBtn = m2Screen.locator('button:has-text("Cancel")');
-    const [saveBox, cancelBox] = await Promise.all([saveBtn.boundingBox(), cancelBtn.boundingBox()]);
+    const cancelBtn = m2Screen.locator('.pip-decision-bar-cancel');
+    const [screenBox, saveBox, cancelBox] = await Promise.all([m2Screen.boundingBox(), saveBtn.boundingBox(), cancelBtn.boundingBox()]);
+    expect(cancelBox.y).toBeLessThan(saveBox.y);
+    expect(saveBox.width).toBeGreaterThan(screenBox.width - 2 * 24 - 2); // full width inside the 24px gutters
 
-    // Stacked: Cancel sits below Save, not beside it.
-    expect(cancelBox.y).toBeGreaterThan(saveBox.y + saveBox.height - 2);
-    // Save above Cancel specifically (not the reverse).
-    expect(saveBox.y).toBeLessThan(cancelBox.y);
-
-    // No horizontal scrolling introduced, no compressed/clipped labels.
     const { scrollWidth, clientWidth } = await m2Screen.evaluate((el) => ({ scrollWidth: el.scrollWidth, clientWidth: el.clientWidth }));
     expect(scrollWidth).toBeLessThanOrEqual(clientWidth + 1);
     await expect(saveBtn).toHaveText('Save');
