@@ -27,14 +27,16 @@ This PRD proposes, in priority order:
 
 ## 2. Problem
 
-### Observed failure
+### The case this PRD designs for: inattention, not hardware events
 
-A real user with three microphones (built-in, USB, and Bluetooth earbuds) calibrated a profile on one and later monitored on another without noticing. A second variant: they calibrate comfortably, then pull the chair in for the meeting.
+Many people have several microphones within reach. The person who raised this has three in their office. A user saves a profile (e.g. "Office") on one mic, and on a later day ends up on another without paying attention to which one is active. Or they keep the same mic but sit closer to it or farther from it than when they calibrated. Mezzo keeps working as designed, but against a reference that no longer fits, so it *feels* less accurate. The user experiences that as Mezzo performing worse, not as a setup change.
+
+Hardware events during a session (a mic unplugged, a Bluetooth device dropping, the OS default switching while monitoring) are **not** what this PRD designs for. They're rare and visible to the user when they happen, and §4.3 covers them only as background.
 
 ### Why it happens
 
-- **The OS default microphone changes without the user doing anything in Mezzo.** Connecting AirPods, docking a laptop, or plugging in a USB headset can change the system default. Mezzo always asks for the default device (§4.1), so the next calibration *or* monitoring session silently uses whatever is default at that moment.
-- **Mezzo never shows which microphone it's using.** No screen names the device, so a mismatch can't be seen.
+- **Choosing a mic is easy and easy to forget.** It can happen in the OS sound settings, by connecting earbuds or a headset, in a meeting app, or in **Chrome's own microphone permission prompt, which includes a microphone picker** (it shows "Use available microphones" with a device dropdown). Mezzo always asks for whatever the browser gives it by default (§4.1), so whichever mic was chosen last, anywhere, is the one Mezzo hears.
+- **Mezzo never shows which microphone it's using.** No screen names the device, so a change can't be seen.
 - **Distance isn't measurable.** Nothing in the audio signal reliably separates "sat closer" from "spoke louder." Guidance is the only lever here.
 
 ### Why it matters for Mezzo specifically
@@ -102,12 +104,11 @@ Conclusions:
 - **The `"default"` label carries a prefix.** Chrome and Edge prefix the default entry's label (`Default - `, and on Windows also a `Communications - ` entry). It must be normalized before storing or comparing (§6.2).
 - **Labels need permission.** Before microphone permission is granted, `enumerateDevices()` returns empty labels in real browsers. The probe returned labels before granting, but that's an artifact of `--use-fake-ui-for-media-stream`, not real behavior. In practice Home's permission gate guarantees permission before the Companion opens, so labels should be available on Ready. If they aren't, the state is **unknown** and Mezzo shows nothing.
 - **The current default can be read without acquiring the mic.** `enumerateDevices()` needs no active capture. Reading the `"default"` entry's label on Ready tells Mezzo which device the next Start monitoring will get, without turning the mic indicator on.
+- **Chrome's per-site mic choice may override the OS default.** Chrome's permission prompt and site settings let the user pick a mic for this site specifically. Unverified: whether an unconstrained `getUserMedia` then returns that chosen mic, and whether `enumerateDevices()`'s `"default"` entry (or first audio input) reflects it. If it doesn't, Ready would compare against the wrong device. Before building, verify which entry matches the track Mezzo actually gets after choosing a non-default mic in that prompt, and compare against that entry (§11 Q4). The picker itself is browser UI: Mezzo can't style, label, or pre-select it, only show the result afterwards.
 
-### 4.3 `devicechange` and default-device switching
+### 4.3 Hardware events (background only, not designed for)
 
-- `devicechange` fires on `navigator.mediaDevices` when inputs are added or removed (e.g. AirPods connecting). The spec allows the user agent to withhold or delay device-change information for documents that aren't visible or focused. **Mezzo's session realm is the opener tab, which is usually hidden behind the meeting tab**, so listening there is unreliable. The Companion's own `pipWindow.navigator.mediaDevices` exists (verified) and belongs to a visible document, so that's where Ready should listen. **Not yet verified on real hardware.**
-- **What happens to a live `"default"` track when the OS default changes mid-session isn't verified** and fake devices can't simulate it. Possible outcomes are that the track keeps the original physical device, or Chrome reroutes `"default"` to the new device. If Chrome reroutes, the session silently starts measuring a mic the profile wasn't calibrated with. If it doesn't, the user may think they switched mics when Mezzo is still hearing the old one. This PRD doesn't depend on which one Chrome does, because it never acts mid-session (§9). It still needs a real-hardware check (§13) before the Calibrating line's wording is final.
-- **Unplugging the active microphone ends the track** (`readyState: 'ended'`). Mezzo has no `ended` listener, so Monitoring would keep showing Listening against a dead input. That's a reliability bug, separate from this PRD (§12).
+Mid-session hardware events are out of scope (§2). For the record: `devicechange` fires when inputs are added or removed, but browsers may delay it for hidden documents, and Mezzo's session runs in the opener tab, which is usually hidden. Whether a live `"default"` track follows an OS default change mid-session is unverified. Unplugging the active mic ends the track, and Mezzo has no `ended` listener. None of this is needed for the inattention case, which is settled before Start monitoring.
 
 ### 4.4 How profiles are stored
 
@@ -143,7 +144,7 @@ No new canonical strings. This PRD reuses **Recalibrate**, **Speaking profile**,
 - When a calibration capture completes, Mezzo records the **normalized label** of the track it actually measured as `calibratedMic` on the result. That covers Create speaking profile, Create new profile, and Recalibrate of a saved or unsaved profile. The field carries through to the unsaved profile, and through save, replace, and recalibrate-Replace into the saved profile.
 - On Ready, Mezzo reads the label of the browser's current default input (`"default"` entry of the Companion window's `enumerateDevices()`, normalized) **without acquiring the microphone**.
 - If the selected profile has a known `calibratedMic` **and** the current label is known **and** the two differ, Ready shows the **mic note**. In every other case, including either side unknown, it shows nothing.
-- The note re-evaluates when the selection changes, when Ready is shown, and on `devicechange` from the Companion window's `navigator.mediaDevices` while Ready is visible. Connecting AirPods while Ready is open updates it live.
+- The note re-evaluates when Ready is shown and when the selection changes. No live device-change listening: the inattention case is settled by checking each time the user arrives at Ready.
 - The note is informational. **Start monitoring stays fully available** and unchanged. Nothing is blocked, confirmed, or defaulted differently.
 
 ### 6.2 Normalization and comparison (pure helpers in `src/profiles.js`)
@@ -259,7 +260,7 @@ A conservative later candidate, only once real usage data exists: a passive, pos
 2. `calibratedMic` carries through: temporary profile, then Save profile (create), Replace via a matching name, and saved-profile Recalibrate then Replace. Keep as unsaved keeps it on the new unsaved profile and leaves the saved profile's value untouched.
 3. Profiles without the field load, display, monitor, recalibrate, save, and delete exactly as today.
 4. Ready shows the mic note only when §6.2's comparison returns `true` for the selected profile.
-5. The note updates on selection change, on Ready being shown, and on Companion-window `devicechange` while Ready is visible.
+5. The note updates when Ready is shown and on selection change.
 6. Reading the current device on Ready never calls `getUserMedia` and never turns on the mic indicator.
 7. The note's **Recalibrate** runs the existing Recalibrate flow for the selected profile. No new flow.
 8. Start monitoring is never disabled, delayed, or changed by the note.
@@ -269,7 +270,7 @@ A conservative later candidate, only once real usage data exists: a passive, pos
 
 ### 10.2 Accessibility
 
-- The note is plain text in reading order between the selector and Start monitoring. It isn't a live region on first render. When it changes while Ready is visible (a `devicechange`), announce it once, politely, without moving focus.
+- The note is plain text in reading order between the selector and Start monitoring. It isn't a live region.
 - The full, untruncated sentence is available to assistive tech.
 - **Recalibrate** is keyboard-operable, with a specific accessible name, e.g. "Recalibrate {profile name}".
 - Meaning doesn't depend on color; no icon is needed.
@@ -280,7 +281,7 @@ A conservative later candidate, only once real usage data exists: a passive, pos
 - `src/audio.js`: a read-only getter for the active track's label. No change to acquisition, constraints, or level processing.
 - `src/calibration-controller.js`: include `calibratedMic` in the result.
 - `src/profiles.js`: thread the field through the functions in §4.4, and add `normalizeMicLabel()`/`micLabelsDiffer()`.
-- `src/mezzo-session.js`: temporary shape, both commit paths, Ready note render and its `devicechange` listener (on `pipWindow.navigator.mediaDevices`, removed in `handlePipClose()`; add any new DOM refs to its reset list), C2 line, C1 copy.
+- `src/mezzo-session.js`: temporary shape, both commit paths, Ready note render (reading `pipWindow.navigator.mediaDevices.enumerateDevices()`; add any new DOM refs to `handlePipClose()`'s reset list), C2 line, C1 copy.
 - `CLAUDE.md`: update "Canonical Runtime Profile Shapes" to `{ id, name, speakingDb, spreadDb, calibratedTs, calibratedMic? }` and the temporary shape to match.
 - `docs/product-experience.md`: only at ship time.
 
@@ -290,7 +291,7 @@ A conservative later candidate, only once real usage data exists: a passive, pos
 
 1. **Plain label vs. hash** for `calibratedMic` (§6.5). Recommendation: plain label, local only.
 2. **Two-name copy vs. fallback copy** at 380px (§6.4). Decide with real long labels, e.g. `MacBook Pro Microphone` vs. `Jabra Evolve2 65 (0b0e:030c)`.
-3. **Does Chrome reroute a live `"default"` track when the OS default changes?** (§4.3) Doesn't change this PRD's scope, but it decides whether the §12 follow-up must also handle default changes, not just unplugging.
+3. **Chrome's per-site mic choice** (§4.1–4.2): after picking a non-default mic in Chrome's permission prompt or site settings, which `enumerateDevices()` entry matches the track Mezzo actually gets? Ready must compare against that one. Blocking for implementation.
 4. **Windows `Communications - ` entry:** confirm Chrome/Edge on Windows pick the `default`, not `communications`, device for an unconstrained `getUserMedia`, so Ready compares against the right entry.
 5. **Unknown on Ready but known at Start monitoring:** if Ready couldn't read labels, should anything happen once the track's label becomes known? Recommendation: no. Monitoring stays untouched.
 
@@ -298,7 +299,7 @@ A conservative later candidate, only once real usage data exists: a passive, pos
 
 ## 12. Related Follow-ups (out of scope)
 
-- **Track `ended` handling during Monitoring.** Unplugging the active microphone ends the track, and Mezzo has no listener, so Monitoring keeps showing Listening against a dead input. This is a reliability/recovery fix, independent of this PRD, and arguably higher priority. It needs its own small spec: what Monitoring shows, and whether it returns to Ready.
+- **Mid-session hardware events** (mic unplugged, Bluetooth drop): judged not worth designing for at this point; see §4.3.
 - **Help/FAQ surface.** See §8.3.
 
 ---
@@ -307,7 +308,8 @@ A conservative later candidate, only once real usage data exists: a passive, pos
 
 - A profile calibrated on mic A, with mic A still default: no note on Ready.
 - Same profile, default switched to mic B: note shows on Ready with both names (or the fallback copy), and **Start monitoring** sits at exactly the same position as without the note.
-- Default switched back to A while Ready is open: the note disappears without reopening the Companion.
+- Mic chosen in Chrome's permission prompt or site settings (not the OS default): the note compares against the mic Mezzo will actually use.
+- Back on mic A and Ready shown again: no note.
 - Profile saved before this change (no `calibratedMic`): no note, ever, until it's next recalibrated and replaced.
 - Labels unavailable (empty): no note.
 - The note's **Recalibrate**, on a saved profile, reaches the existing Replace / Keep as unsaved decision state. Replace stores the new mic; Keep as unsaved leaves the saved profile's mic untouched.
@@ -324,15 +326,14 @@ A conservative later candidate, only once real usage data exists: a passive, pos
 
 **Unit (`npm test`):** `normalizeMicLabel()` (prefixes, whitespace, empty, length cap); `micLabelsDiffer()` (null either side means false; case-insensitive); field round-trip through `addSavedProfile`, `promoteTemporaryProfile`, `updateSavedProfile`, and `commitSavePromptName` (create and update); legacy profiles without the field; analytics payloads never containing it.
 
-**Playwright (`npm run test:pip`):** fake devices make the default `Fake Default Audio Input`, so calibrate normally, then stub the Companion window's `navigator.mediaDevices.enumerateDevices()` and dispatch `devicechange` to simulate a new default. Cover note shown/hidden, Start monitoring position unchanged (bounding box), the live update, the Recalibrate route, C2's line, and C1's fit. Run with `--workers=1` if flaky, per CLAUDE.md. Never use broad process-kill commands.
+**Playwright (`npm run test:pip`):** fake devices make the default `Fake Default Audio Input`, so calibrate normally, then stub the Companion window's `navigator.mediaDevices.enumerateDevices()` to simulate a different mic before Ready renders. Cover note shown/hidden, Start monitoring position unchanged (bounding box), the Recalibrate route, C2's line, and C1's fit. Run with `--workers=1` if flaky, per CLAUDE.md. Never use broad process-kill commands.
 
 **Manual, real hardware (required before Implemented):** on Chrome and Edge, macOS and Windows, with built-in + USB + Bluetooth microphones:
 
-1. Calibrate on built-in, connect Bluetooth earbuds so they become default, open Ready: note appears.
-2. Disconnect them while Ready is open: note clears (verifies `devicechange` on the PiP window with the opener tab hidden).
-3. Start monitoring, then switch the OS default mid-session: record whether the live track follows (answers §11 Q3).
-4. Unplug the active USB mic mid-session: confirm the track ends (input for the §12 follow-up).
-5. Inspect real label formats, including the `Default - ` prefix and USB vendor/product suffixes (input for §11 Q2).
+1. Calibrate "Office" on the built-in mic. Switch to the USB mic in OS settings, reopen the Companion: note appears on Ready.
+2. Switch instead via Chrome's site mic setting (the same picker the permission prompt shows): note appears and names the mic Mezzo actually hears (answers §11 Q3).
+3. Switch back to the built-in mic: no note.
+4. Inspect real label formats, including the `Default - ` prefix and USB vendor/product suffixes (input for §11 Q2).
 
 ---
 
