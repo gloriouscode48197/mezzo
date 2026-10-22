@@ -19,12 +19,15 @@ const CONTENT_TYPES = {
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.svg': 'image/svg+xml',
+  '.png': 'image/png',
   '.webmanifest': 'application/manifest+json',
 };
 
 const server = http.createServer((req, res) => {
   const urlPath = decodeURIComponent(new URL(req.url, `http://localhost:${PORT}`).pathname);
-  const filePath = path.join(ROOT, urlPath === '/' ? '/index.html' : urlPath);
+  // A directory (/playground/ or /playground) serves its index.html, as Vercel does.
+  let filePath = path.join(ROOT, urlPath);
+  try { if (fs.statSync(filePath).isDirectory()) filePath = path.join(filePath, 'index.html'); } catch { /* 404 below */ }
 
   if (!filePath.startsWith(ROOT)) {
     res.writeHead(403);
