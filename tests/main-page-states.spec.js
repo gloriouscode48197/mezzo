@@ -41,31 +41,36 @@ async function blockMicrophone(context) {
 }
 
 test.describe('Main page: permission not yet granted', () => {
-  test('shows the Lantern hero, ring tile, benefits, and Get started band, and never requests the microphone merely by rendering', async ({ page }) => {
+  test('shows the hero and How it works, with Enable microphone as the only button, and never requests the microphone merely by rendering', async ({ page }) => {
     await page.goto('/index.html');
     const state = page.locator('#mic-request');
     await expect(state).toBeVisible();
-    await expect(state.locator('h1')).toHaveText('Be heard without filling the room.');
-    await expect(state.locator('.home-eyebrow')).toHaveText('Voice awareness for calls');
-    await expect(state.locator('.home-highlight')).toHaveText('outside your intended range');
+    await expect(state.locator('.home-eyebrow')).toHaveText('For headphone calls in shared spaces');
+    await expect(state.locator('.home-hero-heading-lead')).toHaveText('Focus on the meeting');
+    await expect(state.locator('.home-hero-heading-rest')).toHaveText('while Mezzo minds the volume.');
+    await expect(state.locator('.home-highlight')).toHaveText('soft glow');
+    await expect(state.locator('.home-hero-privacy')).toHaveText('Mezzo only measures volume. Nothing you say is recorded.');
 
-    // The hero ring is a still CSS illustration: no <canvas> (a real
-    // visualizer always renders one), no image, decorative only.
-    const tile = state.locator('.home-ring-tile');
-    await expect(tile).toBeVisible();
-    await expect(tile).toHaveAttribute('aria-hidden', 'true');
-    await expect(tile.locator('canvas')).toHaveCount(0);
-    await expect(tile.locator('img')).toHaveCount(0);
-    await expect(state.locator('.home-ring-caption')).toHaveText('When your voice travels past your range, a soft chartreuse glow appears. That’s the nudge.');
+    // The illustration is inlined, labeled, and sits on the #2D2E31 its
+    // fills and premixed line colors assume.
+    const art = state.locator('.home-hero-illustration svg');
+    await expect(art).toHaveAttribute('role', 'img');
+    expect(await art.getAttribute('aria-label')).toBeTruthy();
+    const heroBg = await state.locator('.home-hero').evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(heroBg).toBe('rgb(45, 46, 49)');
 
-    for (const heading of ['For calls with headphones', 'Calibrated to you', 'Your words stay private']) {
-      await expect(state.locator('.home-benefit-heading', { hasText: heading })).toBeVisible();
-    }
-
+    // One button on the whole page.
+    await expect(page.locator('button:visible')).toHaveCount(1);
     const enableBtn = page.locator('#btn-enable-microphone');
     await expect(enableBtn).toBeVisible();
     await expect(enableBtn).toHaveText('Enable microphone');
-    await expect(page.locator('#get-started .home-step')).toHaveCount(3);
+    await expect(page.locator('.home-get-started')).toHaveCount(0);
+
+    const how = page.locator('#how-it-works');
+    await expect(how).toBeVisible();
+    await expect(how.locator('.home-step')).toHaveCount(3);
+    await expect(how.locator('.home-chip')).toHaveCount(3);
+    await expect(page.locator('.home-benefits, .home-ring-tile')).toHaveCount(0);
 
     // Rendering this state alone must never itself acquire the microphone —
     // still showing the not-yet-granted state after load (not silently
@@ -74,14 +79,20 @@ test.describe('Main page: permission not yet granted', () => {
     await expect(page.locator('#mic-denied')).toBeHidden();
   });
 
-  test('Get started jumps to the band, and the page never scrolls sideways at phone width', async ({ page }) => {
+  test('desktop: two columns, vertically centered; phone: illustration below the button, no sideways scroll', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 860 });
     await page.goto('/index.html');
-    await page.locator('.home-get-started').click();
-    await expect(page).toHaveURL(/#get-started$/);
-    await expect(page.locator('#btn-enable-microphone')).toBeInViewport();
+    const text = page.locator('.home-hero-text');
+    const art = page.locator('.home-hero-illustration');
+    let t = await text.boundingBox();
+    let a = await art.boundingBox();
+    expect(a.x).toBeGreaterThan(t.x + t.width - 1);
+    expect(a.width).toBeLessThanOrEqual(620);
+    expect(Math.abs((t.y + t.height / 2) - (a.y + a.height / 2))).toBeLessThan(2);
+    const h1Size = await page.locator('.home-hero-heading').evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+    expect(h1Size).toBe(48);
 
-    for (const width of [375, 320]) {
+    for (const width of [390, 320]) {
       await page.setViewportSize({ width, height: 800 });
       await page.goto('/index.html');
       await expect(page.locator('#mic-request')).toBeVisible();
@@ -90,10 +101,28 @@ test.describe('Main page: permission not yet granted', () => {
         clientWidth: document.documentElement.clientWidth,
       }));
       expect(scrollWidth, `no horizontal scroll at ${width}px`).toBeLessThanOrEqual(clientWidth);
-      // The hero tile must not take over the first screen on a phone.
-      const tileBox = await page.locator('.home-ring-tile').boundingBox();
-      expect(tileBox.height).toBeLessThanOrEqual(260);
+      const btn = await page.locator('#btn-enable-microphone').boundingBox();
+      a = await art.boundingBox();
+      expect(a.y).toBeGreaterThan(btn.y + btn.height);
     }
+
+    // "Focus on the meeting" stays on one line on phones down to 360px.
+    for (const width of [390, 360]) {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto('/index.html');
+      await page.evaluate(() => document.fonts.ready);
+      const leadLines = await page.locator('.home-hero-heading-lead').evaluate((el) => {
+        const r = document.createRange(); r.selectNodeContents(el);
+        return new Set([...r.getClientRects()].map((rect) => Math.round(rect.top))).size;
+      });
+      expect(leadLines, `lead on one line at ${width}px`).toBe(1);
+    }
+
+    // Headings render Geist at 500, not a heavier weight or a fallback face.
+    const h = await page.locator('.home-hero-heading').evaluate((el) => ({ weight: getComputedStyle(el).fontWeight, family: getComputedStyle(el).fontFamily }));
+    expect(h.weight).toBe('500');
+    expect(h.family.startsWith('Geist') || h.family.startsWith('"Geist"')).toBe(true);
+    expect(await page.evaluate(() => document.fonts.check('500 48px Geist'))).toBe(true);
   });
 
   test('does not automatically focus Enable microphone on the very first page load (2026-08-17 manual-review fix)', async ({ page }) => {
@@ -191,9 +220,8 @@ test.describe('Main page: permission granted, Companion closed', () => {
     const state = page.locator('#mic-granted');
     await expect(state).toBeVisible({ timeout: 10000 });
     await expect(state.locator('h1')).toHaveText("You're ready to use Mezzo");
-    await expect(state).toContainText('Microphone access is enabled.');
-    await expect(state).toContainText('Open the Companion to choose or create a speaking profile and start monitoring.');
-    await expect(state).toContainText('Mezzo only uses your microphone while calibrating or monitoring. Nothing you say is recorded, transcribed, stored, or sent anywhere.');
+    await expect(state).toContainText('Microphone access is on. Open the Companion to pick a speaking profile and start monitoring.');
+    await expect(state).toContainText('Mezzo only measures volume. Nothing you say is recorded.');
 
     const openBtn = page.locator('#btn-open-companion');
     await expect(openBtn).toBeVisible();
@@ -266,7 +294,6 @@ test.describe('Main page: retired content and design-tool chrome are absent', ()
   test('no old editorial section, no footer, and no design-tool state-switcher controls anywhere on the page', async ({ page }) => {
     await page.goto('/index.html');
     const bodyText = await page.locator('body').innerText();
-    expect(bodyText).not.toMatch(/How it works/);
     expect(bodyText).not.toMatch(/Designed to stay out of your way/);
     expect(bodyText).not.toMatch(/What it's good for/);
     expect(bodyText).not.toMatch(/What it doesn't do/);

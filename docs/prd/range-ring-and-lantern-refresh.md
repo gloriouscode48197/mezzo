@@ -207,17 +207,58 @@ Replace the flat orange meter:
 
 ## 9. Proposal 5: Home
 
-- Dark theme, Lantern type and buttons. Nav is the lowercase "mezzo" wordmark only (no icon), plus Home and Privacy.
-- Eyebrow: "Voice awareness for calls".
-- Headline: "Be heard without filling the room."
-- Subhead: "Mezzo gently nudges you when your voice travels outside your intended range." with "outside your intended range" in chartreuse text.
-- A chartreuse "Get started" button in the hero that jumps to the Get started section.
-- Hero layout: text on the left; on the right, a single Over range ring in a slate tile, with a faint dot grid that fades in toward the tile's corners. Caption: "When your voice travels past your range, a soft chartreuse glow appears. That's the nudge."
-- Benefits, on the plain page background with sage dot bullets: "For calls with headphones", "Calibrated to you", "Your words stay private".
-- Get started: a full-bleed slate band with three numbered steps, the chartreuse "Enable microphone" button, and one privacy line.
-- Text selection uses chartreuse with dark text.
-- The mic sub-states (granted, denied) and the Dock adopt the same type, colors, and buttons. Their copy is unchanged.
-- Mobile: scale the headline down and keep the hero tile from dominating the first screen.
+Revised 2026-10-22: this replaces the earlier Home spec (the "Be heard without filling the room." hero, the slate ring tile, the benefits list, and the Get started band with its scroll button).
+
+**How the page picks its state.** On load, Home reads `navigator.permissions.query({ name: "microphone" })` and shows one of three states. Without the permissions API it falls back to "prompt". A "granted" result still runs the real acquire/release probe before the granted state shows (unchanged).
+
+| Permission | State shown |
+|---|---|
+| `prompt` (first visit, or "Allow this time") | The marketing page below |
+| `granted` | "You're ready to use Mezzo" |
+| `denied` | "Your browser has blocked microphone access" |
+
+**Header (all states).** Unchanged: the lowercase "mezzo" wordmark, Home and Privacy, the thin divider, and the chartreuse underline on the active link. Text selection uses chartreuse with dark text.
+
+### Prompt state
+
+**Hero** (on `--color-bg`, #2D2E31):
+- Two columns, both vertically centered: text on the left, the illustration on the right (at most about 620px wide). On mobile they stack, with the illustration below the button.
+- Eyebrow: "For headphone calls in shared spaces", in Geist Mono uppercase, muted (#B0AB9E).
+- H1, one sentence in two parts: "Focus on the meeting" in cream on its own line, then "while Mezzo minds the volume." in muted with `text-wrap: balance`. 48px on desktop, about 38px at 390px.
+- Subhead, muted: "Set a range you're comfortable with. A soft glow nudges you when your voice drifts outside it, before it carries." "soft glow" is chartreuse and never breaks across lines.
+- The real "Enable microphone" button: chartreuse with charcoal text and 3px corners. It is the only button on the page.
+- Under it, 13px muted: "Mezzo only measures volume. Nothing you say is recorded."
+- Illustration: `assets/hero-coworking.svg`, inlined, keeping its `role="img"` and `aria-label`, colors unchanged. Its faded lines use solid premixed colors so crossings don't brighten, and some shapes fill with #2D2E31 to hide lines behind them, so the hero background must stay #2D2E31.
+
+**How it works** (a full-bleed slate #38393C band, `id="how-it-works"`):
+- Left: h2 "How it works" and "It takes about a minute. Everything happens in your browser."
+- Right: a vertical ordered list with chartreuse Geist Mono numbers and thin dividers.
+  1. **Allow your mic.** "Choose "Allow on every visit" to skip this step next time."
+  2. **Calibrate in the Companion.** "Talk normally for a few seconds in the floating window. Mezzo sets a range that fits your voice, your mic, and your room."
+  3. **Glance at the ring.** "It stays quiet while you talk."
+- Under step 03, a row of three chips that wraps on mobile. Each chip has a 36px still Range Ring (aria-hidden), a Geist Mono label, and two words.
+
+  | Chip | Label color | Ring | Text |
+  |---|---|---|---|
+  | Within range | muted | faint voice circle, thin cream edge | Keep going |
+  | Approaching | sage | #8E897B voice circle, 2px sage edge | Getting close |
+  | Outside range | chartreuse | #8E897B voice circle, chartreuse band with a small glow | Ease back |
+
+The benefits section and the large ring tiles are removed. Their points now live in the eyebrow, step 02, and the privacy line.
+
+### Granted state
+
+Layout, heading, and the "Open Mezzo Companion" button unchanged. Copy:
+- "Microphone access is on. Open the Companion to pick a speaking profile and start monitoring."
+- Privacy line: "Mezzo only measures volume. Nothing you say is recorded."
+
+### Denied state
+
+Unchanged. The address-bar chip shows the page's real host (`window.location.host`), never a hard-coded one.
+
+### Dock and unsupported browser
+
+Same type, colors, and buttons; copy unchanged.
 
 ---
 

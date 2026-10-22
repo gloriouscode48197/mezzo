@@ -7,8 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="design-tokens/mezzo-tokens.css?v=11">
-  <link rel="stylesheet" href="landing.css?v=15">
+  <link rel="stylesheet" href="design-tokens/mezzo-tokens.css?v=12">
+  <link rel="stylesheet" href="landing.css?v=17">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" sizes="16x16" href="icons/icon-16.svg">
   <link rel="icon" type="image/svg+xml" sizes="32x32" href="icons/icon-32.svg">
@@ -72,72 +72,99 @@
          moment it opens (see CLAUDE.md's "Companion entry behavior"). ── -->
     <main id="state-home">
 
-      <!-- ── mic-request: permission not yet granted. The full marketing
-           homepage (PRD §9): hero, benefits, and the Get started band that
-           holds "Enable microphone", the only control that ever triggers
-           the browser's permission prompt. ── -->
+      <!-- ── mic-request: permission not yet granted (or "Allow this time").
+           The marketing page (PRD §9): a hero holding "Enable microphone",
+           the only button on the page and the only control that ever
+           triggers the browser's permission prompt, then How it works. ── -->
       <div id="mic-request" class="hero-mic-state hidden">
         <section class="hero home-hero reveal">
           <div class="home-hero-inner">
             <div class="home-hero-text">
-              <p class="home-eyebrow">Voice awareness for calls</p>
-              <h1 class="type-hero-heading home-hero-heading">Be heard without filling the room.</h1>
-              <p class="type-hero-body home-hero-subhead">Mezzo gently nudges you when your voice travels <span class="home-highlight">outside your intended range</span>.</p>
-              <a href="#get-started" class="btn-primary home-get-started">Get started</a>
+              <p class="home-eyebrow">For headphone calls in shared spaces</p>
+              <h1 class="type-hero-heading home-hero-heading">
+                <span class="home-hero-heading-lead">Focus on the meeting</span>
+                <span class="home-hero-heading-rest">while Mezzo minds the volume.</span>
+              </h1>
+              <p class="type-hero-body home-hero-subhead">Set a range you're comfortable with. A <span class="home-highlight">soft glow</span> nudges you when your voice drifts outside it, before it carries.</p>
+              <button id="btn-enable-microphone" type="button" class="btn-primary">Enable microphone</button>
+              <p class="home-hero-privacy">Mezzo only measures volume. Nothing you say is recorded.</p>
             </div>
+            <!-- assets/hero-coworking.svg, inlined. Its faded lines use solid
+                 premixed colors and some shapes fill with #2D2E31 to hide
+                 lines behind them, so the hero background must stay
+                 --color-bg (#2D2E31). -->
+            <div class="home-hero-illustration">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="24 112 472 256" role="img" aria-label="Line drawing of people spread out at a shared table in a co-working space. One person wears a headset and talks in a meeting, and their voice stays inside a circle that marks their range." fill="none" stroke="#DEDE65" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+<circle cx="260" cy="210" r="86" fill="#2D2E31" stroke="#747446"/>
+<circle cx="260" cy="210" r="60" fill="#DEDE65" fill-opacity="0.08" stroke="none"/>
+<path d="M50 300 C50 248 64 236 90 236 C116 236 130 248 130 300" fill="#2D2E31" stroke="#747446"/>
+<circle cx="90" cy="214" r="17" fill="#2D2E31" stroke="#747446"/>
+<path d="M390 300 C390 248 404 236 430 236 C456 236 470 248 470 300" fill="#2D2E31" stroke="#747446"/>
+<circle cx="430" cy="214" r="17" fill="#2D2E31" stroke="#747446"/>
+<path d="M68 299 L72 268 L108 268 L112 299 Z" fill="#2D2E31" stroke="#747446"/>
+<path d="M408 299 L412 268 L448 268 L452 299 Z" fill="#2D2E31" stroke="#747446"/>
+<path d="M220 300 C220 238 234 226 260 226 C286 226 300 238 300 300" fill="#2D2E31" stroke="#DEDE65"/>
+<circle cx="260" cy="204" r="17" fill="#2D2E31" stroke="#DEDE65"/>
+<path d="M239 206 A21 21 0 0 1 281 206"/>
+<rect x="235" y="202" width="7" height="13" rx="3" fill="#2D2E31"/><rect x="278" y="202" width="7" height="13" rx="3" fill="#2D2E31"/>
+<path d="M282 213C283 219 276 216 264 213.5" stroke-width="2"/>
+<rect x="253" y="210.5" width="11" height="6" rx="3" fill="#DEDE65" stroke="none"/>
+<path d="M204 156H232A4 4 0 0 1 236 160V174A4 4 0 0 1 232 178H230L236 186L222 178H204A4 4 0 0 1 200 174V160A4 4 0 0 1 204 156Z" fill="#2D2E31"/>
+<path d="M209 165V169M213.5 162V172M218 160V174M222.5 162V172M227 165V169"/>
+<path d="M0 300H520M8 306H512M52 306V362M468 306V362" stroke="#747446"/>
+<path d="M236 299 L240 274 L280 274 L284 299 Z" fill="#2D2E31"/>
 
-            <!-- One still Over range ring in a slate tile. Decorative: the
-                 caption carries the meaning. Pure CSS, no canvas, script,
-                 or audio of any kind. -->
-            <figure class="home-hero-figure">
-              <div class="home-ring-tile" aria-hidden="true">
-                <div class="home-ring"></div>
-              </div>
-              <figcaption class="home-ring-caption">When your voice travels past your range, a soft chartreuse glow appears. That’s the nudge.</figcaption>
-            </figure>
+</svg>
+            </div>
           </div>
         </section>
 
-        <section class="home-benefits" aria-label="Why Mezzo">
-          <ul class="home-benefits-list">
-            <li class="home-benefit">
-              <h2 class="home-benefit-heading">For calls with headphones</h2>
-              <p class="type-body">Use Mezzo during calls with headphones when other people are nearby.</p>
-            </li>
-            <li class="home-benefit">
-              <h2 class="home-benefit-heading">Calibrated to you</h2>
-              <p class="type-body">A few seconds of talking sets a range that fits your voice, your microphone, and your room.</p>
-            </li>
-            <li class="home-benefit">
-              <h2 class="home-benefit-heading">Your words stay private</h2>
-              <p class="type-body">Mezzo measures volume on your device. It never records or transcribes what you say.</p>
-            </li>
-          </ul>
-        </section>
-
-        <section id="get-started" class="home-start" aria-labelledby="get-started-heading">
-          <div class="home-start-inner">
-            <h2 id="get-started-heading" class="type-section-heading home-start-heading">Get started</h2>
-            <p class="type-hero-body home-start-lede">It takes about a minute. Everything happens in your browser.</p>
+        <section id="how-it-works" class="home-how" aria-labelledby="how-it-works-heading">
+          <div class="home-how-inner">
+            <div class="home-how-intro">
+              <h2 id="how-it-works-heading" class="type-section-heading home-how-heading">How it works</h2>
+              <p class="type-hero-body home-how-lede">It takes about a minute. Everything happens in your browser.</p>
+            </div>
             <ol class="home-steps">
               <li class="home-step">
-                <span class="type-step-number home-step-number" aria-hidden="true">01</span>
-                <h3 class="type-step-heading">Enable your microphone</h3>
-                <p class="type-body">Your browser asks once, right here.</p>
+                <span class="home-step-number" aria-hidden="true">01</span>
+                <div class="home-step-body">
+                  <h3 class="type-step-heading">Allow your mic</h3>
+                  <p class="type-body">Choose "Allow on every visit" to skip this step next time.</p>
+                </div>
               </li>
               <li class="home-step">
-                <span class="type-step-number home-step-number" aria-hidden="true">02</span>
-                <h3 class="type-step-heading">Open the Mezzo Companion</h3>
-                <p class="type-body">A small window that floats above your call.</p>
+                <span class="home-step-number" aria-hidden="true">02</span>
+                <div class="home-step-body">
+                  <h3 class="type-step-heading">Calibrate in the Companion</h3>
+                  <p class="type-body">Talk normally for a few seconds in the floating window. Mezzo sets a range that fits your voice, your mic, and your room.</p>
+                </div>
               </li>
               <li class="home-step">
-                <span class="type-step-number home-step-number" aria-hidden="true">03</span>
-                <h3 class="type-step-heading">Calibrate and start monitoring</h3>
-                <p class="type-body">Talk normally for a few seconds so Mezzo learns your range.</p>
+                <span class="home-step-number" aria-hidden="true">03</span>
+                <div class="home-step-body">
+                  <h3 class="type-step-heading">Glance at the ring</h3>
+                  <p class="type-body">It stays quiet while you talk.</p>
+                  <ul class="home-chips">
+                    <li class="home-chip" data-state="within">
+                      <span class="home-chip-ring" aria-hidden="true"></span>
+                      <span class="home-chip-label">Within range</span>
+                      <span class="home-chip-text">Keep going</span>
+                    </li>
+                    <li class="home-chip" data-state="approaching">
+                      <span class="home-chip-ring" aria-hidden="true"></span>
+                      <span class="home-chip-label">Approaching</span>
+                      <span class="home-chip-text">Getting close</span>
+                    </li>
+                    <li class="home-chip" data-state="over">
+                      <span class="home-chip-ring" aria-hidden="true"></span>
+                      <span class="home-chip-label">Outside range</span>
+                      <span class="home-chip-text">Ease back</span>
+                    </li>
+                  </ul>
+                </div>
               </li>
             </ol>
-            <button id="btn-enable-microphone" type="button" class="btn-primary">Enable microphone</button>
-            <p class="type-microcopy home-start-privacy">Mezzo uses microphone access to measure volume only. Nothing you say is recorded, transcribed, stored, or sent anywhere.</p>
           </div>
         </section>
       </div>
@@ -152,10 +179,9 @@
         <section class="hero home-status reveal">
           <div class="hero-inner">
             <h1 class="type-hero-heading home-status-heading">You're ready to use Mezzo</h1>
-            <p class="type-hero-body hero-body">Microphone access is enabled.</p>
-            <p class="type-hero-body hero-body">Open the Companion to choose or create a speaking profile and start monitoring.</p>
+            <p class="type-hero-body hero-body">Microphone access is on. Open the Companion to pick a speaking profile and start monitoring.</p>
             <button id="btn-open-companion" type="button" class="btn-primary">Open Mezzo Companion</button>
-            <p class="type-microcopy microcopy-cta">Mezzo only uses your microphone while calibrating or monitoring. Nothing you say is recorded, transcribed, stored, or sent anywhere.</p>
+            <p class="type-microcopy microcopy-cta">Mezzo only measures volume. Nothing you say is recorded.</p>
           </div>
         </section>
       </div>

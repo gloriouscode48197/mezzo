@@ -284,9 +284,8 @@ describe('Home', () => {
   it('has no leftover editorial content, footer, or design-tool state-switcher chrome', async () => {
     const { document } = await setupPage();
     const pageText = document.body.textContent;
-    // Retired editorial section (2026-08-17 redesign) — replaced by the
-    // mic-request sub-state's own benefits list.
-    assert.doesNotMatch(pageText, /How it works/);
+    // Retired editorial section (2026-08-17 redesign). "How it works" is
+    // back as mic-request's own steps band (2026-10-22), checked below.
     assert.doesNotMatch(pageText, /Designed to stay out of your way/);
     assert.doesNotMatch(pageText, /What it's good for/);
     assert.doesNotMatch(pageText, /What it doesn't do/);
@@ -416,56 +415,73 @@ describe('Home — microphone permission state', () => {
 // =============================================================================
 
 describe('Home — per-sub-state heading, copy, and focus', () => {
-  it('mic-request has its own heading, eyebrow, highlighted subhead, benefits, and Get started band (Lantern, PRD §9)', async () => {
+  it('mic-request has its own eyebrow, two-part heading, highlighted subhead, and privacy line (PRD §9)', async () => {
     const { document } = await setupPage({ permissionState: 'prompt' });
     const state = document.getElementById('mic-request');
-    assert.strictEqual(state.querySelector('h1').textContent, 'Be heard without filling the room.');
-    assert.strictEqual(state.querySelector('.home-eyebrow').textContent, 'Voice awareness for calls');
-    assert.strictEqual(state.querySelector('.home-hero-subhead').textContent, 'Mezzo gently nudges you when your voice travels outside your intended range.');
-    assert.strictEqual(state.querySelector('.home-highlight').textContent, 'outside your intended range');
-    const benefits = [...state.querySelectorAll('.home-benefit-heading')].map((h) => h.textContent);
-    assert.deepStrictEqual(benefits, ['For calls with headphones', 'Calibrated to you', 'Your words stay private']);
-
-    // "Get started" jumps to the band; the band holds the only control that
-    // can trigger the browser's permission prompt.
-    const getStarted = state.querySelector('.home-get-started');
-    assert.strictEqual(getStarted.textContent, 'Get started');
-    assert.strictEqual(getStarted.getAttribute('href'), '#get-started');
-    const band = document.getElementById('get-started');
-    assert.ok(state.contains(band), 'the Get started band belongs to mic-request');
-    assert.strictEqual(band.querySelectorAll('.home-step').length, 3);
-    assert.ok(band.contains(document.getElementById('btn-enable-microphone')));
+    const text = (sel) => state.querySelector(sel).textContent.replace(/\s+/g, ' ').trim();
+    assert.strictEqual(text('.home-eyebrow'), 'For headphone calls in shared spaces');
+    assert.strictEqual(text('h1'), 'Focus on the meeting while Mezzo minds the volume.');
+    assert.strictEqual(text('.home-hero-heading-lead'), 'Focus on the meeting');
+    assert.strictEqual(text('.home-hero-heading-rest'), 'while Mezzo minds the volume.');
+    assert.strictEqual(text('.home-hero-subhead'), "Set a range you're comfortable with. A soft glow nudges you when your voice drifts outside it, before it carries.");
+    assert.strictEqual(text('.home-highlight'), 'soft glow');
+    assert.strictEqual(text('.home-hero-privacy'), 'Mezzo only measures volume. Nothing you say is recorded.');
   });
 
-  it('the hero ring is a plain, decorative CSS illustration: no <canvas>, <img>, script, or microphone wiring', async () => {
+  it('Enable microphone is the only button on the prompt page, in the hero; the old Get started link is gone', async () => {
     const { document } = await setupPage({ permissionState: 'prompt' });
-    const tile = document.querySelector('.home-ring-tile');
-    assert.notStrictEqual(tile, null);
-    assert.strictEqual(tile.getAttribute('aria-hidden'), 'true');
-    assert.notStrictEqual(tile.querySelector('.home-ring'), null);
-    assert.strictEqual(tile.querySelector('canvas'), null, 'a real visualizer renders a <canvas>; the hero is a still illustration');
-    assert.strictEqual(tile.querySelector('img'), null);
-    assert.strictEqual(document.querySelector('.hero-static-viz'), null, 'the retired PNG preview is gone');
-    assert.strictEqual(
-      document.querySelector('.home-ring-caption').textContent,
-      'When your voice travels past your range, a soft chartreuse glow appears. That’s the nudge.',
-    );
+    const state = document.getElementById('mic-request');
+    const buttons = [...state.querySelectorAll('button, a.btn-primary, .btn-primary, .btn-outline')];
+    assert.deepStrictEqual(buttons.map((b) => b.id), ['btn-enable-microphone']);
+    assert.ok(state.querySelector('.home-hero').contains(document.getElementById('btn-enable-microphone')));
+    assert.strictEqual(document.querySelector('.home-get-started'), null);
+    assert.strictEqual(document.getElementById('get-started'), null);
   });
 
-  it('the benefits section does not appear in mic-granted or mic-denied — it is scoped to mic-request only', async () => {
+  it('How it works: an intro and three numbered steps, with three ring chips under step 03', async () => {
+    const { document } = await setupPage({ permissionState: 'prompt' });
+    const how = document.getElementById('how-it-works');
+    assert.ok(document.getElementById('mic-request').contains(how));
+    assert.strictEqual(how.querySelector('h2').textContent, 'How it works');
+    assert.match(how.textContent, /It takes about a minute\. Everything happens in your browser\./);
+    const steps = [...how.querySelectorAll('.home-step')];
+    assert.deepStrictEqual(steps.map((li) => li.querySelector('.home-step-number').textContent), ['01', '02', '03']);
+    assert.deepStrictEqual(steps.map((li) => li.querySelector('h3').textContent), ['Allow your mic', 'Calibrate in the Companion', 'Glance at the ring']);
+    assert.match(steps[0].textContent, /Choose "Allow on every visit" to skip this step next time\./);
+    const chips = [...steps[2].querySelectorAll('.home-chip')];
+    assert.deepStrictEqual(
+      chips.map((c) => [c.dataset.state, c.querySelector('.home-chip-label').textContent, c.querySelector('.home-chip-text').textContent]),
+      [['within', 'Within range', 'Keep going'], ['approaching', 'Approaching', 'Getting close'], ['over', 'Outside range', 'Ease back']],
+    );
+    for (const c of chips) assert.strictEqual(c.querySelector('.home-chip-ring').getAttribute('aria-hidden'), 'true');
+  });
+
+  it('the retired benefits section, ring tile, and Get started band are gone', async () => {
+    const { document } = await setupPage({ permissionState: 'prompt' });
+    for (const sel of ['.home-benefits', '.home-benefit-heading', '.home-ring-tile', '.home-ring', '.home-ring-caption', '.home-start', '.hero-static-viz']) {
+      assert.strictEqual(document.querySelector(sel), null, `${sel} should be gone`);
+    }
+    assert.doesNotMatch(document.body.textContent, /Designed for shared spaces|Calibrated to you/);
+  });
+
+  it('How it works does not appear in mic-granted or mic-denied — it is scoped to mic-request only', async () => {
     const { document } = await setupPage({ permissionState: 'granted' });
-    assert.doesNotMatch(document.getElementById('mic-granted').textContent, /Calibrated to you|Get started/);
+    assert.doesNotMatch(document.getElementById('mic-granted').textContent, /How it works|Glance at the ring/);
 
     const { document: deniedDoc } = await setupPage({ permissionState: 'denied' });
-    assert.doesNotMatch(deniedDoc.getElementById('mic-denied').textContent, /Calibrated to you|Get started/);
+    assert.doesNotMatch(deniedDoc.getElementById('mic-denied').textContent, /How it works|Glance at the ring/);
   });
 
-  it('mic-granted has its own accurate heading and copy, distinguishing permission being enabled from the microphone actually being used', async () => {
+  it('mic-granted keeps its heading and Open Mezzo Companion, with the merged line and short privacy line', async () => {
     const { document } = await setupPage({ permissionState: 'granted' });
     const state = document.getElementById('mic-granted');
     assert.strictEqual(state.querySelector('h1').textContent, "You're ready to use Mezzo");
-    assert.match(state.textContent, /Microphone access is enabled\./);
-    assert.match(state.textContent, /Mezzo only uses your microphone while calibrating or monitoring\./);
+    const lines = [...state.querySelectorAll('p')].map((p) => p.textContent);
+    assert.deepStrictEqual(lines, [
+      'Microphone access is on. Open the Companion to pick a speaking profile and start monitoring.',
+      'Mezzo only measures volume. Nothing you say is recorded.',
+    ]);
+    assert.strictEqual(state.querySelector('button').id, 'btn-open-companion');
   });
 
   it('mic-denied has its own accurate heading, generic (not browser-specific) recovery copy, and a caption — never a Try again/Reload button', async () => {
