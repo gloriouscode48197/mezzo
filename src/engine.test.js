@@ -1059,6 +1059,69 @@ describe('MezzoEngine — end of range from calibration peaks, and a short-term 
     assert.strictEqual(engine.shortTermVoicedMs, 300);
   });
 
+  // Zone level method: normal speech varies around -42 dB; frames every 50ms.
+  function speechEngine(zone) {
+    const engine = engineWith({ zoneWindowMs: 600, voicedOnly: true, ...zone });
+    engine.loadCalibration({ baselineRMS: rmsAt(-42), spreadDb: 4 });
+    engine.startMonitoring();
+    engine.gracePeriodActive = false;
+    return engine;
+  }
+  const normal = (t) => -42 + 2 * Math.sin(t / 90); // ordinary variation around the calibrated level
+
+  it('median: a single 150ms loud syllable within normal speech does not reach Outside', () => {
+    for (const zone of [{ zoneMethod: 'median' }, { zoneMethod: 'median', outsideDwellMs: 0 }]) {
+      const engine = speechEngine(zone);
+      const { endDb } = engine.getRangeBoundsDb();
+      const zones = [];
+      for (let t = 0; t < 3000; t += 50) {
+        const db = t >= 1500 && t < 1650 ? -42 + endDb + 12 : normal(t);
+        engine.processFrame(rmsAt(db), t, true);
+        zones.push(engine.getZone());
+      }
+      assert.ok(!zones.includes(3), `no Outside (dwell ${engine.zoneSettings.outsideDwellMs}ms)`);
+    }
+  });
+
+  it('mean: the same syllable lifts the level enough to count toward Outside', () => {
+    const engine = speechEngine({ zoneMethod: 'mean', outsideDwellMs: 0 });
+    const { endDb } = engine.getRangeBoundsDb();
+    const zones = [];
+    for (let t = 0; t < 3000; t += 50) {
+      engine.processFrame(rmsAt(t >= 1500 && t < 1650 ? -42 + endDb + 12 : normal(t)), t, true);
+      zones.push(engine.getZone());
+    }
+    assert.ok(zones.includes(3));
+  });
+
+  it('median: a sustained step from normal to loud reaches the Outside threshold in about half the window, then commits after the dwell', () => {
+    const engine = speechEngine({ zoneMethod: 'median', outsideDwellMs: 200 });
+    const { endDb } = engine.getRangeBoundsDb();
+    for (let t = 0; t < 2000; t += 50) engine.processFrame(rmsAt(normal(t)), t, true);
+    let committedAfter = Infinity;
+    for (let t = 2000; t < 4000; t += 50) {
+      engine.processFrame(rmsAt(-42 + endDb + 3), t, true);
+      if (engine.getZone() === 3) { committedAfter = t - 2000; break; }
+    }
+    // Half the 600ms window (300ms) for the median to turn, plus the 200ms dwell.
+    assert.ok(committedAfter <= 550, `Outside after ${committedAfter}ms`);
+    assert.strictEqual(engine.lastOutsideLagMs, committedAfter);
+  });
+
+  it('percentile 60 follows a step sooner than the median', () => {
+    const stepMs = (zone) => {
+      const engine = speechEngine({ ...zone, outsideDwellMs: 0 });
+      const { endDb } = engine.getRangeBoundsDb();
+      for (let t = 0; t < 2000; t += 50) engine.processFrame(rmsAt(normal(t)), t, true);
+      for (let t = 2000; t < 4000; t += 50) {
+        engine.processFrame(rmsAt(-42 + endDb + 3), t, true);
+        if (engine.getZone() === 3) return t - 2000;
+      }
+      return Infinity;
+    };
+    assert.ok(stepMs({ zoneMethod: 'percentile', zonePercentile: 60 }) < stepMs({ zoneMethod: 'median' }));
+  });
+
   it('the short-term level is the mean in linear RMS, then dB', () => {
     const engine = engineWith({ zoneWindowMs: 200 });
     engine.loadCalibration({ baselineRMS: rmsAt(-40), spreadDb: 4 });

@@ -126,6 +126,19 @@ const EPSILON = 1e-10;
  * gate), so the silence before someone starts talking doesn't dilute the
  * average and delay a loud start. With no voiced frames in the window, the
  * momentary level is used.
+ *
+ * zoneMethod: how the window's frames become one level, always in linear
+ * RMS before dB. 'mean' (the app's default) reacts to every frame in
+ * proportion, so one loud syllable can lift it and a loud start takes a
+ * while to pull it up. 'median' ignores anything that covers less than half
+ * the window and follows a sustained change once it covers half. 'percentile'
+ * uses zonePercentile (60 = it follows once 40% of the window is louder).
+ *
+ * zoneInputRaw: a note for callers, not read here. The app feeds
+ * processFrame() audio.js's EMA-smoothed level (about a 224ms time
+ * constant), which adds roughly 50-150ms on top of the window before a loud
+ * step registers; true means the caller passes the raw per-frame level
+ * instead.
  */
 export const DEFAULT_ZONE_SETTINGS = Object.freeze({
   silenceSpreadMult: ZONE_SILENCE_SPREAD_MULT,
@@ -142,6 +155,9 @@ export const DEFAULT_ZONE_SETTINGS = Object.freeze({
   peaksSafetyCapDb: 12,
   zoneWindowMs: 0,
   voicedOnly: false,
+  zoneMethod: 'mean',
+  zonePercentile: 60,
+  zoneInputRaw: false,
 });
 
 export class MezzoEngine {
@@ -178,6 +194,8 @@ export class MezzoEngine {
     this.levelWindow = [];          // recent { t, rms, voiced, ms } frames, for zoneWindowMs
     this.shortTermRms = 0;
     this.shortTermVoicedMs = 0;     // how much voiced audio the current average covers
+    this.crossedEndAt = null;       // when the momentary level last rose past the end of range
+    this.lastOutsideLagMs = null;   // from that crossing to Outside committing, last time it did
   }
 
   /** Clears every piece of Outside-range dwell state. */
@@ -419,7 +437,23 @@ export class MezzoEngine {
     }
 
     this.shortTermRms = this._shortTermRms(rmsValue, nowMs, voiced);
+    const wasOutside = this.currentZone === 3;
+    this._trackEndCrossing(rmsValue, nowMs);
     this.currentZone = this._resolveZone(this._computeZone(rmsValue, this.shortTermRms), nowMs);
+    if (this.currentZone === 3 && !wasOutside && this.crossedEndAt !== null) {
+      this.lastOutsideLagMs = nowMs - this.crossedEndAt;
+      this.crossedEndAt = null;
+    }
+  }
+
+  /** Notes when the momentary level rises past the end of range (for the
+   *  lag readout); forgets it once the level is back to Within range. */
+  _trackEndCrossing(rmsValue, nowMs) {
+    if (this.currentZone === 3) return;
+    const { targetDb, endDb } = this.getRangeBoundsDb();
+    const db = this.getLevelOffsetDb(rmsValue);
+    if (db > endDb && this.crossedEndAt === null) this.crossedEndAt = nowMs;
+    else if (db <= targetDb) this.crossedEndAt = null;
   }
 
   /** Mean RMS over the last zoneWindowMs (just this frame when it's 0);
@@ -438,6 +472,12 @@ export class MezzoEngine {
     const counted = this.zoneSettings.voicedOnly ? this.levelWindow.filter((f) => f.voiced) : this.levelWindow;
     this.shortTermVoicedMs = this.levelWindow.filter((f) => f.voiced).reduce((sum, f) => sum + f.ms, 0);
     if (!counted.length) return rmsValue;
+    const method = this.zoneSettings.zoneMethod;
+    if (method === 'median' || method === 'percentile') {
+      const sorted = counted.map((f) => f.rms).sort((a, b) => a - b);
+      const p = method === 'median' ? 0.5 : Math.min(100, Math.max(0, this.zoneSettings.zonePercentile)) / 100;
+      return sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))];
+    }
     return counted.reduce((sum, f) => sum + f.rms, 0) / counted.length;
   }
 
