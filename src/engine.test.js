@@ -1030,6 +1030,35 @@ describe('MezzoEngine — end of range from calibration peaks, and a short-term 
     assert.ok(!run(1000).includes(3) && !run(1000).includes(2), 'one-second window: it stays Within range');
   });
 
+  it('averaging voiced frames only: from silence, a sustained loud level reaches Outside within about the dwell plus 300ms', () => {
+    const reachOutsideMs = (voicedOnly) => {
+      const engine = engineWith({ zoneWindowMs: 1000, voicedOnly, outsideDwellMs: 500 });
+      engine.loadCalibration({ baselineRMS: rmsAt(-42), spreadDb: 4 });
+      engine.startMonitoring();
+      engine.gracePeriodActive = false;
+      const { endDb } = engine.getRangeBoundsDb();
+      for (let t = 0; t < 2000; t += 50) engine.processFrame(rmsAt(-80), t, false); // silence, gate closed
+      for (let t = 2000; t < 5000; t += 50) {
+        engine.processFrame(rmsAt(-42 + endDb + 3), t, true); // loud, gate open
+        if (engine.getZone() === 3) return t - 2000;
+      }
+      return Infinity;
+    };
+    const voiced = reachOutsideMs(true);
+    assert.ok(voiced <= 500 + 300, `voiced-only: Outside after ${voiced}ms`);
+    assert.ok(reachOutsideMs(false) > voiced, 'averaging every frame waits for the silence to leave the window');
+  });
+
+  it('reports how much voiced audio the average covers', () => {
+    const engine = engineWith({ zoneWindowMs: 1000, voicedOnly: true });
+    engine.loadCalibration({ baselineRMS: rmsAt(-42), spreadDb: 4 });
+    engine.startMonitoring();
+    engine.gracePeriodActive = false;
+    for (let t = 0; t < 500; t += 50) engine.processFrame(rmsAt(-80), t, false);
+    for (let t = 500; t < 800; t += 50) engine.processFrame(rmsAt(-40), t, true);
+    assert.strictEqual(engine.shortTermVoicedMs, 300);
+  });
+
   it('the short-term level is the mean in linear RMS, then dB', () => {
     const engine = engineWith({ zoneWindowMs: 200 });
     engine.loadCalibration({ baselineRMS: rmsAt(-40), spreadDb: 4 });

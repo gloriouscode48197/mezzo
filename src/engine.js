@@ -120,6 +120,12 @@ const EPSILON = 1e-10;
  * this window (in linear RMS, then dB) instead of the momentary level, so
  * single loud syllables don't count. 0 (the app's default) is momentary.
  * Listening is still judged on the momentary level.
+ *
+ * voicedOnly: the window averages only frames the caller marks as voiced
+ * (processFrame()'s `voiced` argument: the tuner passes the circle's own
+ * gate), so the silence before someone starts talking doesn't dilute the
+ * average and delay a loud start. With no voiced frames in the window, the
+ * momentary level is used.
  */
 export const DEFAULT_ZONE_SETTINGS = Object.freeze({
   silenceSpreadMult: ZONE_SILENCE_SPREAD_MULT,
@@ -135,6 +141,7 @@ export const DEFAULT_ZONE_SETTINGS = Object.freeze({
   peakMarginDb: 2,
   peaksSafetyCapDb: 12,
   zoneWindowMs: 0,
+  voicedOnly: false,
 });
 
 export class MezzoEngine {
@@ -168,8 +175,9 @@ export class MezzoEngine {
     // _resetDwell() and zoneSettings.dwellGraceMs.
     this._resetDwell();
     this.calibrationSamples = null; // this calibration's own RMS samples, for 'peaks'
-    this.levelWindow = [];          // recent [timestamp, rms] frames, for zoneWindowMs
+    this.levelWindow = [];          // recent { t, rms, voiced, ms } frames, for zoneWindowMs
     this.shortTermRms = 0;
+    this.shortTermVoicedMs = 0;     // how much voiced audio the current average covers
   }
 
   /** Clears every piece of Outside-range dwell state. */
@@ -396,7 +404,7 @@ export class MezzoEngine {
    * @param {number} rmsValue - Current RMS value from audio processor
    * @param {number} [nowMs] - Monotonic timestamp for this frame
    */
-  processFrame(rmsValue, nowMs = performance.now()) {
+  processFrame(rmsValue, nowMs = performance.now(), voiced = true) {
     if (!this.monitoringActive) {
       return;
     }
@@ -410,20 +418,27 @@ export class MezzoEngine {
       return; // No zone updates during grace period
     }
 
-    this.shortTermRms = this._shortTermRms(rmsValue, nowMs);
+    this.shortTermRms = this._shortTermRms(rmsValue, nowMs, voiced);
     this.currentZone = this._resolveZone(this._computeZone(rmsValue, this.shortTermRms), nowMs);
   }
 
-  /** Mean RMS over the last zoneWindowMs (just this frame when it's 0). */
-  _shortTermRms(rmsValue, nowMs) {
+  /** Mean RMS over the last zoneWindowMs (just this frame when it's 0);
+   *  with voicedOnly, over the voiced frames in it only. */
+  _shortTermRms(rmsValue, nowMs, voiced) {
     const windowMs = this.zoneSettings.zoneWindowMs || 0;
     if (windowMs <= 0) {
       this.levelWindow = [];
+      this.shortTermVoicedMs = 0;
       return rmsValue;
     }
-    this.levelWindow.push([nowMs, rmsValue]);
-    while (this.levelWindow.length && this.levelWindow[0][0] <= nowMs - windowMs) this.levelWindow.shift();
-    return this.levelWindow.reduce((sum, [, rms]) => sum + rms, 0) / this.levelWindow.length;
+    const prev = this.levelWindow.at(-1);
+    const ms = prev ? Math.min(nowMs - prev.t, 100) : FRAME_MS;
+    this.levelWindow.push({ t: nowMs, rms: rmsValue, voiced, ms });
+    while (this.levelWindow.length && this.levelWindow[0].t <= nowMs - windowMs) this.levelWindow.shift();
+    const counted = this.zoneSettings.voicedOnly ? this.levelWindow.filter((f) => f.voiced) : this.levelWindow;
+    this.shortTermVoicedMs = this.levelWindow.filter((f) => f.voiced).reduce((sum, f) => sum + f.ms, 0);
+    if (!counted.length) return rmsValue;
+    return counted.reduce((sum, f) => sum + f.rms, 0) / counted.length;
   }
 
   /**

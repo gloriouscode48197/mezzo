@@ -226,7 +226,7 @@ const clone = (o) => JSON.parse(JSON.stringify(o));
 // Where the tuner starts when it differs from the app, which keeps these
 // off (grace 0, end of range from spread, momentary zones) until tuned
 // values are applied.
-const TUNER_START = { zones: { dwellGraceMs: 250, endFrom: 'peaks', zoneWindowMs: 1000 } };
+const TUNER_START = { zones: { dwellGraceMs: 250, endFrom: 'peaks', zoneWindowMs: 1000, voicedOnly: true } };
 function appDefaults() {
   return {
     ring: clone(DEFAULT_RING_SETTINGS),
@@ -293,6 +293,7 @@ const GROUPS = [
     { path: 'zones.endFrom', label: 'End of range from', type: 'choice', options: [['spread', 'average + spread'], ['peaks', 'calibration peaks']], hint: 'Peaks keep your normal speech, including its loud moments, inside the range. Needs a Calibrate (typical values fall back to spread).' },
     { path: 'zones.peakPercentile', label: 'Calibration peak percentile', min: 50, max: 100, step: 1, unit: '%', digits: 0, hint: 'Which of your calibration’s loud moments counts as a peak. 95% ignores the top 5%.' },
     { path: 'zones.peakMarginDb', label: 'Margin above your peaks', min: 0, max: 10, step: 0.5, unit: ' dB', digits: 1, hint: 'How far above those peaks the end of range sits.' },
+    { path: 'zones.voicedOnly', label: 'Average voiced frames only', type: 'toggle', hint: 'Skip frames where the circle’s gate is closed, so silence before you start talking doesn’t slow a loud start.' },
     { path: 'zones.zoneWindowMs', label: 'Zone averaging window', min: 0, max: 3000, step: 50, unit: ' ms', digits: 0, hint: 'Approaching and Outside are judged on your average level over this window. 0 is momentary (today’s behavior). The circle still follows the momentary level.' },
     { path: 'zones.peaksSafetyCapDb', label: 'Peaks mode safety cap', min: 4, max: 24, step: 0.5, unit: ' dB', digits: 1, hint: 'In peaks mode, the end of range never sits higher than this above your normal level.' },
     { path: 'zones.endCapDb', label: 'End-of-range cap (average + spread)', min: 2, max: 20, step: 0.5, unit: ' dB', digits: 1, hint: 'In average + spread mode, the end of range never sits higher than this above your normal level.' },
@@ -490,7 +491,8 @@ function startMonitoringView() {
   engine.gracePeriodActive = false; // skip the app's start-of-session grace while tuning
   engine.graceRemainingMs = 0;
   levelHandler = ({ rms, rawRms }) => {
-    engine.processFrame(rms, performance.now());
+    // Voiced = the circle's own gate (silence floor or room noise).
+    engine.processFrame(rms, performance.now(), ring.gateOpen);
     if (view === 'monitoring') ring.update({ zone: engine.getZone(), rawRms, bounds: engine.getRangeBoundsDb() });
     if (view === 'calibrating') calRing.setLevel(rawRms);
   };
@@ -656,7 +658,7 @@ function renderReadout() {
   const zone = engine.getZone();
   const vis = ring.offsetDb;
   box.innerHTML = `
-    <span>level vs normal <b>${fmt(engine.getLevelOffsetDb(lastSmoothed))} dB</b> · short-term <b>${fmt(engine.getShortTermOffsetDb())} dB</b> (circle ${fmt(vis)})</span>
+    <span>level vs normal <b>${fmt(engine.getLevelOffsetDb(lastSmoothed))} dB</b> · short-term <b>${fmt(engine.getShortTermOffsetDb())} dB</b> over <b>${Math.round(engine.shortTermVoicedMs)} ms</b> voiced (circle ${fmt(vis)})</span>
     <span>calibration peak <b>${engine.getPeakOffsetDb() === null ? 'n/a' : `${fmt(engine.getPeakOffsetDb())} dB`}</b> (${settings.zones.peakPercentile}th pct)</span>
     <span>zone <b class="zone-${zone}">${ZONES[zone]}</b></span>
     <span>gate <b>${ring.gateOpen ? 'open' : 'resting'}</b></span>
