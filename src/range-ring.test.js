@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  voiceCircleState, bandFraction, ringGeometry, ease, stepBand, followLevel, voiceGate, DEFAULT_RING_SETTINGS,
+  voiceCircleState, bandFraction, ringGeometry, ease, stepBand, followLevel, voiceGate, stepShown, DEFAULT_RING_SETTINGS,
   VOICE_RISE_TAU_MS, VOICE_FALL_TAU_MS,
   BAND_MIN_FRACTION, BAND_MAX_FRACTION, BAND_FULL_DB, BAND_FADE_MS, BAND_THIN_FRACTION,
   VOICE_FRACTION_END, VOICE_OPACITY_REST, REFERENCE_EDGE_PX,
@@ -148,6 +148,47 @@ describe('voiceGate — the circle rests until the level clears the floor', () =
     for (const db of [-13, -13.9, -12.5, -13.5]) open = voiceGate(open, db, gate, -20); // stays above the -14 floor
     assert.equal(open, true);
     assert.equal(voiceGate(open, -14.1, gate, -20), false);
+  });
+});
+
+describe('stepShown — settling to rest never snaps', () => {
+  const motion = { ...DEFAULT_RING_SETTINGS.motion, settleMs: 1000 };
+  const FRAME = 16;
+  const run = (state, input, ms) => {
+    const out = [];
+    for (let t = 0; t < ms; t += FRAME) { state = stepShown(state, { ...input, dtMs: FRAME }, motion); out.push(state); }
+    return out;
+  };
+
+  it('with the gate open and not settling, shows the level directly', () => {
+    assert.deepStrictEqual(stepShown({ shown: 0.3, settling: false }, { open: true, level: 0.5, rest: 0.12, dtMs: FRAME }, motion), { shown: 0.5, settling: false });
+  });
+
+  it('when the gate closes, eases to rest over the settle time instead of jumping', () => {
+    const frames = run({ shown: 0.6, settling: false }, { open: false, level: 0.6, rest: 0.12 }, 3000);
+    let prev = 0.6;
+    for (const f of frames) {
+      assert.ok(prev - f.shown < 0.02, 'no frame-to-frame jump');
+      prev = f.shown;
+    }
+    const at = (ms) => frames[Math.round(ms / FRAME) - 1].shown;
+    // One settle time constant: 63% of the way to rest.
+    assert.ok(Math.abs((0.6 - at(1000)) / (0.6 - 0.12) - (1 - Math.exp(-1))) < 0.02);
+    assert.ok(at(3000) - 0.12 < 0.03);
+  });
+
+  it('settles far more slowly than the normal fall', () => {
+    assert.ok(motion.settleMs > motion.fallMs * 2);
+  });
+
+  it('if the voice returns mid-settle, rises at the normal rise, then tracks the level directly', () => {
+    const mid = run({ shown: 0.6, settling: false }, { open: false, level: 0.6, rest: 0.12 }, 400).at(-1);
+    assert.ok(mid.settling && mid.shown > 0.3);
+    const back = run(mid, { open: true, level: 0.7, rest: 0.12 }, 600);
+    // At the rise time constant it's 63% of the way, not the settle's ~9%.
+    const progress = (back[Math.round(motion.riseMs / FRAME) - 1].shown - mid.shown) / (0.7 - mid.shown);
+    assert.ok(progress > 0.55, `progress ${progress.toFixed(2)} after one rise time constant`);
+    assert.deepStrictEqual(back.at(-1), { shown: 0.7, settling: false });
   });
 });
 

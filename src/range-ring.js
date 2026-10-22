@@ -38,6 +38,8 @@
  * motion: the raw level is eased in linear RMS (riseMs / fallMs), after an
  *   optional extra smoothing of the raw input (inputSmoothingMs, 0 = off).
  *   fillMs eases the one zone-driven step, to a full circle at Outside range.
+ *   settleMs paces the return to rest when the gate closes: word-to-word
+ *   motion uses the short fall, settling into silence the long settle.
  * band: thickness as a fraction of the edge, full at fullDb over the end of
  *   range; growMs / shrinkMs / fadeMs pace its entry and exit;
  *   glowStrength scales the glow's opacity.
@@ -56,7 +58,7 @@ export const DEFAULT_RING_SETTINGS = Object.freeze({
     opacityRest: 0.4,
     opacityEnd: 1,
   }),
-  motion: Object.freeze({ riseMs: 90, fallMs: 320, inputSmoothingMs: 0, fillMs: 60 }),
+  motion: Object.freeze({ riseMs: 90, fallMs: 320, inputSmoothingMs: 0, fillMs: 60, settleMs: 1000 }),
   band: Object.freeze({
     minFraction: 0.065,
     maxFraction: 0.22,
@@ -205,6 +207,33 @@ export function followLevel(liveRms, rawRms, dtMs, motion = DEFAULT_RING_SETTING
 }
 
 /**
+ * One frame of the displayed circle (size, or anything else drawn from the
+ * level, such as opacity). The gate only ever changes the target; the
+ * displayed value never jumps.
+ *
+ * - Gate open, not settling: shows the level directly (its motion is
+ *   already followLevel()'s rise and fall).
+ * - Gate closed: eases toward rest over motion.settleMs.
+ * - Gate reopened mid-settle: eases toward the level at motion.riseMs if
+ *   the level is above (the voice is back), or keeps settling if it's
+ *   below; once it catches up, it tracks the level directly again.
+ *
+ * @param {{ shown: number, settling: boolean }} state
+ * @param {{ open: boolean, level: number, rest: number, dtMs: number, caughtUp?: number }} input -
+ *   caughtUp: how close counts as caught up, in the value's own units
+ * @param {typeof DEFAULT_RING_SETTINGS.motion} [motion]
+ * @returns {{ shown: number, settling: boolean }}
+ */
+export const SETTLE_CAUGHT_UP = 0.005;
+export function stepShown({ shown, settling }, { open, level, rest, dtMs, caughtUp = SETTLE_CAUGHT_UP }, motion = DEFAULT_RING_SETTINGS.motion) {
+  if (!open) return { shown: ease(shown, rest, dtMs, motion.settleMs), settling: true };
+  if (!settling || Math.abs(level - shown) < caughtUp) return { shown: level, settling: false };
+  const tau = level > shown ? motion.riseMs : motion.settleMs;
+  const next = ease(shown, level, dtMs, tau);
+  return Math.abs(level - next) < caughtUp ? { shown: level, settling: false } : { shown: next, settling: true };
+}
+
+/**
  * One frame of band motion. The band is never shown half-transparent for
  * long (a translucent chartreuse reads muddy over the dark background): it
  * appears as a thin ring that fades in within fadeMs while it grows to its
@@ -335,6 +364,8 @@ export class MezzoRangeRing {
     this.bounds = { silenceDb: -4, targetDb: 2, endDb: 5 };
     this.geometry = ringGeometry(REFERENCE_EDGE_PX, REFERENCE_EDGE_PX * 2, settings.band);
     this.current = { size: settings.voice.sizeRest, opacity: settings.voice.opacityRest, fill: 0, band: 0, bandOpacity: 0 };
+    this.shownSize = { shown: settings.voice.sizeRest, settling: false };
+    this.shownOpacity = { shown: settings.voice.opacityRest, settling: false };
     this.lastTime = null;
     this.rafId = null;
 
@@ -418,9 +449,11 @@ export class MezzoRangeRing {
     this.liveRms = followLevel(this.liveRms, this.rawRms, dt, motion);
     this.offsetDb = this.levelOffsetDb(this.liveRms);
     this.gateOpen = voiceGate(this.gateOpen, this.offsetDb, gate, this.roomNoiseOffsetDb());
-    const level = this.gateOpen
-      ? voiceCircleState(this.offsetDb, this.bounds, Math.min(this.zone, 2), voice)
-      : { size: voice.sizeRest, opacity: voice.opacityRest };
+    // The gate changes only the target (see stepShown()); the circle eases there.
+    const target = voiceCircleState(this.offsetDb, this.bounds, Math.min(this.zone, 2), voice);
+    this.shownSize = stepShown(this.shownSize, { open: this.gateOpen, level: target.size, rest: voice.sizeRest, dtMs: dt }, motion);
+    this.shownOpacity = stepShown(this.shownOpacity, { open: this.gateOpen, level: target.opacity, rest: voice.opacityRest, dtMs: dt }, motion);
+    const level = { size: this.shownSize.shown, opacity: this.shownOpacity.shown };
     const over = this.zone === 3;
     // Reduced motion keeps the band static (see stepBand()).
     const bandTarget = over

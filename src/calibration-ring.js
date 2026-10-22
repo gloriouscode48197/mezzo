@@ -18,7 +18,7 @@
  * which the tuning page (design/prototypes/ring-tuner.html) drives live.
  */
 
-import { followLevel, voiceGate, DEFAULT_RING_SETTINGS } from './range-ring.js';
+import { followLevel, voiceGate, stepShown, DEFAULT_RING_SETTINGS } from './range-ring.js';
 
 export const DEFAULT_CALIBRATION_RING_SETTINGS = Object.freeze({
   ringSizePx: 132,
@@ -139,6 +139,7 @@ export class MezzoCalibrationRing {
     this.rawRms = 0;
     this.liveRms = 0;
     this.currentPx = this.settings.voiceMinPx;
+    this.shown = { shown: this.currentPx, settling: false };
     this.lastTime = null;
     this._setProgress(0);
     this._setValueNow(0);
@@ -231,7 +232,9 @@ export class MezzoCalibrationRing {
     } else {
       this.gateOpen = true;
     }
-    this.currentPx = this.gateOpen ? voiceDiameterPx(this.liveRms, this.settings) : this.settings.voiceMinPx;
+    // The gate changes only the target; the circle eases there (stepShown()).
+    this.shown = stepShown(this.shown, { open: this.gateOpen, level: voiceDiameterPx(this.liveRms, this.settings), rest: this.settings.voiceMinPx, dtMs: dt, caughtUp: 0.5 }, this.motion);
+    this.currentPx = this.shown.shown;
     this._drawVoice();
   }
 
