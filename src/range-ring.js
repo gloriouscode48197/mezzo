@@ -57,7 +57,7 @@ const lerp = (a, b, t) => a + (b - a) * t;
  * fills the edge once zone 3 is committed (until then it caps at "nearly
  * fills"), and the circle never claims an Outside look on its own.
  *
- * @param {number} offsetDb - smoothed level relative to the calibrated
+ * @param {number} offsetDb - the visual level (see followLevel()) relative to the calibrated
  *   baseline, in dB (engine.getLevelOffsetDb())
  * @param {{ silenceDb: number, targetDb: number, endDb: number }} bounds -
  *   the engine's zone boundaries as dB offsets (engine.getRangeBoundsDb())
@@ -119,6 +119,24 @@ export function ease(current, target, dtMs, tauMs) {
   return current + (target - current) * (1 - Math.exp(-dtMs / tauMs));
 }
 
+/** Level following for the visuals (matches design/prototypes/
+ *  ring-experiment.html's stepVoice()): the raw, per-sample RMS — not
+ *  audio.js's EMA-smoothed value, which stays the engine's zone input — is
+ *  eased in linear RMS, rising faster than it falls, and only then
+ *  converted to dB by the caller. Easing in RMS rather than dB makes a rise
+ *  read quickly and a fall settle gently. */
+export const VOICE_RISE_TAU_MS = 90;
+export const VOICE_FALL_TAU_MS = 320;
+/** The one zone-driven step — nearly full to full when Outside range
+ *  commits — eases over this, so it never snaps. Level-following itself
+ *  gets no further easing beyond followLevel(). */
+export const VOICE_SETTLE_TAU_MS = 60;
+
+export function followLevel(liveRms, rawRms, dtMs) {
+  const raw = Number.isFinite(rawRms) && rawRms > 0 ? rawRms : 0;
+  return ease(liveRms, raw, dtMs, raw > liveRms ? VOICE_RISE_TAU_MS : VOICE_FALL_TAU_MS);
+}
+
 /** Band motion. The band is never shown half-transparent for long (a
  *  translucent chartreuse reads muddy over the dark background): it appears
  *  as a thin ring that fades in within BAND_FADE_MS while it grows to its
@@ -158,13 +176,6 @@ export function stepBand({ band, opacity }, { over, target, dtMs, reduced = fals
 // =============================================================================
 // Renderer
 // =============================================================================
-
-// Motion: eased and continuous (PRD §5.3). Rising a little faster than
-// falling keeps the circle responsive without snapping.
-export const VOICE_RISE_TAU_MS = 90;
-export const VOICE_FALL_TAU_MS = 220;
-// Reduced motion: short crossfades instead of growth (PRD §11.2).
-const REDUCED_TAU_MS = 60;
 
 const COMPONENT_CSS = `
   .mezzo-ring {
@@ -220,20 +231,25 @@ const COMPONENT_CSS = `
 export class MezzoRangeRing {
   /**
    * @param {HTMLElement} container - the element the ring centers in
-   * @param {{ preferredEdgePx?: () => number }} [options] - read on every
-   *   resize; lets Compact and Expanded prefer different edges
+   * @param {{ preferredEdgePx?: () => number, levelOffsetDb?: (rms: number) => number }} [options] -
+   *   preferredEdgePx is read on every resize, so Compact and Expanded can
+   *   prefer different edges; levelOffsetDb converts an RMS level to dB
+   *   relative to the calibrated baseline (the engine's getLevelOffsetDb())
    */
-  constructor(container, { preferredEdgePx = () => REFERENCE_EDGE_PX } = {}) {
+  constructor(container, { preferredEdgePx = () => REFERENCE_EDGE_PX, levelOffsetDb = () => -Infinity } = {}) {
     this.container = container;
     this.doc = container.ownerDocument;
     this.win = this.doc.defaultView;
     this.preferredEdgePx = preferredEdgePx;
+    this.levelOffsetDb = levelOffsetDb;
 
     this.zone = 0;
+    this.rawRms = 0;
+    this.liveRms = 0;
     this.offsetDb = -Infinity;
     this.bounds = { silenceDb: -4, targetDb: 2, endDb: 5 };
     this.geometry = ringGeometry(REFERENCE_EDGE_PX, REFERENCE_EDGE_PX * 2);
-    this.current = { size: VOICE_FRACTION_FLOOR, opacity: VOICE_OPACITY_REST, band: 0, bandOpacity: 0 };
+    this.current = { size: VOICE_FRACTION_FLOOR, opacity: VOICE_OPACITY_REST, fill: 0, band: 0, bandOpacity: 0 };
     this.lastTime = null;
     this.rafId = null;
 
@@ -250,11 +266,12 @@ export class MezzoRangeRing {
   }
 
   /**
-   * @param {{ zone: number, offsetDb: number, bounds: { silenceDb: number, targetDb: number, endDb: number } }} state
+   * @param {{ zone: number, rawRms: number, bounds: { silenceDb: number, targetDb: number, endDb: number } }} state -
+   *   rawRms is the unsmoothed per-sample level (see followLevel())
    */
-  update({ zone, offsetDb, bounds }) {
+  update({ zone, rawRms, bounds }) {
     this.zone = Math.min(3, Math.max(0, zone || 0));
-    this.offsetDb = offsetDb;
+    this.rawRms = rawRms;
     if (bounds) this.bounds = bounds;
     this.el.dataset.zone = String(this.zone);
   }
@@ -303,7 +320,11 @@ export class MezzoRangeRing {
     this.lastTime = now;
 
     const reduced = !!this._reducedMotion?.matches;
-    const target = voiceCircleState(this.offsetDb, this.bounds, this.zone);
+    // The circle follows the level under reduced motion too: it is the
+    // feedback, not decoration.
+    this.liveRms = followLevel(this.liveRms, this.rawRms, dt);
+    this.offsetDb = this.levelOffsetDb(this.liveRms);
+    const level = voiceCircleState(this.offsetDb, this.bounds, Math.min(this.zone, 2));
     const over = this.zone === 3;
     // Reduced motion keeps the band static (see stepBand()).
     const bandTarget = over
@@ -311,9 +332,11 @@ export class MezzoRangeRing {
       : 0;
 
     const c = this.current;
-    const voiceTau = reduced ? REDUCED_TAU_MS : (target.size > c.size ? VOICE_RISE_TAU_MS : VOICE_FALL_TAU_MS);
-    c.size = ease(c.size, target.size, dt, voiceTau);
-    c.opacity = ease(c.opacity, target.opacity, dt, voiceTau);
+    // The circle tracks the level directly; committing Outside range eases
+    // it the rest of the way to full (see voiceCircleState()).
+    c.fill = ease(c.fill, over ? 1 : 0, dt, VOICE_SETTLE_TAU_MS);
+    c.size = level.size + (1 - level.size) * c.fill;
+    c.opacity = level.opacity + (1 - level.opacity) * c.fill;
     const band = stepBand({ band: c.band, opacity: c.bandOpacity }, { over, target: bandTarget, dtMs: dt, reduced });
     c.band = band.band;
     c.bandOpacity = band.opacity;

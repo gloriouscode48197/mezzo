@@ -63,7 +63,7 @@ describe('dbToLevelRatio', () => {
 
 
 describe('voiceDiameterPx — live level to circle size', () => {
-  it('is about 20px when silent and about 116px at loud speech', () => {
+  it('is about 20px when silent and about 96px at loud speech', () => {
     assert.strictEqual(voiceDiameterPx(0), VOICE_MIN_PX);
     assert.strictEqual(voiceDiameterPx(rmsAt(-80)), VOICE_MIN_PX);
     assert.strictEqual(voiceDiameterPx(rmsAt(-30)), VOICE_MAX_PX);
@@ -76,8 +76,9 @@ describe('voiceDiameterPx — live level to circle size', () => {
     assert.ok(b > a && b - a < 6);
   });
 
-  it('at its largest, still sits inside the ring stroke', () => {
-    assert.ok(VOICE_MAX_PX <= RING_SIZE_PX - 2 * RING_STROKE_PX - 2);
+  it('at its largest, always leaves a gap inside the ring, so it never reads as Approaching', () => {
+    assert.equal(VOICE_MAX_PX, 96);
+    assert.ok((RING_SIZE_PX - 2 * RING_STROKE_PX - VOICE_MAX_PX) / 2 >= 10);
   });
 });
 

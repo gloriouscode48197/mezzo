@@ -1,7 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  voiceCircleState, bandFraction, ringGeometry, ease, stepBand,
+  voiceCircleState, bandFraction, ringGeometry, ease, stepBand, followLevel,
+  VOICE_RISE_TAU_MS, VOICE_FALL_TAU_MS,
   BAND_MIN_FRACTION, BAND_MAX_FRACTION, BAND_FULL_DB, BAND_FADE_MS, BAND_THIN_FRACTION,
   VOICE_FRACTION_END, VOICE_OPACITY_REST, REFERENCE_EDGE_PX,
 } from './range-ring.js';
@@ -122,6 +123,51 @@ describe('ease — eased, frame-rate independent motion', () => {
     const one = ease(0, 1, 32, 100);
     const two = ease(ease(0, 1, 16, 100), 1, 16, 100);
     assert.ok(Math.abs(one - two) < 1e-12);
+  });
+});
+
+describe('followLevel — the visuals follow the raw level, eased in linear RMS', () => {
+  const baseline = Math.pow(10, -30 / 20);
+  const offsetOf = (rms) => (rms > 0 ? 20 * Math.log10(rms) - 20 * Math.log10(baseline) : -Infinity);
+  // The renderer's per-frame chain: ease the raw RMS, convert to dB, map
+  // to a size.
+  function simulate(fromDb, toDb, ms, frame = 16) {
+    let live = rmsAt(fromDb);
+    let size = voiceCircleState(fromDb, bounds, 1).size;
+    const start = size;
+    const end = voiceCircleState(toDb, bounds, 1).size;
+    const trace = [];
+    for (let t = frame; t <= ms; t += frame) {
+      live = followLevel(live, rmsAt(toDb), frame);
+      size = voiceCircleState(offsetOf(live), bounds, 1).size;
+      trace.push({ t, progress: (size - start) / (end - start) });
+    }
+    return trace;
+  }
+
+  it('rises at 90ms and falls at 320ms', () => {
+    assert.equal(VOICE_RISE_TAU_MS, 90);
+    assert.equal(VOICE_FALL_TAU_MS, 320);
+    // One time constant: 63% of the way, in linear RMS, each direction.
+    assert.ok(Math.abs(followLevel(0, 1, VOICE_RISE_TAU_MS) - (1 - Math.exp(-1))) < 1e-12);
+    assert.ok(Math.abs(followLevel(1, 0, VOICE_FALL_TAU_MS) - Math.exp(-1)) < 1e-12);
+  });
+
+  it('on the rise, the circle reaches 63% of a step within about 90ms', () => {
+    const trace = simulate(bounds.silenceDb - 6, bounds.targetDb, 400);
+    const at = trace.find((f) => f.progress >= 0.63).t;
+    assert.ok(at <= 96, `63% reached at ${at}ms`);
+  });
+
+  it('falls more gently than it rises', () => {
+    const up = simulate(bounds.silenceDb - 6, bounds.targetDb, 600).find((f) => f.progress >= 0.63).t;
+    const down = simulate(bounds.targetDb, bounds.silenceDb - 6, 1200).find((f) => f.progress >= 0.63).t;
+    assert.ok(down > up * 2, `rise ${up}ms, fall ${down}ms`);
+  });
+
+  it('treats a missing or zero level as silence', () => {
+    assert.equal(followLevel(0.5, undefined, 1e6), 0);
+    assert.equal(followLevel(0.5, 0, 1e6), 0);
   });
 });
 

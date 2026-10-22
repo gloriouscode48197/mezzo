@@ -4,19 +4,22 @@
  * A sage progress ring that fills clockwise from 12 o'clock over the
  * six-second capture, and a live voice circle inside it that follows the
  * microphone level, so the user can see their voice being captured. There is
- * no range edge and no chartreuse: the range doesn't exist yet.
+ * no range edge and no chartreuse: the range doesn't exist yet. The circle
+ * also moves during the 3-2-1 countdown, as a mic check, while the ring
+ * stays empty until capture begins.
  *
  * The level-to-size mapping and the progress stepping are pure functions so
- * they can be unit-tested without a browser. The voice circle eases with the
- * Range Ring's own time constants, so it moves the way Monitoring's will.
+ * they can be unit-tested without a browser. The voice circle follows the
+ * raw level exactly the way the Range Ring does (range-ring.js's
+ * followLevel()), so it moves the way Monitoring's will.
  */
 
-import { ease, VOICE_RISE_TAU_MS, VOICE_FALL_TAU_MS } from './range-ring.js';
+import { followLevel } from './range-ring.js';
 
 export const RING_SIZE_PX = 132;
 export const RING_STROKE_PX = 6;
 export const VOICE_MIN_PX = 20;     // silent
-export const VOICE_MAX_PX = 116;    // loud speech: just inside the ring's stroke
+export const VOICE_MAX_PX = 96;     // loud speech: always leaves a gap inside the ring, so a full circle in a full sage ring never reads as Approaching
 export const CAPTURE_STEPS = 6;     // reduced motion: one step per second of capture
 
 // -55..-30 dB (carried over from the old calibration meter's 2026-08-12
@@ -106,11 +109,13 @@ export class MezzoCalibrationRing {
     this.reset();
   }
 
-  /** Back to the resting state: empty ring, smallest circle, not capturing. */
+  /** Back to the resting state: empty ring, smallest circle, still. */
   reset() {
     this._stop();
+    this.capturing = false;
     this.captureStart = null;
-    this.targetPx = VOICE_MIN_PX;
+    this.rawRms = 0;
+    this.liveRms = 0;
     this.currentPx = VOICE_MIN_PX;
     this.lastTime = null;
     this._setProgress(0);
@@ -118,16 +123,24 @@ export class MezzoCalibrationRing {
     this.voiceEl.style.transform = `scale(${VOICE_MIN_PX / VOICE_MAX_PX})`;
   }
 
-  /** Capture has begun: start filling the ring and following the level. */
-  startCapture() {
-    this.captureStart = null; // stamped on the first frame, in the window's own clock
+  /** The 3-2-1 countdown has begun: the circle follows the level as a mic
+   *  check; the ring stays empty. */
+  startMicCheck() {
     this._start();
   }
 
-  /** A smoothed RMS sample from the microphone. Ignored until capture starts. */
-  setLevel(rms) {
+  /** Capture has begun: start filling the ring; the circle keeps following. */
+  startCapture() {
+    this.capturing = true;
+    this.captureStart = null; // stamped on the next frame, in the window's own clock
+    this._start();
+  }
+
+  /** A raw, per-sample RMS level from the microphone (before audio.js's
+   *  EMA). Ignored while the ring is at rest. */
+  setLevel(rawRms) {
     if (this.rafId == null) return;
-    this.targetPx = voiceDiameterPx(rms);
+    this.rawRms = rawRms;
   }
 
   destroy() {
@@ -146,18 +159,20 @@ export class MezzoCalibrationRing {
 
   _loop(now) {
     this.rafId = this.win.requestAnimationFrame(this._boundLoop);
-    if (this.captureStart === null) this.captureStart = now;
     const dt = this.lastTime === null ? 16 : Math.min(now - this.lastTime, 100);
     this.lastTime = now;
 
-    const elapsed = now - this.captureStart;
-    this._setProgress(captureProgress(elapsed, this.durationMs, !!this._reducedMotion?.matches));
-    this._setValueNow(progressValueNow(elapsed, this.durationMs));
+    if (this.capturing) {
+      if (this.captureStart === null) this.captureStart = now;
+      const elapsed = now - this.captureStart;
+      this._setProgress(captureProgress(elapsed, this.durationMs, !!this._reducedMotion?.matches));
+      this._setValueNow(progressValueNow(elapsed, this.durationMs));
+    }
 
     // The circle still follows the level under reduced motion: it is the
     // feedback, not decoration.
-    const tau = this.targetPx > this.currentPx ? VOICE_RISE_TAU_MS : VOICE_FALL_TAU_MS;
-    this.currentPx = ease(this.currentPx, this.targetPx, dt, tau);
+    this.liveRms = followLevel(this.liveRms, this.rawRms, dt);
+    this.currentPx = voiceDiameterPx(this.liveRms);
     this.voiceEl.style.transform = `scale(${(this.currentPx / VOICE_MAX_PX).toFixed(4)})`;
   }
 

@@ -304,6 +304,11 @@ const C0_BLOCKED_ICON_SVG = '<svg width="44" height="44" viewBox="0 0 44 44" fil
 // countdown text counts down from.
 const CALIBRATION_COUNTDOWN_SECONDS = 6;
 const CALIBRATION_CAPTURE_MS = CALIBRATION_COUNTDOWN_SECONDS * 1000;
+const CALIBRATING_HINT_PREPARING = 'Get ready to talk normally.';
+const CALIBRATING_HINT_LISTENING = 'Talk normally. The circle moves with your voice.';
+// How often the 3-2-1 mic check reads the level — audio.js's own sampling
+// interval during capture, so the circle moves the same way before and after.
+const MIC_CHECK_INTERVAL_MS = 50;
 
 // Mirrors calibration-controller.js's own DEFAULT_PREPARATION_MS (3000ms) —
 // same relationship as CALIBRATION_COUNTDOWN_SECONDS above: the controller's
@@ -612,7 +617,9 @@ export function createMezzoSession({
     if (state.capturing && !calibrationCountdownStarted) {
       calibrationCountdownStarted = true;
       stopPreparationCountdown();
+      stopMicCheck();
       calibrationRing?.startCapture();
+      if (calibratingHintEl) calibratingHintEl.textContent = CALIBRATING_HINT_LISTENING;
       if (calibratingAnnounceEl) calibratingAnnounceEl.textContent = 'Listening for 6 seconds.';
       startCalibratingCountdown();
     }
@@ -796,6 +803,8 @@ export function createMezzoSession({
   let calibratingStatusEl = null; // aria-hidden visible text: blank, then (if shown) "Preparing microphone…", then "Start speaking in {n}", then a live "Listening… {n}s" countdown
   let calibratingAnnounceEl = null; // visually-hidden aria-live region — exactly two one-time announcements, see its own construction comment above
   let calibrationRing = null; // MezzoCalibrationRing: progress ring + live voice circle, driven by handleCalibrationLevelSample()
+  let calibratingHintEl = null; // "Get ready to talk normally." during the countdown, then CALIBRATING_HINT_LISTENING
+  let micCheckTimer = null; // reads the mic level during the 3-2-1 so the circle can react before capture — see startMicCheck()
   let calibratingCountdownTimer = null;
   // Guards the countdown's false→true "start exactly once per attempt"
   // requirement — reset in prepareCalibratingScreen() at the top of every
@@ -873,7 +882,7 @@ export function createMezzoSession({
     if (sessionState.get() === SESSION_STATES.MONITORING_ACTIVE) zoneAnnouncer.update(zone);
   }
 
-  function onAudioFrame({ rms }) {
+  function onAudioFrame({ rms, rawRms }) {
     // Explicit real timestamp, not engine.js's own performance.now() default —
     // keeps the caller in control of the clock the Outside-of-Range entry
     // dwell (see OUTSIDE_ENTRY_DWELL_MS in engine.js) measures against.
@@ -900,12 +909,14 @@ export function createMezzoSession({
       }
     }
 
-    // The Range Ring reads the committed zone and where the smoothed level
-    // sits against the engine's own boundaries; it never classifies.
+    // The Range Ring reads the committed zone and the engine's own
+    // boundaries; it never classifies. It follows the raw, per-sample level
+    // (eased in its own loop — see range-ring.js's followLevel()), while
+    // the engine above classifies from audio.js's EMA-smoothed level.
     // isSustained (SUSTAINED_DRIFT_MS) is no longer a visual input — it
     // still feeds sessionAlertTriggered above.
     if (activeCircle) {
-      activeCircle.update({ zone: currentZone, offsetDb: engine.getLevelOffsetDb(rms), bounds: engine.getRangeBoundsDb() });
+      activeCircle.update({ zone: currentZone, rawRms: rawRms ?? rms, bounds: engine.getRangeBoundsDb() });
       markPipUpdate(pipWindow); // TEMPORARY — see docs/monitoring-runtime-investigation.md
     }
 
@@ -3272,8 +3283,9 @@ export function createMezzoSession({
 
     const calibratingHint = pipDoc.createElement('p');
     calibratingHint.className = 'pip-calibrating-hint';
-    calibratingHint.textContent = 'Talk normally. The circle moves with your voice.';
+    calibratingHint.textContent = CALIBRATING_HINT_PREPARING;
     calibratingScreen.appendChild(calibratingHint);
+    calibratingHintEl = calibratingHint;
 
     // Static, visually-hidden live region carrying exactly two one-time
     // announcements ("Get ready. Calibration starts in 3 seconds." /
@@ -3945,6 +3957,7 @@ export function createMezzoSession({
     if (!pipCircle && pipCircleWrapperEl) {
       pipCircle = new MezzoRangeRing(pipCircleWrapperEl, {
         preferredEdgePx: () => (layoutMode === LAYOUT_MODES.COMPACT ? RANGE_RING_EDGE_COMPACT_PX : RANGE_RING_EDGE_EXPANDED_PX),
+        levelOffsetDb: (rms) => engine.getLevelOffsetDb(rms),
       });
     }
     activeCircle = pipCircle;
@@ -3983,6 +3996,7 @@ export function createMezzoSession({
     });
     if (screenEl !== calibratingScreenEl) {
       if (unsubscribeCalibrationLevel) { unsubscribeCalibrationLevel(); unsubscribeCalibrationLevel = null; }
+      stopMicCheck();
       calibrationRing?.reset();
       stopCalibratingCountdown();
       stopPreparationCountdown();
@@ -4989,7 +5003,9 @@ export function createMezzoSession({
     if (calibratingSubheadingEl) {
       calibratingSubheadingEl.textContent = mode === 'recalibrate' && targetName ? `Recalibrating ${targetName}` : '';
     }
+    stopMicCheck();
     calibrationRing?.reset(); // empty ring, resting circle; filling starts on the capturing:true edge
+    if (calibratingHintEl) calibratingHintEl.textContent = CALIBRATING_HINT_PREPARING;
     stopCalibratingCountdown(); // defensive — see startCalibratingCountdown()'s own trigger below; this guarantees a clean slate even on a retry
     stopPreparationCountdown();
     clearPreparingMessageTimers();
@@ -5083,6 +5099,26 @@ export function createMezzoSession({
     if (calibratingAnnounceEl) calibratingAnnounceEl.textContent = `Get ready. Calibration starts in ${PREPARATION_COUNTDOWN_SECONDS} seconds.`;
     calibrationController.beginCountdown();
     startPreparationCountdown();
+    startMicCheck();
+  }
+
+  /** The 3-2-1 mic check: the controller collects no samples and doesn't
+   *  start audio.js's monitoring until capture begins, so this reads the
+   *  already-acquired microphone's raw level directly (audio.calculateRms(),
+   *  a plain read of the analyser that touches neither audio.js's smoothing
+   *  nor the controller's samples) and feeds only the voice circle. Stopped
+   *  on the capturing:true edge, and whenever Calibrating is left. */
+  function startMicCheck() {
+    stopMicCheck();
+    calibrationRing?.startMicCheck();
+    micCheckTimer = setInterval(() => {
+      if (!audio.isMicrophoneActive) return;
+      calibrationRing?.setLevel(audio.calculateRms());
+    }, MIC_CHECK_INTERVAL_MS);
+  }
+
+  function stopMicCheck() {
+    if (micCheckTimer) { clearInterval(micCheckTimer); micCheckTimer = null; }
   }
 
   /** Visible-only (aria-hidden) "Start speaking in 3/2/1" — decorative
@@ -5140,12 +5176,11 @@ export function createMezzoSession({
     if (calibratingCountdownTimer) { clearInterval(calibratingCountdownTimer); calibratingCountdownTimer = null; }
   }
 
-  /** Feeds the live voice circle. subscribeToLevel() delivers samples
-   *  through the whole attempt, including the preparation stages; the ring
-   *  ignores them until capture begins (calibrationRing.startCapture()), so
-   *  nothing moves before the countdown ends. */
-  function handleCalibrationLevelSample(rms) {
-    calibrationRing?.setLevel(rms);
+  /** Feeds the live voice circle during capture with the raw, per-sample
+   *  level (the controller's samples stay the EMA-smoothed values). Before
+   *  capture, startMicCheck() feeds it instead. */
+  function handleCalibrationLevelSample(rms, rawRms) {
+    calibrationRing?.setLevel(rawRms ?? rms);
   }
 
   function handleCalibratingCancel() {
@@ -5958,8 +5993,10 @@ export function createMezzoSession({
     calibratingSubheadingEl = null;
     calibratingStatusEl = null;
     calibratingAnnounceEl = null;
+    stopMicCheck();
     calibrationRing?.destroy();
     calibrationRing = null;
+    calibratingHintEl = null;
     stopCalibratingCountdown();
     stopPreparationCountdown();
     clearPreparingMessageTimers();

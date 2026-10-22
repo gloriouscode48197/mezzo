@@ -579,6 +579,9 @@ test.describe('Calibration-stall reliability correction (acquisition timeout)', 
     expect((await style(voice, ['backgroundColor'])).backgroundColor).toBe('rgb(142, 137, 123)');
 
     const status = screen.locator('.pip-calibrating-status');
+    const hintEl = screen.locator('.pip-calibrating-hint');
+    await expect(status).toHaveText(/Start speaking in/, { timeout: 4000 });
+    await expect(hintEl).toHaveText('Get ready to talk normally.');
     await expect(status).toHaveText('Listening… 6s', { timeout: 8000 });
     expect(await style(status, ['fontSize', 'fontWeight', 'color'])).toEqual({ fontSize: '15px', fontWeight: '500', color: 'rgb(206, 226, 196)' });
     const statusBox = await status.boundingBox();
@@ -604,7 +607,7 @@ test.describe('Calibration-stall reliability correction (acquisition timeout)', 
     expect(fits).toEqual([true, true]);
   });
 
-  test('the voice circle follows the live level and the ring fills over the capture; the progressbar value changes once a second', async ({ page, context }) => {
+  test('the voice circle reacts during the 3-2-1 as a mic check, then follows the level while the ring fills; the progressbar value changes once a second', async ({ page, context }) => {
     const pipPage = await openCompanion(page, context);
     await installLevelDriver(page, { speakingDb: 0 }); // levels below are absolute dB
     await pipPage.locator('button:has-text("Create speaking profile")').click();
@@ -614,21 +617,25 @@ test.describe('Calibration-stall reliability correction (acquisition timeout)', 
     const ring = screen.locator('.mezzo-cal-ring');
     const voicePx = () => screen.locator('.mezzo-cal-ring-voice').evaluate((el) => el.getBoundingClientRect().width);
 
-    // Before capture, the circle rests at its smallest, whatever the level.
+    // During the 3-2-1, the circle follows the level as a mic check while
+    // the ring stays empty.
     await setLevelDb(page, -32);
     await expect(screen.locator('.pip-calibrating-status')).toHaveText(/Start speaking in/, { timeout: 4000 });
-    expect(Math.round(await voicePx())).toBe(20);
+    await pipPage.waitForTimeout(500);
+    expect(await voicePx()).toBeGreaterThan(70);
+    await expect(ring).toHaveAttribute('aria-valuenow', '0');
 
     await setLevelDb(page, -80);
     await expect(screen.locator('.pip-calibrating-status')).toHaveText('Listening… 6s', { timeout: 6000 });
-    await pipPage.waitForTimeout(600);
+    await pipPage.waitForTimeout(1500); // the fall eases at 320ms
     expect(await voicePx()).toBeLessThan(26);
 
-    await setLevelDb(page, -31);
-    await pipPage.waitForTimeout(900);
+    // Loud speech: capped at 96px, so there's always a gap inside the 132px ring.
+    await setLevelDb(page, -25);
+    await pipPage.waitForTimeout(700);
     const loud = await voicePx();
-    expect(loud).toBeGreaterThan(100);
-    expect(loud).toBeLessThanOrEqual(116.5);
+    expect(loud).toBeGreaterThan(90);
+    expect(loud).toBeLessThanOrEqual(96.5);
 
     const values = new Set();
     for (let i = 0; i < 12; i++) {
@@ -661,7 +668,7 @@ test.describe('Calibration-stall reliability correction (acquisition timeout)', 
 
     await setLevelDb(page, -31);
     await pipPage.waitForTimeout(500);
-    expect(await screen.locator('.mezzo-cal-ring-voice').evaluate((el) => el.getBoundingClientRect().width)).toBeGreaterThan(80);
+    expect(await screen.locator('.mezzo-cal-ring-voice').evaluate((el) => el.getBoundingClientRect().width)).toBeGreaterThan(70);
     await setLevelDb(page, null);
     await context.close();
   });

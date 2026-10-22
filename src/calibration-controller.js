@@ -499,9 +499,11 @@ export function createCalibrationController({
     setState({ preparing: false });
 
     const samples = [];
-    audio.onLevelChange = ({ rms }) => {
+    audio.onLevelChange = ({ rms, rawRms }) => {
       samples.push(rms);
-      levelListeners.forEach((fn) => fn(rms));
+      // Listeners also get the unsmoothed level, for visuals only (see
+      // calibration-ring.js); the samples above stay the smoothed values.
+      levelListeners.forEach((fn) => fn(rms, rawRms));
     };
     audio.startMonitoring();
     // capturing flips true only once monitoring has actually started
