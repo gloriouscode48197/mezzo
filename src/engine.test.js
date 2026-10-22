@@ -21,6 +21,7 @@ import {
   INITIAL_GRACE_MS_MIN,
   INITIAL_GRACE_MS_MAX,
   OUTSIDE_ENTRY_DWELL_MS,
+  END_OF_RANGE_MAX_DB,
 } from './engine.js';
 
 // =============================================================================
@@ -911,6 +912,33 @@ describe('MezzoEngine — range bounds for presentation', () => {
       assert.ok(Math.abs(engine.getLevelOffsetDb(rmsAt(endDb)) - endDb) < 1e-6); // rmsToDb adds a 1e-10 epsilon
     });
   }
+
+  it('caps the end of range at baseline +6 dB (endDb = min(2.5 × spread, 6)), for the circle and the nudge alike', () => {
+    assert.strictEqual(END_OF_RANGE_MAX_DB, 6);
+    const engineFor = (spreadDb) => {
+      const engine = new MezzoEngine();
+      engine.loadCalibration({ baselineRMS: Math.pow(10, -30 / 20), spreadDb });
+      return engine;
+    };
+    assert.strictEqual(engineFor(2).getRangeBoundsDb().endDb, 5); // under the cap: 2.5 × 2
+    assert.strictEqual(engineFor(4).getRangeBoundsDb().endDb, 6); // 2.5 × 4 = 10, capped
+    const rmsAt = (offsetDb) => Math.pow(10, (-30 + offsetDb) / 20);
+    const wide = engineFor(4);
+    assert.strictEqual(wide._computeZone(rmsAt(5.9)), 2);
+    assert.strictEqual(wide._computeZone(rmsAt(6.1)), 3); // was Approaching before the cap
+  });
+
+  it('keeps the zones in order when the spread is wider than the cap', () => {
+    const engine = new MezzoEngine();
+    engine.loadCalibration({ baselineRMS: Math.pow(10, -30 / 20), spreadDb: 8 });
+    const { silenceDb, targetDb, endDb } = engine.getRangeBoundsDb();
+    assert.strictEqual(endDb, 6);
+    assert.strictEqual(targetDb, 6); // held at the end, never above it
+    assert.ok(silenceDb < targetDb);
+    const rmsAt = (offsetDb) => Math.pow(10, (-30 + offsetDb) / 20);
+    assert.strictEqual(engine._computeZone(rmsAt(5.9)), 1);
+    assert.strictEqual(engine._computeZone(rmsAt(6.1)), 3); // never misread as Within range
+  });
 
   it('reports silence and an uncalibrated engine as -Infinity, never a number', () => {
     const engine = new MezzoEngine();

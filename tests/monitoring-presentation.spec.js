@@ -139,7 +139,9 @@ test.describe('Monitoring presentation: the Range Ring', () => {
     expect(within.voiceOpacity).toBeCloseTo(0.4, 1);
     expect(within.bandOpacity).toBeLessThan(0.01);
 
-    await settleAt(page, pipPage, b.endDb - 1);
+    // Just under the end of range: Approaching is only 2 dB wide once the
+    // end of range is capped at +6 dB (engine.js's END_OF_RANGE_MAX_DB).
+    await settleAt(page, pipPage, b.endDb - 0.3);
     const approaching = await readRing(pipPage);
     expect(approaching.zone).toBe(2);
     expect(approaching.voiceScale).toBeGreaterThan(0.85);

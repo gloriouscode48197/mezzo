@@ -29,6 +29,14 @@ export const ZONE_SILENCE_SPREAD_MULT = -2.0;   // baseline + this × spread -> 
 export const ZONE_TARGET_SPREAD_MULT = 1.0;     // baseline + this × spread -> zone 1/2 boundary
 export const ZONE_ACCEPTABLE_SPREAD_MULT = 2.5; // baseline + this × spread -> zone 2/3 boundary
 
+// The end of range never sits more than this far above the calibrated
+// baseline, however variable the calibration was (2026-10-22): a wide
+// spread otherwise pushes the nudge so far up that it rarely shows. The
+// Within/Approaching boundary is held at or below it so the zones stay in
+// order. Kept separate from the multipliers above so it can be reverted on
+// its own.
+export const END_OF_RANGE_MAX_DB = 6;
+
 // Floor applied to a calibration's measured spread before it's used to
 // derive zone boundaries (see calibrate() and _computeZone() below) — never
 // applied to the spreadDb value actually stored/reported. Two distinct
@@ -399,10 +407,11 @@ export class MezzoEngine {
    */
   getRangeBoundsDb() {
     const spread = Math.max(this.spreadDb || 0, MIN_SPREAD_DB);
+    const endDb = Math.min(ZONE_ACCEPTABLE_SPREAD_MULT * spread, END_OF_RANGE_MAX_DB);
     return {
       silenceDb: ZONE_SILENCE_SPREAD_MULT * spread,
-      targetDb: ZONE_TARGET_SPREAD_MULT * spread,
-      endDb: ZONE_ACCEPTABLE_SPREAD_MULT * spread,
+      targetDb: Math.min(ZONE_TARGET_SPREAD_MULT * spread, endDb),
+      endDb,
     };
   }
 
@@ -464,12 +473,12 @@ export class MezzoEngine {
       return 0;
     }
 
-    const spread = Math.max(this.spreadDb || 0, MIN_SPREAD_DB);
+    const { silenceDb, targetDb, endDb } = this.getRangeBoundsDb();
     const diffDb = MezzoEngine.rmsToDb(rmsValue) - MezzoEngine.rmsToDb(this.baselineRMS);
 
-    if (diffDb < ZONE_SILENCE_SPREAD_MULT * spread) return 0;
-    if (diffDb <= ZONE_TARGET_SPREAD_MULT * spread) return 1;
-    if (diffDb <= ZONE_ACCEPTABLE_SPREAD_MULT * spread) return 2;
+    if (diffDb < silenceDb) return 0;
+    if (diffDb <= targetDb) return 1;
+    if (diffDb <= endDb) return 2;
     return 3;
   }
 
