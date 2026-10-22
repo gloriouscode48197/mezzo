@@ -1,0 +1,533 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ring Tuner</title>
+<!--
+  Ring Tuner — tune the Range Ring, the calibrating circle, and the zone
+  boundaries with a real voice. Serve the repo root and open
+  /design/prototypes/ring-tuner.html (it must be served: it imports the app's
+  own modules).
+
+  It runs the real code, not a re-creation: src/range-ring.js
+  (MezzoRangeRing), src/calibration-ring.js (MezzoCalibrationRing),
+  src/engine.js (MezzoEngine's zone logic), and src/audio.js
+  (AudioProcessor, the app's mic pipeline). Each takes a settings object;
+  this page passes live, editable copies of the app's defaults.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/design-tokens/mezzo-tokens.css">
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body {
+    margin: 0;
+    background: #222326;
+    color: var(--color-text);
+    font-family: var(--font-body);
+    font-size: 14px;
+    line-height: 1.4;
+  }
+  .mono { font-family: var(--font-mono); }
+
+  header {
+    position: sticky; top: 0; z-index: 5;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px;
+    padding: 12px 20px;
+    background: #222326;
+    border-bottom: 1px solid color-mix(in srgb, var(--color-text) 12%, transparent);
+  }
+  header h1 { font-size: 15px; font-weight: 500; margin: 0 8px 0 0; letter-spacing: -0.01em; }
+  button {
+    font: inherit; font-size: 13px;
+    color: var(--color-text);
+    background: color-mix(in srgb, var(--color-text) 8%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-text) 16%, transparent);
+    border-radius: 3px; padding: 6px 11px; cursor: pointer;
+  }
+  button:hover { background: color-mix(in srgb, var(--color-text) 14%, transparent); }
+  button.primary { background: var(--color-accent); color: var(--color-on-accent, #2D2E31); border-color: transparent; font-weight: 500; }
+  button[aria-pressed="true"] { background: color-mix(in srgb, var(--color-link) 22%, transparent); border-color: var(--color-link); }
+  button:disabled { opacity: 0.5; cursor: default; }
+  .status { color: var(--color-text-muted); font-size: 13px; }
+  .readout {
+    width: 100%;
+    font-family: var(--font-mono); font-size: 12px; color: var(--color-text-muted);
+    display: flex; flex-wrap: wrap; gap: 4px 18px;
+  }
+  .readout b { color: var(--color-text); font-weight: 500; }
+  .readout .zone-3 { color: var(--color-accent); }
+  .readout .zone-2 { color: var(--color-link); }
+  label.toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--color-text-muted); cursor: pointer; }
+
+  main { display: grid; grid-template-columns: minmax(420px, 1fr) minmax(380px, 460px); gap: 0; min-height: calc(100vh - 100px); }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+
+  .stage { padding: 20px; display: flex; flex-direction: column; gap: 14px; align-items: flex-start; }
+  .tabs, .sizes { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .sizes input { width: 56px; font: inherit; font-size: 12px; color: var(--color-text); background: transparent; border: 1px solid color-mix(in srgb, var(--color-text) 20%, transparent); border-radius: 3px; padding: 4px 6px; }
+  .frame {
+    position: relative;
+    background: var(--color-bg);
+    border-radius: 10px;
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-text) 14%, transparent), 0 12px 40px rgba(0,0,0,0.35);
+    overflow: hidden;
+    display: flex; flex-direction: column; align-items: center;
+  }
+  .frame-label { font-family: var(--font-mono); font-size: 11px; color: var(--color-text-muted); }
+
+  /* Monitoring preview: profile name on top, the ring centered below. */
+  .mon-name {
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: var(--tracking-label);
+    text-transform: uppercase; color: var(--color-text-muted);
+    padding-top: 14px; flex-shrink: 0;
+    max-width: 90%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .mon-ring { flex: 1; width: 100%; display: flex; align-items: center; justify-content: center; }
+
+  /* Calibrating preview: mirrors the Companion's Calibrating screen. */
+  .cal { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px 24px 56px; }
+  .cal h2 { font-family: var(--font-display); font-weight: 500; font-size: 20px; line-height: 1.25; letter-spacing: var(--tracking-heading); text-align: center; text-wrap: balance; max-width: 280px; margin: 0; }
+  .cal-visual { margin-top: 30px; }
+  .cal-status { margin-top: 18px; font-size: 15px; font-weight: 500; color: var(--color-link); min-height: 19px; }
+  .cal-hint { margin: 6px 0 0; font-size: 13px; color: var(--color-text-muted); text-align: center; }
+  .cal-cancel { position: absolute; bottom: 18px; font-size: 12px; color: var(--color-link); text-decoration: underline; }
+
+  aside {
+    padding: 8px 20px 40px;
+    border-left: 1px solid color-mix(in srgb, var(--color-text) 12%, transparent);
+    overflow-y: auto; max-height: calc(100vh - 100px); position: sticky; top: 100px;
+  }
+  fieldset { border: 0; margin: 0; padding: 14px 0 6px; border-bottom: 1px solid color-mix(in srgb, var(--color-text) 10%, transparent); }
+  legend { font-family: var(--font-mono); font-size: 11px; letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--color-link); padding: 0; margin-bottom: 6px; }
+  .ctl { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; padding: 7px 0; }
+  .ctl label { font-size: 13px; }
+  .ctl output { font-family: var(--font-mono); font-size: 12px; text-align: right; min-width: 64px; }
+  .ctl input[type=range] { grid-column: 1 / -1; width: 100%; accent-color: var(--color-link); }
+  .ctl .hint { grid-column: 1 / -1; font-size: 12px; color: var(--color-text-muted); }
+  .ctl .auto { grid-column: 1 / -1; font-size: 12px; color: var(--color-text-muted); display: inline-flex; gap: 6px; align-items: center; }
+  .ctl.is-auto input[type=range] { opacity: 0.35; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 16px 0 6px; }
+  textarea { width: 100%; min-height: 120px; font-family: var(--font-mono); font-size: 12px; color: var(--color-text); background: #1b1c1e; border: 1px solid color-mix(in srgb, var(--color-text) 20%, transparent); border-radius: 3px; padding: 8px; }
+  .note { font-size: 12px; color: var(--color-text-muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Ring Tuner</h1>
+  <button id="btn-calibrate" class="primary">Calibrate (6s)</button>
+  <button id="btn-typical">Skip with typical values</button>
+  <span id="status" class="status">Not calibrated. Calibrate, or skip with typical values.</span>
+  <label class="toggle" style="margin-left:auto"><input id="toggle-readout" type="checkbox" checked> Readout</label>
+  <div id="readout" class="readout" aria-live="off"></div>
+</header>
+
+<main>
+  <section class="stage">
+    <div class="tabs" role="tablist">
+      <button id="tab-monitoring" role="tab" aria-pressed="true">Monitoring</button>
+      <button id="tab-calibrating" role="tab" aria-pressed="false">Calibrating</button>
+    </div>
+
+    <div id="monitoring-controls" class="sizes">
+      <button data-size="compact" aria-pressed="false">Compact 220×220</button>
+      <button data-size="small" aria-pressed="true">Smaller default</button>
+      <input id="small-w" type="number" min="160" max="400" aria-label="Smaller default width"> ×
+      <input id="small-h" type="number" min="160" max="520" aria-label="Smaller default height">
+      <button data-size="expanded" aria-pressed="false">Expanded 382×480</button>
+      <span class="frame-label">Profile name <input id="profile-name" value="Home office" style="width:120px"></span>
+    </div>
+    <div id="calibrating-controls" class="sizes" hidden>
+      <button id="btn-miccheck">Mic check (3-2-1)</button>
+      <button id="btn-capture">Run capture (6s)</button>
+      <button id="btn-cal-reset">Reset</button>
+      <span class="frame-label">380×364, the Companion's pre-monitoring size</span>
+    </div>
+
+    <div id="frame" class="frame">
+      <div id="mon" style="display:contents">
+        <div id="mon-name" class="mon-name"></div>
+        <div id="mon-ring" class="mon-ring"></div>
+      </div>
+      <div id="cal" class="cal" hidden>
+        <h2>Keep speaking at the level you want to maintain</h2>
+        <div id="cal-visual" class="cal-visual"></div>
+        <div id="cal-status" class="cal-status"></div>
+        <p id="cal-hint" class="cal-hint">Get ready to talk normally.</p>
+        <span class="cal-cancel">Cancel</span>
+      </div>
+    </div>
+    <div id="frame-label" class="frame-label"></div>
+    <p class="note">The calibrating circle shares the Motion settings. The Silence gate applies to Monitoring only: before calibration there's no "normal" level to measure against.</p>
+  </section>
+
+  <aside>
+    <form id="controls" onsubmit="return false"></form>
+    <div class="actions">
+      <button id="btn-copy">Copy settings</button>
+      <button id="btn-download">Download settings</button>
+      <button id="btn-reset">Reset to app defaults</button>
+      <button id="btn-load">Load settings</button>
+    </div>
+    <div id="load-box" hidden>
+      <textarea id="load-text" placeholder="Paste settings JSON here"></textarea>
+      <div class="actions"><button id="btn-load-apply">Apply</button><button id="btn-load-cancel">Cancel</button></div>
+    </div>
+    <p id="io-status" class="note" aria-live="polite"></p>
+  </aside>
+</main>
+
+<script type="module">
+import { MezzoRangeRing, DEFAULT_RING_SETTINGS } from '/src/range-ring.js';
+import { MezzoCalibrationRing, DEFAULT_CALIBRATION_RING_SETTINGS } from '/src/calibration-ring.js';
+import { MezzoEngine, DEFAULT_ZONE_SETTINGS } from '/src/engine.js';
+import { AudioProcessor } from '/src/audio.js';
+
+const $ = (id) => document.getElementById(id);
+const STORAGE_KEY = 'mezzo-ring-tuner-v1';
+const CAPTURE_MS = 6000;
+const TYPICAL = { speakingDb: -42, spreadDb: 4 };
+
+// ── Settings ────────────────────────────────────────────────────────────────
+// The app's defaults, plus the tuner-only layout values (ring size as a % of
+// the window's short side: the app's 236px in 382 and 140px in 220).
+const LAYOUT_DEFAULTS = { compactPct: 140 / 220, smallPct: 140 / 220, expandedPct: 236 / 382, smallWidth: 240, smallHeight: 264 };
+const clone = (o) => JSON.parse(JSON.stringify(o));
+function appDefaults() {
+  return {
+    ring: clone(DEFAULT_RING_SETTINGS),
+    zones: clone(DEFAULT_ZONE_SETTINGS),
+    calibrating: clone(DEFAULT_CALIBRATION_RING_SETTINGS),
+    layout: clone(LAYOUT_DEFAULTS),
+  };
+}
+// One live object: the engine and both rings hold references into it, so a
+// slider change takes effect on the next frame.
+const settings = appDefaults();
+function assignSettings(src) {
+  const fresh = appDefaults();
+  for (const group of Object.keys(fresh)) {
+    if (group === 'ring') {
+      for (const sub of Object.keys(fresh.ring)) Object.assign(settings.ring[sub], fresh.ring[sub], src?.ring?.[sub] ?? {});
+    } else {
+      Object.assign(settings[group], fresh[group], src?.[group] ?? {});
+    }
+  }
+}
+try { const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null'); if (saved) assignSettings(saved); } catch { /* no saved values */ }
+function save() { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(settings)); } catch { /* storage unavailable */ } }
+
+// ── Controls ────────────────────────────────────────────────────────────────
+const pct = { scale: 100, unit: '%', digits: 0 };
+const GROUPS = [
+  ['Silence and noise', [
+    { path: 'ring.gate.floorDb', label: 'Silence gate floor', min: -60, max: 0, step: 0.5, unit: ' dB', digits: 1, hint: 'Below this level (vs your normal), the circle rests. −60 is off.' },
+    { path: 'ring.gate.hysteresisDb', label: 'Gate hysteresis', min: 0, max: 6, step: 0.5, unit: ' dB', digits: 1, hint: 'How far above the floor the level must rise before the circle wakes again.' },
+    { path: 'ring.voice.sizeRest', label: 'Rest circle size', min: 0, max: 0.6, step: 0.01, ...pct, hint: 'Circle size while resting or very quiet.' },
+  ]],
+  ['Motion', [
+    { path: 'ring.motion.riseMs', label: 'Rise', min: 10, max: 500, step: 5, unit: ' ms', digits: 0, hint: 'How fast the circle grows when you get louder.' },
+    { path: 'ring.motion.fallMs', label: 'Fall', min: 20, max: 1500, step: 10, unit: ' ms', digits: 0, hint: 'How gently it shrinks when you get quieter.' },
+    { path: 'ring.motion.inputSmoothingMs', label: 'Input smoothing', min: 0, max: 500, step: 5, unit: ' ms', digits: 0, hint: 'Extra smoothing of the raw mic level before rise and fall. 0 is off.' },
+  ]],
+  ['Circle size', [
+    { path: 'ring.voice.sizeAtSilence', label: 'At silence boundary', min: 0, max: 1, step: 0.01, ...pct, hint: 'Size where Listening turns into Within range.' },
+    { path: 'ring.voice.sizeAtNormal', label: 'At normal level (0 dB)', min: 0, max: 1, step: 0.01, ...pct, nullable: true, autoValue: 0.45, hint: 'Size at your calibrated level. Auto draws a straight line between its neighbors.' },
+    { path: 'ring.voice.sizeAtTarget', label: 'At top of Within range', min: 0, max: 1, step: 0.01, ...pct, hint: 'Size where Approaching starts.' },
+    { path: 'ring.voice.sizeAtEnd', label: 'At end of range', min: 0, max: 1, step: 0.01, ...pct, hint: 'Size just before Outside range. It fills the edge only once Outside range commits.' },
+    { path: 'ring.voice.opacityRest', label: 'Opacity at rest', min: 0, max: 1, step: 0.01, ...pct, hint: 'How faint the circle is through Within range.' },
+    { path: 'ring.voice.opacityEnd', label: 'Opacity at end of range', min: 0, max: 1, step: 0.01, ...pct, hint: 'How solid it gets near the edge.' },
+  ]],
+  ['Range boundaries', [
+    { path: 'zones.endCapDb', label: 'End-of-range cap', min: 2, max: 20, step: 0.5, unit: ' dB', digits: 1, hint: 'The end of range never sits higher than this above your normal level.' },
+    { path: 'zones.endSpreadMult', label: 'End of range, × spread', min: 1, max: 5, step: 0.1, unit: '×', digits: 1, hint: 'End of range as a multiple of how much your voice varied during calibration.' },
+    { path: 'zones.approachingWidthDb', label: 'Approaching width', min: 0.5, max: 8, step: 0.5, unit: ' dB', digits: 1, nullable: true, autoValue: 2, hint: 'How many dB before the end of range Approaching starts. Auto is the app’s current rule (1 × spread).' },
+    { path: 'zones.silenceSpreadMult', label: 'Silence boundary, × spread', min: -5, max: 0, step: 0.1, unit: '×', digits: 1, hint: 'Below this, the zone is Listening.' },
+    { path: 'zones.outsideDwellMs', label: 'Outside dwell', min: 0, max: 2000, step: 50, unit: ' ms', digits: 0, hint: 'How long you must stay over before Outside range commits.' },
+  ]],
+  ['Band', [
+    { path: 'ring.band.minFraction', label: 'Min thickness', min: 0, max: 0.3, step: 0.005, scale: 100, unit: '%', digits: 1, hint: 'Band thickness just over the end of range, as % of the edge.' },
+    { path: 'ring.band.maxFraction', label: 'Max thickness', min: 0, max: 0.4, step: 0.005, scale: 100, unit: '%', digits: 1, hint: 'Its thickest. The window still caps it so the glow never touches the edge.' },
+    { path: 'ring.band.fullDb', label: 'Full band at', min: 0.5, max: 12, step: 0.5, unit: ' dB over', digits: 1, hint: 'How far over the end of range the band reaches full thickness.' },
+    { path: 'ring.band.growMs', label: 'Grow speed', min: 10, max: 600, step: 5, unit: ' ms', digits: 0, hint: 'How fast the band grows from its thin ring.' },
+    { path: 'ring.band.shrinkMs', label: 'Shrink speed', min: 10, max: 600, step: 5, unit: ' ms', digits: 0, hint: 'How fast it shrinks back before fading.' },
+    { path: 'ring.band.glowStrength', label: 'Glow strength', min: 0, max: 1.5, step: 0.05, unit: '×', digits: 2, hint: 'The glow around the band. 1 is the current design.' },
+  ]],
+  ['Layout', [
+    { path: 'layout.compactPct', label: 'Ring size, Compact', min: 0.3, max: 0.9, step: 0.005, scale: 100, unit: '%', digits: 1, hint: 'Ring edge as % of the window’s short side.' },
+    { path: 'layout.smallPct', label: 'Ring size, smaller default', min: 0.3, max: 0.9, step: 0.005, scale: 100, unit: '%', digits: 1, hint: 'Ring edge as % of the window’s short side.' },
+    { path: 'layout.expandedPct', label: 'Ring size, Expanded', min: 0.3, max: 0.9, step: 0.005, scale: 100, unit: '%', digits: 1, hint: 'Ring edge as % of the window’s short side.' },
+    { path: 'calibrating.voiceMaxPx', label: 'Calibrating: voice circle max', min: 40, max: 160, step: 1, unit: ' px', digits: 0, hint: 'Largest the calibrating circle gets at loud speech.' },
+    { path: 'calibrating.ringSizePx', label: 'Calibrating: ring size', min: 80, max: 200, step: 1, unit: ' px', digits: 0, hint: 'Diameter of the progress ring.' },
+    { path: 'calibrating.strokePx', label: 'Calibrating: stroke', min: 1, max: 14, step: 0.5, unit: ' px', digits: 1, hint: 'Thickness of the progress ring.' },
+  ]],
+];
+
+const getPath = (path) => path.split('.').reduce((o, k) => o[k], settings);
+function setPath(path, value) {
+  const keys = path.split('.');
+  const last = keys.pop();
+  keys.reduce((o, k) => o[k], settings)[last] = value;
+}
+const controls = [];
+function format(def, v) {
+  return `${((v ?? 0) * (def.scale ?? 1)).toFixed(def.digits ?? 0)}${def.unit ?? ''}`;
+}
+function buildControls() {
+  const form = $('controls');
+  for (const [title, defs] of GROUPS) {
+    const fs = document.createElement('fieldset');
+    const lg = document.createElement('legend');
+    lg.textContent = title;
+    fs.appendChild(lg);
+    for (const def of defs) {
+      const id = 'c-' + def.path.replace(/\./g, '-');
+      const row = document.createElement('div');
+      row.className = 'ctl';
+      row.innerHTML = `<label for="${id}"></label><output for="${id}"></output><input id="${id}" type="range">${def.nullable ? `<label class="auto"><input type="checkbox"> Auto</label>` : ''}<span class="hint"></span>`;
+      row.querySelector('label').textContent = def.label;
+      row.querySelector('.hint').textContent = def.hint;
+      const input = row.querySelector('input[type=range]');
+      Object.assign(input, { min: def.min, max: def.max, step: def.step });
+      const out = row.querySelector('output');
+      const auto = row.querySelector('.auto input');
+      const sync = () => {
+        const v = getPath(def.path);
+        const isAuto = def.nullable && v == null;
+        row.classList.toggle('is-auto', isAuto);
+        if (auto) auto.checked = isAuto;
+        input.value = isAuto ? def.autoValue : v;
+        out.textContent = isAuto ? 'auto' : format(def, v);
+      };
+      input.addEventListener('input', () => {
+        setPath(def.path, parseFloat(input.value));
+        changed();
+        sync();
+      });
+      auto?.addEventListener('change', () => {
+        setPath(def.path, auto.checked ? null : parseFloat(input.value));
+        changed();
+        sync();
+      });
+      controls.push(sync);
+      sync();
+      fs.appendChild(row);
+    }
+    form.appendChild(fs);
+  }
+}
+function syncControls() { controls.forEach((f) => f()); $('small-w').value = settings.layout.smallWidth; $('small-h').value = settings.layout.smallHeight; }
+function changed() {
+  save();
+  applyLayout();
+}
+
+// ── Audio and engine (the app's own) ──────────────────────────────────────
+const audio = new AudioProcessor();
+const engine = new MezzoEngine({ zoneSettings: settings.zones });
+let micOn = false;
+let calibrated = false;
+let lastRaw = 0;
+let lastSmoothed = 0;
+let levelHandler = null;
+
+async function ensureMic() {
+  if (micOn) return true;
+  const ok = await audio.acquire();
+  if (ok === false || !audio.isMicrophoneActive) { setStatus('Microphone unavailable. Allow access and try again.'); return false; }
+  audio.onLevelChange = (frame) => {
+    lastRaw = frame.rawRms;
+    lastSmoothed = frame.rms;
+    levelHandler?.(frame);
+  };
+  audio.startMonitoring();
+  micOn = true;
+  return true;
+}
+
+function startMonitoringView() {
+  engine.startMonitoring();
+  engine.gracePeriodActive = false; // skip the app's start-of-session grace while tuning
+  engine.graceRemainingMs = 0;
+  levelHandler = ({ rms, rawRms }) => {
+    engine.processFrame(rms, performance.now());
+    if (view === 'monitoring') ring.update({ zone: engine.getZone(), rawRms, bounds: engine.getRangeBoundsDb() });
+    if (view === 'calibrating') calRing.setLevel(rawRms);
+  };
+}
+
+$('btn-calibrate').addEventListener('click', async () => {
+  if (!(await ensureMic())) return;
+  const btn = $('btn-calibrate');
+  btn.disabled = true;
+  const samples = [];
+  const previous = levelHandler;
+  levelHandler = ({ rms, rawRms }) => { samples.push(rms); if (view === 'calibrating') calRing.setLevel(rawRms); };
+  const t0 = performance.now();
+  const tick = setInterval(() => setStatus(`Talk normally… ${Math.max(0, Math.ceil((CAPTURE_MS - (performance.now() - t0)) / 1000))}s`), 200);
+  await new Promise((r) => setTimeout(r, CAPTURE_MS));
+  clearInterval(tick);
+  btn.disabled = false;
+  try {
+    engine.calibrate(samples);
+    calibrated = true;
+    setStatus(`Calibrated: normal ${toDb(engine.baselineRMS).toFixed(1)} dB, spread ${engine.spreadDb.toFixed(1)} dB.`);
+    startMonitoringView();
+  } catch (err) {
+    levelHandler = previous;
+    setStatus(`Calibration didn’t take: ${err.message}`);
+  }
+});
+
+$('btn-typical').addEventListener('click', async () => {
+  if (!(await ensureMic())) return;
+  engine.loadCalibration({ baselineRMS: Math.pow(10, TYPICAL.speakingDb / 20), spreadDb: TYPICAL.spreadDb });
+  calibrated = true;
+  setStatus(`Typical values: normal ${TYPICAL.speakingDb} dB, spread ${TYPICAL.spreadDb} dB.`);
+  startMonitoringView();
+});
+
+const toDb = (rms) => 20 * Math.log10((rms || 0) + 1e-10);
+function setStatus(text) { $('status').textContent = text; }
+
+// ── Previews ───────────────────────────────────────────────────────────────
+const SIZES = {
+  compact: () => ({ width: 220, height: 220, pct: settings.layout.compactPct, label: 'Compact 220×220' }),
+  small: () => ({ width: settings.layout.smallWidth, height: settings.layout.smallHeight, pct: settings.layout.smallPct, label: `Smaller default ${settings.layout.smallWidth}×${settings.layout.smallHeight}` }),
+  expanded: () => ({ width: 382, height: 480, pct: settings.layout.expandedPct, label: 'Expanded 382×480' }),
+};
+let size = 'small';
+let view = 'monitoring';
+const frame = $('frame');
+
+const ring = new MezzoRangeRing($('mon-ring'), {
+  settings: settings.ring,
+  levelOffsetDb: (rms) => engine.getLevelOffsetDb(rms),
+  preferredEdgePx: () => { const s = SIZES[size](); return s.pct * Math.min(s.width, s.height); },
+  viewportSize: () => { const s = SIZES[size](); return { width: s.width, height: s.height }; },
+});
+const calRing = new MezzoCalibrationRing($('cal-visual'), { durationMs: CAPTURE_MS, settings: settings.calibrating, motion: settings.ring.motion });
+
+function applyLayout() {
+  const s = view === 'calibrating' ? { width: 380, height: 364, label: '380×364' } : SIZES[size]();
+  frame.style.width = `${s.width}px`;
+  frame.style.height = `${s.height}px`;
+  $('frame-label').textContent = view === 'calibrating' ? 'Calibrating, 380×364' : s.label;
+  ring.relayout();
+  calRing.relayout();
+}
+
+document.querySelectorAll('[data-size]').forEach((b) => b.addEventListener('click', () => {
+  size = b.dataset.size;
+  document.querySelectorAll('[data-size]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+  applyLayout();
+}));
+for (const [id, key] of [['small-w', 'smallWidth'], ['small-h', 'smallHeight']]) {
+  $(id).addEventListener('change', () => { const v = parseInt($(id).value, 10); if (v > 0) { settings.layout[key] = v; changed(); } });
+}
+$('profile-name').addEventListener('input', () => { $('mon-name').textContent = $('profile-name').value; });
+$('mon-name').textContent = $('profile-name').value;
+
+function setView(next) {
+  view = next;
+  $('tab-monitoring').setAttribute('aria-pressed', String(next === 'monitoring'));
+  $('tab-calibrating').setAttribute('aria-pressed', String(next === 'calibrating'));
+  $('mon').style.display = next === 'monitoring' ? 'contents' : 'none';
+  $('cal').hidden = next !== 'calibrating';
+  $('monitoring-controls').hidden = next !== 'monitoring';
+  $('calibrating-controls').hidden = next !== 'calibrating';
+  applyLayout();
+}
+$('tab-monitoring').addEventListener('click', () => setView('monitoring'));
+$('tab-calibrating').addEventListener('click', () => setView('calibrating'));
+
+// Calibrating preview: the mic check and a 6s capture drive the real ring.
+let capTimer = null;
+async function calMicCheck() {
+  if (!(await ensureMic())) return;
+  if (!levelHandler) levelHandler = ({ rawRms }) => calRing.setLevel(rawRms);
+  calRing.reset();
+  calRing.startMicCheck();
+  $('cal-status').textContent = 'Start speaking in 3';
+  $('cal-hint').textContent = 'Get ready to talk normally.';
+}
+$('btn-miccheck').addEventListener('click', calMicCheck);
+$('btn-capture').addEventListener('click', async () => {
+  if (!(await ensureMic())) return;
+  if (!levelHandler) levelHandler = ({ rawRms }) => calRing.setLevel(rawRms);
+  clearInterval(capTimer);
+  calRing.reset();
+  calRing.startCapture();
+  $('cal-hint').textContent = 'Talk normally. The circle moves with your voice.';
+  let left = 6;
+  $('cal-status').textContent = `Listening… ${left}s`;
+  capTimer = setInterval(() => {
+    left -= 1;
+    $('cal-status').textContent = left > 0 ? `Listening… ${left}s` : 'Done';
+    if (left <= 0) clearInterval(capTimer);
+  }, 1000);
+});
+$('btn-cal-reset').addEventListener('click', () => { clearInterval(capTimer); calRing.reset(); $('cal-status').textContent = ''; $('cal-hint').textContent = 'Get ready to talk normally.'; });
+
+// ── Readout ────────────────────────────────────────────────────────────────
+const ZONES = ['Listening', 'Within range', 'Approaching end of range', 'Outside range'];
+function renderReadout() {
+  requestAnimationFrame(renderReadout);
+  const box = $('readout');
+  if (!$('toggle-readout').checked) { box.hidden = true; return; }
+  box.hidden = false;
+  if (!calibrated) {
+    box.innerHTML = micOn ? `<span>raw <b>${toDb(lastRaw).toFixed(1)} dB</b></span>` : '<span>Mic off</span>';
+    return;
+  }
+  const b = engine.getRangeBoundsDb();
+  const zone = engine.getZone();
+  const vis = ring.offsetDb;
+  const fmt = (v) => (Number.isFinite(v) ? `${v >= 0 ? '+' : ''}${v.toFixed(1)}` : '−∞');
+  box.innerHTML = `
+    <span>level vs normal <b>${fmt(engine.getLevelOffsetDb(lastSmoothed))} dB</b> (circle ${fmt(vis)})</span>
+    <span>zone <b class="zone-${zone}">${ZONES[zone]}</b></span>
+    <span>gate <b>${ring.gateOpen ? 'open' : 'resting'}</b></span>
+    <span>bounds: silence <b>${fmt(b.silenceDb)}</b> · Approaching <b>${fmt(b.targetDb)}</b> · end <b>${fmt(b.endDb)}</b> dB</span>`;
+}
+requestAnimationFrame(renderReadout);
+
+// ── Output ─────────────────────────────────────────────────────────────────
+const json = () => JSON.stringify(settings, null, 2);
+function ioStatus(text) { $('io-status').textContent = text; }
+$('btn-copy').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText(json()); ioStatus('Settings copied.'); } catch { ioStatus('Couldn’t copy. Use Download instead.'); }
+});
+$('btn-download').addEventListener('click', () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([json()], { type: 'application/json' }));
+  a.download = 'ring-settings.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  ioStatus('Saved ring-settings.json.');
+});
+$('btn-reset').addEventListener('click', () => { assignSettings(null); syncControls(); changed(); ioStatus('Back to app defaults.'); });
+$('btn-load').addEventListener('click', () => { $('load-box').hidden = false; $('load-text').focus(); });
+$('btn-load-cancel').addEventListener('click', () => { $('load-box').hidden = true; });
+$('btn-load-apply').addEventListener('click', () => {
+  try {
+    assignSettings(JSON.parse($('load-text').value));
+    syncControls();
+    changed();
+    $('load-box').hidden = true;
+    ioStatus('Settings loaded.');
+  } catch (err) {
+    ioStatus(`That isn’t valid settings JSON: ${err.message}`);
+  }
+});
+
+buildControls();
+syncControls();
+setView('monitoring');
+</script>
+</body>
+</html>

@@ -11,15 +11,26 @@
  * The level-to-size mapping and the progress stepping are pure functions so
  * they can be unit-tested without a browser. The voice circle follows the
  * raw level exactly the way the Range Ring does (range-ring.js's
- * followLevel()), so it moves the way Monitoring's will.
+ * followLevel(), with the same motion settings), so it moves the way
+ * Monitoring's will.
+ *
+ * Its sizes live in one settings object (DEFAULT_CALIBRATION_RING_SETTINGS),
+ * which the tuning page (design/prototypes/ring-tuner.html) drives live.
  */
 
-import { followLevel } from './range-ring.js';
+import { followLevel, DEFAULT_RING_SETTINGS } from './range-ring.js';
 
-export const RING_SIZE_PX = 132;
-export const RING_STROKE_PX = 6;
-export const VOICE_MIN_PX = 20;     // silent
-export const VOICE_MAX_PX = 96;     // loud speech: always leaves a gap inside the ring, so a full circle in a full sage ring never reads as Approaching
+export const DEFAULT_CALIBRATION_RING_SETTINGS = Object.freeze({
+  ringSizePx: 132,
+  strokePx: 6,
+  voiceMinPx: 20,   // silent
+  voiceMaxPx: 96,   // loud speech: always leaves a gap inside the ring, so a full circle in a full sage ring never reads as Approaching
+});
+
+export const RING_SIZE_PX = DEFAULT_CALIBRATION_RING_SETTINGS.ringSizePx;
+export const RING_STROKE_PX = DEFAULT_CALIBRATION_RING_SETTINGS.strokePx;
+export const VOICE_MIN_PX = DEFAULT_CALIBRATION_RING_SETTINGS.voiceMinPx;
+export const VOICE_MAX_PX = DEFAULT_CALIBRATION_RING_SETTINGS.voiceMaxPx;
 export const CAPTURE_STEPS = 6;     // reduced motion: one step per second of capture
 
 // -55..-30 dB (carried over from the old calibration meter's 2026-08-12
@@ -38,10 +49,10 @@ export function dbToLevelRatio(db) {
   return Math.min(1, Math.max(0, (db - LEVEL_DB_MIN) / (LEVEL_DB_MAX - LEVEL_DB_MIN)));
 }
 
-/** A smoothed RMS level to the voice circle's diameter in px. */
-export function voiceDiameterPx(rms) {
+/** An RMS level to the voice circle's diameter in px. */
+export function voiceDiameterPx(rms, s = DEFAULT_CALIBRATION_RING_SETTINGS) {
   const t = dbToLevelRatio(20 * Math.log10((rms || 0) + 1e-10));
-  return VOICE_MIN_PX + (VOICE_MAX_PX - VOICE_MIN_PX) * t;
+  return s.voiceMinPx + (s.voiceMaxPx - s.voiceMinPx) * t;
 }
 
 /**
@@ -62,14 +73,11 @@ export function progressValueNow(elapsedMs, durationMs) {
   return Math.round(captureProgress(elapsedMs, durationMs, true) * 100);
 }
 
-const RADIUS = (RING_SIZE_PX - RING_STROKE_PX) / 2;
-const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
-
 const COMPONENT_CSS = `
   .mezzo-cal-ring {
     position: relative;
-    width: ${RING_SIZE_PX}px;
-    height: ${RING_SIZE_PX}px;
+    width: var(--cal-ring-size);
+    height: var(--cal-ring-size);
     flex-shrink: 0;
   }
   .mezzo-cal-ring svg {
@@ -83,12 +91,11 @@ const COMPONENT_CSS = `
     position: absolute;
     left: 50%;
     top: 50%;
-    width: ${VOICE_MAX_PX}px;
-    height: ${VOICE_MAX_PX}px;
-    margin: ${-VOICE_MAX_PX / 2}px 0 0 ${-VOICE_MAX_PX / 2}px;
+    width: var(--cal-voice-max);
+    height: var(--cal-voice-max);
+    translate: -50% -50%;
     border-radius: 50%;
     background: var(--color-voice);
-    transform: scale(${VOICE_MIN_PX / VOICE_MAX_PX});
     will-change: transform;
   }
 `;
@@ -96,14 +103,23 @@ const COMPONENT_CSS = `
 export class MezzoCalibrationRing {
   /**
    * @param {HTMLElement} container
-   * @param {{ durationMs: number }} options
+   * @param {{
+   *   durationMs: number,
+   *   settings?: typeof DEFAULT_CALIBRATION_RING_SETTINGS,
+   *   motion?: typeof DEFAULT_RING_SETTINGS.motion,
+   * }} options - settings and motion are read live (the app passes neither)
    */
-  constructor(container, { durationMs }) {
+  constructor(container, { durationMs, settings = DEFAULT_CALIBRATION_RING_SETTINGS, motion = DEFAULT_RING_SETTINGS.motion }) {
     this.doc = container.ownerDocument;
     this.win = this.doc.defaultView;
     this.durationMs = durationMs;
+    this.settings = settings;
+    this.motion = motion;
+    this.progress = 0;
+    this.currentPx = settings.voiceMinPx;
     this._injectCSS();
     this._createDOM(container);
+    this.relayout();
     this._reducedMotion = this.win.matchMedia?.('(prefers-reduced-motion: reduce)');
     this._boundLoop = this._loop.bind(this);
     this.reset();
@@ -116,11 +132,36 @@ export class MezzoCalibrationRing {
     this.captureStart = null;
     this.rawRms = 0;
     this.liveRms = 0;
-    this.currentPx = VOICE_MIN_PX;
+    this.currentPx = this.settings.voiceMinPx;
     this.lastTime = null;
     this._setProgress(0);
     this._setValueNow(0);
-    this.voiceEl.style.transform = `scale(${VOICE_MIN_PX / VOICE_MAX_PX})`;
+    this._drawVoice();
+  }
+
+  /** Applies the current size settings (ring, stroke, voice range). */
+  relayout() {
+    const { ringSizePx: size, strokePx: stroke, voiceMaxPx } = this.settings;
+    this.radius = (size - stroke) / 2;
+    this.circumference = 2 * Math.PI * this.radius;
+    this.el.style.setProperty('--cal-ring-size', `${size}px`);
+    this.el.style.setProperty('--cal-voice-max', `${voiceMaxPx}px`);
+    this.svg.setAttribute('width', String(size));
+    this.svg.setAttribute('height', String(size));
+    this.svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
+    for (const c of [this.trackEl, this.progressEl]) {
+      c.setAttribute('cx', String(size / 2));
+      c.setAttribute('cy', String(size / 2));
+      c.setAttribute('r', String(this.radius));
+      c.setAttribute('stroke-width', String(stroke));
+    }
+    this.progressEl.setAttribute('stroke-dasharray', this.circumference.toFixed(2));
+    this._setProgress(this.progress);
+    this._drawVoice();
+  }
+
+  _drawVoice() {
+    this.voiceEl.style.transform = `scale(${(this.currentPx / this.settings.voiceMaxPx).toFixed(4)})`;
   }
 
   /** The 3-2-1 countdown has begun: the circle follows the level as a mic
@@ -171,13 +212,14 @@ export class MezzoCalibrationRing {
 
     // The circle still follows the level under reduced motion: it is the
     // feedback, not decoration.
-    this.liveRms = followLevel(this.liveRms, this.rawRms, dt);
-    this.currentPx = voiceDiameterPx(this.liveRms);
-    this.voiceEl.style.transform = `scale(${(this.currentPx / VOICE_MAX_PX).toFixed(4)})`;
+    this.liveRms = followLevel(this.liveRms, this.rawRms, dt, this.motion);
+    this.currentPx = voiceDiameterPx(this.liveRms, this.settings);
+    this._drawVoice();
   }
 
   _setProgress(p) {
-    this.progressEl.setAttribute('stroke-dashoffset', (CIRCUMFERENCE * (1 - p)).toFixed(2));
+    this.progress = p;
+    this.progressEl.setAttribute('stroke-dashoffset', (this.circumference * (1 - p)).toFixed(2));
     // A zero-length round-capped stroke still paints a dot; hide it at 0.
     this.progressEl.style.visibility = p > 0 ? 'visible' : 'hidden';
   }
@@ -204,24 +246,17 @@ export class MezzoCalibrationRing {
     this.el.setAttribute('aria-valuemax', '100');
 
     const svg = this.doc.createElementNS(NS, 'svg');
-    svg.setAttribute('width', String(RING_SIZE_PX));
-    svg.setAttribute('height', String(RING_SIZE_PX));
-    svg.setAttribute('viewBox', `0 0 ${RING_SIZE_PX} ${RING_SIZE_PX}`);
     svg.setAttribute('aria-hidden', 'true');
     const circle = (cls) => {
       const c = this.doc.createElementNS(NS, 'circle');
       c.setAttribute('class', cls);
-      c.setAttribute('cx', String(RING_SIZE_PX / 2));
-      c.setAttribute('cy', String(RING_SIZE_PX / 2));
-      c.setAttribute('r', String(RADIUS));
       c.setAttribute('fill', 'none');
-      c.setAttribute('stroke-width', String(RING_STROKE_PX));
       svg.appendChild(c);
       return c;
     };
-    circle('mezzo-cal-ring-track');
+    this.trackEl = circle('mezzo-cal-ring-track');
     this.progressEl = circle('mezzo-cal-ring-progress');
-    this.progressEl.setAttribute('stroke-dasharray', CIRCUMFERENCE.toFixed(2));
+    this.svg = svg;
     this.el.appendChild(svg);
 
     this.voiceEl = this.doc.createElement('div');

@@ -2,15 +2,20 @@
  * Range Ring — the Monitoring visual (docs/prd/range-ring-and-lantern-refresh.md §5).
  *
  * Anatomy: a range edge (always visible), a voice circle inside it that
- * follows the smoothed level, and a flat chartreuse band outside the edge
- * that appears only once the engine commits zone 3 (Outside range).
+ * follows the level, and a flat chartreuse band outside the edge that
+ * appears only once the engine commits zone 3 (Outside range).
  *
  * This module never classifies zones. It reads two things from the engine:
- * the committed zone (src/engine.js's getZone()) and where the smoothed
- * level sits relative to the engine's own zone boundaries
- * (getLevelOffsetDb() / getRangeBoundsDb()). The mapping from those to
- * sizes, opacity, and band thickness lives in the pure functions below, so
- * it can be unit-tested without a browser.
+ * the committed zone (src/engine.js's getZone()) and where the level sits
+ * relative to the engine's own zone boundaries (getLevelOffsetDb() /
+ * getRangeBoundsDb()). The mapping from those to sizes, opacity, and band
+ * thickness lives in the pure functions below, so it can be unit-tested
+ * without a browser.
+ *
+ * Every tuned value lives in one settings object (DEFAULT_RING_SETTINGS).
+ * The app always uses the defaults; the tuning page
+ * (design/prototypes/ring-tuner.html) drives this same code with live
+ * values, so there is one implementation, never a re-creation.
  *
  * Rendering is DOM + CSS custom properties: per frame it only writes a few
  * variables on the ring's root, which drive transform, opacity, color, and
@@ -18,26 +23,66 @@
  */
 
 // =============================================================================
-// Mapping (pure)
+// Settings
 // =============================================================================
 
-/** Band thickness as a fraction of the edge diameter: just over the end of
- *  range, and at BAND_FULL_DB past it (PRD §5.3; decision: full at +4 dB). */
-export const BAND_MIN_FRACTION = 0.065;
-export const BAND_MAX_FRACTION = 0.22;
-export const BAND_FULL_DB = 4;
+/**
+ * gate: below floorDb (dB vs the calibrated level) the circle rests at
+ *   voice.sizeRest; it reopens only hysteresisDb above the floor, so it
+ *   doesn't flicker at the boundary.
+ * voice: circle diameter as a fraction of the edge, anchored at the zone
+ *   boundaries. sizeAtNormal (at 0 dB) is optional; null draws a straight
+ *   line from the silence boundary to the top of Within range.
+ * motion: the raw level is eased in linear RMS (riseMs / fallMs), after an
+ *   optional extra smoothing of the raw input (inputSmoothingMs, 0 = off).
+ *   fillMs eases the one zone-driven step, to a full circle at Outside range.
+ * band: thickness as a fraction of the edge, full at fullDb over the end of
+ *   range; growMs / shrinkMs / fadeMs pace its entry and exit;
+ *   glowStrength scales the glow's opacity.
+ */
+export const DEFAULT_RING_SETTINGS = Object.freeze({
+  // -60 dB sits below every possible rest point (silence boundary at most
+  // -40 dB, rest 6 dB under it), so by default the gate changes nothing.
+  gate: Object.freeze({ floorDb: -60, hysteresisDb: 0 }),
+  voice: Object.freeze({
+    sizeRest: 0.12,
+    restBelowSilenceDb: 6,   // how far below the silence boundary the circle reaches its rest size
+    sizeAtSilence: 0.24,
+    sizeAtNormal: null,
+    sizeAtTarget: 0.62,
+    sizeAtEnd: 0.94,         // "nearly fills the edge"
+    opacityRest: 0.4,
+    opacityEnd: 1,
+  }),
+  motion: Object.freeze({ riseMs: 90, fallMs: 320, inputSmoothingMs: 0, fillMs: 60 }),
+  band: Object.freeze({
+    minFraction: 0.065,
+    maxFraction: 0.22,
+    fullDb: 4,
+    growMs: 120,
+    shrinkMs: 50,
+    fadeMs: 100,
+    thinFraction: 0.01,      // the thin ring it grows from and shrinks to (~2px Expanded)
+    glowStrength: 1,
+  }),
+});
 
-/** Voice-circle diameter as a fraction of the edge diameter. */
-export const VOICE_FRACTION_FLOOR = 0.12;      // quietest
-export const VOICE_FRACTION_SILENCE = 0.24;    // at the Listening/Within boundary
-export const VOICE_FRACTION_TARGET = 0.62;     // at the top of the target range
-export const VOICE_FRACTION_END = 0.94;        // at the end of range: "nearly fills the edge"
-const VOICE_FLOOR_BELOW_SILENCE_DB = 6;        // how far below the silence boundary reaches the floor
-
-/** Voice-circle opacity: about 40% within range, solid at the end of range.
- *  Its color stays --color-voice throughout; rising opacity is what makes it
- *  read lighter as it nears the edge, and it never competes with the band. */
-export const VOICE_OPACITY_REST = 0.4;
+// The defaults as named constants, for callers and tests that read one value.
+export const BAND_MIN_FRACTION = DEFAULT_RING_SETTINGS.band.minFraction;
+export const BAND_MAX_FRACTION = DEFAULT_RING_SETTINGS.band.maxFraction;
+export const BAND_FULL_DB = DEFAULT_RING_SETTINGS.band.fullDb;
+export const BAND_FADE_MS = DEFAULT_RING_SETTINGS.band.fadeMs;
+export const BAND_THIN_FRACTION = DEFAULT_RING_SETTINGS.band.thinFraction;
+export const BAND_GROW_TAU_MS = DEFAULT_RING_SETTINGS.band.growMs;
+export const BAND_SHRINK_TAU_MS = DEFAULT_RING_SETTINGS.band.shrinkMs;
+export const VOICE_FRACTION_FLOOR = DEFAULT_RING_SETTINGS.voice.sizeRest;
+export const VOICE_FRACTION_SILENCE = DEFAULT_RING_SETTINGS.voice.sizeAtSilence;
+export const VOICE_FRACTION_TARGET = DEFAULT_RING_SETTINGS.voice.sizeAtTarget;
+export const VOICE_FRACTION_END = DEFAULT_RING_SETTINGS.voice.sizeAtEnd;
+export const VOICE_OPACITY_REST = DEFAULT_RING_SETTINGS.voice.opacityRest;
+export const VOICE_RISE_TAU_MS = DEFAULT_RING_SETTINGS.motion.riseMs;
+export const VOICE_FALL_TAU_MS = DEFAULT_RING_SETTINGS.motion.fallMs;
+export const VOICE_SETTLE_TAU_MS = DEFAULT_RING_SETTINGS.motion.fillMs;
 
 /** Glow on the band's outer edge, in px at the Expanded reference edge (PRD
  *  §5.2): `0 0 18px 6px` at 65% plus `0 0 38px 10px` at 30%. Scaled with the
@@ -48,35 +93,56 @@ export const GLOW = Object.freeze({ blur1: 18, spread1: 6, blur2: 38, spread2: 1
  *  the outer glow's spread plus half its blur. */
 const GLOW_REACH_PX = GLOW.spread2 + GLOW.blur2 / 2;
 
+// =============================================================================
+// Mapping (pure)
+// =============================================================================
+
 const clamp01 = (v) => Math.min(1, Math.max(0, v));
 const lerp = (a, b, t) => a + (b - a) * t;
 
 /**
- * Voice-circle appearance from the smoothed level. Continuous in the level,
- * not stepped by zone, except two zone rules from PRD §5.2: the circle only
+ * Whether the voice circle should follow the level or rest, with hysteresis.
+ *
+ * @param {boolean} open - the gate's state last frame
+ * @param {number} offsetDb - the visual level relative to the calibrated baseline
+ * @param {{ floorDb: number, hysteresisDb: number }} [gate]
+ * @returns {boolean}
+ */
+export function voiceGate(open, offsetDb, gate = DEFAULT_RING_SETTINGS.gate) {
+  if (!Number.isFinite(offsetDb)) return false;
+  return offsetDb >= gate.floorDb + (open ? 0 : gate.hysteresisDb);
+}
+
+/**
+ * Voice-circle appearance from the level. Continuous in the level, not
+ * stepped by zone, except two zone rules from PRD §5.2: the circle only
  * fills the edge once zone 3 is committed (until then it caps at "nearly
  * fills"), and the circle never claims an Outside look on its own.
  *
- * @param {number} offsetDb - the visual level (see followLevel()) relative to the calibrated
- *   baseline, in dB (engine.getLevelOffsetDb())
+ * @param {number} offsetDb - the visual level (see followLevel()) relative to
+ *   the calibrated baseline, in dB (engine.getLevelOffsetDb())
  * @param {{ silenceDb: number, targetDb: number, endDb: number }} bounds -
  *   the engine's zone boundaries as dB offsets (engine.getRangeBoundsDb())
  * @param {number} zone - the engine's committed zone, 0–3
+ * @param {typeof DEFAULT_RING_SETTINGS.voice} [v]
  * @returns {{ size: number, opacity: number }} size as a fraction of the
  *   edge diameter
  */
-export function voiceCircleState(offsetDb, bounds, zone) {
+export function voiceCircleState(offsetDb, bounds, zone, v = DEFAULT_RING_SETTINGS.voice) {
   if (zone === 3) return { size: 1, opacity: 1 };
   const { silenceDb, targetDb, endDb } = bounds;
-  const floorDb = silenceDb - VOICE_FLOOR_BELOW_SILENCE_DB;
+  const restDb = silenceDb - v.restBelowSilenceDb;
+  const useNormal = v.sizeAtNormal != null && silenceDb < 0 && targetDb > 0;
   let size;
-  if (!Number.isFinite(offsetDb) || offsetDb <= floorDb) size = VOICE_FRACTION_FLOOR;
-  else if (offsetDb <= silenceDb) size = lerp(VOICE_FRACTION_FLOOR, VOICE_FRACTION_SILENCE, (offsetDb - floorDb) / (silenceDb - floorDb));
-  else if (offsetDb <= targetDb) size = lerp(VOICE_FRACTION_SILENCE, VOICE_FRACTION_TARGET, (offsetDb - silenceDb) / (targetDb - silenceDb));
-  else size = lerp(VOICE_FRACTION_TARGET, VOICE_FRACTION_END, clamp01((offsetDb - targetDb) / (endDb - targetDb)));
+  if (!Number.isFinite(offsetDb) || offsetDb <= restDb) size = v.sizeRest;
+  else if (offsetDb <= silenceDb) size = lerp(v.sizeRest, v.sizeAtSilence, (offsetDb - restDb) / (silenceDb - restDb));
+  else if (useNormal && offsetDb <= 0) size = lerp(v.sizeAtSilence, v.sizeAtNormal, (offsetDb - silenceDb) / (0 - silenceDb));
+  else if (useNormal && offsetDb <= targetDb) size = lerp(v.sizeAtNormal, v.sizeAtTarget, offsetDb / targetDb);
+  else if (offsetDb <= targetDb) size = lerp(v.sizeAtSilence, v.sizeAtTarget, (offsetDb - silenceDb) / (targetDb - silenceDb));
+  else size = lerp(v.sizeAtTarget, v.sizeAtEnd, clamp01((offsetDb - targetDb) / (endDb - targetDb)));
 
   const toEnd = Number.isFinite(offsetDb) ? clamp01((offsetDb - targetDb) / (endDb - targetDb)) : 0;
-  return { size, opacity: lerp(VOICE_OPACITY_REST, 1, toEnd) };
+  return { size, opacity: lerp(v.opacityRest, v.opacityEnd, toEnd) };
 }
 
 /**
@@ -84,13 +150,14 @@ export function voiceCircleState(offsetDb, bounds, zone) {
  * end of range. Only meaningful once zone 3 is committed; the caller passes
  * 0 for any other zone.
  *
- * @param {number} overshootDb - smoothed level minus the end-of-range boundary
+ * @param {number} overshootDb - level minus the end-of-range boundary
  * @param {number} [maxFraction] - this layout's cap (see ringGeometry())
+ * @param {typeof DEFAULT_RING_SETTINGS.band} [b]
  * @returns {number}
  */
-export function bandFraction(overshootDb, maxFraction = BAND_MAX_FRACTION) {
-  const t = Number.isFinite(overshootDb) ? clamp01(overshootDb / BAND_FULL_DB) : 0;
-  return Math.min(maxFraction, lerp(BAND_MIN_FRACTION, BAND_MAX_FRACTION, t));
+export function bandFraction(overshootDb, maxFraction = BAND_MAX_FRACTION, b = DEFAULT_RING_SETTINGS.band) {
+  const t = Number.isFinite(overshootDb) ? clamp01(overshootDb / b.fullDb) : 0;
+  return Math.min(maxFraction, lerp(b.minFraction, b.maxFraction, t));
 }
 
 /**
@@ -101,15 +168,16 @@ export function bandFraction(overshootDb, maxFraction = BAND_MAX_FRACTION) {
  *
  * @param {number} preferredEdgePx
  * @param {number} windowMinPx - the smaller of the window's width and height
+ * @param {typeof DEFAULT_RING_SETTINGS.band} [b]
  * @returns {{ edge: number, bandMax: number, glowScale: number }}
  */
-export function ringGeometry(preferredEdgePx, windowMinPx) {
+export function ringGeometry(preferredEdgePx, windowMinPx, b = DEFAULT_RING_SETTINGS.band) {
   const reach = (edge) => GLOW_REACH_PX * (edge / REFERENCE_EDGE_PX);
   // Largest edge that still leaves room for the minimum band and its glow.
-  const fitEdge = windowMinPx / (1 + 2 * BAND_MIN_FRACTION + (2 * GLOW_REACH_PX) / REFERENCE_EDGE_PX);
+  const fitEdge = windowMinPx / (1 + 2 * b.minFraction + (2 * GLOW_REACH_PX) / REFERENCE_EDGE_PX);
   const edge = Math.max(0, Math.min(preferredEdgePx, fitEdge));
   const room = (windowMinPx - 2 * reach(edge) - edge) / (2 * edge);
-  const bandMax = Math.max(BAND_MIN_FRACTION, Math.min(BAND_MAX_FRACTION, room));
+  const bandMax = Math.max(b.minFraction, Math.min(b.maxFraction, room));
   return { edge, bandMax, glowScale: edge / REFERENCE_EDGE_PX };
 }
 
@@ -125,51 +193,39 @@ export function ease(current, target, dtMs, tauMs) {
  *  eased in linear RMS, rising faster than it falls, and only then
  *  converted to dB by the caller. Easing in RMS rather than dB makes a rise
  *  read quickly and a fall settle gently. */
-export const VOICE_RISE_TAU_MS = 90;
-export const VOICE_FALL_TAU_MS = 320;
-/** The one zone-driven step — nearly full to full when Outside range
- *  commits — eases over this, so it never snaps. Level-following itself
- *  gets no further easing beyond followLevel(). */
-export const VOICE_SETTLE_TAU_MS = 60;
-
-export function followLevel(liveRms, rawRms, dtMs) {
+export function followLevel(liveRms, rawRms, dtMs, motion = DEFAULT_RING_SETTINGS.motion) {
   const raw = Number.isFinite(rawRms) && rawRms > 0 ? rawRms : 0;
-  return ease(liveRms, raw, dtMs, raw > liveRms ? VOICE_RISE_TAU_MS : VOICE_FALL_TAU_MS);
+  return ease(liveRms, raw, dtMs, raw > liveRms ? motion.riseMs : motion.fallMs);
 }
 
-/** Band motion. The band is never shown half-transparent for long (a
- *  translucent chartreuse reads muddy over the dark background): it appears
- *  as a thin ring that fades in within BAND_FADE_MS while it grows to its
- *  width, and leaves the same way in reverse, shrinking back to the thin
- *  ring before fading out. */
-export const BAND_FADE_MS = 100;
-export const BAND_THIN_FRACTION = 0.01;   // the thin ring it grows from and shrinks to (~2px Expanded)
-export const BAND_GROW_TAU_MS = 120;
-export const BAND_SHRINK_TAU_MS = 50;
-
 /**
- * One frame of band motion.
+ * One frame of band motion. The band is never shown half-transparent for
+ * long (a translucent chartreuse reads muddy over the dark background): it
+ * appears as a thin ring that fades in within fadeMs while it grows to its
+ * width, and leaves the same way in reverse, shrinking back to the thin
+ * ring before fading out.
  *
  * @param {{ band: number, opacity: number }} state - band as a fraction of
  *   the edge diameter, opacity 0–1
  * @param {{ over: boolean, target: number, dtMs: number, reduced?: boolean }} input -
  *   over: zone 3 is committed; target: the band fraction to grow toward
+ * @param {typeof DEFAULT_RING_SETTINGS.band} [b]
  * @returns {{ band: number, opacity: number }}
  */
-export function stepBand({ band, opacity }, { over, target, dtMs, reduced = false }) {
-  const fadeStep = dtMs / BAND_FADE_MS;
+export function stepBand({ band, opacity }, { over, target, dtMs, reduced = false }, b = DEFAULT_RING_SETTINGS.band) {
+  const fadeStep = dtMs / b.fadeMs;
   if (reduced) {
     // Reduced motion: a fixed thickness that only fades in and out.
     return { band: target || band, opacity: clamp01(opacity + (over ? fadeStep : -fadeStep)) };
   }
   if (over) {
-    const from = opacity === 0 ? BAND_THIN_FRACTION : band;
-    return { band: ease(from, target, dtMs, BAND_GROW_TAU_MS), opacity: clamp01(opacity + fadeStep) };
+    const from = opacity === 0 ? b.thinFraction : band;
+    return { band: ease(from, target, dtMs, b.growMs), opacity: clamp01(opacity + fadeStep) };
   }
   if (opacity === 0) return { band: 0, opacity: 0 };
-  const shrunk = ease(band, 0, dtMs, BAND_SHRINK_TAU_MS);
+  const shrunk = ease(band, 0, dtMs, b.shrinkMs);
   // Stay opaque while shrinking; fade only once back at the thin ring.
-  const thin = shrunk <= BAND_THIN_FRACTION * 1.5;
+  const thin = shrunk <= b.thinFraction * 1.5;
   return { band: shrunk, opacity: thin ? clamp01(opacity - fadeStep) : opacity };
 }
 
@@ -188,6 +244,7 @@ const COMPONENT_CSS = `
     --band: 0px;
     --band-opacity: 0;
     --glow-scale: 1;
+    --glow-strength: 1;
   }
   .mezzo-ring > * {
     position: absolute;
@@ -201,8 +258,8 @@ const COMPONENT_CSS = `
     opacity: var(--band-opacity);
     box-shadow:
       0 0 0 var(--band) var(--color-accent),
-      0 0 calc(18px * var(--glow-scale)) calc(var(--band) + 6px * var(--glow-scale)) color-mix(in srgb, var(--color-accent) 65%, transparent),
-      0 0 calc(38px * var(--glow-scale)) calc(var(--band) + 10px * var(--glow-scale)) color-mix(in srgb, var(--color-accent) 30%, transparent);
+      0 0 calc(18px * var(--glow-scale)) calc(var(--band) + 6px * var(--glow-scale)) color-mix(in srgb, var(--color-accent) calc(65% * var(--glow-strength)), transparent),
+      0 0 calc(38px * var(--glow-scale)) calc(var(--band) + 10px * var(--glow-scale)) color-mix(in srgb, var(--color-accent) calc(30% * var(--glow-strength)), transparent);
   }
   /* Range edge: 1.5px cream at 60% with a very faint fill at rest; a 3px
      sage edge while approaching. Hidden under the band when over range. */
@@ -231,25 +288,42 @@ const COMPONENT_CSS = `
 export class MezzoRangeRing {
   /**
    * @param {HTMLElement} container - the element the ring centers in
-   * @param {{ preferredEdgePx?: () => number, levelOffsetDb?: (rms: number) => number }} [options] -
+   * @param {{
+   *   preferredEdgePx?: () => number,
+   *   levelOffsetDb?: (rms: number) => number,
+   *   settings?: typeof DEFAULT_RING_SETTINGS,
+   *   viewportSize?: () => { width: number, height: number },
+   * }} [options] -
    *   preferredEdgePx is read on every resize, so Compact and Expanded can
    *   prefer different edges; levelOffsetDb converts an RMS level to dB
-   *   relative to the calibrated baseline (the engine's getLevelOffsetDb())
+   *   relative to the calibrated baseline (the engine's getLevelOffsetDb());
+   *   settings is read every frame (the app passes nothing); viewportSize
+   *   is the window the ring must fit (default: the real window)
    */
-  constructor(container, { preferredEdgePx = () => REFERENCE_EDGE_PX, levelOffsetDb = () => -Infinity } = {}) {
+  constructor(container, {
+    preferredEdgePx = () => REFERENCE_EDGE_PX,
+    levelOffsetDb = () => -Infinity,
+    settings = DEFAULT_RING_SETTINGS,
+    viewportSize = null,
+  } = {}) {
     this.container = container;
     this.doc = container.ownerDocument;
     this.win = this.doc.defaultView;
     this.preferredEdgePx = preferredEdgePx;
     this.levelOffsetDb = levelOffsetDb;
+    this.settings = settings;
+    this.viewportSize = viewportSize ?? (() => ({ width: this.win.innerWidth || 0, height: this.win.innerHeight || 0 }));
 
     this.zone = 0;
     this.rawRms = 0;
+    this.inputRms = 0;
+    this.lastUpdateAt = null;
     this.liveRms = 0;
+    this.gateOpen = false;
     this.offsetDb = -Infinity;
     this.bounds = { silenceDb: -4, targetDb: 2, endDb: 5 };
-    this.geometry = ringGeometry(REFERENCE_EDGE_PX, REFERENCE_EDGE_PX * 2);
-    this.current = { size: VOICE_FRACTION_FLOOR, opacity: VOICE_OPACITY_REST, fill: 0, band: 0, bandOpacity: 0 };
+    this.geometry = ringGeometry(REFERENCE_EDGE_PX, REFERENCE_EDGE_PX * 2, settings.band);
+    this.current = { size: settings.voice.sizeRest, opacity: settings.voice.opacityRest, fill: 0, band: 0, bandOpacity: 0 };
     this.lastTime = null;
     this.rafId = null;
 
@@ -271,7 +345,14 @@ export class MezzoRangeRing {
    */
   update({ zone, rawRms, bounds }) {
     this.zone = Math.min(3, Math.max(0, zone || 0));
-    this.rawRms = rawRms;
+    // Optional extra smoothing of the raw input (off by default).
+    const now = this.win.performance?.now?.() ?? Date.now();
+    const sinceLast = this.lastUpdateAt === null ? 0 : now - this.lastUpdateAt;
+    this.lastUpdateAt = now;
+    const smoothing = this.settings.motion.inputSmoothingMs;
+    const raw = Number.isFinite(rawRms) && rawRms > 0 ? rawRms : 0;
+    this.inputRms = smoothing > 0 && sinceLast > 0 ? ease(this.inputRms, raw, sinceLast, smoothing) : raw;
+    this.rawRms = this.inputRms;
     if (bounds) this.bounds = bounds;
     this.el.dataset.zone = String(this.zone);
   }
@@ -308,8 +389,8 @@ export class MezzoRangeRing {
   /** Re-fits the ring to its window and preferred edge. Runs on every
    *  resize; call it directly after a layout-mode change too. */
   relayout() {
-    const windowMin = Math.min(this.win.innerWidth || 0, this.win.innerHeight || 0);
-    this.geometry = ringGeometry(this.preferredEdgePx(), windowMin);
+    const { width, height } = this.viewportSize();
+    this.geometry = ringGeometry(this.preferredEdgePx(), Math.min(width, height), this.settings.band);
     this.el.style.setProperty('--ring-edge', `${this.geometry.edge}px`);
     this.el.style.setProperty('--glow-scale', this.geometry.glowScale.toFixed(3));
   }
@@ -318,26 +399,30 @@ export class MezzoRangeRing {
     this.rafId = this.win.requestAnimationFrame(this._boundLoop);
     const dt = this.lastTime === null ? 16 : Math.min(now - this.lastTime, 100);
     this.lastTime = now;
+    const { gate, voice, motion, band: bandSettings } = this.settings;
 
     const reduced = !!this._reducedMotion?.matches;
     // The circle follows the level under reduced motion too: it is the
     // feedback, not decoration.
-    this.liveRms = followLevel(this.liveRms, this.rawRms, dt);
+    this.liveRms = followLevel(this.liveRms, this.rawRms, dt, motion);
     this.offsetDb = this.levelOffsetDb(this.liveRms);
-    const level = voiceCircleState(this.offsetDb, this.bounds, Math.min(this.zone, 2));
+    this.gateOpen = voiceGate(this.gateOpen, this.offsetDb, gate);
+    const level = this.gateOpen
+      ? voiceCircleState(this.offsetDb, this.bounds, Math.min(this.zone, 2), voice)
+      : { size: voice.sizeRest, opacity: voice.opacityRest };
     const over = this.zone === 3;
     // Reduced motion keeps the band static (see stepBand()).
     const bandTarget = over
-      ? (reduced ? BAND_MIN_FRACTION : bandFraction(this.offsetDb - this.bounds.endDb, this.geometry.bandMax))
+      ? (reduced ? bandSettings.minFraction : bandFraction(this.offsetDb - this.bounds.endDb, this.geometry.bandMax, bandSettings))
       : 0;
 
     const c = this.current;
     // The circle tracks the level directly; committing Outside range eases
     // it the rest of the way to full (see voiceCircleState()).
-    c.fill = ease(c.fill, over ? 1 : 0, dt, VOICE_SETTLE_TAU_MS);
+    c.fill = ease(c.fill, over ? 1 : 0, dt, motion.fillMs);
     c.size = level.size + (1 - level.size) * c.fill;
     c.opacity = level.opacity + (1 - level.opacity) * c.fill;
-    const band = stepBand({ band: c.band, opacity: c.bandOpacity }, { over, target: bandTarget, dtMs: dt, reduced });
+    const band = stepBand({ band: c.band, opacity: c.bandOpacity }, { over, target: bandTarget, dtMs: dt, reduced }, bandSettings);
     c.band = band.band;
     c.bandOpacity = band.opacity;
 
@@ -346,5 +431,6 @@ export class MezzoRangeRing {
     s.setProperty('--voice-opacity', c.opacity.toFixed(3));
     s.setProperty('--band', `${(c.band * this.geometry.edge).toFixed(2)}px`);
     s.setProperty('--band-opacity', c.bandOpacity.toFixed(3));
+    s.setProperty('--glow-strength', String(bandSettings.glowStrength));
   }
 }

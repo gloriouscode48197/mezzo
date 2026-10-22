@@ -93,8 +93,32 @@ export const FRAME_MS = 50;
 // browser/UI dependencies, per the file header above.
 const EPSILON = 1e-10;
 
+/**
+ * The zone rules above, as one settings object, so a tuning tool
+ * (design/prototypes/ring-tuner.html) can drive this same engine with other
+ * values. The app always uses these defaults.
+ *
+ * approachingWidthDb: when set, Approaching is that many dB before the end
+ * of range; null keeps the default rule (targetSpreadMult × spread, held
+ * at or below the end of range).
+ */
+export const DEFAULT_ZONE_SETTINGS = Object.freeze({
+  silenceSpreadMult: ZONE_SILENCE_SPREAD_MULT,
+  targetSpreadMult: ZONE_TARGET_SPREAD_MULT,
+  approachingWidthDb: null,
+  endSpreadMult: ZONE_ACCEPTABLE_SPREAD_MULT,
+  endCapDb: END_OF_RANGE_MAX_DB,
+  minSpreadDb: MIN_SPREAD_DB,
+  outsideDwellMs: OUTSIDE_ENTRY_DWELL_MS,
+});
+
 export class MezzoEngine {
-  constructor() {
+  /**
+   * @param {{ zoneSettings?: Partial<typeof DEFAULT_ZONE_SETTINGS> }} [options] -
+   *   the app passes nothing; the tuner passes a live settings object
+   */
+  constructor({ zoneSettings } = {}) {
+    this.zoneSettings = zoneSettings ?? DEFAULT_ZONE_SETTINGS;
     // Calibration values
     this.baselineRMS = null;
     this.spreadDb = null; // dB standard deviation of the trimmed calibration samples — see calibrate()
@@ -341,7 +365,7 @@ export class MezzoEngine {
       this.pendingOutsideSince = nowMs;
     }
 
-    if (nowMs - this.pendingOutsideSince >= OUTSIDE_ENTRY_DWELL_MS) {
+    if (nowMs - this.pendingOutsideSince >= this.zoneSettings.outsideDwellMs) {
       this.pendingOutsideSince = null;
       return 3;
     }
@@ -406,13 +430,13 @@ export class MezzoEngine {
    *   endDb: the end of range (Approaching/Outside)
    */
   getRangeBoundsDb() {
-    const spread = Math.max(this.spreadDb || 0, MIN_SPREAD_DB);
-    const endDb = Math.min(ZONE_ACCEPTABLE_SPREAD_MULT * spread, END_OF_RANGE_MAX_DB);
-    return {
-      silenceDb: ZONE_SILENCE_SPREAD_MULT * spread,
-      targetDb: Math.min(ZONE_TARGET_SPREAD_MULT * spread, endDb),
-      endDb,
-    };
+    const z = this.zoneSettings;
+    const spread = Math.max(this.spreadDb || 0, z.minSpreadDb);
+    const endDb = Math.min(z.endSpreadMult * spread, z.endCapDb);
+    const targetDb = z.approachingWidthDb == null
+      ? Math.min(z.targetSpreadMult * spread, endDb)
+      : endDb - z.approachingWidthDb;
+    return { silenceDb: z.silenceSpreadMult * spread, targetDb, endDb };
   }
 
   /**
