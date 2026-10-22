@@ -962,6 +962,75 @@ describe('MezzoEngine — dwell grace (tuner setting; the app default is 0)', ()
   });
 });
 
+describe('MezzoEngine — end of range from calibration peaks, and a short-term zone level (tuner settings)', () => {
+  const rmsAt = (db) => Math.pow(10, db / 20);
+  // A calibration that varies like real speech: -42 dB ± up to 5 dB.
+  const samples = Array.from({ length: 120 }, (_, i) => rmsAt(-42 + 5 * Math.sin(i * 0.7)));
+  const engineWith = (zone = {}) => new MezzoEngine({ zoneSettings: { ...DEFAULT_ZONE_SETTINGS, ...zone } });
+
+  it('the app defaults are unchanged: end of range from spread, momentary zones', () => {
+    assert.strictEqual(DEFAULT_ZONE_SETTINGS.endFrom, 'spread');
+    assert.strictEqual(DEFAULT_ZONE_SETTINGS.zoneWindowMs, 0);
+    const a = engineWith(); a.calibrate(samples);
+    const b = engineWith({ endFrom: 'spread' }); b.calibrate(samples);
+    assert.deepStrictEqual(a.getRangeBoundsDb(), b.getRangeBoundsDb());
+  });
+
+  it("'peaks' puts the end of range at the chosen percentile plus the margin, under the cap", () => {
+    const engine = engineWith({ endFrom: 'peaks', peakPercentile: 95, peakMarginDb: 2, endCapDb: 20 });
+    engine.calibrate(samples);
+    const peak = engine.getPeakOffsetDb();
+    assert.ok(peak > 0, 'the 95th percentile sits above the average');
+    assert.ok(Math.abs(engine.getRangeBoundsDb().endDb - (peak + 2)) < 1e-9);
+    engine.zoneSettings = { ...engine.zoneSettings, endCapDb: 3 };
+    assert.strictEqual(engine.getRangeBoundsDb().endDb, 3);
+  });
+
+  it("with 'peaks', speaking at every calibrated level stays under the end of range", () => {
+    const engine = engineWith({ endFrom: 'peaks', peakPercentile: 100, peakMarginDb: 2, endCapDb: 20 });
+    engine.calibrate(samples);
+    for (const rms of samples) assert.notStrictEqual(engine._computeZone(rms), 3);
+  });
+
+  it("a loaded profile has no samples, so 'peaks' falls back to the spread rule", () => {
+    const peaks = engineWith({ endFrom: 'peaks' });
+    peaks.loadCalibration({ baselineRMS: rmsAt(-42), spreadDb: 4 });
+    const spread = engineWith();
+    spread.loadCalibration({ baselineRMS: rmsAt(-42), spreadDb: 4 });
+    assert.strictEqual(peaks.getPeakOffsetDb(), null);
+    assert.deepStrictEqual(peaks.getRangeBoundsDb(), spread.getRangeBoundsDb());
+  });
+
+  it('a short-term window keeps one loud syllable from reaching Approaching or Outside', () => {
+    const run = (zoneWindowMs) => {
+      const engine = engineWith({ zoneWindowMs, outsideDwellMs: 0 });
+      engine.loadCalibration({ baselineRMS: rmsAt(-42), spreadDb: 4 });
+      engine.startMonitoring();
+      engine.gracePeriodActive = false;
+      const { endDb } = engine.getRangeBoundsDb();
+      const zones = [];
+      for (let t = 0; t < 2000; t += 50) {
+        const db = t >= 1000 && t < 1150 ? -42 + endDb + 3 : -42; // a 150ms syllable well past the end of range
+        engine.processFrame(rmsAt(db), t);
+        zones.push(engine.getZone());
+      }
+      return zones;
+    };
+    assert.ok(run(0).includes(3), 'momentary: the syllable reads Outside');
+    assert.ok(!run(1000).includes(3) && !run(1000).includes(2), 'one-second window: it stays Within range');
+  });
+
+  it('the short-term level is the mean in linear RMS, then dB', () => {
+    const engine = engineWith({ zoneWindowMs: 200 });
+    engine.loadCalibration({ baselineRMS: rmsAt(-40), spreadDb: 4 });
+    engine.startMonitoring();
+    engine.gracePeriodActive = false;
+    for (const [t, db] of [[0, -40], [50, -40], [100, -30], [150, -30]]) engine.processFrame(rmsAt(db), t);
+    const expected = 20 * Math.log10((2 * rmsAt(-40) + 2 * rmsAt(-30)) / 4) + 40;
+    assert.ok(Math.abs(engine.getShortTermOffsetDb() - expected) < 1e-6);
+  });
+});
+
 describe('MezzoEngine — range bounds for presentation', () => {
   for (const spreadDb of [4, 1]) { // 1 exercises the MIN_SPREAD_DB floor
     it(`boundaries match classification exactly (spread ${spreadDb} dB)`, () => {

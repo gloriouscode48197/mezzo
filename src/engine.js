@@ -107,6 +107,18 @@ const EPSILON = 1e-10;
  * Outside is committed the level must stay under for this long before it
  * leaves. 0 (the app's default) means any dip resets the count and the
  * first frame under leaves.
+ *
+ * endFrom: where the end of range comes from. 'spread' (the app's default)
+ * is endSpreadMult × spread; 'peaks' is the calibration's peakPercentile
+ * level plus peakMarginDb, so speaking at the calibrated level can't reach
+ * it. Both are limited by endCapDb. 'peaks' needs this calibration's own
+ * samples (calibrate()); a loaded profile without them falls back to
+ * 'spread'.
+ *
+ * zoneWindowMs: Approaching and Outside are judged on the mean level over
+ * this window (in linear RMS, then dB) instead of the momentary level, so
+ * single loud syllables don't count. 0 (the app's default) is momentary.
+ * Listening is still judged on the momentary level.
  */
 export const DEFAULT_ZONE_SETTINGS = Object.freeze({
   silenceSpreadMult: ZONE_SILENCE_SPREAD_MULT,
@@ -117,6 +129,10 @@ export const DEFAULT_ZONE_SETTINGS = Object.freeze({
   minSpreadDb: MIN_SPREAD_DB,
   outsideDwellMs: OUTSIDE_ENTRY_DWELL_MS,
   dwellGraceMs: 0,
+  endFrom: 'spread',
+  peakPercentile: 95,
+  peakMarginDb: 2,
+  zoneWindowMs: 0,
 });
 
 export class MezzoEngine {
@@ -149,6 +165,9 @@ export class MezzoEngine {
     // any dip in progress, entering or leaving) is reset with it — see
     // _resetDwell() and zoneSettings.dwellGraceMs.
     this._resetDwell();
+    this.calibrationSamples = null; // this calibration's own RMS samples, for 'peaks'
+    this.levelWindow = [];          // recent [timestamp, rms] frames, for zoneWindowMs
+    this.shortTermRms = 0;
   }
 
   /** Clears every piece of Outside-range dwell state. */
@@ -267,7 +286,30 @@ export class MezzoEngine {
     // Set calibration values
     this.baselineRMS = mean;
     this.spreadDb = spreadDb;
+    this.calibrationSamples = [...rmsSamples];
     this.calibrationComplete = true;
+  }
+
+  /**
+   * The calibration's level at zoneSettings.peakPercentile, in dB relative
+   * to the baseline — how loud this person's normal speech got at its
+   * peaks. null when this calibration has no samples (a loaded profile).
+   *
+   * @returns {number | null}
+   */
+  getPeakOffsetDb() {
+    const samples = this.calibrationSamples;
+    if (!samples?.length || !this.baselineRMS) return null;
+    const sorted = [...samples].sort((a, b) => a - b);
+    const p = Math.min(100, Math.max(0, this.zoneSettings.peakPercentile)) / 100;
+    const peak = sorted[Math.min(sorted.length - 1, Math.floor(p * (sorted.length - 1) + 0.5))];
+    return MezzoEngine.rmsToDb(peak) - MezzoEngine.rmsToDb(this.baselineRMS);
+  }
+
+  /** The level Approaching and Outside are judged on, in dB vs baseline
+   *  (the momentary level when zoneWindowMs is 0). */
+  getShortTermOffsetDb() {
+    return this.getLevelOffsetDb(this.shortTermRms);
   }
 
   // ===========================================================================
@@ -291,6 +333,8 @@ export class MezzoEngine {
     // Reset zone state
     this.currentZone = 0;
     this._resetDwell();
+    this.levelWindow = [];
+    this.shortTermRms = 0;
 
     // Set monitoring state
     this.monitoringActive = true;
@@ -315,6 +359,8 @@ export class MezzoEngine {
     this.gracePeriodActive = false;
     this.graceRemainingMs = 0;
     this._resetDwell();
+    this.levelWindow = [];
+    this.shortTermRms = 0;
 
     // Set monitoring state
     this.monitoringActive = false;
@@ -351,7 +397,20 @@ export class MezzoEngine {
       return; // No zone updates during grace period
     }
 
-    this.currentZone = this._resolveZone(this._computeZone(rmsValue), nowMs);
+    this.shortTermRms = this._shortTermRms(rmsValue, nowMs);
+    this.currentZone = this._resolveZone(this._computeZone(rmsValue, this.shortTermRms), nowMs);
+  }
+
+  /** Mean RMS over the last zoneWindowMs (just this frame when it's 0). */
+  _shortTermRms(rmsValue, nowMs) {
+    const windowMs = this.zoneSettings.zoneWindowMs || 0;
+    if (windowMs <= 0) {
+      this.levelWindow = [];
+      return rmsValue;
+    }
+    this.levelWindow.push([nowMs, rmsValue]);
+    while (this.levelWindow.length && this.levelWindow[0][0] <= nowMs - windowMs) this.levelWindow.shift();
+    return this.levelWindow.reduce((sum, [, rms]) => sum + rms, 0) / this.levelWindow.length;
   }
 
   /**
@@ -492,7 +551,8 @@ export class MezzoEngine {
   getRangeBoundsDb() {
     const z = this.zoneSettings;
     const spread = Math.max(this.spreadDb || 0, z.minSpreadDb);
-    const endDb = Math.min(z.endSpreadMult * spread, z.endCapDb);
+    const peakDb = z.endFrom === 'peaks' ? this.getPeakOffsetDb() : null;
+    const endDb = Math.min(peakDb === null ? z.endSpreadMult * spread : peakDb + z.peakMarginDb, z.endCapDb);
     const targetDb = z.approachingWidthDb == null
       ? Math.min(z.targetSpreadMult * spread, endDb)
       : endDb - z.approachingWidthDb;
@@ -531,6 +591,7 @@ export class MezzoEngine {
       throw new Error('loadCalibration requires a positive, finite baselineRMS');
     }
     this.baselineRMS = baselineRMS;
+    this.calibrationSamples = null; // a loaded profile carries no samples, so 'peaks' falls back to 'spread'
     // Older profiles saved before spreadDb existed carry none — falls back
     // to 0, which _computeZone()'s own MIN_SPREAD_DB floor already handles
     // exactly like a freshly-measured, perfectly uniform calibration would.
@@ -552,17 +613,20 @@ export class MezzoEngine {
    * @returns {number}
    * @private
    */
-  _computeZone(rmsValue) {
+  _computeZone(rmsValue, shortTermRms = rmsValue) {
     if (!this.baselineRMS || this.baselineRMS <= 0 || !rmsValue || rmsValue <= 0) {
       return 0;
     }
 
     const { silenceDb, targetDb, endDb } = this.getRangeBoundsDb();
     const diffDb = MezzoEngine.rmsToDb(rmsValue) - MezzoEngine.rmsToDb(this.baselineRMS);
+    // Approaching and Outside are judged on the short-term level (the same
+    // as the momentary one unless zoneWindowMs is set).
+    const termDb = MezzoEngine.rmsToDb(shortTermRms) - MezzoEngine.rmsToDb(this.baselineRMS);
 
     if (diffDb < silenceDb) return 0;
-    if (diffDb <= targetDb) return 1;
-    if (diffDb <= endDb) return 2;
+    if (termDb <= targetDb) return 1;
+    if (termDb <= endDb) return 2;
     return 3;
   }
 

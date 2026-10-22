@@ -130,6 +130,7 @@
   .ctl .auto { grid-column: 1 / -1; font-size: 12px; color: var(--color-text-muted); display: inline-flex; gap: 6px; align-items: center; }
   .ctl.is-auto input[type=range] { opacity: 0.35; }
   .ctl.toggle-row { grid-template-columns: auto 1fr; align-items: center; }
+  .ctl select { font: inherit; font-size: 12px; color: var(--color-text); background: #1b1c1e; border: 1px solid color-mix(in srgb, var(--color-text) 20%, transparent); border-radius: 3px; padding: 3px 6px; }
   .ctl.toggle-row input { grid-column: auto; width: auto; }
   .actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 16px 0 6px; }
   textarea { width: 100%; min-height: 120px; font-family: var(--font-mono); font-size: 12px; color: var(--color-text); background: #1b1c1e; border: 1px solid color-mix(in srgb, var(--color-text) 20%, transparent); border-radius: 3px; padding: 8px; }
@@ -279,6 +280,10 @@ const GROUPS = [
     { path: 'ring.voice.opacityEnd', label: 'Opacity at end of range', min: 0, max: 1, step: 0.01, ...pct, hint: 'How solid it gets near the edge.' },
   ]],
   ['Range boundaries', [
+    { path: 'zones.endFrom', label: 'End of range from', type: 'choice', options: [['spread', 'average + spread'], ['peaks', 'calibration peaks']], hint: 'Peaks keep your normal speech, including its loud moments, inside the range. Needs a Calibrate (typical values fall back to spread).' },
+    { path: 'zones.peakPercentile', label: 'Calibration peak percentile', min: 50, max: 100, step: 1, unit: '%', digits: 0, hint: 'Which of your calibration’s loud moments counts as a peak. 95% ignores the top 5%.' },
+    { path: 'zones.peakMarginDb', label: 'Margin above your peaks', min: 0, max: 10, step: 0.5, unit: ' dB', digits: 1, hint: 'How far above those peaks the end of range sits.' },
+    { path: 'zones.zoneWindowMs', label: 'Zone averaging window', min: 0, max: 3000, step: 50, unit: ' ms', digits: 0, hint: 'Approaching and Outside are judged on your average level over this window. 0 is momentary (today’s behavior). The circle still follows the momentary level.' },
     { path: 'zones.endCapDb', label: 'End-of-range cap', min: 2, max: 20, step: 0.5, unit: ' dB', digits: 1, hint: 'The end of range never sits higher than this above your normal level.' },
     { path: 'zones.endSpreadMult', label: 'End of range, × spread', min: 1, max: 5, step: 0.1, unit: '×', digits: 1, hint: 'End of range as a multiple of how much your voice varied during calibration.' },
     { path: 'zones.approachingWidthDb', label: 'Approaching width', min: 0.5, max: 8, step: 0.5, unit: ' dB', digits: 1, nullable: true, autoValue: 2, hint: 'How many dB before the end of range Approaching starts. Auto is the app’s current rule (1 × spread).' },
@@ -339,6 +344,19 @@ function buildControls() {
     groupDots.push([summary.querySelector('.changed-dot'), defs]);
     for (const def of defs) {
       const id = 'c-' + def.path.replace(/\./g, '-');
+      if (def.type === 'choice') {
+        const row = document.createElement('div');
+        row.className = 'ctl';
+        row.innerHTML = `<label for="${id}"></label><select id="${id}"></select><span class="hint"></span>`;
+        row.querySelector('label').textContent = def.label;
+        row.querySelector('.hint').textContent = def.hint;
+        const select = row.querySelector('select');
+        for (const [value, text] of def.options) select.add(new Option(text, value));
+        select.addEventListener('change', () => { setPath(def.path, select.value); changed(); });
+        controls.push(() => { select.value = getPath(def.path); });
+        fs.appendChild(row);
+        continue;
+      }
       if (def.type === 'toggle') {
         const row = document.createElement('div');
         row.className = 'ctl toggle-row';
@@ -619,7 +637,8 @@ function renderReadout() {
   const zone = engine.getZone();
   const vis = ring.offsetDb;
   box.innerHTML = `
-    <span>level vs normal <b>${fmt(engine.getLevelOffsetDb(lastSmoothed))} dB</b> (circle ${fmt(vis)})</span>
+    <span>level vs normal <b>${fmt(engine.getLevelOffsetDb(lastSmoothed))} dB</b> · short-term <b>${fmt(engine.getShortTermOffsetDb())} dB</b> (circle ${fmt(vis)})</span>
+    <span>calibration peak <b>${engine.getPeakOffsetDb() === null ? 'n/a' : `${fmt(engine.getPeakOffsetDb())} dB`}</b> (${settings.zones.peakPercentile}th pct)</span>
     <span>zone <b class="zone-${zone}">${ZONES[zone]}</b></span>
     <span>gate <b>${ring.gateOpen ? 'open' : 'resting'}</b></span>
     <span>${dwellText()}</span>
@@ -636,6 +655,7 @@ function measured() {
   return {
     speakingDb: calibrated ? +toDb(engine.baselineRMS).toFixed(1) : null,
     spreadDb: calibrated ? +engine.spreadDb.toFixed(2) : null,
+    peakDb: engine.getPeakOffsetDb() === null ? null : +engine.getPeakOffsetDb().toFixed(1),
     roomNoiseDb: roomNoiseRms > 0 ? +toDb(roomNoiseRms).toFixed(1) : null,
     speakingAboveRoomDb: calibrated && roomNoiseRms > 0 ? +(toDb(engine.baselineRMS) - toDb(roomNoiseRms)).toFixed(1) : null,
   };
