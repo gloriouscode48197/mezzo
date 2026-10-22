@@ -59,8 +59,9 @@ export const DEFAULT_RING_SETTINGS = Object.freeze({
     sizeAtNormal: 0.45,      // at the calibrated level: comfortably inside the edge
     sizeAtTarget: 0.55,
     sizeAtEnd: 0.8,          // just before Outside range; full only once Outside commits
-    opacityRest: 0.45,       // also the range edge's opacity at rest
+    opacityRest: 0.45,
     opacityEnd: 1,
+    edgeOpacity: 0.45,       // the range edge at rest; never above opacityRest (see edgeOpacityFor())
   }),
   motion: Object.freeze({ riseMs: 150, fallMs: 400, inputSmoothingMs: 100, fillMs: 60, settleMs: 1000 }),
   band: Object.freeze({
@@ -77,8 +78,6 @@ export const DEFAULT_RING_SETTINGS = Object.freeze({
 
 /** The ring's edge as a fraction of the window's short side. */
 export const RING_EDGE_FRACTION = 0.6;
-/** While monitoring is paused, the ring shrinks to this. */
-export const RING_EDGE_FRACTION_PAUSED = 0.4;
 
 // The defaults as named constants, for callers and tests that read one value.
 export const BAND_MIN_FRACTION = DEFAULT_RING_SETTINGS.band.minFraction;
@@ -125,6 +124,18 @@ const lerp = (a, b, t) => a + (b - a) * t;
 export function roomMarginDbFor(roomNoiseOffsetDb, gate = DEFAULT_RING_SETTINGS.gate) {
   if (gate.noisyGapDb == null || !Number.isFinite(roomNoiseOffsetDb)) return gate.roomMarginDb;
   return -roomNoiseOffsetDb < gate.noisyGapDb ? gate.noisyMarginDb : gate.roomMarginDb;
+}
+
+/**
+ * The range edge's opacity at rest: --color-voice at voice.edgeOpacity,
+ * never brighter than the voice circle at rest (voice.opacityRest).
+ *
+ * @param {typeof DEFAULT_RING_SETTINGS.voice} [v]
+ * @returns {number}
+ */
+export function edgeOpacityFor(v = DEFAULT_RING_SETTINGS.voice) {
+  const edge = Number.isFinite(v.edgeOpacity) ? v.edgeOpacity : v.opacityRest;
+  return Math.max(0, Math.min(edge, v.opacityRest));
 }
 
 /**
@@ -319,8 +330,8 @@ const COMPONENT_CSS = `
       0 0 calc(18px * var(--glow-scale)) calc(var(--band) + 6px * var(--glow-scale)) color-mix(in srgb, var(--color-accent) calc(65% * var(--glow-strength)), transparent),
       0 0 calc(38px * var(--glow-scale)) calc(var(--band) + 10px * var(--glow-scale)) color-mix(in srgb, var(--color-accent) calc(30% * var(--glow-strength)), transparent);
   }
-  /* Range edge: 1.5px --color-voice at the voice circle's rest opacity
-     (--edge-rest-opacity, from voice.opacityRest), with a very faint fill;
+  /* Range edge: 1.5px --color-voice at --edge-rest-opacity (voice.edgeOpacity,
+     never above the voice circle's rest opacity), with a very faint fill;
      a 3px sage edge while approaching. Hidden under the band when over
      range. */
   .mezzo-ring-edge {
@@ -340,9 +351,6 @@ const COMPONENT_CSS = `
     transform: scale(var(--voice-size));
     will-change: transform, opacity;
   }
-  /* Paused: just the edge, no voice circle, band, or zone color. */
-  .mezzo-ring[data-paused] .mezzo-ring-voice,
-  .mezzo-ring[data-paused] .mezzo-ring-band { opacity: 0; }
   @media (prefers-reduced-motion: reduce) {
     .mezzo-ring-edge { transition: opacity 0.15s linear; }
   }
@@ -427,23 +435,6 @@ export class MezzoRangeRing {
     this.el.dataset.zone = String(this.zone);
   }
 
-  /** Paused: the ring shows only its edge (the caller shrinks it via
-   *  preferredEdgePx and relayout()). Resuming starts from rest. */
-  setPaused(paused) {
-    this.paused = !!paused;
-    if (this.paused) {
-      this.el.setAttribute('data-paused', '');
-      this.update({ zone: 0, rawRms: 0, bounds: this.bounds });
-      this.liveRms = 0;
-      this.gateOpen = false;
-      this.current.band = 0;
-      this.current.bandOpacity = 0;
-      this.current.fill = 0;
-    } else {
-      this.el.removeAttribute('data-paused');
-    }
-  }
-
   destroy() {
     if (this.rafId) { this.win.cancelAnimationFrame(this.rafId); this.rafId = null; }
     this.resizeObserver?.disconnect();
@@ -523,6 +514,6 @@ export class MezzoRangeRing {
     s.setProperty('--band', `${(c.band * this.geometry.edge).toFixed(2)}px`);
     s.setProperty('--band-opacity', c.bandOpacity.toFixed(3));
     s.setProperty('--glow-strength', String(bandSettings.glowStrength));
-    s.setProperty('--edge-rest-opacity', String(voice.opacityRest));
+    s.setProperty('--edge-rest-opacity', String(edgeOpacityFor(voice)));
   }
 }

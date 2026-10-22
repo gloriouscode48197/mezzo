@@ -328,64 +328,57 @@ test.describe('Monitoring presentation: retired content', () => {
   });
 });
 
-test.describe('Monitoring presentation: responsive tiers (Expanded)', () => {
-  test('382×480 reference: profile, Range Ring, Stop pill, and the top-right Compact toggle are all present', async ({ page, context }) => {
-    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 382, height: 480 } });
+// Stop (2026-10-22): bottom left at every size. Under about 300px on the
+// short side it's a 32px icon; larger, a "Stop" pill at least 44px tall.
+// Its accessible name is always "Stop monitoring". The profile name always
+// shows.
+async function stopShape(monitoringScreen) {
+  const stop = monitoringScreen.locator('.pip-control-btn-stop');
+  const screenBox = await monitoringScreen.boundingBox();
+  const box = await stop.boundingBox();
+  return {
+    stop, box,
+    left: box.x - screenBox.x,
+    bottom: screenBox.y + screenBox.height - (box.y + box.height),
+    labelShown: await stop.locator('.pip-control-label').isVisible(),
+  };
+}
 
-    await expect(monitoringScreen.locator('.pip-profile-info')).toBeVisible();
-    await expect(monitoringScreen.locator('.mezzo-ring')).toBeVisible();
-    const stop = monitoringScreen.locator('.pip-control-btn-stop');
-    await expect(stop).toBeVisible();
-    await expect(stop).toContainText('Stop monitoring');
-    await expect(monitoringScreen.locator('.pip-control-btn-compact')).toBeVisible();
-    await assertNoOverflow(pipPage);
-  });
+test.describe('Monitoring presentation: Stop and the profile name at every size (Expanded)', () => {
+  for (const size of [{ width: 382, height: 480 }, { width: 340, height: 425 }, { width: 300, height: 375 }]) {
+    test(`${size.width}×${size.height}: profile name, Range Ring, a "Stop" pill (≥44px) bottom left, and the top-right Compact toggle`, async ({ page, context }) => {
+      const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size });
+      await expect(monitoringScreen.locator('.pip-profile-info')).toBeVisible();
+      await expect(monitoringScreen.locator('.mezzo-ring')).toBeVisible();
+      const { stop, box, left, bottom, labelShown } = await stopShape(monitoringScreen);
+      expect(labelShown).toBe(true);
+      await expect(stop).toHaveText('Stop');
+      await expect(stop).toHaveAttribute('aria-label', 'Stop monitoring');
+      expect(box.height).toBeGreaterThanOrEqual(44);
+      expect(left).toBeLessThan(20);
+      expect(bottom).toBeLessThan(20);
+      await expect(monitoringScreen.locator('.pip-control-btn-compact')).toBeVisible();
+      await assertNoOverflow(pipPage);
+    });
+  }
 
-  test('~340×425: profile name drops; the Range Ring, Stop pill, and Compact toggle remain', async ({ page, context }) => {
-    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 340, height: 425 } });
-
-    await expect(monitoringScreen.locator('.mezzo-ring')).toBeVisible();
-    await expect(monitoringScreen.locator('.pip-profile-info')).toBeHidden();
-    // Still the full pill here (with its "Stop monitoring" text) — the
-    // icon-only Stop treatment doesn't start until the next tier down
-    // (~300×375), see below.
-    const stop = monitoringScreen.locator('.pip-control-btn-stop');
-    await expect(stop).toBeVisible();
-    await expect(stop).toContainText('Stop monitoring');
-    await expect(monitoringScreen.locator('.pip-control-btn-compact')).toBeVisible();
-    await assertNoOverflow(pipPage);
-  });
-
-  test('~300×375: the Stop pill becomes an always-visible bottom-left icon; the Range Ring and Compact toggle remain', async ({ page, context }) => {
-    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 300, height: 375 } });
-
-    await expect(monitoringScreen.locator('.mezzo-ring')).toBeVisible();
-    await expect(monitoringScreen.locator('.pip-profile-info')).toBeHidden();
-    const stop = monitoringScreen.locator('.pip-control-btn-stop');
-    await expect(stop).toBeVisible();
-    // Not hover-gated at this tier (unlike Compact) — visible without any hover/focus.
-    await expect(stop).toHaveCSS('opacity', '1');
-    const stopBox = await stop.boundingBox();
-    const screenBox = await monitoringScreen.boundingBox();
-    expect(stopBox.x - screenBox.x).toBeLessThan(30); // bottom-left corner
-    expect(screenBox.y + screenBox.height - (stopBox.y + stopBox.height)).toBeLessThan(30);
-    await expect(monitoringScreen.locator('.pip-control-btn-compact')).toBeVisible();
-    await assertNoOverflow(pipPage);
-  });
-
-  test('~260×325: the header drops, leaving only the Range Ring, the bottom-left Stop icon, and the top-right Compact toggle', async ({ page, context }) => {
-    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 260, height: 325 } });
-
-    await expect(monitoringScreen.locator('.pip-monitoring-header')).toBeHidden();
-    await expect(monitoringScreen.locator('.mezzo-ring')).toBeVisible();
-    await expect(monitoringScreen.locator('.pip-control-btn-stop')).toBeVisible();
-    await expect(monitoringScreen.locator('.pip-control-btn-compact')).toBeVisible();
-    await assertNoOverflow(pipPage);
-  });
+  for (const size of [{ width: 260, height: 325 }, { width: 400, height: 280 }]) {
+    test(`${size.width}×${size.height} (short side under 300px): Stop is a 32px icon bottom left; the profile name still shows`, async ({ page, context }) => {
+      const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size });
+      await expect(monitoringScreen.locator('.pip-profile-info')).toBeVisible();
+      const { stop, box, left, bottom, labelShown } = await stopShape(monitoringScreen);
+      expect(labelShown).toBe(false);
+      await expect(stop).toHaveAttribute('aria-label', 'Stop monitoring');
+      expect([Math.round(box.width), Math.round(box.height)]).toEqual([32, 32]);
+      expect(left).toBeLessThan(20);
+      expect(bottom).toBeLessThan(20);
+      await assertNoOverflow(pipPage);
+    });
+  }
 });
 
 test.describe('Monitoring presentation: explicit Compact', () => {
-  test('220×220 at rest: the Range Ring with the profile name above it; Stop, Pause, and Expand not yet revealed', async ({ page, context }) => {
+  test('220×220 at rest: the Range Ring with the profile name above it; Stop and Expand not yet revealed', async ({ page, context }) => {
     const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 220, height: 220 } });
     await enterCompact(pipPage, monitoringScreen);
 
@@ -404,7 +397,6 @@ test.describe('Monitoring presentation: explicit Compact', () => {
     const expandBtn = monitoringScreen.locator('.pip-control-btn-expand');
     await expect(stop).toHaveCSS('opacity', '0');
     await expect(expandBtn).toHaveCSS('opacity', '0');
-    await expect(monitoringScreen.locator('.pip-control-btn-pause')).toHaveCSS('opacity', '0');
     // Never focusable-while-invisible check is separate (below) — this only
     // confirms the resting, unrevealed visual state.
     await assertNoOverflow(pipPage);
@@ -432,9 +424,9 @@ test.describe('Monitoring presentation: explicit Compact', () => {
     // Expand: top-right — the same corner the Expanded-mode Compact toggle occupies.
     expect(screenBox.x + screenBox.width - (expandBox.x + expandBox.width)).toBeLessThan(30);
     expect(expandBox.y - screenBox.y).toBeLessThan(30);
-    // 28×28 targets, per the accepted design.
-    expect(stopBox.width).toBeCloseTo(28, 0);
-    expect(stopBox.height).toBeCloseTo(28, 0);
+    // Stop: a 32px icon at this size; Expand: 28px.
+    expect(stopBox.width).toBeCloseTo(32, 0);
+    expect(stopBox.height).toBeCloseTo(32, 0);
     expect(expandBox.width).toBeCloseTo(28, 0);
     expect(expandBox.height).toBeCloseTo(28, 0);
   });
@@ -479,7 +471,7 @@ test.describe('Monitoring presentation: explicit Compact', () => {
     await expect(pipPage.locator('body')).toHaveAttribute('data-layout', 'expanded');
     // Monitoring is still active — the ring and Stop pill are back.
     await expect(monitoringScreen.locator('.mezzo-ring')).toBeVisible();
-    await expect(monitoringScreen.locator('.pip-control-btn-stop')).toContainText('Stop monitoring');
+    await expect(monitoringScreen.locator('.pip-control-btn-stop')).toHaveText('Stop');
 
     await monitoringScreen.locator('.pip-control-btn-compact').click();
     await expect(pipPage.locator('body')).toHaveAttribute('data-layout', 'compact');
@@ -487,33 +479,14 @@ test.describe('Monitoring presentation: explicit Compact', () => {
 });
 
 test.describe('Monitoring presentation: manual resize, larger windows, and non-reference aspect ratios', () => {
-  test('a larger window (480×600) does not enlarge the ring past its Expanded edge, or enlarge typography or controls', async ({ page, context }) => {
+  test('the window is freely resizable: the ring stays at 60% of the short side at any size', async ({ page, context }) => {
     const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 480, height: 600 } });
-
-    const box = await monitoringScreen.locator('.mezzo-ring').boundingBox();
-    expect(box.width).toBeCloseTo(EXPANDED_EDGE, 0);
-    expect(box.height).toBeCloseTo(EXPANDED_EDGE, 0);
-    await expect(monitoringScreen.locator('.pip-profile-info')).toHaveCSS('font-size', '12px');
-    await assertNoOverflow(pipPage);
-  });
-
-  test('a non-4:5 manual size (e.g. very wide, short) sheds content by height without clipping or overflow', async ({ page, context }) => {
-    // Height (300) is below the ~324px status threshold and the ~374px
-    // stop-pill threshold, even though width (400) is comfortably above
-    // both width thresholds — confirming the OR-combined width/height
-    // breakpoints shed content on either dimension alone.
-    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 400, height: 300 } });
-
-    await expect(monitoringScreen.locator('.pip-monitoring-header')).toBeHidden();
-    await assertNoOverflow(pipPage);
-  });
-
-  test('a non-4:5 manual size (e.g. very narrow, tall) sheds content by width without clipping or overflow', async ({ page, context }) => {
-    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 240, height: 480 } });
-
-    await expect(monitoringScreen.locator('.pip-monitoring-header')).toBeHidden();
-    await expect(monitoringScreen.locator('.mezzo-ring')).toBeVisible();
-    await assertNoOverflow(pipPage);
+    for (const size of [{ width: 480, height: 600 }, { width: 400, height: 280 }, { width: 240, height: 480 }, { width: 600, height: 600 }]) {
+      await pipPage.setViewportSize(size);
+      await expect.poll(async () => (await monitoringScreen.locator('.mezzo-ring').boundingBox()).width).toBeCloseTo(0.6 * Math.min(size.width, size.height), 0);
+      await assertNoOverflow(pipPage);
+    }
+    await expect(monitoringScreen.locator('.pip-profile-info')).toBeVisible();
   });
 
   test('manual resize does not itself change [data-layout] — layout mode stays Expanded the whole time', async ({ page, context }) => {
@@ -546,8 +519,8 @@ test.describe('Monitoring presentation: visualization stability', () => {
   });
 });
 
-test.describe('Monitoring presentation: Compact default and Pause/Resume (2026-10-22)', () => {
-  test('Start monitoring opens Compact (220×220): ring at 60% of the short side, name above, Expand top right, Stop bottom left, Pause bottom right', async ({ page, context }) => {
+test.describe('Monitoring presentation: the Compact default (2026-10-22)', () => {
+  test('Start monitoring opens Compact (220×220): ring at 60% of the short side, name above, Expand top right, Stop bottom left; no Pause', async ({ page, context }) => {
     const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 220, height: 220 }, layout: 'compact' });
     await expect(pipPage.locator('body')).toHaveAttribute('data-layout', 'compact');
     await pipPage.mouse.move(110, 110); // reveal the corner controls
@@ -555,50 +528,11 @@ test.describe('Monitoring presentation: Compact default and Pause/Resume (2026-1
     expect(ring.width).toBeCloseTo(COMPACT_EDGE, 0);
     await expect(monitoringScreen.locator('.pip-profile-info')).toBeVisible();
     const box = (sel) => monitoringScreen.locator(sel).boundingBox();
-    const [expandBox, stopBox, pauseBox] = await Promise.all([box('.pip-control-btn-expand'), box('.pip-control-btn-stop'), box('.pip-control-btn-pause')]);
+    const [expandBox, stopBox] = await Promise.all([box('.pip-control-btn-expand'), box('.pip-control-btn-stop')]);
     expect(expandBox.x).toBeGreaterThan(150); expect(expandBox.y).toBeLessThan(40);
     expect(stopBox.x).toBeLessThan(40); expect(stopBox.y).toBeGreaterThan(170);
-    expect(pauseBox.x).toBeGreaterThan(150); expect(pauseBox.y).toBeGreaterThan(170);
-    await expect(monitoringScreen.locator('.pip-control-btn-pause')).toHaveAttribute('aria-label', 'Pause monitoring');
+    await expect(monitoringScreen.locator('.pip-control-btn-pause, [aria-label*="Pause"]')).toHaveCount(0);
     await assertNoOverflow(pipPage);
-  });
-
-  test('Pause releases the microphone and shows a smaller, empty ring with "Paused"; Resume re-acquires it, keeps the profile, and announces it', async ({ page, context }) => {
-    // Track every microphone stream the app opens, to check it's released.
-    await page.addInitScript(() => {
-      window.__streams = [];
-      const real = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
-      navigator.mediaDevices.getUserMedia = async (c) => { const st = await real(c); window.__streams.push(st); return st; };
-    });
-    const liveTracks = () => page.evaluate(() => window.__streams.flatMap((st) => st.getTracks()).filter((t) => t.readyState === 'live').length);
-    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 220, height: 220 }, layout: 'compact', driven: true });
-    const live = monitoringScreen.locator('.pip-zone-live');
-    const pause = monitoringScreen.locator('.pip-control-btn-pause');
-    expect(await liveTracks()).toBe(1);
-
-    await pause.click();
-    await expect(pause).toHaveAttribute('aria-label', 'Resume monitoring');
-    expect(await liveTracks(), 'the microphone is released').toBe(0);
-    await expect(live).toHaveText('Paused');
-    await expect(monitoringScreen.locator('.pip-profile-info')).toHaveText('Paused');
-    await expect(page.locator('#dock-status-text')).toHaveText('Monitoring is not active');
-    const ring = monitoringScreen.locator('.mezzo-ring');
-    await expect(ring).toHaveAttribute('data-paused', '');
-    await expect(ring).toHaveAttribute('data-zone', '0');
-    await expect(ring.locator('.mezzo-ring-voice')).toHaveCSS('opacity', '0');
-    await expect.poll(async () => (await ring.boundingBox()).width).toBeCloseTo(0.4 * 220, 0);
-    // Resume stays visible while paused: it's the next thing to do.
-    await pipPage.mouse.move(-10, -10);
-    await expect(pause).toHaveCSS('opacity', '1');
-
-    await pause.click();
-    await expect(pause).toHaveAttribute('aria-label', 'Pause monitoring');
-    await expect(live).toHaveText('Monitoring resumed.');
-    expect(await liveTracks(), 'the microphone is back').toBe(1);
-    await expect(monitoringScreen.locator('.pip-profile-info')).toHaveText('Kitchen');
-    await expect(ring).not.toHaveAttribute('data-paused', '');
-    await expect.poll(async () => (await ring.boundingBox()).width).toBeCloseTo(COMPACT_EDGE, 0);
-    await expect(page.locator('#dock-status-text')).toHaveText('Monitoring is active');
   });
 
   test('Compact: the profile name is centered above the ring, and steps aside while the over-range band shows', async ({ page, context }) => {
@@ -614,14 +548,19 @@ test.describe('Monitoring presentation: Compact default and Pause/Resume (2026-1
     await expect(header).toHaveCSS('opacity', '1');
   });
 
-  test('Pause and Resume are in Expanded too, as a pill beside Stop', async ({ page, context }) => {
-    const { monitoringScreen } = await reachMonitoring(page, context, { size: { width: 382, height: 480 } });
-    const pause = monitoringScreen.locator('.pip-control-btn-pause');
-    await expect(pause).toBeVisible();
-    await expect(pause).toHaveText('Pause');
-    const [p, st] = await Promise.all([pause.boundingBox(), monitoringScreen.locator('.pip-control-btn-stop').boundingBox()]);
-    expect(Math.abs(p.y - st.y)).toBeLessThan(2);
-    await pause.click();
-    await expect(pause).toHaveText('Resume');
+  test('Stop ends the session, releases the microphone, and returns to Ready with the profile still selected', async ({ page, context }) => {
+    await page.addInitScript(() => {
+      window.__streams = [];
+      const real = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+      navigator.mediaDevices.getUserMedia = async (c) => { const st = await real(c); window.__streams.push(st); return st; };
+    });
+    const liveTracks = () => page.evaluate(() => window.__streams.flatMap((st) => st.getTracks()).filter((t) => t.readyState === 'live').length);
+    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 220, height: 220 }, layout: 'compact' });
+    expect(await liveTracks()).toBe(1);
+    await monitoringScreen.locator('.pip-control-btn-stop').click({ force: true });
+    const ready = pipPage.locator('.pip-screen-ready');
+    await expect(ready).toBeVisible();
+    await expect(ready.locator('.pip-ready-selector-trigger-name')).toHaveText('Kitchen');
+    expect(await liveTracks()).toBe(0);
   });
 });

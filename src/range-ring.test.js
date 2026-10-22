@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  voiceCircleState, bandFraction, ringGeometry, ease, stepBand, followLevel, voiceGate, stepShown, roomMarginDbFor, DEFAULT_RING_SETTINGS,
+  voiceCircleState, bandFraction, ringGeometry, ease, stepBand, followLevel, voiceGate, stepShown, roomMarginDbFor, edgeOpacityFor, DEFAULT_RING_SETTINGS,
   VOICE_RISE_TAU_MS, VOICE_FALL_TAU_MS,
   BAND_MIN_FRACTION, BAND_MAX_FRACTION, BAND_FULL_DB, BAND_FADE_MS, BAND_THIN_FRACTION,
   VOICE_FRACTION_END, VOICE_OPACITY_REST, REFERENCE_EDGE_PX,
@@ -320,5 +320,17 @@ describe('the ring follows the engine, never classifies', () => {
     assert.equal(e.getZone(), 3);
     assert.equal(voiceCircleState(e.getLevelOffsetDb(loudRms), e.getRangeBoundsDb(), 3).size, 1);
     assert.ok(bandFraction(e.getLevelOffsetDb(loudRms) - e.getRangeBoundsDb().endDb) > BAND_MIN_FRACTION);
+  });
+});
+
+describe('edgeOpacityFor — the range edge is never brighter than the voice circle at rest', () => {
+  it('defaults to the rest opacity (0.45)', () => {
+    assert.equal(edgeOpacityFor(), 0.45);
+  });
+  it('can be set lower, never higher', () => {
+    const v = DEFAULT_RING_SETTINGS.voice;
+    assert.equal(edgeOpacityFor({ ...v, edgeOpacity: 0.3 }), 0.3);
+    assert.equal(edgeOpacityFor({ ...v, edgeOpacity: 0.9 }), v.opacityRest);
+    assert.equal(edgeOpacityFor({ ...v, opacityRest: 0.2, edgeOpacity: 0.45 }), 0.2);
   });
 });

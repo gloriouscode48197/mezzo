@@ -25,10 +25,24 @@ test.describe('First-time copy and calibration-entry routing', () => {
     const welcomeScreen = pipPage.locator('.pip-screen-welcome');
     await expect(welcomeScreen).toBeVisible();
 
-    await expect(welcomeScreen.locator('.pip-intro-heading')).toHaveText('Welcome');
+    // The wordmark is Welcome's heading (2026-10-22): its one <h1>, at the
+    // top, 30px Geist 600, -0.045em, cream, lowercase. No "Welcome" heading.
+    const wordmark = welcomeScreen.locator('h1');
+    await expect(wordmark).toHaveCount(1);
+    await expect(wordmark).toHaveText('mezzo');
+    expect(await wordmark.evaluate((el) => {
+      const cs = getComputedStyle(el);
+      return [cs.fontSize, cs.fontWeight, cs.letterSpacing, cs.color, cs.textTransform, cs.fontFamily.split(',')[0]];
+    })).toEqual(['30px', '600', '-1.35px', 'rgb(243, 235, 222)', 'lowercase', 'Geist']);
+    const [markBox, bodyBox] = await Promise.all([wordmark.boundingBox(), welcomeScreen.locator('.pip-intro-body').boundingBox()]);
+    expect(markBox.y).toBeLessThan(bodyBox.y);
+    expect(markBox.y).toBeLessThan(40);
+    await expect(welcomeScreen).not.toContainText('Welcome');
     await expect(welcomeScreen.locator('.pip-intro-body')).toHaveText(
-      "Mezzo listens in the background and gently lets you know if you're talking louder than you'd like. We'll start with a quick voice calibration."
+      "A gentle nudge when you're talking louder than you'd like. First, a quick voice calibration."
     );
+    // The window's accessible name says what the screen is.
+    expect(await pipPage.title()).toBe('Mezzo, welcome.');
     await expect(welcomeScreen.locator('.pip-intro-disclaimer')).toHaveText("Mezzo doesn't record audio or transcribe speech.");
     await expect(welcomeScreen.locator('button:has-text("Create speaking profile")')).toBeVisible();
 
@@ -427,7 +441,7 @@ test.describe('Calibration-stall reliability correction (acquisition timeout)', 
     // disclosure message eventually appears (past the 500ms threshold);
     // the progress ring, which only fills once real capture begins, stays empty.
     await expect(calibratingScreen.locator('.pip-calibrating-status')).toHaveText('Preparing microphone…', { timeout: 3000 });
-    await expect(calibratingScreen.locator('.mezzo-cal-ring')).toHaveAttribute('aria-valuenow', '0');
+    await expect(calibratingScreen.locator('.mezzo-level-meter')).toHaveAttribute('aria-valuenow', '0');
 
     const c0Screen = pipPage.locator('.pip-screen-c0');
     await expect(c0Screen).toBeVisible({ timeout: 8000 });
@@ -504,23 +518,20 @@ test.describe('Calibration-stall reliability correction (acquisition timeout)', 
     await expect(resultScreen).toBeVisible({ timeout: 15000 });
   });
 
-  test('a fast (<500ms) acquisition never shows "Preparing microphone…" — the 3-2-1 countdown is the first visible change, each number holding a real second, ring empty throughout, before capture begins', async ({ page, context }) => {
+  test('a fast (<500ms) acquisition never shows "Preparing microphone…" — the 3-2-1 countdown is the first visible change, each number holding a real second, before capture begins', async ({ page, context }) => {
     const pipPage = await openCompanion(page, context);
     await pipPage.locator('button:has-text("Create speaking profile")').click();
     await pipPage.locator('button:has-text("I\'m ready")').click();
 
     const calibratingScreen = pipPage.locator('.pip-screen-calibrating');
     const status = calibratingScreen.locator('.pip-calibrating-status');
-    const ring = calibratingScreen.locator('.mezzo-cal-ring');
     await expect(calibratingScreen).toBeVisible();
 
     // 1. "Start speaking in 3" — real (fake-device) acquisition here is
     // fast, well under the 500ms delayed-disclosure threshold, so
-    // "Preparing microphone…" is never rendered at all; the progress ring
-    // stays empty throughout preparation.
+    // "Preparing microphone…" is never rendered at all.
     await expect(status).toHaveText('Start speaking in 3', { timeout: 2000 });
     await expect(status).not.toHaveText('Preparing microphone…');
-    await expect(ring).toHaveAttribute('aria-valuenow', '0');
 
     const countdownObservedAt = Date.now();
 
@@ -528,7 +539,6 @@ test.describe('Calibration-stall reliability correction (acquisition timeout)', 
     // held state, not an instantaneous flash-through.
     await pipPage.waitForTimeout(400);
     await expect(status).toHaveText('Start speaking in 3');
-    await expect(ring).toHaveAttribute('aria-valuenow', '0');
 
     // 3. Each remaining number holds for a real second too. Generous
     // per-tick timeouts — this shared Document PiP realm is susceptible to
@@ -539,7 +549,7 @@ test.describe('Calibration-stall reliability correction (acquisition timeout)', 
     await expect(status).toHaveText('Start speaking in 2', { timeout: 3000 });
     await expect(status).toHaveText('Start speaking in 1', { timeout: 3000 });
 
-    // 4. "Listening… 6s" — and the ring starts filling — only once the fixed
+    // 4. "Listening… 6s" only once the fixed
     // countdown has genuinely elapsed. Measures real wall-clock time, not
     // just the label change, against DEFAULT_PREPARATION_MS (3000ms), with
     // slack for scheduling jitter — this is the actual enforcement the fix
@@ -547,10 +557,9 @@ test.describe('Calibration-stall reliability correction (acquisition timeout)', 
     await expect(status).toHaveText('Listening… 6s', { timeout: 5000 });
     const elapsedMs = Date.now() - countdownObservedAt;
     expect(elapsedMs).toBeGreaterThanOrEqual(2700);
-    await expect(ring).not.toHaveAttribute('aria-valuenow', '0', { timeout: 2500 });
   });
 
-  test('Calibrating matches PRD §8: heading, progress ring with a live voice circle, sage countdown, one hint line, Cancel pinned to the bottom', async ({ page, context }) => {
+  test('Calibrating matches PRD §8: heading, a six-segment level meter about 52px below it, sage countdown, one hint line, Cancel pinned to the bottom', async ({ page, context }) => {
     const pipPage = await openCompanion(page, context);
     await pipPage.locator('button:has-text("Create speaking profile")').click();
     await pipPage.locator('button:has-text("I\'m ready")').click();
@@ -563,42 +572,40 @@ test.describe('Calibration-stall reliability correction (acquisition timeout)', 
     await expect(heading).toHaveText('Keep speaking at the level you want to maintain');
     expect(await style(heading, ['fontSize', 'fontWeight', 'textAlign', 'color'])).toEqual({ fontSize: '20px', fontWeight: '500', textAlign: 'center', color: 'rgb(243, 235, 222)' });
 
-    const ring = screen.locator('.mezzo-cal-ring');
-    await expect(ring).toHaveAttribute('role', 'progressbar');
-    await expect(ring).toHaveAttribute('aria-valuemin', '0');
-    await expect(ring).toHaveAttribute('aria-valuemax', '100');
-    const ringBox = await ring.boundingBox();
-    expect(ringBox.width).toBe(132);
-    const headingBox = await heading.boundingBox();
-    expect(Math.round(ringBox.y - (headingBox.y + headingBox.height))).toBe(30);
-    expect(await screen.locator('.mezzo-cal-ring-progress').evaluate((el) => [getComputedStyle(el).stroke, getComputedStyle(el).strokeLinecap, el.getAttribute('stroke-width')]))
-      .toEqual(['rgb(206, 226, 196)', 'round', '6']);
+    // No progress ring or voice circle any more.
+    await expect(screen.locator('.mezzo-cal-ring, [role="progressbar"]')).toHaveCount(0);
 
-    const voice = screen.locator('.mezzo-cal-ring-voice');
-    await expect(voice).toHaveAttribute('aria-hidden', 'true');
-    expect((await style(voice, ['backgroundColor'])).backgroundColor).toBe('rgb(142, 137, 123)');
+    const meter = screen.locator('.mezzo-level-meter');
+    await expect(meter).toHaveAttribute('role', 'meter');
+    await expect(meter).toHaveAttribute('aria-label', 'Your voice level');
+    await expect(meter).toHaveAttribute('aria-valuemin', '0');
+    await expect(meter).toHaveAttribute('aria-valuemax', '6');
+    const segments = meter.locator('.mezzo-level-meter-segment');
+    await expect(segments).toHaveCount(6);
+    const boxes = await segments.evaluateAll((els) => els.map((el) => el.getBoundingClientRect()).map((r) => ({ x: r.x, w: r.width, h: r.height })));
+    for (const b of boxes) expect([b.w, b.h]).toEqual([34, 14]);
+    for (let k = 1; k < boxes.length; k++) expect(Math.round(boxes[k].x - (boxes[k - 1].x + boxes[k - 1].w))).toBe(6);
+    expect(await segments.first().evaluate((el) => getComputedStyle(el).borderRadius)).toBe('2px');
+    const meterBox = await meter.boundingBox();
+    const headingBox = await heading.boundingBox();
+    expect(Math.abs(meterBox.y - (headingBox.y + headingBox.height) - 52)).toBeLessThanOrEqual(2);
+    expect(Math.abs(meterBox.x + meterBox.width / 2 - (pipPage.viewportSize().width / 2))).toBeLessThan(2);
 
     const status = screen.locator('.pip-calibrating-status');
-    const hintEl = screen.locator('.pip-calibrating-hint');
+    const hint = screen.locator('.pip-calibrating-hint');
     await expect(status).toHaveText(/Start speaking in/, { timeout: 4000 });
-    await expect(hintEl).toHaveText('Get ready to talk normally.');
+    await expect(hint).toHaveText('Get ready to talk normally.');
     await expect(status).toHaveText('Listening… 6s', { timeout: 8000 });
     expect(await style(status, ['fontSize', 'fontWeight', 'color'])).toEqual({ fontSize: '15px', fontWeight: '500', color: 'rgb(206, 226, 196)' });
-    const statusBox = await status.boundingBox();
-    expect(Math.round(statusBox.y - (ringBox.y + ringBox.height))).toBe(18);
-
-    const hint = screen.locator('.pip-calibrating-hint');
-    await expect(hint).toHaveText('Talk normally. The circle moves with your voice.');
+    await expect(hint).toHaveText('Talk normally. The bars move with your voice.');
     expect(await style(hint, ['fontSize', 'color'])).toEqual({ fontSize: '13px', color: 'rgb(176, 171, 158)' });
-    const hintBox = await hint.boundingBox();
-    expect(Math.round(hintBox.y - (statusBox.y + statusBox.height))).toBe(6);
 
     // The old bar and its hint are gone.
     await expect(screen.locator('.pip-calibrating-meter-row, .pip-calibrating-meter-hint')).toHaveCount(0);
-    await expect(screen).not.toContainText('Background sounds may move the meter too.');
 
     // Cancel sits at the bottom, below everything else, and nothing scrolls
     // or clips at 380x364.
+    const hintBox = await hint.boundingBox();
     const cancelBox = await screen.locator('button:has-text("Cancel")').boundingBox();
     const viewport = pipPage.viewportSize();
     expect(viewport.height - (cancelBox.y + cancelBox.height)).toBeLessThan(24);
@@ -607,46 +614,40 @@ test.describe('Calibration-stall reliability correction (acquisition timeout)', 
     expect(fits).toEqual([true, true]);
   });
 
-  test('the voice circle reacts during the 3-2-1 as a mic check, then follows the level while the ring fills; the progressbar value changes once a second', async ({ page, context }) => {
+  test('the meter lights sage segments with the live level, as a mic check during the 3-2-1 and then during capture: low, normal, loud', async ({ page, context }) => {
     const pipPage = await openCompanion(page, context);
     await installLevelDriver(page, { speakingDb: 0 }); // levels below are absolute dB
     await pipPage.locator('button:has-text("Create speaking profile")').click();
     await pipPage.locator('button:has-text("I\'m ready")').click();
-
     const screen = pipPage.locator('.pip-screen-calibrating');
-    const ring = screen.locator('.mezzo-cal-ring');
-    const voicePx = () => screen.locator('.mezzo-cal-ring-voice').evaluate((el) => el.getBoundingClientRect().width);
+    const meter = screen.locator('.mezzo-level-meter');
+    const lit = async () => Number(await meter.getAttribute('aria-valuenow'));
 
-    // During the 3-2-1, the circle follows the level as a mic check while
-    // the ring stays empty.
-    await setLevelDb(page, -32);
+    // During the 3-2-1: a mic check.
+    await setLevelDb(page, -38);
     await expect(screen.locator('.pip-calibrating-status')).toHaveText(/Start speaking in/, { timeout: 4000 });
-    await pipPage.waitForTimeout(500);
-    expect(await voicePx()).toBeGreaterThan(70);
-    await expect(ring).toHaveAttribute('aria-valuenow', '0');
+    await expect.poll(lit, { timeout: 2000 }).toBeGreaterThanOrEqual(3);
 
-    await setLevelDb(page, -80);
     await expect(screen.locator('.pip-calibrating-status')).toHaveText('Listening… 6s', { timeout: 6000 });
-    await pipPage.waitForTimeout(1500); // the fall eases at 320ms
-    expect(await voicePx()).toBeLessThan(26);
-
-    // Loud speech: capped at 96px, so there's always a gap inside the 132px ring.
-    await setLevelDb(page, -25);
-    await pipPage.waitForTimeout(700);
-    const loud = await voicePx();
-    expect(loud).toBeGreaterThan(90);
-    expect(loud).toBeLessThanOrEqual(96.5);
-
-    const values = new Set();
-    for (let i = 0; i < 12; i++) {
-      values.add(await ring.getAttribute('aria-valuenow'));
-      await pipPage.waitForTimeout(150);
+    await setLevelDb(page, -80);
+    await expect.poll(lit, { timeout: 3000 }).toBe(0);
+    await setLevelDb(page, -43); // normal speech
+    await expect.poll(lit, { timeout: 2000 }).toBeGreaterThanOrEqual(2);
+    expect(await lit()).toBeLessThanOrEqual(4);
+    await setLevelDb(page, -28); // loud
+    await expect.poll(lit, { timeout: 2000 }).toBe(6);
+    // Lit segments are sage, unlit cream at 12%.
+    await setLevelDb(page, -43);
+    await expect.poll(lit, { timeout: 3000 }).toBeLessThanOrEqual(4);
+    const colors = await meter.locator('.mezzo-level-meter-segment').evaluateAll((els) => els.map((el) => [el.hasAttribute('data-lit'), getComputedStyle(el).backgroundColor]));
+    for (const [on, color] of colors) {
+      if (on) expect(color).toBe('rgb(206, 226, 196)');
+      else expect(color).toMatch(/rgba\(243, 235, 222, 0\.12\)|color\(srgb [\d.]+ [\d.]+ [\d.]+ \/ 0\.12\)/);
     }
-    for (const v of values) expect(['0', '17', '33', '50', '67', '83', '100']).toContain(v);
     await setLevelDb(page, null);
   });
 
-  test('with reduced motion, the ring steps once a second while the voice circle still follows the level', async ({ browser }) => {
+  test('with reduced motion, the meter follows the level without easing', async ({ browser }) => {
     const context = await browser.newContext({ reducedMotion: 'reduce' });
     const page = await context.newPage();
     const pipPage = await openCompanion(page, context);
@@ -654,21 +655,13 @@ test.describe('Calibration-stall reliability correction (acquisition timeout)', 
     await pipPage.locator('button:has-text("Create speaking profile")').click();
     await pipPage.locator('button:has-text("I\'m ready")').click();
     const screen = pipPage.locator('.pip-screen-calibrating');
+    const meter = screen.locator('.mezzo-level-meter');
     await setLevelDb(page, -80);
     await expect(screen.locator('.pip-calibrating-status')).toHaveText('Listening… 6s', { timeout: 6000 });
-
-    // Every observed fill is a whole number of sixths.
-    const circumference = 2 * Math.PI * 63;
-    for (let i = 0; i < 16; i++) {
-      const off = parseFloat(await screen.locator('.mezzo-cal-ring-progress').getAttribute('stroke-dashoffset'));
-      const sixths = (1 - off / circumference) * 6;
-      expect(Math.abs(sixths - Math.round(sixths))).toBeLessThan(0.01);
-      await pipPage.waitForTimeout(150);
-    }
-
-    await setLevelDb(page, -31);
-    await pipPage.waitForTimeout(500);
-    expect(await screen.locator('.mezzo-cal-ring-voice').evaluate((el) => el.getBoundingClientRect().width)).toBeGreaterThan(70);
+    // audio.js's own 50ms frames and smoothing still apply; with no easing on
+    // top, a jump to loud lights every segment within a few frames.
+    await setLevelDb(page, -28);
+    await expect.poll(async () => Number(await meter.getAttribute('aria-valuenow')), { timeout: 250, intervals: [25] }).toBe(6);
     await setLevelDb(page, null);
     await context.close();
   });
@@ -721,7 +714,7 @@ test.describe('Calibration-stall reliability correction (acquisition timeout)', 
     await expect(calibratingScreen).toBeVisible();
     // Acquisition is still pending — the progress ring (which only fills
     // once real capture begins) must still be empty.
-    await expect(calibratingScreen.locator('.mezzo-cal-ring')).toHaveAttribute('aria-valuenow', '0');
+    await expect(calibratingScreen.locator('.mezzo-level-meter')).toHaveAttribute('aria-valuenow', '0');
 
     await calibratingScreen.locator('button:has-text("Cancel")').click();
     await expect(readyScreen).toBeVisible();
@@ -1080,7 +1073,7 @@ test.describe('Companion heading punctuation audit (2026-08-16)', () => {
     const pipPage = await openCompanion(page, context);
     const welcomeScreen = pipPage.locator('.pip-screen-welcome');
     await expect(welcomeScreen).toBeVisible();
-    await expect(welcomeScreen.locator('.pip-intro-heading')).toHaveText('Welcome');
+    await expect(welcomeScreen.locator('h1')).toHaveText('mezzo');
 
     await welcomeScreen.locator('button:has-text("Create speaking profile")').click();
     await pipPage.locator('button:has-text("I\'m ready")').click();

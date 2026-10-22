@@ -5,14 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ring Tuner</title>
 <!--
-  Ring Tuner — tune the Range Ring, the calibrating circle, and the zone
+  Ring Tuner — tune the Range Ring and the zone
   boundaries with a real voice. Serve the repo root and open
   /design/prototypes/ring-tuner.html (it must be served: it imports the app's
   own modules).
 
   It runs the real code, not a re-creation: src/range-ring.js
-  (MezzoRangeRing), src/calibration-ring.js (MezzoCalibrationRing),
-  src/engine.js (MezzoEngine's zone logic), and src/audio.js
+  (MezzoRangeRing), src/engine.js (MezzoEngine's zone logic), and src/audio.js
   (AudioProcessor, the app's mic pipeline). Each takes a settings object;
   this page passes live, editable copies of the app's defaults.
 -->
@@ -89,17 +88,6 @@
   }
   .mon-ring { flex: 1; width: 100%; display: flex; align-items: center; justify-content: center; }
 
-  /* Calibrating preview: mirrors the Companion's Calibrating screen. */
-  .cal { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px 24px 56px; }
-  .cal h2 { font-family: var(--font-display); font-weight: 500; font-size: 20px; line-height: 1.25; letter-spacing: var(--tracking-heading); text-align: center; text-wrap: balance; max-width: 280px; margin: 0; }
-  .cal-visual { margin-top: 30px; }
-  .cal-status { margin-top: 18px; font-size: 15px; font-weight: 500; color: var(--color-link); min-height: 19px; }
-  .cal-hint { margin: 6px 0 0; font-size: 13px; color: var(--color-text-muted); text-align: center; }
-  .cal-cancel { position: absolute; bottom: 18px; font-size: 12px; color: var(--color-link); text-decoration: underline; }
-
-  /* The controls column: the accordion scrolls, the export/load/reset
-     buttons stay pinned at the bottom. The preview stays in view too. */
-  .stage { position: sticky; top: 100px; align-self: start; }
   aside {
     display: flex; flex-direction: column;
     padding: 8px 20px 0;
@@ -150,11 +138,6 @@
 
 <main>
   <section class="stage">
-    <div class="tabs" role="tablist">
-      <button id="tab-monitoring" role="tab" aria-pressed="true">Monitoring</button>
-      <button id="tab-calibrating" role="tab" aria-pressed="false">Calibrating</button>
-    </div>
-
     <div id="monitoring-controls" class="sizes">
       <button data-size="compact" aria-pressed="false">Compact 220×220</button>
       <button data-size="small" aria-pressed="true">Smaller default</button>
@@ -163,28 +146,13 @@
       <button data-size="expanded" aria-pressed="false">Expanded 382×480</button>
       <span class="frame-label">Profile name <input id="profile-name" value="Home office" style="width:120px"></span>
     </div>
-    <div id="calibrating-controls" class="sizes" hidden>
-      <button id="btn-miccheck">Mic check (3-2-1)</button>
-      <button id="btn-capture">Run capture (6s)</button>
-      <button id="btn-cal-reset">Reset</button>
-      <span class="frame-label">380×364, the Companion's pre-monitoring size</span>
-    </div>
-
     <div id="frame" class="frame">
       <div id="mon" style="display:contents">
         <div id="mon-name" class="mon-name"></div>
         <div id="mon-ring" class="mon-ring"></div>
       </div>
-      <div id="cal" class="cal" hidden>
-        <h2>Keep speaking at the level you want to maintain</h2>
-        <div id="cal-visual" class="cal-visual"></div>
-        <div id="cal-status" class="cal-status"></div>
-        <p id="cal-hint" class="cal-hint">Get ready to talk normally.</p>
-        <span class="cal-cancel">Cancel</span>
-      </div>
     </div>
     <div id="frame-label" class="frame-label"></div>
-    <p class="note">The calibrating circle shares the Motion settings. The Silence gate applies to Monitoring only: before calibration there's no "normal" level to measure against.</p>
   </section>
 
   <aside>
@@ -207,7 +175,6 @@
 
 <script type="module">
 import { MezzoRangeRing, DEFAULT_RING_SETTINGS } from '/src/range-ring.js';
-import { MezzoCalibrationRing, DEFAULT_CALIBRATION_RING_SETTINGS } from '/src/calibration-ring.js';
 import { MezzoEngine, DEFAULT_ZONE_SETTINGS } from '/src/engine.js';
 import { AudioProcessor, DEFAULT_AUDIO_SETTINGS } from '/src/audio.js';
 
@@ -223,15 +190,10 @@ const TYPICAL = { speakingDb: -42, spreadDb: 4 };
 // the window's short side: the app's 236px in 382 and 140px in 220).
 const LAYOUT_DEFAULTS = { compactPct: 140 / 220, smallPct: 140 / 220, expandedPct: 236 / 382, smallWidth: 240, smallHeight: 264 };
 const clone = (o) => JSON.parse(JSON.stringify(o));
-// Where the tuner starts when it differs from the app, which keeps these
-// off (grace 0, end of range from spread, momentary zones) until tuned
-// values are applied.
-const TUNER_START = { zones: { dwellGraceMs: 250, endFrom: 'peaks', zoneWindowMs: 600, voicedOnly: true, zoneMethod: 'median' } };
 function appDefaults() {
   return {
     ring: clone(DEFAULT_RING_SETTINGS),
-    zones: { ...clone(DEFAULT_ZONE_SETTINGS), ...TUNER_START.zones },
-    calibrating: clone(DEFAULT_CALIBRATION_RING_SETTINGS),
+    zones: clone(DEFAULT_ZONE_SETTINGS),
     layout: clone(LAYOUT_DEFAULTS),
     audio: clone(DEFAULT_AUDIO_SETTINGS),
   };
@@ -250,18 +212,6 @@ function mergeInto(target, defaults, src) {
 function assignSettings(src) { mergeInto(settings, appDefaults(), src); }
 try {
   const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
-  // Values saved before the peaks safety cap existed: switch them once to
-  // the current starting point (peaks, 1000 ms window), keeping the rest.
-  if (saved?.zones && !('peaksSafetyCapDb' in saved.zones)) {
-    saved.zones.endFrom = TUNER_START.zones.endFrom;
-    saved.zones.zoneWindowMs = TUNER_START.zones.zoneWindowMs;
-  }
-  // Values saved before the zone level method existed: start them on
-  // median with its 600ms window, keeping the rest.
-  if (saved?.zones && !('zoneMethod' in saved.zones)) {
-    saved.zones.zoneMethod = TUNER_START.zones.zoneMethod;
-    saved.zones.zoneWindowMs = TUNER_START.zones.zoneWindowMs;
-  }
   if (saved) assignSettings(saved);
 } catch { /* no saved values */ }
 function save() { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(settings)); } catch { /* storage unavailable */ } }
@@ -293,6 +243,7 @@ const GROUPS = [
     { path: 'ring.voice.sizeAtTarget', label: 'At top of Within range', min: 0, max: 1, step: 0.01, ...pct, hint: 'Size where Approaching starts.' },
     { path: 'ring.voice.sizeAtEnd', label: 'At end of range', min: 0, max: 1, step: 0.01, ...pct, hint: 'Size just before Outside range. It fills the edge only once Outside range commits.' },
     { path: 'ring.voice.opacityRest', label: 'Opacity at rest', min: 0, max: 1, step: 0.01, ...pct, hint: 'How faint the circle is through Within range.' },
+    { path: 'ring.voice.edgeOpacity', label: 'Edge opacity', min: 0, max: 1, maxFrom: 'ring.voice.opacityRest', step: 0.01, ...pct, hint: 'The range edge at rest, in the voice color. Never brighter than the circle at rest.' },
     { path: 'ring.voice.opacityEnd', label: 'Opacity at end of range', min: 0, max: 1, step: 0.01, ...pct, hint: 'How solid it gets near the edge.' },
   ]],
   ['Range boundaries', [
@@ -324,9 +275,6 @@ const GROUPS = [
     { path: 'layout.compactPct', label: 'Ring size, Compact', min: 0.3, max: 0.9, step: 0.005, scale: 100, unit: '%', digits: 1, hint: 'Ring edge as % of the window’s short side.' },
     { path: 'layout.smallPct', label: 'Ring size, smaller default', min: 0.3, max: 0.9, step: 0.005, scale: 100, unit: '%', digits: 1, hint: 'Ring edge as % of the window’s short side.' },
     { path: 'layout.expandedPct', label: 'Ring size, Expanded', min: 0.3, max: 0.9, step: 0.005, scale: 100, unit: '%', digits: 1, hint: 'Ring edge as % of the window’s short side.' },
-    { path: 'calibrating.voiceMaxPx', label: 'Calibrating: voice circle max', min: 40, max: 160, step: 1, unit: ' px', digits: 0, hint: 'Largest the calibrating circle gets at loud speech.' },
-    { path: 'calibrating.ringSizePx', label: 'Calibrating: ring size', min: 80, max: 200, step: 1, unit: ' px', digits: 0, hint: 'Diameter of the progress ring.' },
-    { path: 'calibrating.strokePx', label: 'Calibrating: stroke', min: 1, max: 14, step: 0.5, unit: ' px', digits: 1, hint: 'Thickness of the progress ring.' },
   ]],
 ];
 
@@ -397,9 +345,12 @@ function buildControls() {
       row.querySelector('.hint').textContent = def.hint;
       const input = row.querySelector('input[type=range]');
       Object.assign(input, { min: def.min, max: def.max, step: def.step });
+      // A slider capped by another value (Edge opacity by Opacity at rest).
+      const capTo = () => { if (!def.maxFrom) return; const cap = getPath(def.maxFrom); input.max = cap; if (getPath(def.path) > cap) setPath(def.path, cap); };
       const out = row.querySelector('output');
       const auto = row.querySelector('.auto input');
       const sync = () => {
+        capTo();
         const v = getPath(def.path);
         const isAuto = def.nullable && v == null;
         row.classList.toggle('is-auto', isAuto);
@@ -434,6 +385,7 @@ function updateChangedDots() {
 }
 function syncControls() { controls.forEach((f) => f()); $('small-w').value = settings.layout.smallWidth; $('small-h').value = settings.layout.smallHeight; updateChangedDots(); }
 function changed() {
+  syncControls(); // re-applies caps between sliders (see maxFrom)
   save();
   applyLayout();
   updateChangedDots();
@@ -491,7 +443,6 @@ async function measureRoom(label) {
   clearInterval(tick);
   levelHandler = previous;
   roomNoiseRms = median(samples.filter((x) => x > 0));
-  calRing.setRoomNoise(roomNoiseRms);
   return roomNoiseRms;
 }
 
@@ -502,8 +453,7 @@ function startMonitoringView() {
   levelHandler = ({ rms, rawRms }) => {
     // Voiced = the circle's own gate (silence floor or room noise).
     engine.processFrame(settings.zones.zoneInputRaw ? rawRms : rms, performance.now(), ring.gateOpen);
-    if (view === 'monitoring') ring.update({ zone: engine.getZone(), rawRms, bounds: engine.getRangeBoundsDb() });
-    if (view === 'calibrating') calRing.setLevel(rawRms);
+    ring.update({ zone: engine.getZone(), rawRms, bounds: engine.getRangeBoundsDb() });
   };
 }
 
@@ -514,7 +464,7 @@ $('btn-calibrate').addEventListener('click', async () => {
   await measureRoom('Start speaking in');
   const samples = [];
   const previous = levelHandler;
-  levelHandler = ({ rms, rawRms }) => { samples.push(rms); if (view === 'calibrating') calRing.setLevel(rawRms); };
+  levelHandler = ({ rms }) => { samples.push(rms); };
   const t0 = performance.now();
   const tick = setInterval(() => setStatus(`Talk normally… ${Math.max(0, Math.ceil((CAPTURE_MS - (performance.now() - t0)) / 1000))}s`), 200);
   await new Promise((r) => setTimeout(r, CAPTURE_MS));
@@ -523,7 +473,7 @@ $('btn-calibrate').addEventListener('click', async () => {
   try {
     engine.calibrate(samples);
     calibrated = true;
-    setStatus(`Calibrated: normal ${toDb(engine.baselineRMS).toFixed(1)} dB, spread ${engine.spreadDb.toFixed(1)} dB, room ${toDb(roomNoiseRms).toFixed(1)} dB.`);
+    setStatus(`Calibrated: normal ${toDb(engine.baselineRMS).toFixed(1)} dB, spread ${engine.spreadDb.toFixed(1)} dB, room ${roomNoiseRms > 0 ? `${toDb(roomNoiseRms).toFixed(1)} dB` : 'not measured'}.`);
     startMonitoringView();
   } catch (err) {
     levelHandler = previous;
@@ -536,7 +486,7 @@ $('btn-room').addEventListener('click', async () => {
   $('btn-room').disabled = true;
   await measureRoom('Stay quiet:');
   $('btn-room').disabled = false;
-  setStatus(`Room noise ${toDb(roomNoiseRms).toFixed(1)} dB.`);
+  setStatus(roomNoiseRms > 0 ? `Room noise ${toDb(roomNoiseRms).toFixed(1)} dB.` : 'Room noise not measured (no signal).');
 });
 
 $('btn-typical').addEventListener('click', async () => {
@@ -557,7 +507,6 @@ const SIZES = {
   expanded: () => ({ width: 382, height: 480, pct: settings.layout.expandedPct, label: 'Expanded 382×480' }),
 };
 let size = 'small';
-let view = 'monitoring';
 const frame = $('frame');
 
 const ring = new MezzoRangeRing($('mon-ring'), {
@@ -567,15 +516,12 @@ const ring = new MezzoRangeRing($('mon-ring'), {
   preferredEdgePx: () => { const s = SIZES[size](); return s.pct * Math.min(s.width, s.height); },
   viewportSize: () => { const s = SIZES[size](); return { width: s.width, height: s.height }; },
 });
-const calRing = new MezzoCalibrationRing($('cal-visual'), { durationMs: CAPTURE_MS, settings: settings.calibrating, motion: settings.ring.motion, gate: settings.ring.gate });
-
 function applyLayout() {
-  const s = view === 'calibrating' ? { width: 380, height: 364, label: '380×364' } : SIZES[size]();
+  const s = SIZES[size]();
   frame.style.width = `${s.width}px`;
   frame.style.height = `${s.height}px`;
-  $('frame-label').textContent = view === 'calibrating' ? 'Calibrating, 380×364' : s.label;
+  $('frame-label').textContent = s.label;
   ring.relayout();
-  calRing.relayout();
 }
 
 document.querySelectorAll('[data-size]').forEach((b) => b.addEventListener('click', () => {
@@ -588,52 +534,6 @@ for (const [id, key] of [['small-w', 'smallWidth'], ['small-h', 'smallHeight']])
 }
 $('profile-name').addEventListener('input', () => { $('mon-name').textContent = $('profile-name').value; });
 $('mon-name').textContent = $('profile-name').value;
-
-function setView(next) {
-  view = next;
-  $('tab-monitoring').setAttribute('aria-pressed', String(next === 'monitoring'));
-  $('tab-calibrating').setAttribute('aria-pressed', String(next === 'calibrating'));
-  $('mon').style.display = next === 'monitoring' ? 'contents' : 'none';
-  $('cal').hidden = next !== 'calibrating';
-  $('monitoring-controls').hidden = next !== 'monitoring';
-  $('calibrating-controls').hidden = next !== 'calibrating';
-  applyLayout();
-}
-$('tab-monitoring').addEventListener('click', () => setView('monitoring'));
-$('tab-calibrating').addEventListener('click', () => setView('calibrating'));
-
-// Calibrating preview: the mic check and a 6s capture drive the real ring.
-let capTimer = null;
-async function calMicCheck() {
-  if (!(await ensureMic())) return;
-  if (!levelHandler) levelHandler = ({ rawRms }) => calRing.setLevel(rawRms);
-  calRing.reset();
-  calRing.setRoomNoise(0); // no gate while the room is being measured
-  calRing.startMicCheck();
-  $('cal-hint').textContent = 'Get ready to talk normally.';
-  const t0 = performance.now();
-  const tick = setInterval(() => { $('cal-status').textContent = `Start speaking in ${Math.max(1, Math.ceil((PREP_MS - (performance.now() - t0)) / 1000))}`; }, 100);
-  await measureRoom('Start speaking in');
-  clearInterval(tick);
-  $('cal-status').textContent = 'Room measured. Run capture.';
-}
-$('btn-miccheck').addEventListener('click', calMicCheck);
-$('btn-capture').addEventListener('click', async () => {
-  if (!(await ensureMic())) return;
-  if (!levelHandler) levelHandler = ({ rawRms }) => calRing.setLevel(rawRms);
-  clearInterval(capTimer);
-  calRing.reset();
-  calRing.startCapture();
-  $('cal-hint').textContent = 'Talk normally. The circle moves with your voice.';
-  let left = 6;
-  $('cal-status').textContent = `Listening… ${left}s`;
-  capTimer = setInterval(() => {
-    left -= 1;
-    $('cal-status').textContent = left > 0 ? `Listening… ${left}s` : 'Done';
-    if (left <= 0) clearInterval(capTimer);
-  }, 1000);
-});
-$('btn-cal-reset').addEventListener('click', () => { clearInterval(capTimer); calRing.reset(); $('cal-status').textContent = ''; $('cal-hint').textContent = 'Get ready to talk normally.'; });
 
 // ── Readout ────────────────────────────────────────────────────────────────
 const ZONES = ['Listening', 'Within range', 'Approaching end of range', 'Outside range'];
@@ -721,7 +621,7 @@ $('btn-load-apply').addEventListener('click', () => {
 
 buildControls();
 syncControls();
-setView('monitoring');
+applyLayout();
 </script>
 </body>
 </html>

@@ -512,7 +512,7 @@ export function createCalibrationController({
     audio.onLevelChange = ({ rms, rawRms }) => {
       samples.push(rms);
       // Listeners also get the unsmoothed level, for visuals only (see
-      // calibration-ring.js); the samples above stay the smoothed values.
+      // level-meter.js); the samples above stay the smoothed values.
       levelListeners.forEach((fn) => fn(rms, rawRms));
     };
     audio.startMonitoring();

@@ -8,7 +8,7 @@ import { test, expect } from '@playwright/test';
 const PLAYGROUND_DEFAULTS = {
   ring: {
     gate: { floorDb: -25, hysteresisDb: 1.5, roomMarginDb: 4 },
-    voice: { sizeRest: 0.2, restBelowSilenceDb: 6, sizeAtSilence: 0.2, sizeAtNormal: 0.45, sizeAtTarget: 0.55, sizeAtEnd: 0.8, opacityRest: 0.45, opacityEnd: 1 },
+    voice: { sizeRest: 0.2, restBelowSilenceDb: 6, sizeAtSilence: 0.2, sizeAtNormal: 0.45, sizeAtTarget: 0.55, sizeAtEnd: 0.8, opacityRest: 0.45, opacityEnd: 1, edgeOpacity: 0.45 },
     motion: { riseMs: 150, fallMs: 400, inputSmoothingMs: 100, fillMs: 60, settleMs: 1000 },
     band: { minFraction: 0.065, maxFraction: 0.18, fullDb: 2, growMs: 150, shrinkMs: 150, fadeMs: 100, thinFraction: 0.01, glowStrength: 1 },
   },
@@ -18,7 +18,6 @@ const PLAYGROUND_DEFAULTS = {
     endFrom: 'peaks', peakPercentile: 95, peakMarginDb: 1.5, peaksSafetyCapDb: 12,
     zoneWindowMs: 600, voicedOnly: true, zoneMethod: 'percentile', zonePercentile: 60, zoneInputRaw: true,
   },
-  calibrating: { ringSizePx: 132, strokePx: 6, voiceMinPx: 20, voiceMaxPx: 96 },
   layout: { compactPct: 0.6, smallPct: 0.6, expandedPct: 0.6, smallWidth: 240, smallHeight: 264 },
   audio: { speechFilter: { enabled: true, highPassHz: 120, lowPassHz: 3400 }, noiseSuppression: false },
 };
@@ -54,7 +53,7 @@ test.describe('Range Ring playground', () => {
     expect(errors).toEqual([]);
     expect(failed).toEqual([]);
     const local = loaded.map(([p]) => p).filter((p) => !p.startsWith('/css2'));
-    for (const file of ['/playground/src/range-ring.js', '/playground/src/calibration-ring.js', '/playground/src/engine.js', '/playground/src/audio.js', '/playground/src/_timing-debug.js', '/playground/design-tokens/mezzo-tokens.css']) {
+    for (const file of ['/playground/src/range-ring.js', '/playground/src/engine.js', '/playground/src/audio.js', '/playground/src/_timing-debug.js', '/playground/design-tokens/mezzo-tokens.css']) {
       expect(local, file).toContain(file);
     }
     expect(local.filter((p) => !p.startsWith('/playground/')), 'nothing loads from the app').toEqual([]);
@@ -126,6 +125,13 @@ test.describe('Range Ring playground', () => {
     const res = await request.get('/playground/og-image.png');
     expect(res.status()).toBe(200);
     expect(res.headers()['content-type']).toBe('image/png');
+  });
+
+  test('has no Calibrating preview, and its range edge is never brighter than the voice circle at rest', async ({ page }) => {
+    await page.goto('/playground/');
+    await expect(page.locator('#tab-calibrating')).toHaveCount(0);
+    await page.locator('summary:has-text("Circle size")').click();
+    await expect(page.locator('#c-ring-voice-edgeOpacity')).toHaveAttribute('max', '0.45');
   });
 
   test('is not in the main nav', async ({ page }) => {

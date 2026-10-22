@@ -67,7 +67,6 @@ function dockStatusCopy(session) {
     [session.SESSION_STATES.COMPANION_READY]: notActive,
     [session.SESSION_STATES.COMPANION_CALIBRATING]: notActive,
     [session.SESSION_STATES.COMPANION_NEEDS_ATTENTION]: notActive,
-    [session.SESSION_STATES.MONITORING_PAUSED]: notActive,
     [session.SESSION_STATES.MONITORING_ACTIVE]: { text: 'Monitoring is active', active: true },
   };
 }

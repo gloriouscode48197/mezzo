@@ -30,8 +30,8 @@
  * gate: below floorDb (dB vs the calibrated level) the circle rests at
  *   voice.sizeRest; it reopens only hysteresisDb above the floor, so it
  *   doesn't flicker at the boundary. When a room-noise level is known, the
- *   floor rises to roomMarginDb above it. The app measures no room noise
- *   yet, so only the tuner uses that.
+ *   floor rises to roomMarginDb above it, or noisyMarginDb when the room
+ *   is within noisyGapDb of the calibrated level (see roomMarginDbFor()).
  * voice: circle diameter as a fraction of the edge, anchored at the zone
  *   boundaries. sizeAtNormal (at 0 dB) is optional; null draws a straight
  *   line from the silence boundary to the top of Within range.
@@ -45,31 +45,39 @@
  *   glowStrength scales the glow's opacity.
  */
 export const DEFAULT_RING_SETTINGS = Object.freeze({
-  // -60 dB sits below every possible rest point (silence boundary at most
-  // -40 dB, rest 6 dB under it), so by default the gate changes nothing.
-  gate: Object.freeze({ floorDb: -60, hysteresisDb: 0, roomMarginDb: 6 }),
+  // Values tuned with a real voice in design/prototypes/ring-tuner.html
+  // (2026-10-22); docs/prd/range-ring-and-lantern-refresh.md §5 has the
+  // reasons. The floor keeps noise below -25 dB from moving the circle; a
+  // room-noise level, measured during the calibration countdown, raises it
+  // to 4 dB above the room (2 dB in a noisy room, where speech sits less
+  // than 12 dB above it, so a soft voice isn't gated out).
+  gate: Object.freeze({ floorDb: -25, hysteresisDb: 1.5, roomMarginDb: 4, noisyGapDb: 12, noisyMarginDb: 2 }), // noisyGapDb matches engine.js's NOISY_ROOM_GAP_DB
   voice: Object.freeze({
-    sizeRest: 0.12,
+    sizeRest: 0.2,
     restBelowSilenceDb: 6,   // how far below the silence boundary the circle reaches its rest size
-    sizeAtSilence: 0.24,
-    sizeAtNormal: null,
-    sizeAtTarget: 0.62,
-    sizeAtEnd: 0.94,         // "nearly fills the edge"
-    opacityRest: 0.4,
+    sizeAtSilence: 0.2,
+    sizeAtNormal: 0.45,      // at the calibrated level: comfortably inside the edge
+    sizeAtTarget: 0.55,
+    sizeAtEnd: 0.8,          // just before Outside range; full only once Outside commits
+    opacityRest: 0.45,
     opacityEnd: 1,
+    edgeOpacity: 0.45,       // the range edge at rest; never above opacityRest (see edgeOpacityFor())
   }),
-  motion: Object.freeze({ riseMs: 90, fallMs: 320, inputSmoothingMs: 0, fillMs: 60, settleMs: 1000 }),
+  motion: Object.freeze({ riseMs: 150, fallMs: 400, inputSmoothingMs: 100, fillMs: 60, settleMs: 1000 }),
   band: Object.freeze({
     minFraction: 0.065,
-    maxFraction: 0.22,
-    fullDb: 4,
-    growMs: 120,
-    shrinkMs: 50,
+    maxFraction: 0.18,
+    fullDb: 2,
+    growMs: 150,
+    shrinkMs: 150,
     fadeMs: 100,
     thinFraction: 0.01,      // the thin ring it grows from and shrinks to (~2px Expanded)
     glowStrength: 1,
   }),
 });
+
+/** The ring's edge as a fraction of the window's short side. */
+export const RING_EDGE_FRACTION = 0.6;
 
 // The defaults as named constants, for callers and tests that read one value.
 export const BAND_MIN_FRACTION = DEFAULT_RING_SETTINGS.band.minFraction;
@@ -103,6 +111,32 @@ const GLOW_REACH_PX = GLOW.spread2 + GLOW.blur2 / 2;
 
 const clamp01 = (v) => Math.min(1, Math.max(0, v));
 const lerp = (a, b, t) => a + (b - a) * t;
+
+/**
+ * The room-noise margin for a room this close to the calibrated level: in
+ * a noisy room (speech less than noisyGapDb above the room) the margin
+ * drops, so a soft voice still moves the circle.
+ *
+ * @param {number} roomNoiseOffsetDb - room noise relative to the calibrated level
+ * @param {typeof DEFAULT_RING_SETTINGS.gate} [gate]
+ * @returns {number}
+ */
+export function roomMarginDbFor(roomNoiseOffsetDb, gate = DEFAULT_RING_SETTINGS.gate) {
+  if (gate.noisyGapDb == null || !Number.isFinite(roomNoiseOffsetDb)) return gate.roomMarginDb;
+  return -roomNoiseOffsetDb < gate.noisyGapDb ? gate.noisyMarginDb : gate.roomMarginDb;
+}
+
+/**
+ * The range edge's opacity at rest: --color-voice at voice.edgeOpacity,
+ * never brighter than the voice circle at rest (voice.opacityRest).
+ *
+ * @param {typeof DEFAULT_RING_SETTINGS.voice} [v]
+ * @returns {number}
+ */
+export function edgeOpacityFor(v = DEFAULT_RING_SETTINGS.voice) {
+  const edge = Number.isFinite(v.edgeOpacity) ? v.edgeOpacity : v.opacityRest;
+  return Math.max(0, Math.min(edge, v.opacityRest));
+}
 
 /**
  * Whether the voice circle should follow the level or rest, with hysteresis.
@@ -296,11 +330,13 @@ const COMPONENT_CSS = `
       0 0 calc(18px * var(--glow-scale)) calc(var(--band) + 6px * var(--glow-scale)) color-mix(in srgb, var(--color-accent) calc(65% * var(--glow-strength)), transparent),
       0 0 calc(38px * var(--glow-scale)) calc(var(--band) + 10px * var(--glow-scale)) color-mix(in srgb, var(--color-accent) calc(30% * var(--glow-strength)), transparent);
   }
-  /* Range edge: 1.5px cream at 60% with a very faint fill at rest; a 3px
-     sage edge while approaching. Hidden under the band when over range. */
+  /* Range edge: 1.5px --color-voice at --edge-rest-opacity (voice.edgeOpacity,
+     never above the voice circle's rest opacity), with a very faint fill;
+     a 3px sage edge while approaching. Hidden under the band when over
+     range. */
   .mezzo-ring-edge {
     background: color-mix(in srgb, var(--color-text) 4%, transparent);
-    box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--color-text) 60%, transparent);
+    box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--color-voice) calc(var(--edge-rest-opacity, 0.45) * 100%), transparent);
     transition: box-shadow 0.35s ease, opacity 0.35s ease;
   }
   .mezzo-ring[data-zone="2"] .mezzo-ring-edge {
@@ -448,7 +484,9 @@ export class MezzoRangeRing {
     // feedback, not decoration.
     this.liveRms = followLevel(this.liveRms, this.rawRms, dt, motion);
     this.offsetDb = this.levelOffsetDb(this.liveRms);
-    this.gateOpen = voiceGate(this.gateOpen, this.offsetDb, gate, this.roomNoiseOffsetDb());
+    const roomOffset = this.roomNoiseOffsetDb();
+    const margin = roomMarginDbFor(roomOffset, gate);
+    this.gateOpen = voiceGate(this.gateOpen, this.offsetDb, margin === gate.roomMarginDb ? gate : { ...gate, roomMarginDb: margin }, roomOffset);
     // The gate changes only the target (see stepShown()); the circle eases there.
     const target = voiceCircleState(this.offsetDb, this.bounds, Math.min(this.zone, 2), voice);
     this.shownSize = stepShown(this.shownSize, { open: this.gateOpen, level: target.size, rest: voice.sizeRest, dtMs: dt }, motion);
@@ -476,5 +514,6 @@ export class MezzoRangeRing {
     s.setProperty('--band', `${(c.band * this.geometry.edge).toFixed(2)}px`);
     s.setProperty('--band-opacity', c.bandOpacity.toFixed(3));
     s.setProperty('--glow-strength', String(bandSettings.glowStrength));
+    s.setProperty('--edge-rest-opacity', String(edgeOpacityFor(voice)));
   }
 }

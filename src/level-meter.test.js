@@ -1,9 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import {
-  dbToLevelRatio, voiceDiameterPx, captureProgress, progressValueNow,
-  VOICE_MIN_PX, VOICE_MAX_PX, RING_SIZE_PX, RING_STROKE_PX,
-} from './calibration-ring.js';
+import { dbToLevelRatio, litSegments, SEGMENTS } from './level-meter.js';
 
 const rmsAt = (db) => Math.pow(10, db / 20);
 
@@ -11,7 +8,7 @@ const rmsAt = (db) => Math.pow(10, db / 20);
 // calibration meter. The dB values below are approximate percentiles from
 // two real-microphone captures (a quieter natural take and a more
 // expressive one), so these lock in the product requirement: natural speech
-// moves the circle continuously and proportionally, never in jumps.
+// moves the meter continuously and proportionally, never in jumps.
 describe('dbToLevelRatio', () => {
   it('-55dB (the floor) maps to an empty bar (ratio 0)', () => {
     assert.strictEqual(dbToLevelRatio(-55), 0);
@@ -62,45 +59,26 @@ describe('dbToLevelRatio', () => {
 });
 
 
-describe('voiceDiameterPx — live level to circle size', () => {
-  it('is about 20px when silent and about 96px at loud speech', () => {
-    assert.strictEqual(voiceDiameterPx(0), VOICE_MIN_PX);
-    assert.strictEqual(voiceDiameterPx(rmsAt(-80)), VOICE_MIN_PX);
-    assert.strictEqual(voiceDiameterPx(rmsAt(-30)), VOICE_MAX_PX);
-    assert.strictEqual(voiceDiameterPx(rmsAt(-10)), VOICE_MAX_PX);
+
+describe('litSegments — level to lit segments', () => {
+  it('six segments; silence lights none and loud speech lights all', () => {
+    assert.equal(SEGMENTS, 6);
+    assert.equal(litSegments(0), 0);
+    assert.equal(litSegments(rmsAt(-80)), 0);
+    assert.equal(litSegments(rmsAt(-30)), 6);
+    assert.equal(litSegments(rmsAt(-10)), 6);
   });
 
-  it('grows continuously with the level', () => {
-    const a = voiceDiameterPx(rmsAt(-45));
-    const b = voiceDiameterPx(rmsAt(-44));
-    assert.ok(b > a && b - a < 6);
+  it('normal speech (about -41 to -45 dB) lights about 3-4 segments', () => {
+    for (const db of [-45, -43, -41]) {
+      const lit = litSegments(rmsAt(db));
+      assert.ok(lit >= 2 && lit <= 4, `${db} dB lights ${lit}`);
+    }
+    assert.equal(litSegments(rmsAt(-41)), 3);
+    assert.equal(litSegments(rmsAt(-38.5)), 4);
   });
 
-  it('at its largest, always leaves a gap inside the ring, so it never reads as Approaching', () => {
-    assert.equal(VOICE_MAX_PX, 96);
-    assert.ok((RING_SIZE_PX - 2 * RING_STROKE_PX - VOICE_MAX_PX) / 2 >= 10);
-  });
-});
-
-describe('captureProgress — ring fill over the capture', () => {
-  it('fills smoothly from 0 to 1 over the capture and clamps', () => {
-    assert.strictEqual(captureProgress(0, 6000), 0);
-    assert.strictEqual(captureProgress(3600, 6000), 0.6);
-    assert.strictEqual(captureProgress(6000, 6000), 1);
-    assert.strictEqual(captureProgress(9000, 6000), 1);
-    assert.strictEqual(captureProgress(-5, 6000), 0);
-  });
-
-  it('with reduced motion, steps once per second instead', () => {
-    assert.strictEqual(captureProgress(900, 6000, true), 0);
-    assert.strictEqual(captureProgress(1000, 6000, true), 1 / 6);
-    assert.strictEqual(captureProgress(3999, 6000, true), 3 / 6);
-    assert.strictEqual(captureProgress(6000, 6000, true), 1);
-  });
-
-  it("the progressbar's value changes once per second, not every frame", () => {
-    const values = new Set();
-    for (let t = 0; t <= 6000; t += 16) values.add(progressValueNow(t, 6000));
-    assert.deepStrictEqual([...values], [0, 17, 33, 50, 67, 83, 100]);
+  it('a quiet-but-valid calibration (-52 dB) still lights one', () => {
+    assert.equal(litSegments(rmsAt(-52)), 1);
   });
 });
