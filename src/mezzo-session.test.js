@@ -49,7 +49,6 @@ const {
   MEZZO_COMPANION_READY_BASE_HEIGHT,
   MEZZO_COMPANION_EXPANDED_SIZE,
   MEZZO_COMPANION_COMPACT_SIZE,
-  dbToMeterFillRatio,
 } = await import('./mezzo-session.js');
 
 // =============================================================================
@@ -396,78 +395,6 @@ describe('computeReadyContentHeight', () => {
     assert.strictEqual(computeReadyContentHeight(5), MEZZO_COMPANION_READY_BASE_HEIGHT);
     assert.strictEqual(computeReadyContentHeight(6), MEZZO_COMPANION_READY_BASE_HEIGHT); // 5 saved + 1 unsaved
     assert.strictEqual(computeReadyContentHeight(100), MEZZO_COMPANION_READY_BASE_HEIGHT);
-  });
-});
-
-// =============================================================================
-// dbToMeterFillRatio — the continuous calibration meter's real, current dB
-// -> clamped 0..1 fill-ratio mapping (2026-08-12 revision — replaces the
-// earlier 5-segment presentation's energyToSegmentCount()/
-// dbToMeterSegmentCount(), retired outright alongside the segmented DOM/CSS
-// they drove; see CLAUDE.md's Engineering Notes). Exercised directly rather
-// than reimplemented here, so this suite can't silently drift from what
-// handleCalibrationLevelSample() actually renders — it calls this same
-// function and sets the fill element's width to `${ratio * 100}%` directly,
-// with no intermediate rounding/segment step.
-//
-// -55..-30: unchanged from the segmented presentation's own revision (see
-// CALIBRATION_METER_DB_MIN/MAX's doc comment) — real-microphone diagnostics
-// confirmed this window fits ordinary natural speech; what changed here is
-// only the presentation (continuous vs. discrete), not the range. The
-// specific dB values below are the approximate percentiles measured from
-// two real-microphone captures during that investigation — a quieter
-// natural-speaking take and a more expressive one — not synthetic boundary
-// values, so this test locks in the actual product requirement (smaller
-// changes in natural speech move the bar continuously and proportionally,
-// not in visible jumps only at segment boundaries).
-// =============================================================================
-
-describe('dbToMeterFillRatio', () => {
-  it('-55dB (the floor) maps to an empty bar (ratio 0)', () => {
-    assert.strictEqual(dbToMeterFillRatio(-55), 0);
-  });
-
-  it('-30dB (the ceiling) maps to a full bar (ratio 1)', () => {
-    assert.strictEqual(dbToMeterFillRatio(-30), 1);
-  });
-
-  it('an intermediate value maps proportionally within the range, not rounded to a discrete step', () => {
-    // -42.5dB is exactly the midpoint of -55..-30 -> exactly 0.5, not
-    // rounded up/down to some fixed increment the old segment presentation
-    // would have produced.
-    assert.strictEqual(dbToMeterFillRatio(-42.5), 0.5);
-    // A small, real difference in speaking level produces a correspondingly
-    // small, distinct difference in ratio — the whole point of restoring a
-    // continuous presentation instead of discrete segments.
-    const quieter = dbToMeterFillRatio(-45.0);
-    const louder = dbToMeterFillRatio(-44.1);
-    assert.ok(louder > quieter);
-    assert.ok(louder - quieter < 0.1); // a ~1dB difference is a small, non-jumpy move
-  });
-
-  it('real-microphone reference values from the calibration-meter investigation map to the expected relative positions', () => {
-    // Quieter natural-speaking capture (p50 ~ -45.0dB, p90 ~ -44.1dB) sits
-    // in the lower-middle of the bar, not empty.
-    assert.ok(dbToMeterFillRatio(-45.0) > 0 && dbToMeterFillRatio(-45.0) < 0.5);
-    // More expressive capture (p50 ~ -41.3dB) sits past the midpoint;
-    // its louder moments (p90 ~ -37.5dB) sit further still, closer to full.
-    assert.ok(dbToMeterFillRatio(-41.3) > 0.5);
-    assert.ok(dbToMeterFillRatio(-37.5) > dbToMeterFillRatio(-41.3));
-  });
-
-  it('a valid-but-quiet calibration at the engine\'s own MIN_USABLE_BASELINE_DB floor (-55dB) reads as the empty bar, not a negative/unreachable value', () => {
-    assert.strictEqual(dbToMeterFillRatio(-55), 0);
-    assert.ok(dbToMeterFillRatio(-52) > 0); // just above the engine's own floor, now visibly nonzero
-  });
-
-  it('clamps below the floor and above the ceiling instead of an out-of-range ratio', () => {
-    assert.strictEqual(dbToMeterFillRatio(-90), 0); // near-silence
-    assert.strictEqual(dbToMeterFillRatio(0), 1); // implausibly loud/clipping
-  });
-
-  it('returns 0 for non-finite input rather than NaN or throwing', () => {
-    assert.strictEqual(dbToMeterFillRatio(NaN), 0);
-    assert.strictEqual(dbToMeterFillRatio(undefined), 0);
   });
 });
 

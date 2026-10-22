@@ -3,7 +3,7 @@
  * Enables offline support and PWA installation
  */
 
-const CACHE_NAME = 'mezzo-v17';
+const CACHE_NAME = 'mezzo-v18';
 const ASSETS = [
   '/',
   '/index.html',
@@ -19,6 +19,7 @@ const ASSETS = [
   '/src/engine.js',
   '/src/analytics.js',
   '/src/range-ring.js',
+  '/src/calibration-ring.js',
   '/src/zone-announcer.js',
   '/src/page-transition.js',
   '/src/mezzo-session.js',

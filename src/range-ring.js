@@ -161,8 +161,8 @@ export function stepBand({ band, opacity }, { over, target, dtMs, reduced = fals
 
 // Motion: eased and continuous (PRD §5.3). Rising a little faster than
 // falling keeps the circle responsive without snapping.
-const VOICE_RISE_TAU_MS = 90;
-const VOICE_FALL_TAU_MS = 220;
+export const VOICE_RISE_TAU_MS = 90;
+export const VOICE_FALL_TAU_MS = 220;
 // Reduced motion: short crossfades instead of growth (PRD §11.2).
 const REDUCED_TAU_MS = 60;
 

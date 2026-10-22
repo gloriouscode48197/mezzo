@@ -196,12 +196,32 @@ Decision states stay full-screen, per CLAUDE.md. The one-off card on the new-pro
 
 ## 8. Proposal 4: Calibrating
 
-Replace the flat orange meter:
+Revised 2026-10-22 to match the updated Calibrating board. The user must see live feedback that their voice is being captured, so this replaces the countdown-number version and settles the §13 open question in favor of a voice circle.
 
-- A 6px sage progress ring with rounded ends, on a faint track, about 130px across. It fills over the six-second capture.
-- A large countdown number (about 40px) in the center. No gray fill.
-- Copy below: "Talk normally for a few seconds." (new copy, to be confirmed)
-- Open question: add a small, faint voice circle inside the ring so users can see the microphone responding (§13).
+Top to bottom, at the shared 380×364 pre-monitoring size:
+
+- **Heading:** "Keep speaking at the level you want to maintain". Geist 500, 20px, cream, centered, `text-wrap: balance`. When recalibrating a saved profile, the existing "Recalibrating {name}" mono label stays above it.
+- **Progress ring**, 30px below the heading:
+  - 132px across, 6px stroke.
+  - Track: cream at 12% opacity.
+  - Progress: sage (#CEE2C4), round caps, filling clockwise from 12 o'clock over the six-second capture. It stays empty through "Preparing microphone…" and the 3-2-1 countdown.
+  - `role="progressbar"` (0–100). `aria-valuenow` changes once per second of capture, not every frame.
+- **Live voice circle**, centered inside the ring:
+  - `--color-voice` (#8E897B), solid, `aria-hidden`.
+  - Its diameter follows the live mic level, from about 20px when silent to about 116px at loud speech (the same -55 to -30 dB window the old meter used), eased with the Range Ring's own rise and fall timing.
+  - It starts following the level when capture begins and rests at 20px before that.
+  - No range edge and no chartreuse, since the range doesn't exist yet.
+- **Status**, 18px below the ring: "Preparing microphone…", then "Start speaking in 3/2/1", then "Listening… Ns" counting down. Sage, 15px, weight 500, `aria-hidden`.
+- **Hint**, 6px below: "Talk normally. The circle moves with your voice." 13px, muted (#B0AB9E).
+- **Cancel**, a sage text link pinned to the bottom. Behavior unchanged.
+
+The horizontal meter bar and "Background sounds may move the meter too." are removed.
+
+**Accessibility.** The existing live region is kept, with its two one-time announcements ("Get ready. Calibration starts in 3 seconds." and "Listening for 6 seconds."). Nothing is announced every second.
+
+**Reduced motion.** The ring steps once per second instead of filling smoothly. The voice circle still follows the level, since it's the feedback.
+
+**Sizes.** Calibrating always runs at the 380×364 pre-monitoring size; it can't be reached in Compact.
 
 ---
 
@@ -321,7 +341,7 @@ This makes the refresh reviewable as small, safe steps and leaves one place to c
 2. **Band maximum.** At what dB over the end of range should the band reach full thickness? The ring experiment used about +4 dB.
 3. **Live-region debounce.** Confirm about 1 second and "into/out of Outside range only" with a screen-reader user if possible.
 4. **Sustained drift.** Keep `SUSTAINED_DRIFT_MS` as a separate effect, or fold it into band intensity?
-5. **Calibrating.** Confirm "Talk normally for a few seconds," and decide whether to show a small voice circle inside the progress ring.
+5. **Calibrating.** Resolved 2026-10-22: a live voice circle inside the progress ring, with "Talk normally. The circle moves with your voice." (§8).
 6. **Website chartreuse buttons.** Confirmed in design; revisit if it ever causes confusion with the in-product nudge.
 
 ---

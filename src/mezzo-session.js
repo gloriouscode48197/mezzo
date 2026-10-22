@@ -115,6 +115,7 @@
 import { AudioProcessor } from './audio.js?v=2';
 import { MezzoEngine } from './engine.js?v=5';
 import { MezzoRangeRing } from './range-ring.js';
+import { MezzoCalibrationRing } from './calibration-ring.js';
 import { createZoneAnnouncer, ZONE_LABELS } from './zone-announcer.js';
 import { createCalibrationController } from './calibration-controller.js';
 import { createCalibrationLock } from './calibration-lock.js';
@@ -302,6 +303,7 @@ const C0_BLOCKED_ICON_SVG = '<svg width="44" height="44" viewBox="0 0 44 44" fil
 // truth for when capture ends; this constant only decides what the
 // countdown text counts down from.
 const CALIBRATION_COUNTDOWN_SECONDS = 6;
+const CALIBRATION_CAPTURE_MS = CALIBRATION_COUNTDOWN_SECONDS * 1000;
 
 // Mirrors calibration-controller.js's own DEFAULT_PREPARATION_MS (3000ms) —
 // same relationship as CALIBRATION_COUNTDOWN_SECONDS above: the controller's
@@ -468,49 +470,6 @@ const LAYOUT_MODES = Object.freeze({ EXPANDED: 'expanded', COMPACT: 'compact' })
 const OUTSIDE_ZONE = 3; // "Outside Range" — there's no higher volume tier
 const SUSTAINED_DRIFT_MS = 1000; // continuous time outside range before drift escalates
 
-// Calibrating screen's live meter dB-to-0..1 mapping. (Predates the
-// PiP-first model: a page-level calibration ring on the old dual-surface
-// try-it.js once used the same ENERGY_DB_MIN/MAX naming — that page-level
-// screen is long retired, calibration is Companion-only now.)
-//
-// -55..-30 (2026-08-12 revision, presentational only): the original -50..-10
-// window read as a progress bar users felt they had to fill, and real-
-// microphone diagnostics (see the calibration-meter investigation this
-// revision closes out) confirmed why — without getUserMedia's autoGainControl
-// (deliberately off; see audio.js), ordinary natural speech without AGC
-// commonly measured p50 around -41 to -45dB and p90 around -37 to -44dB,
-// which the old window's bottom quarter compressed into "barely any visible
-// movement, regardless of how the person was actually speaking." -55 aligns
-// the floor with engine.js's own MIN_USABLE_BASELINE_DB (a quiet-but-valid
-// calibration no longer reads as near-zero activity); -30 narrows the span
-// to the range real speech actually occupies. This constant is read only by
-// handleCalibrationLevelSample() below to drive the meter's own continuous
-// visual fill — see CLAUDE.md's Engineering Notes for confirmation that
-// changing it has no effect on captured samples, the computed speaking
-// profile, monitoring thresholds, or mic constraints, all of which are
-// computed independently in calibration-controller.js/engine.js from the
-// same raw samples, never from this mapping.
-const CALIBRATION_METER_DB_MIN = -55;
-const CALIBRATION_METER_DB_MAX = -30;
-
-// A raw dB value (already computed from rms the same way
-// handleCalibrationLevelSample() does) -> a clamped 0..1 fill ratio for the
-// continuous calibration meter bar (2026-08-12 revision — replaces the
-// earlier 5-segment presentation; see CLAUDE.md's Engineering Notes for why:
-// discrete segments meant a real, audible change in speaking level often
-// produced no visible change at all until it crossed a whole segment
-// boundary, which read as unresponsive). Exported so this one piece of real
-// math gets direct unit coverage without needing a live DOM or a
-// fake-audio-device fixture — see src/mezzo-session.test.js — and so there
-// is exactly one implementation of the mapping (handleCalibrationLevelSample()
-// itself just calls this and sets the fill element's width directly), not a
-// test-only reimplementation that could silently drift from production
-// behavior.
-export function dbToMeterFillRatio(db) {
-  if (!Number.isFinite(db)) return 0;
-  return Math.min(1, Math.max(0, (db - CALIBRATION_METER_DB_MIN) / (CALIBRATION_METER_DB_MAX - CALIBRATION_METER_DB_MIN)));
-}
-
 // Sentence case (2026-08-18 redesign, was Title Case: "Quiet" / "Within
 // Range" / "Approaching End of Range" / "Outside Range") — an approved
 // wording change from the accepted Monitoring design, not incidental
@@ -653,8 +612,7 @@ export function createMezzoSession({
     if (state.capturing && !calibrationCountdownStarted) {
       calibrationCountdownStarted = true;
       stopPreparationCountdown();
-      if (calibratingMeterRowEl) calibratingMeterRowEl.classList.remove('hidden');
-      if (calibratingMeterHintEl) calibratingMeterHintEl.classList.remove('hidden');
+      calibrationRing?.startCapture();
       if (calibratingAnnounceEl) calibratingAnnounceEl.textContent = 'Listening for 6 seconds.';
       startCalibratingCountdown();
     }
@@ -837,9 +795,7 @@ export function createMezzoSession({
   let calibratingSubheadingEl = null; // mode-aware "Recalibrating {name}" line — session mode leaves it empty
   let calibratingStatusEl = null; // aria-hidden visible text: blank, then (if shown) "Preparing microphone…", then "Start speaking in {n}", then a live "Listening… {n}s" countdown
   let calibratingAnnounceEl = null; // visually-hidden aria-live region — exactly two one-time announcements, see its own construction comment above
-  let calibratingMeterRowEl = null;
-  let calibratingMeterFillEl = null; // the single continuous-fill element, width set via handleCalibrationLevelSample()
-  let calibratingMeterHintEl = null; // "Background sounds may move the meter too." — shares calibratingMeterRowEl's own hidden/visible lifecycle exactly
+  let calibrationRing = null; // MezzoCalibrationRing: progress ring + live voice circle, driven by handleCalibrationLevelSample()
   let calibratingCountdownTimer = null;
   // Guards the countdown's false→true "start exactly once per attempt"
   // requirement — reset in prepareCalibratingScreen() at the top of every
@@ -897,7 +853,7 @@ export function createMezzoSession({
   // flag is enough: only one decision screen is ever visible at a time.
   let decisionCommitInFlight = false;
 
-  let unsubscribeCalibrationLevel = null; // Calibrating screen's live-meter subscription — torn down whenever that screen isn't active
+  let unsubscribeCalibrationLevel = null; // Calibrating screen's live-level subscription — torn down whenever that screen isn't active
 
   let currentZone = 0;
   let isSustained = false;
@@ -2171,15 +2127,15 @@ export function createMezzoSession({
         flex-shrink: 0;
       }
 
-      /* ── Calibrating (C2) — a live, proportional volume bar and a
-         ticking countdown, automatic completion after the configured
-         capture duration, and a single visible Cancel action; no manual
-         "I'm done" control. Shares the Ready/Welcome/C1/C0 fixed size. ── */
+      /* ── Calibrating (C2) (PRD §8) — heading, a progress ring with a live
+         voice circle inside, a sage "Listening… {n}s" countdown, one line
+         of guidance, and Cancel pinned to the bottom. Completes on its own
+         after the capture; no manual "I'm done" control. Shares the
+         Ready/Welcome/C1/C0 fixed size. ── */
       .pip-screen-calibrating {
         justify-content: center;
-        padding: 32px 24px;
+        padding: 20px 24px 56px; /* bottom room for the pinned Cancel */
         box-sizing: border-box;
-        gap: 16px;
       }
       .pip-calibrating-subheading {
         font-family: var(--font-mono);
@@ -2188,92 +2144,45 @@ export function createMezzoSession({
         text-transform: uppercase;
         color: var(--color-text-muted);
         text-align: center;
-        min-height: 12px;
+        margin-bottom: 10px;
       }
-      /* Typography now comes from .pip-h1 (2026-08-14 pass — see p.pip-h1's
-         own comment on the shared rule above); this class only carries the
-         one genuinely layout-specific concern left. */
-      .pip-calibrating-heading {
-        max-width: 250px;
+      .pip-calibrating-subheading:empty { display: none; }
+      p.pip-h1.pip-calibrating-heading {
+        font-weight: var(--weight-medium);
+        font-size: 20px;
+        line-height: 1.25;
+        max-width: 280px;
+        text-wrap: balance;
       }
+      .pip-calibrating-visual { margin-top: 30px; }
       /* "Preparing microphone…" / "Start speaking in {n}" / "Listening…
          {n}s" — aria-hidden (see calibratingAnnounceEl for what assistive
-         tech actually hears); a live countdown, not a static label. See
-         handleAcquisitionConfirmed()/startPreparationCountdown()/
-         startCalibratingCountdown(). One consistent, more prominent
-         treatment across every pre-capture and active-capture state
-         (2026-08-14 pass) — bumped from 11px/regular to 15px/medium-weight
-         (15px reuses the exact size .pip-calibrating-heading/
-         .pip-failed-message used before this same pass moved them up to
-         24px, rather than picking a new, unrelated number), still clearly
-         smaller than the 24px heading above it, and still the same amber
-         already used here (unchanged color — a larger size only improves
-         its own effective contrast, never worsens it). min-height scaled
-         to match so the pre-disclosure blank state still reserves the
-         right amount of layout space. */
+         tech actually hears). min-height holds its space while blank. */
       .pip-calibrating-status {
+        margin-top: 18px;
         font-family: var(--font-body);
         font-size: 15px;
         font-weight: var(--weight-medium);
-        color: color-mix(in srgb, var(--color-notice) 90%, transparent);
+        line-height: 1.25;
+        color: var(--color-link);
         text-align: center;
-        min-height: 19px; /* holds its own layout space even while blank, pre-disclosure */
+        min-height: 19px;
       }
-      /* Continuous fill meter (2026-08-12 revision — restores the
-         continuous presentation the old "Quiet"/"Loud" bar used, minus its
-         judgmental labels; supersedes the intermediate 5-segment
-         presentation, which made a real, audible change in speaking level
-         often produce no visible movement at all until it crossed a whole
-         segment boundary). Hidden until real six-second capture begins (see
-         calibratingMeterRowEl's own construction comment). Row dimensions
-         (100% width, 160px max, 28px height) and the fill color
-         (var(--hanko-fill), the same token the old segments used when lit)
-         are unchanged from the segmented presentation this replaces. */
-      .pip-calibrating-meter-row {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 100%;
-        max-width: 160px;
-        height: 28px;
-      }
-      .pip-calibrating-meter-track {
-        width: 100%;
-        height: 100%;
-        border-radius: 4px;
-        background: color-mix(in srgb, var(--color-overlay) 8%, transparent);
-        border: 1px solid color-mix(in srgb, var(--color-text-muted) 35%, transparent);
-        overflow: hidden;
-      }
-      .pip-calibrating-meter-fill {
-        height: 100%;
-        width: 0%;
-        background: var(--color-link);
-        transition: width 0.08s linear;
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .pip-calibrating-meter-fill { transition: none; }
-      }
-      /* Meter helper text (2026-08-13) — a product decision, not a bug fix:
-         real-microphone diagnostics confirmed the meter's own quiet-state
-         movement is genuine ambient/background sound reaching the mic, not
-         a rendering defect, and calibration's own validation already
-         rejects a capture without enough real speech regardless of what
-         the meter shows. Rather than gating or suppressing that movement,
-         one line of concise secondary copy sets the right expectation.
-         Same muted "secondary helper text" treatment already established
-         for Ready's own privacy disclaimer (.pip-ready-disclaimer) — reused
-         rather than inventing a new visual weight. Shares calibratingMeterRowEl's
-         own hidden/visible lifecycle exactly (see its own toggle sites) so
-         it's visible only whenever the active meter is, never a moment
-         longer or shorter. */
-      .pip-calibrating-meter-hint {
+      .pip-calibrating-hint {
+        margin: 6px 0 0;
         font-family: var(--font-body);
-        font-size: 11px;
+        font-size: 13px;
         line-height: 1.4;
         color: var(--color-text-muted);
         text-align: center;
-        max-width: 220px;
+        max-width: 300px;
+      }
+      .pip-calibrating-cancel {
+        position: absolute;
+        left: 50%;
+        bottom: 18px;
+        transform: translateX(-50%);
+        min-height: 24px;
       }
       /* .pip-text-btn's own rule now lives merged with .pip-ready-contextual-link
          above (2026-08-14 visual-language pass) — the old uppercase-chip
@@ -3340,27 +3249,36 @@ export function createMezzoSession({
     calibratingHeading.textContent = 'Keep speaking at the level you want to maintain';
     calibratingScreen.appendChild(calibratingHeading);
 
-    // Visible status text ("Start speaking in 3/2/1", then "Listening…
-    // {n}s") — calibration pacing revision, second pass: this rapidly-
-    // changing element is now aria-hidden. Assistive tech gets exactly two
-    // one-time announcements instead (calibratingAnnounceEl, immediately
-    // below), per the accessibility decision in CLAUDE.md's Engineering
-    // Notes — narrating every visible tick was found to be noisy, not
-    // helpful, for a fast, decorative countdown like this one.
+    // Progress ring with the live voice circle inside it (PRD §8). The
+    // ring fills over the six-second capture; the circle follows the
+    // microphone level from the moment capture begins, so the user can see
+    // their voice being captured. The ring is a role="progressbar" whose
+    // value changes once a second; the circle is aria-hidden.
+    const calibratingVisual = pipDoc.createElement('div');
+    calibratingVisual.className = 'pip-calibrating-visual';
+    calibratingScreen.appendChild(calibratingVisual);
+    calibrationRing = new MezzoCalibrationRing(calibratingVisual, { durationMs: CALIBRATION_CAPTURE_MS });
+
+    // Visible status text ("Preparing microphone…", "Start speaking in
+    // 3/2/1", then "Listening… {n}s") — aria-hidden. Assistive tech gets
+    // exactly two one-time announcements instead (calibratingAnnounceEl,
+    // below): narrating every visible tick was found to be noisy, not
+    // helpful, for a fast countdown like this one.
     const calibratingStatus = pipDoc.createElement('div');
     calibratingStatus.className = 'pip-calibrating-status';
     calibratingStatus.setAttribute('aria-hidden', 'true');
     calibratingScreen.appendChild(calibratingStatus);
     calibratingStatusEl = calibratingStatus;
 
+    const calibratingHint = pipDoc.createElement('p');
+    calibratingHint.className = 'pip-calibrating-hint';
+    calibratingHint.textContent = 'Talk normally. The circle moves with your voice.';
+    calibratingScreen.appendChild(calibratingHint);
+
     // Static, visually-hidden live region carrying exactly two one-time
     // announcements ("Get ready. Calibration starts in 3 seconds." /
     // "Listening for 6 seconds.") — kept separate from calibratingStatusEl
-    // above specifically so its rapid visible-text changes never reach
-    // assistive tech, and so this element's own text only ever changes at
-    // the two moments meant to be announced, never in between (a single
-    // shared live region firing on every visible-text change would
-    // otherwise re-announce "Start speaking in 2", "…in 1", etc.).
+    // above so its rapid visible-text changes never reach assistive tech.
     const calibratingAnnounce = pipDoc.createElement('div');
     calibratingAnnounce.className = 'pip-calibrating-announce';
     calibratingAnnounce.setAttribute('aria-live', 'polite');
@@ -3368,46 +3286,9 @@ export function createMezzoSession({
     calibratingScreen.appendChild(calibratingAnnounce);
     calibratingAnnounceEl = calibratingAnnounce;
 
-    // Continuous fill meter (2026-08-12 revision — see dbToMeterFillRatio()'s
-    // own comment above). Hidden until real six-second capture begins: no
-    // meter movement, and no samples, during either preparation stage
-    // (delayed-disclosure wait or the fixed 3-2-1 countdown) — see the
-    // capturing:true edge listener below, which is the only place this
-    // row's hidden class is removed. Entirely decorative (communicates "the
-    // microphone is responding," not a judgment about the current level, and
-    // carries no numeric dB values, tick marks, or target zones), so the
-    // whole row stays aria-hidden even once visible.
-    const meterRow = pipDoc.createElement('div');
-    meterRow.className = 'pip-calibrating-meter-row hidden';
-    meterRow.setAttribute('aria-hidden', 'true');
-    const meterTrack = pipDoc.createElement('div');
-    meterTrack.className = 'pip-calibrating-meter-track';
-    const meterFill = pipDoc.createElement('div');
-    meterFill.className = 'pip-calibrating-meter-fill';
-    meterTrack.appendChild(meterFill);
-    meterRow.appendChild(meterTrack);
-    calibratingScreen.appendChild(meterRow);
-    calibratingMeterRowEl = meterRow;
-    calibratingMeterFillEl = meterFill;
-
-    // Meter helper text (2026-08-13) — see .pip-calibrating-meter-hint's
-    // own CSS comment for the product reasoning. A separate element (not
-    // nested inside meterRow, which has its own fixed 28px height sized
-    // exactly for the bar) sharing meterRow's hidden/visible lifecycle
-    // exactly — toggled at the same two sites (the capturing:true edge
-    // listener above reveals both together; prepareCalibratingScreen()
-    // hides both together on every fresh attempt/retry). Not aria-hidden:
-    // unlike the purely decorative bar, this is real, static informative
-    // text a screen reader should read as ordinary page content.
-    const meterHint = pipDoc.createElement('p');
-    meterHint.className = 'pip-calibrating-meter-hint hidden';
-    meterHint.textContent = 'Background sounds may move the meter too.';
-    calibratingScreen.appendChild(meterHint);
-    calibratingMeterHintEl = meterHint;
-
     const calibratingCancelBtn = pipDoc.createElement('button');
     calibratingCancelBtn.type = 'button';
-    calibratingCancelBtn.className = 'pip-text-btn';
+    calibratingCancelBtn.className = 'pip-text-btn pip-calibrating-cancel';
     calibratingCancelBtn.textContent = 'Cancel';
     calibratingCancelBtn.addEventListener('click', handleCalibratingCancel);
     calibratingScreen.appendChild(calibratingCancelBtn);
@@ -4102,6 +3983,7 @@ export function createMezzoSession({
     });
     if (screenEl !== calibratingScreenEl) {
       if (unsubscribeCalibrationLevel) { unsubscribeCalibrationLevel(); unsubscribeCalibrationLevel = null; }
+      calibrationRing?.reset();
       stopCalibratingCountdown();
       stopPreparationCountdown();
       clearPreparingMessageTimers();
@@ -5107,9 +4989,7 @@ export function createMezzoSession({
     if (calibratingSubheadingEl) {
       calibratingSubheadingEl.textContent = mode === 'recalibrate' && targetName ? `Recalibrating ${targetName}` : '';
     }
-    resetCalibrationMeter();
-    if (calibratingMeterRowEl) calibratingMeterRowEl.classList.add('hidden'); // revealed only on the capturing:true edge below
-    if (calibratingMeterHintEl) calibratingMeterHintEl.classList.add('hidden'); // shares the meter row's own hidden/visible lifecycle exactly
+    calibrationRing?.reset(); // empty ring, resting circle; filling starts on the capturing:true edge
     stopCalibratingCountdown(); // defensive — see startCalibratingCountdown()'s own trigger below; this guarantees a clean slate even on a retry
     stopPreparationCountdown();
     clearPreparingMessageTimers();
@@ -5260,28 +5140,12 @@ export function createMezzoSession({
     if (calibratingCountdownTimer) { clearInterval(calibratingCountdownTimer); calibratingCountdownTimer = null; }
   }
 
-  /** Empties the meter fill and hides the row — the pre-capture resting
-   *  state, restored by prepareCalibratingScreen() on every fresh
-   *  attempt/retry. Kept as its own function (rather than inlined) since
-   *  it's also what a defensive full reset needs, independent of whether
-   *  the row happens to already be hidden. */
-  function resetCalibrationMeter() {
-    if (!calibratingMeterFillEl) return;
-    calibratingMeterFillEl.style.width = '0%';
-  }
-
-  /** Drives the continuous-fill meter — see dbToMeterFillRatio()'s own
-   *  comment above for the mapping. subscribeToLevel() delivers samples
-   *  throughout the whole calibration attempt, including the preparation
-   *  stages — this function itself, not the subscription, is what enforces
-   *  "no meter movement before capture begins," by simply declining to
-   *  touch the (hidden) fill until calibratingMeterRowEl no longer carries
-   *  the 'hidden' class. */
+  /** Feeds the live voice circle. subscribeToLevel() delivers samples
+   *  through the whole attempt, including the preparation stages; the ring
+   *  ignores them until capture begins (calibrationRing.startCapture()), so
+   *  nothing moves before the countdown ends. */
   function handleCalibrationLevelSample(rms) {
-    if (!calibratingMeterFillEl || !calibratingMeterRowEl || calibratingMeterRowEl.classList.contains('hidden')) return;
-    const db = 20 * Math.log10(rms + 1e-10);
-    const ratio = dbToMeterFillRatio(db);
-    calibratingMeterFillEl.style.width = `${ratio * 100}%`;
+    calibrationRing?.setLevel(rms);
   }
 
   function handleCalibratingCancel() {
@@ -6094,9 +5958,8 @@ export function createMezzoSession({
     calibratingSubheadingEl = null;
     calibratingStatusEl = null;
     calibratingAnnounceEl = null;
-    calibratingMeterRowEl = null;
-    calibratingMeterFillEl = null;
-    calibratingMeterHintEl = null;
+    calibrationRing?.destroy();
+    calibrationRing = null;
     stopCalibratingCountdown();
     stopPreparationCountdown();
     clearPreparingMessageTimers();
