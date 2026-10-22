@@ -22,6 +22,7 @@ import {
   INITIAL_GRACE_MS_MAX,
   OUTSIDE_ENTRY_DWELL_MS,
   END_OF_RANGE_MAX_DB,
+  DEFAULT_ZONE_SETTINGS,
 } from './engine.js';
 
 // =============================================================================
@@ -894,6 +895,72 @@ describe('Success Criteria', () => {
 // getRangeBoundsDb() / getLevelOffsetDb() — read-only boundaries for the
 // Range Ring (src/range-ring.js); must agree with _computeZone() exactly.
 // =============================================================================
+
+describe('MezzoEngine — dwell grace (tuner setting; the app default is 0)', () => {
+  const rmsAt = (offsetDb) => Math.pow(10, (-30 + offsetDb) / 20);
+  function engineWith(dwellGraceMs) {
+    const engine = new MezzoEngine({ zoneSettings: { ...DEFAULT_ZONE_SETTINGS, dwellGraceMs } });
+    engine.loadCalibration({ baselineRMS: rmsAt(0), spreadDb: 4 });
+    engine.startMonitoring();
+    engine.gracePeriodActive = false;
+    return engine;
+  }
+  // Frames every 50ms; `over` frames sit 1 dB past the end of range, the
+  // others 1 dB under it.
+  function run(engine, pattern, start = 0) {
+    const { endDb } = engine.getRangeBoundsDb();
+    let t = start;
+    const zones = [];
+    for (const over of pattern) {
+      engine.processFrame(rmsAt(over ? endDb + 1 : endDb - 1), t);
+      zones.push(engine.getZone());
+      t += 50;
+    }
+    return { zones, t };
+  }
+  const speech = (cycles) => Array.from({ length: cycles }, () => [1, 1, 1, 1, 0, 0]).flat(); // 200ms over, 100ms dip
+
+  it('the app default (0) is unchanged: any dip restarts the count', () => {
+    assert.strictEqual(DEFAULT_ZONE_SETTINGS.dwellGraceMs, 0);
+    const { zones } = run(engineWith(0), speech(6));
+    assert.ok(!zones.includes(3), 'loud speech with 100ms dips never commits');
+  });
+
+  it('with grace, short dips between words hold the count instead of resetting it', () => {
+    const engine = engineWith(250);
+    const { zones } = run(engine, speech(6));
+    assert.ok(zones.includes(3), 'loud speech commits Outside range');
+    // Only time over counts, so it takes most of three bursts: 150ms from
+    // the first (its first frame starts the count at 0), 200ms from the
+    // second, and the 500th ms on the third burst's third frame.
+    assert.strictEqual(zones.indexOf(3), 14);
+  });
+
+  it('a dip longer than the grace resets the count', () => {
+    const engine = engineWith(250);
+    const { zones } = run(engine, [1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1]);
+    assert.ok(!zones.includes(3));
+  });
+
+  it('with grace, Outside range holds through dips shorter than the grace, and leaves after it', () => {
+    const engine = engineWith(250);
+    const { t } = run(engine, Array(14).fill(1)); // committed
+    assert.strictEqual(engine.getZone(), 3);
+    const dip = run(engine, [0, 0, 0, 0], t); // 150ms under: still Outside
+    assert.deepStrictEqual(dip.zones, [3, 3, 3, 3]);
+    const back = run(engine, [1, 0, 0, 0, 0, 0, 0], dip.t);
+    assert.strictEqual(back.zones.at(-1), 2, 'leaves once under for the grace');
+  });
+
+  it('reports dwell progress for the readout', () => {
+    const engine = engineWith(250);
+    run(engine, [1, 1, 1, 1, 1]);
+    const p = engine.getDwellProgress(200);
+    assert.strictEqual(p.phase, 'entering');
+    assert.strictEqual(p.ms, 200);
+    assert.strictEqual(p.of, 500);
+  });
+});
 
 describe('MezzoEngine — range bounds for presentation', () => {
   for (const spreadDb of [4, 1]) { // 1 exercises the MIN_SPREAD_DB floor

@@ -222,10 +222,13 @@ const TYPICAL = { speakingDb: -42, spreadDb: 4 };
 // the window's short side: the app's 236px in 382 and 140px in 220).
 const LAYOUT_DEFAULTS = { compactPct: 140 / 220, smallPct: 140 / 220, expandedPct: 236 / 382, smallWidth: 240, smallHeight: 264 };
 const clone = (o) => JSON.parse(JSON.stringify(o));
+// Where the tuner starts when it differs from the app: dwell grace is new
+// and off in the app (0) until tuned values are applied.
+const TUNER_START = { zones: { dwellGraceMs: 250 } };
 function appDefaults() {
   return {
     ring: clone(DEFAULT_RING_SETTINGS),
-    zones: clone(DEFAULT_ZONE_SETTINGS),
+    zones: { ...clone(DEFAULT_ZONE_SETTINGS), ...TUNER_START.zones },
     calibrating: clone(DEFAULT_CALIBRATION_RING_SETTINGS),
     layout: clone(LAYOUT_DEFAULTS),
     audio: clone(DEFAULT_AUDIO_SETTINGS),
@@ -279,7 +282,8 @@ const GROUPS = [
     { path: 'zones.endSpreadMult', label: 'End of range, × spread', min: 1, max: 5, step: 0.1, unit: '×', digits: 1, hint: 'End of range as a multiple of how much your voice varied during calibration.' },
     { path: 'zones.approachingWidthDb', label: 'Approaching width', min: 0.5, max: 8, step: 0.5, unit: ' dB', digits: 1, nullable: true, autoValue: 2, hint: 'How many dB before the end of range Approaching starts. Auto is the app’s current rule (1 × spread).' },
     { path: 'zones.silenceSpreadMult', label: 'Silence boundary, × spread', min: -5, max: 0, step: 0.1, unit: '×', digits: 1, hint: 'Below this, the zone is Listening.' },
-    { path: 'zones.outsideDwellMs', label: 'Outside dwell', min: 0, max: 2000, step: 50, unit: ' ms', digits: 0, hint: 'How long you must stay over before Outside range commits.' },
+    { path: 'zones.outsideDwellMs', label: 'Outside dwell', min: 0, max: 2000, step: 50, unit: ' ms', digits: 0, hint: 'How long you must stay over before Outside range commits. Only time actually over counts.' },
+    { path: 'zones.dwellGraceMs', label: 'Dwell grace', min: 0, max: 800, step: 10, unit: ' ms', digits: 0, hint: 'Dips under the line shorter than this don’t reset the dwell, and the band stays until you’ve been under this long. (The app is at 0 until tuned.)' },
   ]],
   ['Band', [
     { path: 'ring.band.minFraction', label: 'Min thickness', min: 0, max: 0.3, step: 0.005, scale: 100, unit: '%', digits: 1, hint: 'Band thickness just over the end of range, as % of the edge.' },
@@ -593,6 +597,12 @@ $('btn-cal-reset').addEventListener('click', () => { clearInterval(capTimer); ca
 // ── Readout ────────────────────────────────────────────────────────────────
 const ZONES = ['Listening', 'Within range', 'Approaching end of range', 'Outside range'];
 const fmt = (v) => (Number.isFinite(v) ? `${v >= 0 ? '+' : ''}${v.toFixed(1)}` : '−∞');
+function dwellText() {
+  const p = engine.getDwellProgress(performance.now());
+  if (!p) return 'dwell <b>idle</b>';
+  const ms = Math.min(Math.round(p.ms), p.of);
+  return p.phase === 'entering' ? `over <b>${ms}/${p.of} ms</b>` : `under <b>${ms}/${p.of} ms</b> (leaving Outside)`;
+}
 function renderReadout() {
   requestAnimationFrame(renderReadout);
   const box = $('readout');
@@ -611,6 +621,7 @@ function renderReadout() {
     <span>level vs normal <b>${fmt(engine.getLevelOffsetDb(lastSmoothed))} dB</b> (circle ${fmt(vis)})</span>
     <span>zone <b class="zone-${zone}">${ZONES[zone]}</b></span>
     <span>gate <b>${ring.gateOpen ? 'open' : 'resting'}</b></span>
+    <span>${dwellText()}</span>
     <span>bounds: silence <b>${fmt(b.silenceDb)}</b> · Approaching <b>${fmt(b.targetDb)}</b> · end <b>${fmt(b.endDb)}</b> dB</span>
     ${room}${gap}`;
 }

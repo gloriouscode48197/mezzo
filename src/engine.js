@@ -101,6 +101,12 @@ const EPSILON = 1e-10;
  * approachingWidthDb: when set, Approaching is that many dB before the end
  * of range; null keeps the default rule (targetSpreadMult × spread, held
  * at or below the end of range).
+ *
+ * dwellGraceMs: dips under the end of range shorter than this don't reset
+ * the Outside dwell (only time actually over counts toward it), and once
+ * Outside is committed the level must stay under for this long before it
+ * leaves. 0 (the app's default) means any dip resets the count and the
+ * first frame under leaves.
  */
 export const DEFAULT_ZONE_SETTINGS = Object.freeze({
   silenceSpreadMult: ZONE_SILENCE_SPREAD_MULT,
@@ -110,6 +116,7 @@ export const DEFAULT_ZONE_SETTINGS = Object.freeze({
   endCapDb: END_OF_RANGE_MAX_DB,
   minSpreadDb: MIN_SPREAD_DB,
   outsideDwellMs: OUTSIDE_ENTRY_DWELL_MS,
+  dwellGraceMs: 0,
 });
 
 export class MezzoEngine {
@@ -138,7 +145,19 @@ export class MezzoEngine {
     // Monotonic timestamp (matches whatever clock processFrame()'s nowMs
     // argument uses) marking when the signal first qualified for zone 3 and
     // hasn't yet been confirmed; null whenever there's no pending escalation.
+    // The rest of the dwell state (time actually spent over the line, and
+    // any dip in progress, entering or leaving) is reset with it — see
+    // _resetDwell() and zoneSettings.dwellGraceMs.
+    this._resetDwell();
+  }
+
+  /** Clears every piece of Outside-range dwell state. */
+  _resetDwell() {
     this.pendingOutsideSince = null;
+    this.overMs = 0;          // time actually over the end of range while entering
+    this.lastFrameMs = null;  // the previous frame's timestamp, while entering
+    this.dipSince = null;     // a dip under the line while entering
+    this.exitDipSince = null; // a dip under the line while committed Outside
   }
 
   // ===========================================================================
@@ -271,7 +290,7 @@ export class MezzoEngine {
 
     // Reset zone state
     this.currentZone = 0;
-    this.pendingOutsideSince = null;
+    this._resetDwell();
 
     // Set monitoring state
     this.monitoringActive = true;
@@ -295,7 +314,7 @@ export class MezzoEngine {
     this.currentZone = 0;
     this.gracePeriodActive = false;
     this.graceRemainingMs = 0;
-    this.pendingOutsideSince = null;
+    this._resetDwell();
 
     // Set monitoring state
     this.monitoringActive = false;
@@ -328,7 +347,7 @@ export class MezzoEngine {
       if (this.graceRemainingMs <= 0) {
         this.gracePeriodActive = false;
       }
-      this.pendingOutsideSince = null; // no pending escalation carries into/through grace
+      this._resetDwell(); // no pending escalation carries into/through grace
       return; // No zone updates during grace period
     }
 
@@ -351,26 +370,67 @@ export class MezzoEngine {
    * @private
    */
   _resolveZone(rawZone, nowMs) {
-    if (rawZone < 3) {
-      this.pendingOutsideSince = null;
+    const grace = this.zoneSettings.dwellGraceMs || 0;
+
+    // Committed Outside: leaving needs the level back under the line for
+    // the grace time, so the band doesn't flicker off between words. With
+    // no grace (the app's default), it leaves on the first frame under.
+    if (this.currentZone === 3) {
+      if (rawZone === 3) {
+        this.exitDipSince = null;
+        return 3;
+      }
+      if (this.exitDipSince === null) this.exitDipSince = nowMs;
+      if (nowMs - this.exitDipSince < grace) return 3;
+      this._resetDwell();
       return rawZone;
     }
 
-    // Already confirmed and still qualifying — stays 3, no re-confirmation.
-    if (this.currentZone === 3) {
-      return 3;
+    if (rawZone < 3) {
+      if (this.pendingOutsideSince === null) return rawZone;
+      // A dip while entering: shorter than the grace, the count is held
+      // (not reset); otherwise it starts over. With no grace (the app's
+      // default), any dip resets it.
+      if (this.dipSince === null) this.dipSince = nowMs;
+      if (nowMs - this.dipSince >= grace) this._resetDwell();
+      else this.lastFrameMs = nowMs; // time under the line never counts
+      return rawZone;
     }
 
+    // Over the line, not yet committed: only time actually over counts.
     if (this.pendingOutsideSince === null) {
       this.pendingOutsideSince = nowMs;
+      this.overMs = 0;
+    } else if (this.lastFrameMs !== null) {
+      this.overMs += nowMs - this.lastFrameMs;
     }
+    this.lastFrameMs = nowMs;
+    this.dipSince = null;
 
-    if (nowMs - this.pendingOutsideSince >= this.zoneSettings.outsideDwellMs) {
-      this.pendingOutsideSince = null;
+    if (this.overMs >= this.zoneSettings.outsideDwellMs) {
+      this._resetDwell();
       return 3;
     }
 
     return 2; // held at Approaching End of Range while confirmation pends
+  }
+
+  /**
+   * The Outside-range dwell's progress, for the tuner's readout:
+   * 'entering' counts time over the line toward outsideDwellMs; 'leaving'
+   * counts time back under toward dwellGraceMs. null when neither is
+   * counting.
+   *
+   * @returns {{ phase: 'entering' | 'leaving', ms: number, of: number } | null}
+   */
+  getDwellProgress(nowMs = performance.now()) {
+    if (this.currentZone === 3 && this.exitDipSince !== null) {
+      return { phase: 'leaving', ms: nowMs - this.exitDipSince, of: this.zoneSettings.dwellGraceMs || 0 };
+    }
+    if (this.pendingOutsideSince !== null) {
+      return { phase: 'entering', ms: this.overMs, of: this.zoneSettings.outsideDwellMs };
+    }
+    return null;
   }
 
   // ===========================================================================
