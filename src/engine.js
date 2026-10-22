@@ -111,9 +111,10 @@ const EPSILON = 1e-10;
  * endFrom: where the end of range comes from. 'spread' (the app's default)
  * is endSpreadMult × spread; 'peaks' is the calibration's peakPercentile
  * level plus peakMarginDb, so speaking at the calibrated level can't reach
- * it. Both are limited by endCapDb. 'peaks' needs this calibration's own
- * samples (calibrate()); a loaded profile without them falls back to
- * 'spread'.
+ * it. 'spread' is limited by endCapDb; 'peaks' only by peaksSafetyCapDb, a
+ * looser safety limit, so the cap doesn't pull the end of range back below
+ * the person's own peaks. 'peaks' needs this calibration's own samples
+ * (calibrate()); a loaded profile without them falls back to 'spread'.
  *
  * zoneWindowMs: Approaching and Outside are judged on the mean level over
  * this window (in linear RMS, then dB) instead of the momentary level, so
@@ -132,6 +133,7 @@ export const DEFAULT_ZONE_SETTINGS = Object.freeze({
   endFrom: 'spread',
   peakPercentile: 95,
   peakMarginDb: 2,
+  peaksSafetyCapDb: 12,
   zoneWindowMs: 0,
 });
 
@@ -304,6 +306,17 @@ export class MezzoEngine {
     const p = Math.min(100, Math.max(0, this.zoneSettings.peakPercentile)) / 100;
     const peak = sorted[Math.min(sorted.length - 1, Math.floor(p * (sorted.length - 1) + 0.5))];
     return MezzoEngine.rmsToDb(peak) - MezzoEngine.rmsToDb(this.baselineRMS);
+  }
+
+  /** Whether a cap, not the rule itself, is setting the end of range right
+   *  now ('spread' cap or 'peaks' safety cap), for the tuner's readout.
+   *  @returns {null | 'cap' | 'safety-cap'} */
+  getEndCapLimiting() {
+    const z = this.zoneSettings;
+    const spread = Math.max(this.spreadDb || 0, z.minSpreadDb);
+    const peakDb = z.endFrom === 'peaks' ? this.getPeakOffsetDb() : null;
+    if (peakDb === null) return z.endSpreadMult * spread > z.endCapDb ? 'cap' : null;
+    return peakDb + z.peakMarginDb > z.peaksSafetyCapDb ? 'safety-cap' : null;
   }
 
   /** The level Approaching and Outside are judged on, in dB vs baseline
@@ -552,7 +565,9 @@ export class MezzoEngine {
     const z = this.zoneSettings;
     const spread = Math.max(this.spreadDb || 0, z.minSpreadDb);
     const peakDb = z.endFrom === 'peaks' ? this.getPeakOffsetDb() : null;
-    const endDb = Math.min(peakDb === null ? z.endSpreadMult * spread : peakDb + z.peakMarginDb, z.endCapDb);
+    const endDb = peakDb === null
+      ? Math.min(z.endSpreadMult * spread, z.endCapDb)
+      : Math.min(peakDb + z.peakMarginDb, z.peaksSafetyCapDb);
     const targetDb = z.approachingWidthDb == null
       ? Math.min(z.targetSpreadMult * spread, endDb)
       : endDb - z.approachingWidthDb;

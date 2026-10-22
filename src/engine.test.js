@@ -976,18 +976,28 @@ describe('MezzoEngine — end of range from calibration peaks, and a short-term 
     assert.deepStrictEqual(a.getRangeBoundsDb(), b.getRangeBoundsDb());
   });
 
-  it("'peaks' puts the end of range at the chosen percentile plus the margin, under the cap", () => {
-    const engine = engineWith({ endFrom: 'peaks', peakPercentile: 95, peakMarginDb: 2, endCapDb: 20 });
+  it("'peaks' puts the end of range at the chosen percentile plus the margin, limited only by its own safety cap", () => {
+    const engine = engineWith({ endFrom: 'peaks', peakPercentile: 95, peakMarginDb: 2, endCapDb: 3, peaksSafetyCapDb: 12 });
     engine.calibrate(samples);
     const peak = engine.getPeakOffsetDb();
     assert.ok(peak > 0, 'the 95th percentile sits above the average');
-    assert.ok(Math.abs(engine.getRangeBoundsDb().endDb - (peak + 2)) < 1e-9);
-    engine.zoneSettings = { ...engine.zoneSettings, endCapDb: 3 };
-    assert.strictEqual(engine.getRangeBoundsDb().endDb, 3);
+    assert.ok(peak + 2 > 3, 'peaks plus margin is above the spread-mode cap');
+    assert.ok(Math.abs(engine.getRangeBoundsDb().endDb - (peak + 2)) < 1e-9, 'the spread-mode cap does not apply');
+    assert.strictEqual(engine.getEndCapLimiting(), null);
+    engine.zoneSettings = { ...engine.zoneSettings, peaksSafetyCapDb: 4 };
+    assert.strictEqual(engine.getRangeBoundsDb().endDb, 4);
+    assert.strictEqual(engine.getEndCapLimiting(), 'safety-cap');
+  });
+
+  it("'spread' keeps its own cap, and reports when it's limiting", () => {
+    const engine = engineWith({ endCapDb: 6 });
+    engine.loadCalibration({ baselineRMS: rmsAt(-42), spreadDb: 4 }); // 2.5 × 4 = 10, capped
+    assert.strictEqual(engine.getRangeBoundsDb().endDb, 6);
+    assert.strictEqual(engine.getEndCapLimiting(), 'cap');
   });
 
   it("with 'peaks', speaking at every calibrated level stays under the end of range", () => {
-    const engine = engineWith({ endFrom: 'peaks', peakPercentile: 100, peakMarginDb: 2, endCapDb: 20 });
+    const engine = engineWith({ endFrom: 'peaks', peakPercentile: 100, peakMarginDb: 2, peaksSafetyCapDb: 20 });
     engine.calibrate(samples);
     for (const rms of samples) assert.notStrictEqual(engine._computeZone(rms), 3);
   });
