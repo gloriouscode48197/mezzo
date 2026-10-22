@@ -1,8 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  voiceCircleState, bandFraction, ringGeometry, ease,
-  BAND_MIN_FRACTION, BAND_MAX_FRACTION, BAND_FULL_DB,
+  voiceCircleState, bandFraction, ringGeometry, ease, stepBand,
+  BAND_MIN_FRACTION, BAND_MAX_FRACTION, BAND_FULL_DB, BAND_FADE_MS, BAND_THIN_FRACTION,
   VOICE_FRACTION_END, VOICE_OPACITY_REST, REFERENCE_EDGE_PX,
 } from './range-ring.js';
 import { MezzoEngine, OUTSIDE_ENTRY_DWELL_MS } from './engine.js';
@@ -34,21 +34,23 @@ describe('voiceCircleState — level to circle size and opacity', () => {
     const s = voiceCircleState(bounds.silenceDb - 8, bounds, 0);
     assert.ok(s.size <= 0.15);
     assert.equal(s.opacity, VOICE_OPACITY_REST);
-    assert.equal(s.light, 0);
   });
 
-  it('stays ~40% opaque through the target range, then rises to solid and lighter at the end of range', () => {
+  it('stays ~40% opaque through the target range, then rises to solid at the end of range', () => {
     assert.equal(voiceCircleState(bounds.targetDb, bounds, 1).opacity, VOICE_OPACITY_REST);
-    const end = voiceCircleState(bounds.endDb, bounds, 2);
-    assert.equal(end.opacity, 1);
-    assert.equal(end.light, 1);
+    assert.equal(voiceCircleState(bounds.endDb, bounds, 2).opacity, 1);
+  });
+
+  it('carries no color change: Approaching and Outside share one color, set in CSS', () => {
+    assert.deepEqual(Object.keys(voiceCircleState(bounds.endDb, bounds, 2)).sort(), ['opacity', 'size']);
+    assert.deepEqual(Object.keys(voiceCircleState(bounds.endDb + 3, bounds, 3)).sort(), ['opacity', 'size']);
   });
 
   it('nearly fills the edge approaching, but only fills it once zone 3 is committed', () => {
     const pending = voiceCircleState(bounds.endDb + 3, bounds, 2); // over the threshold, dwell not yet met
     assert.equal(pending.size, VOICE_FRACTION_END);
     assert.ok(pending.size < 1);
-    assert.deepEqual(voiceCircleState(bounds.endDb + 3, bounds, 3), { size: 1, opacity: 1, light: 1 });
+    assert.deepEqual(voiceCircleState(bounds.endDb + 3, bounds, 3), { size: 1, opacity: 1 });
   });
 
   it('treats silence (no finite level) as the quietest state', () => {
@@ -120,6 +122,47 @@ describe('ease — eased, frame-rate independent motion', () => {
     const one = ease(0, 1, 32, 100);
     const two = ease(ease(0, 1, 16, 100), 1, 16, 100);
     assert.ok(Math.abs(one - two) < 1e-12);
+  });
+});
+
+describe('stepBand — grow in, shrink out, never linger half-transparent', () => {
+  const FRAME = 16;
+  const run = (state, input, ms) => {
+    const frames = [];
+    for (let t = 0; t < ms; t += FRAME) { state = stepBand(state, { ...input, dtMs: FRAME }); frames.push(state); }
+    return frames;
+  };
+  const target = 0.18;
+
+  it('appears as a thin ring and is fully opaque within about 120ms, while it grows', () => {
+    const frames = run({ band: 0, opacity: 0 }, { over: true, target }, 600);
+    assert.ok(frames[0].band < target * 0.25, 'starts as a thin ring');
+    const opaqueAt = frames.findIndex((f) => f.opacity === 1) * FRAME;
+    assert.ok(opaqueAt <= 120, `opaque after ${opaqueAt}ms`);
+    assert.ok(frames[Math.ceil(120 / FRAME)].band < target * 0.75, 'still growing once opaque');
+    assert.ok(frames.at(-1).band > target * 0.98);
+  });
+
+  it('on exit, stays opaque while shrinking back to the thin ring, then fades out', () => {
+    const frames = run({ band: target, opacity: 1 }, { over: false, target: 0 }, 600);
+    for (const f of frames) {
+      if (f.opacity < 1) assert.ok(f.band <= BAND_THIN_FRACTION * 1.5, 'only fades once thin');
+    }
+    const goneAt = (frames.findIndex((f) => f.opacity === 0) + 1) * FRAME;
+    assert.ok(goneAt <= 300, `gone after ${goneAt}ms`);
+    assert.ok(goneAt - BAND_FADE_MS >= 80, 'shrinks before it fades');
+  });
+
+  it('re-entering mid-exit grows back from where it is, with no jump', () => {
+    let s = run({ band: target, opacity: 1 }, { over: false, target: 0 }, 64).at(-1);
+    const next = stepBand(s, { over: true, target, dtMs: FRAME });
+    assert.ok(next.band >= s.band && next.opacity >= s.opacity);
+  });
+
+  it('reduced motion: a fixed thickness that only fades', () => {
+    const frames = run({ band: 0, opacity: 0 }, { over: true, target: BAND_MIN_FRACTION, reduced: true }, 200);
+    assert.ok(frames.every((f) => f.band === BAND_MIN_FRACTION));
+    assert.equal(frames.at(-1).opacity, 1);
   });
 });
 
