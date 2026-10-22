@@ -97,13 +97,31 @@
   .cal-hint { margin: 6px 0 0; font-size: 13px; color: var(--color-text-muted); text-align: center; }
   .cal-cancel { position: absolute; bottom: 18px; font-size: 12px; color: var(--color-link); text-decoration: underline; }
 
+  /* The controls column: the accordion scrolls, the export/load/reset
+     buttons stay pinned at the bottom. The preview stays in view too. */
+  .stage { position: sticky; top: 100px; align-self: start; }
   aside {
-    padding: 8px 20px 40px;
+    display: flex; flex-direction: column;
+    padding: 8px 20px 0;
     border-left: 1px solid color-mix(in srgb, var(--color-text) 12%, transparent);
-    overflow-y: auto; max-height: calc(100vh - 100px); position: sticky; top: 100px;
+    height: calc(100vh - 100px); position: sticky; top: 100px;
   }
-  fieldset { border: 0; margin: 0; padding: 14px 0 6px; border-bottom: 1px solid color-mix(in srgb, var(--color-text) 10%, transparent); }
-  legend { font-family: var(--font-mono); font-size: 11px; letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--color-link); padding: 0; margin-bottom: 6px; }
+  #controls { flex: 1; overflow-y: auto; min-height: 0; margin: 0 -6px; padding: 0 6px; }
+  .aside-footer { flex-shrink: 0; padding-bottom: 16px; border-top: 1px solid color-mix(in srgb, var(--color-text) 12%, transparent); }
+  details { border-bottom: 1px solid color-mix(in srgb, var(--color-text) 10%, transparent); }
+  summary {
+    display: flex; align-items: center; gap: 8px;
+    padding: 13px 2px; cursor: pointer; list-style: none;
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--color-link);
+    border-radius: 2px;
+  }
+  summary::-webkit-details-marker { display: none; }
+  summary::before { content: '▸'; font-size: 10px; transition: transform 0.15s ease; }
+  details[open] > summary::before { transform: rotate(90deg); }
+  summary:focus-visible { outline: 2px solid var(--color-link); outline-offset: 2px; }
+  .changed-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--color-accent); }
+  .changed-dot[hidden] { display: none; }
+  .group-body { padding: 0 0 10px; }
   .ctl { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; padding: 7px 0; }
   .ctl label { font-size: 13px; }
   .ctl output { font-family: var(--font-mono); font-size: 12px; text-align: right; min-width: 64px; }
@@ -111,6 +129,8 @@
   .ctl .hint { grid-column: 1 / -1; font-size: 12px; color: var(--color-text-muted); }
   .ctl .auto { grid-column: 1 / -1; font-size: 12px; color: var(--color-text-muted); display: inline-flex; gap: 6px; align-items: center; }
   .ctl.is-auto input[type=range] { opacity: 0.35; }
+  .ctl.toggle-row { grid-template-columns: auto 1fr; align-items: center; }
+  .ctl.toggle-row input { grid-column: auto; width: auto; }
   .actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 16px 0 6px; }
   textarea { width: 100%; min-height: 120px; font-family: var(--font-mono); font-size: 12px; color: var(--color-text); background: #1b1c1e; border: 1px solid color-mix(in srgb, var(--color-text) 20%, transparent); border-radius: 3px; padding: 8px; }
   .note { font-size: 12px; color: var(--color-text-muted); }
@@ -121,6 +141,7 @@
   <h1>Ring Tuner</h1>
   <button id="btn-calibrate" class="primary">Calibrate (6s)</button>
   <button id="btn-typical">Skip with typical values</button>
+  <button id="btn-room">Measure room (3s)</button>
   <span id="status" class="status">Not calibrated. Calibrate, or skip with typical values.</span>
   <label class="toggle" style="margin-left:auto"><input id="toggle-readout" type="checkbox" checked> Readout</label>
   <div id="readout" class="readout" aria-live="off"></div>
@@ -167,6 +188,7 @@
 
   <aside>
     <form id="controls" onsubmit="return false"></form>
+    <div class="aside-footer">
     <div class="actions">
       <button id="btn-copy">Copy settings</button>
       <button id="btn-download">Download settings</button>
@@ -178,6 +200,7 @@
       <div class="actions"><button id="btn-load-apply">Apply</button><button id="btn-load-cancel">Cancel</button></div>
     </div>
     <p id="io-status" class="note" aria-live="polite"></p>
+    </div>
   </aside>
 </main>
 
@@ -185,11 +208,13 @@
 import { MezzoRangeRing, DEFAULT_RING_SETTINGS } from '/src/range-ring.js';
 import { MezzoCalibrationRing, DEFAULT_CALIBRATION_RING_SETTINGS } from '/src/calibration-ring.js';
 import { MezzoEngine, DEFAULT_ZONE_SETTINGS } from '/src/engine.js';
-import { AudioProcessor } from '/src/audio.js';
+import { AudioProcessor, DEFAULT_AUDIO_SETTINGS } from '/src/audio.js';
 
 const $ = (id) => document.getElementById(id);
 const STORAGE_KEY = 'mezzo-ring-tuner-v1';
+const OPEN_GROUP_KEY = 'mezzo-ring-tuner-open-group';
 const CAPTURE_MS = 6000;
+const PREP_MS = 3000; // the app's 3-2-1; the tuner measures room noise during it
 const TYPICAL = { speakingDb: -42, spreadDb: 4 };
 
 // ── Settings ────────────────────────────────────────────────────────────────
@@ -203,27 +228,34 @@ function appDefaults() {
     zones: clone(DEFAULT_ZONE_SETTINGS),
     calibrating: clone(DEFAULT_CALIBRATION_RING_SETTINGS),
     layout: clone(LAYOUT_DEFAULTS),
+    audio: clone(DEFAULT_AUDIO_SETTINGS),
   };
 }
 // One live object: the engine and both rings hold references into it, so a
 // slider change takes effect on the next frame.
 const settings = appDefaults();
-function assignSettings(src) {
-  const fresh = appDefaults();
-  for (const group of Object.keys(fresh)) {
-    if (group === 'ring') {
-      for (const sub of Object.keys(fresh.ring)) Object.assign(settings.ring[sub], fresh.ring[sub], src?.ring?.[sub] ?? {});
-    } else {
-      Object.assign(settings[group], fresh[group], src?.[group] ?? {});
-    }
+// Deep, in-place merge: the modules hold references to the nested objects.
+function mergeInto(target, defaults, src) {
+  for (const key of Object.keys(defaults)) {
+    const d = defaults[key];
+    if (d !== null && typeof d === 'object') mergeInto(target[key], d, src?.[key]);
+    else target[key] = src && key in src ? src[key] : d;
   }
 }
+function assignSettings(src) { mergeInto(settings, appDefaults(), src); }
 try { const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null'); if (saved) assignSettings(saved); } catch { /* no saved values */ }
 function save() { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(settings)); } catch { /* storage unavailable */ } }
 
 // ── Controls ────────────────────────────────────────────────────────────────
 const pct = { scale: 100, unit: '%', digits: 0 };
 const GROUPS = [
+  ['Noise', [
+    { path: 'audio.speechFilter.enabled', label: 'Speech-band filter', type: 'toggle', hint: 'Band-pass before the level is measured, for both the circle and the zones. Recalibrate after changing it.', onChange: () => audio.applyFilterSettings() },
+    { path: 'audio.speechFilter.highPassHz', label: 'High-pass cutoff', min: 40, max: 500, step: 5, unit: ' Hz', digits: 0, hint: 'Cuts rumble below this: fans, traffic, desk knocks.', onChange: () => audio.applyFilterSettings() },
+    { path: 'audio.speechFilter.lowPassHz', label: 'Low-pass cutoff', min: 1500, max: 10000, step: 100, unit: ' Hz', digits: 0, hint: 'Cuts hiss above this.', onChange: () => audio.applyFilterSettings() },
+    { path: 'audio.noiseSuppression', label: 'Browser noise suppression', type: 'toggle', hint: 'getUserMedia noiseSuppression. Restarts the mic. Automatic gain stays off.', onChange: () => restartMic() },
+    { path: 'ring.gate.roomMarginDb', label: 'Gate margin above room noise', min: 0, max: 20, step: 0.5, unit: ' dB', digits: 1, hint: 'The circle rests unless your level is this far above the room noise measured during the 3-2-1.' },
+  ]],
   ['Silence and noise', [
     { path: 'ring.gate.floorDb', label: 'Silence gate floor', min: -60, max: 0, step: 0.5, unit: ' dB', digits: 1, hint: 'Below this level (vs your normal), the circle rests. −60 is off.' },
     { path: 'ring.gate.hysteresisDb', label: 'Gate hysteresis', min: 0, max: 6, step: 0.5, unit: ' dB', digits: 1, hint: 'How far above the floor the level must rise before the circle wakes again.' },
@@ -277,15 +309,43 @@ const controls = [];
 function format(def, v) {
   return `${((v ?? 0) * (def.scale ?? 1)).toFixed(def.digits ?? 0)}${def.unit ?? ''}`;
 }
+// One accordion section per group; only one is open at a time.
+const groupDots = []; // [dot element, defs]
+let openGroup = 'Noise';
+try { openGroup = localStorage.getItem(OPEN_GROUP_KEY) || 'Noise'; } catch { /* storage unavailable */ }
 function buildControls() {
   const form = $('controls');
   for (const [title, defs] of GROUPS) {
-    const fs = document.createElement('fieldset');
-    const lg = document.createElement('legend');
-    lg.textContent = title;
-    fs.appendChild(lg);
+    const details = document.createElement('details');
+    details.name = 'tuner-group'; // the browser's own exclusive accordion; the toggle handler below backs it up
+    details.open = title === openGroup;
+    const summary = document.createElement('summary');
+    summary.innerHTML = '<span class="group-title"></span><span class="changed-dot" hidden title="Changed from the app defaults"></span>';
+    summary.querySelector('.group-title').textContent = title;
+    details.appendChild(summary);
+    const fs = document.createElement('div');
+    fs.className = 'group-body';
+    details.appendChild(fs);
+    details.addEventListener('toggle', () => {
+      if (!details.open) return;
+      form.querySelectorAll('details').forEach((d) => { if (d !== details) d.open = false; });
+      try { localStorage.setItem(OPEN_GROUP_KEY, title); } catch { /* storage unavailable */ }
+    });
+    groupDots.push([summary.querySelector('.changed-dot'), defs]);
     for (const def of defs) {
       const id = 'c-' + def.path.replace(/\./g, '-');
+      if (def.type === 'toggle') {
+        const row = document.createElement('div');
+        row.className = 'ctl toggle-row';
+        row.innerHTML = `<input id="${id}" type="checkbox"><label for="${id}"></label><span class="hint"></span>`;
+        row.querySelector('label').textContent = def.label;
+        row.querySelector('.hint').textContent = def.hint;
+        const box = row.querySelector('input');
+        box.addEventListener('change', () => { setPath(def.path, box.checked); changed(); def.onChange?.(); });
+        controls.push(() => { box.checked = !!getPath(def.path); });
+        fs.appendChild(row);
+        continue;
+      }
       const row = document.createElement('div');
       row.className = 'ctl';
       row.innerHTML = `<label for="${id}"></label><output for="${id}"></output><input id="${id}" type="range">${def.nullable ? `<label class="auto"><input type="checkbox"> Auto</label>` : ''}<span class="hint"></span>`;
@@ -307,6 +367,7 @@ function buildControls() {
         setPath(def.path, parseFloat(input.value));
         changed();
         sync();
+        def.onChange?.();
       });
       auto?.addEventListener('change', () => {
         setPath(def.path, auto.checked ? null : parseFloat(input.value));
@@ -317,28 +378,42 @@ function buildControls() {
       sync();
       fs.appendChild(row);
     }
-    form.appendChild(fs);
+    form.appendChild(details);
   }
+  if (![...form.querySelectorAll('details')].some((d) => d.open)) form.querySelector('details').open = true;
 }
-function syncControls() { controls.forEach((f) => f()); $('small-w').value = settings.layout.smallWidth; $('small-h').value = settings.layout.smallHeight; }
+// A group's dot shows when any of its values differs from the app defaults.
+const DEFAULTS = appDefaults();
+const defaultAt = (path) => path.split('.').reduce((o, k) => o?.[k], DEFAULTS);
+function updateChangedDots() {
+  for (const [dot, defs] of groupDots) dot.hidden = !defs.some((d) => getPath(d.path) !== defaultAt(d.path));
+}
+function syncControls() { controls.forEach((f) => f()); $('small-w').value = settings.layout.smallWidth; $('small-h').value = settings.layout.smallHeight; updateChangedDots(); }
 function changed() {
   save();
   applyLayout();
+  updateChangedDots();
 }
 
 // ── Audio and engine (the app's own) ──────────────────────────────────────
-const audio = new AudioProcessor();
+const audio = new AudioProcessor({ settings: settings.audio });
 const engine = new MezzoEngine({ zoneSettings: settings.zones });
 let micOn = false;
 let calibrated = false;
 let lastRaw = 0;
 let lastSmoothed = 0;
 let levelHandler = null;
+let roomNoiseRms = 0; // median raw (filtered) RMS during the 3-2-1; 0 = not measured
 
 async function ensureMic() {
   if (micOn) return true;
-  const ok = await audio.acquire();
-  if (ok === false || !audio.isMicrophoneActive) { setStatus('Microphone unavailable. Allow access and try again.'); return false; }
+  try {
+    await audio.acquire();
+  } catch (err) {
+    setStatus(`Microphone unavailable: ${err.message}`);
+    return false;
+  }
+  if (!audio.isMicrophoneActive) { setStatus('Microphone unavailable. Allow access and try again.'); return false; }
   audio.onLevelChange = (frame) => {
     lastRaw = frame.rawRms;
     lastSmoothed = frame.rms;
@@ -347,6 +422,33 @@ async function ensureMic() {
   audio.startMonitoring();
   micOn = true;
   return true;
+}
+
+// Noise suppression is a getUserMedia constraint, so changing it means a
+// fresh microphone. Keeps the current calibration and room measurement.
+async function restartMic() {
+  if (!micOn) return;
+  audio.release();
+  micOn = false;
+  if (await ensureMic()) setStatus(`Mic restarted, noise suppression ${settings.audio.noiseSuppression ? 'on' : 'off'}. Recalibrate to compare fairly.`);
+}
+
+const median = (xs) => { const a = [...xs].sort((x, y) => x - y); return a.length ? a[Math.floor(a.length / 2)] : 0; };
+
+// The room-noise measurement: the median raw level over the 3-2-1, the way
+// the app would take it before capture begins.
+async function measureRoom(label) {
+  const samples = [];
+  const previous = levelHandler;
+  levelHandler = (frame) => { samples.push(frame.rawRms); previous?.(frame); };
+  const t0 = performance.now();
+  const tick = setInterval(() => setStatus(`${label} ${Math.max(1, Math.ceil((PREP_MS - (performance.now() - t0)) / 1000))}… (measuring room noise)`), 100);
+  await new Promise((r) => setTimeout(r, PREP_MS));
+  clearInterval(tick);
+  levelHandler = previous;
+  roomNoiseRms = median(samples.filter((x) => x > 0));
+  calRing.setRoomNoise(roomNoiseRms);
+  return roomNoiseRms;
 }
 
 function startMonitoringView() {
@@ -364,6 +466,7 @@ $('btn-calibrate').addEventListener('click', async () => {
   if (!(await ensureMic())) return;
   const btn = $('btn-calibrate');
   btn.disabled = true;
+  await measureRoom('Start speaking in');
   const samples = [];
   const previous = levelHandler;
   levelHandler = ({ rms, rawRms }) => { samples.push(rms); if (view === 'calibrating') calRing.setLevel(rawRms); };
@@ -375,12 +478,20 @@ $('btn-calibrate').addEventListener('click', async () => {
   try {
     engine.calibrate(samples);
     calibrated = true;
-    setStatus(`Calibrated: normal ${toDb(engine.baselineRMS).toFixed(1)} dB, spread ${engine.spreadDb.toFixed(1)} dB.`);
+    setStatus(`Calibrated: normal ${toDb(engine.baselineRMS).toFixed(1)} dB, spread ${engine.spreadDb.toFixed(1)} dB, room ${toDb(roomNoiseRms).toFixed(1)} dB.`);
     startMonitoringView();
   } catch (err) {
     levelHandler = previous;
     setStatus(`Calibration didn’t take: ${err.message}`);
   }
+});
+
+$('btn-room').addEventListener('click', async () => {
+  if (!(await ensureMic())) return;
+  $('btn-room').disabled = true;
+  await measureRoom('Stay quiet:');
+  $('btn-room').disabled = false;
+  setStatus(`Room noise ${toDb(roomNoiseRms).toFixed(1)} dB.`);
 });
 
 $('btn-typical').addEventListener('click', async () => {
@@ -407,10 +518,11 @@ const frame = $('frame');
 const ring = new MezzoRangeRing($('mon-ring'), {
   settings: settings.ring,
   levelOffsetDb: (rms) => engine.getLevelOffsetDb(rms),
+  roomNoiseOffsetDb: () => (roomNoiseRms > 0 ? engine.getLevelOffsetDb(roomNoiseRms) : -Infinity),
   preferredEdgePx: () => { const s = SIZES[size](); return s.pct * Math.min(s.width, s.height); },
   viewportSize: () => { const s = SIZES[size](); return { width: s.width, height: s.height }; },
 });
-const calRing = new MezzoCalibrationRing($('cal-visual'), { durationMs: CAPTURE_MS, settings: settings.calibrating, motion: settings.ring.motion });
+const calRing = new MezzoCalibrationRing($('cal-visual'), { durationMs: CAPTURE_MS, settings: settings.calibrating, motion: settings.ring.motion, gate: settings.ring.gate });
 
 function applyLayout() {
   const s = view === 'calibrating' ? { width: 380, height: 364, label: '380×364' } : SIZES[size]();
@@ -451,9 +563,14 @@ async function calMicCheck() {
   if (!(await ensureMic())) return;
   if (!levelHandler) levelHandler = ({ rawRms }) => calRing.setLevel(rawRms);
   calRing.reset();
+  calRing.setRoomNoise(0); // no gate while the room is being measured
   calRing.startMicCheck();
-  $('cal-status').textContent = 'Start speaking in 3';
   $('cal-hint').textContent = 'Get ready to talk normally.';
+  const t0 = performance.now();
+  const tick = setInterval(() => { $('cal-status').textContent = `Start speaking in ${Math.max(1, Math.ceil((PREP_MS - (performance.now() - t0)) / 1000))}`; }, 100);
+  await measureRoom('Start speaking in');
+  clearInterval(tick);
+  $('cal-status').textContent = 'Room measured. Run capture.';
 }
 $('btn-miccheck').addEventListener('click', calMicCheck);
 $('btn-capture').addEventListener('click', async () => {
@@ -475,29 +592,43 @@ $('btn-cal-reset').addEventListener('click', () => { clearInterval(capTimer); ca
 
 // ── Readout ────────────────────────────────────────────────────────────────
 const ZONES = ['Listening', 'Within range', 'Approaching end of range', 'Outside range'];
+const fmt = (v) => (Number.isFinite(v) ? `${v >= 0 ? '+' : ''}${v.toFixed(1)}` : '−∞');
 function renderReadout() {
   requestAnimationFrame(renderReadout);
   const box = $('readout');
   if (!$('toggle-readout').checked) { box.hidden = true; return; }
   box.hidden = false;
+  const room = roomNoiseRms > 0 ? `<span>room noise <b>${toDb(roomNoiseRms).toFixed(1)} dB</b>${calibrated ? ` (${fmt(engine.getLevelOffsetDb(roomNoiseRms))} vs normal)` : ''}</span>` : '<span>room noise <b>not measured</b></span>';
   if (!calibrated) {
-    box.innerHTML = micOn ? `<span>raw <b>${toDb(lastRaw).toFixed(1)} dB</b></span>` : '<span>Mic off</span>';
+    box.innerHTML = micOn ? `<span>raw <b>${toDb(lastRaw).toFixed(1)} dB</b></span>${room}` : '<span>Mic off</span>';
     return;
   }
+  const gap = roomNoiseRms > 0 ? `<span>speaking vs room <b>${(toDb(engine.baselineRMS) - toDb(roomNoiseRms)).toFixed(1)} dB</b></span>` : '';
   const b = engine.getRangeBoundsDb();
   const zone = engine.getZone();
   const vis = ring.offsetDb;
-  const fmt = (v) => (Number.isFinite(v) ? `${v >= 0 ? '+' : ''}${v.toFixed(1)}` : '−∞');
   box.innerHTML = `
     <span>level vs normal <b>${fmt(engine.getLevelOffsetDb(lastSmoothed))} dB</b> (circle ${fmt(vis)})</span>
     <span>zone <b class="zone-${zone}">${ZONES[zone]}</b></span>
     <span>gate <b>${ring.gateOpen ? 'open' : 'resting'}</b></span>
-    <span>bounds: silence <b>${fmt(b.silenceDb)}</b> · Approaching <b>${fmt(b.targetDb)}</b> · end <b>${fmt(b.endDb)}</b> dB</span>`;
+    <span>bounds: silence <b>${fmt(b.silenceDb)}</b> · Approaching <b>${fmt(b.targetDb)}</b> · end <b>${fmt(b.endDb)}</b> dB</span>
+    ${room}${gap}`;
 }
 requestAnimationFrame(renderReadout);
 
 // ── Output ─────────────────────────────────────────────────────────────────
-const json = () => JSON.stringify(settings, null, 2);
+// Settings, plus what was measured when they were exported (read-only:
+// Load settings ignores the measured block).
+function measured() {
+  if (!calibrated && !(roomNoiseRms > 0)) return null;
+  return {
+    speakingDb: calibrated ? +toDb(engine.baselineRMS).toFixed(1) : null,
+    spreadDb: calibrated ? +engine.spreadDb.toFixed(2) : null,
+    roomNoiseDb: roomNoiseRms > 0 ? +toDb(roomNoiseRms).toFixed(1) : null,
+    speakingAboveRoomDb: calibrated && roomNoiseRms > 0 ? +(toDb(engine.baselineRMS) - toDb(roomNoiseRms)).toFixed(1) : null,
+  };
+}
+const json = () => JSON.stringify({ ...settings, measured: measured() }, null, 2);
 function ioStatus(text) { $('io-status').textContent = text; }
 $('btn-copy').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText(json()); ioStatus('Settings copied.'); } catch { ioStatus('Couldn’t copy. Use Download instead.'); }

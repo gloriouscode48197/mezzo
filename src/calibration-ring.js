@@ -18,7 +18,7 @@
  * which the tuning page (design/prototypes/ring-tuner.html) drives live.
  */
 
-import { followLevel, DEFAULT_RING_SETTINGS } from './range-ring.js';
+import { followLevel, voiceGate, DEFAULT_RING_SETTINGS } from './range-ring.js';
 
 export const DEFAULT_CALIBRATION_RING_SETTINGS = Object.freeze({
   ringSizePx: 132,
@@ -107,14 +107,20 @@ export class MezzoCalibrationRing {
    *   durationMs: number,
    *   settings?: typeof DEFAULT_CALIBRATION_RING_SETTINGS,
    *   motion?: typeof DEFAULT_RING_SETTINGS.motion,
-   * }} options - settings and motion are read live (the app passes neither)
+   *   gate?: typeof DEFAULT_RING_SETTINGS.gate,
+   * }} options - settings, motion, and gate are read live (the app passes
+   *   none of them). The gate only applies once a room-noise level is set
+   *   (setRoomNoise()), which only the tuner does so far.
    */
-  constructor(container, { durationMs, settings = DEFAULT_CALIBRATION_RING_SETTINGS, motion = DEFAULT_RING_SETTINGS.motion }) {
+  constructor(container, { durationMs, settings = DEFAULT_CALIBRATION_RING_SETTINGS, motion = DEFAULT_RING_SETTINGS.motion, gate = DEFAULT_RING_SETTINGS.gate }) {
     this.doc = container.ownerDocument;
     this.win = this.doc.defaultView;
     this.durationMs = durationMs;
     this.settings = settings;
     this.motion = motion;
+    this.gate = gate;
+    this.roomNoiseRms = 0;
+    this.gateOpen = true;
     this.progress = 0;
     this.currentPx = settings.voiceMinPx;
     this._injectCSS();
@@ -177,6 +183,12 @@ export class MezzoCalibrationRing {
     this._start();
   }
 
+  /** The room's noise level (RMS), measured during the 3-2-1; 0 = unknown.
+   *  Once set, the circle rests unless the level is roomMarginDb above it. */
+  setRoomNoise(rms) {
+    this.roomNoiseRms = rms || 0;
+  }
+
   /** A raw, per-sample RMS level from the microphone (before audio.js's
    *  EMA). Ignored while the ring is at rest. */
   setLevel(rawRms) {
@@ -213,7 +225,13 @@ export class MezzoCalibrationRing {
     // The circle still follows the level under reduced motion: it is the
     // feedback, not decoration.
     this.liveRms = followLevel(this.liveRms, this.rawRms, dt, this.motion);
-    this.currentPx = voiceDiameterPx(this.liveRms, this.settings);
+    if (this.roomNoiseRms > 0) {
+      const toDb = (rms) => 20 * Math.log10(rms + 1e-10);
+      this.gateOpen = voiceGate(this.gateOpen, toDb(this.liveRms), this.gate, toDb(this.roomNoiseRms), -Infinity);
+    } else {
+      this.gateOpen = true;
+    }
+    this.currentPx = this.gateOpen ? voiceDiameterPx(this.liveRms, this.settings) : this.settings.voiceMinPx;
     this._drawVoice();
   }
 

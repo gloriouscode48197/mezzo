@@ -29,7 +29,9 @@
 /**
  * gate: below floorDb (dB vs the calibrated level) the circle rests at
  *   voice.sizeRest; it reopens only hysteresisDb above the floor, so it
- *   doesn't flicker at the boundary.
+ *   doesn't flicker at the boundary. When a room-noise level is known, the
+ *   floor rises to roomMarginDb above it. The app measures no room noise
+ *   yet, so only the tuner uses that.
  * voice: circle diameter as a fraction of the edge, anchored at the zone
  *   boundaries. sizeAtNormal (at 0 dB) is optional; null draws a straight
  *   line from the silence boundary to the top of Within range.
@@ -43,7 +45,7 @@
 export const DEFAULT_RING_SETTINGS = Object.freeze({
   // -60 dB sits below every possible rest point (silence boundary at most
   // -40 dB, rest 6 dB under it), so by default the gate changes nothing.
-  gate: Object.freeze({ floorDb: -60, hysteresisDb: 0 }),
+  gate: Object.freeze({ floorDb: -60, hysteresisDb: 0, roomMarginDb: 6 }),
   voice: Object.freeze({
     sizeRest: 0.12,
     restBelowSilenceDb: 6,   // how far below the silence boundary the circle reaches its rest size
@@ -104,13 +106,17 @@ const lerp = (a, b, t) => a + (b - a) * t;
  * Whether the voice circle should follow the level or rest, with hysteresis.
  *
  * @param {boolean} open - the gate's state last frame
- * @param {number} offsetDb - the visual level relative to the calibrated baseline
- * @param {{ floorDb: number, hysteresisDb: number }} [gate]
+ * @param {number} levelDb - the visual level
+ * @param {{ floorDb: number, hysteresisDb: number, roomMarginDb: number }} [gate]
+ * @param {number} [roomNoiseDb] - measured room noise, in the same terms as
+ *   levelDb (-Infinity when unknown)
+ * @param {number} [floorDb] - the fixed floor, in the same terms as levelDb
  * @returns {boolean}
  */
-export function voiceGate(open, offsetDb, gate = DEFAULT_RING_SETTINGS.gate) {
-  if (!Number.isFinite(offsetDb)) return false;
-  return offsetDb >= gate.floorDb + (open ? 0 : gate.hysteresisDb);
+export function voiceGate(open, levelDb, gate = DEFAULT_RING_SETTINGS.gate, roomNoiseDb = -Infinity, floorDb = gate.floorDb) {
+  if (!Number.isFinite(levelDb)) return false;
+  const floor = Math.max(floorDb, roomNoiseDb + gate.roomMarginDb);
+  return levelDb >= floor + (open ? 0 : gate.hysteresisDb);
 }
 
 /**
@@ -293,24 +299,29 @@ export class MezzoRangeRing {
    *   levelOffsetDb?: (rms: number) => number,
    *   settings?: typeof DEFAULT_RING_SETTINGS,
    *   viewportSize?: () => { width: number, height: number },
+   *   roomNoiseOffsetDb?: () => number,
    * }} [options] -
    *   preferredEdgePx is read on every resize, so Compact and Expanded can
    *   prefer different edges; levelOffsetDb converts an RMS level to dB
    *   relative to the calibrated baseline (the engine's getLevelOffsetDb());
    *   settings is read every frame (the app passes nothing); viewportSize
-   *   is the window the ring must fit (default: the real window)
+   *   is the window the ring must fit (default: the real window);
+   *   roomNoiseOffsetDb is the measured room noise vs the calibrated level
+   *   (default: unknown)
    */
   constructor(container, {
     preferredEdgePx = () => REFERENCE_EDGE_PX,
     levelOffsetDb = () => -Infinity,
     settings = DEFAULT_RING_SETTINGS,
     viewportSize = null,
+    roomNoiseOffsetDb = () => -Infinity,
   } = {}) {
     this.container = container;
     this.doc = container.ownerDocument;
     this.win = this.doc.defaultView;
     this.preferredEdgePx = preferredEdgePx;
     this.levelOffsetDb = levelOffsetDb;
+    this.roomNoiseOffsetDb = roomNoiseOffsetDb;
     this.settings = settings;
     this.viewportSize = viewportSize ?? (() => ({ width: this.win.innerWidth || 0, height: this.win.innerHeight || 0 }));
 
@@ -406,7 +417,7 @@ export class MezzoRangeRing {
     // feedback, not decoration.
     this.liveRms = followLevel(this.liveRms, this.rawRms, dt, motion);
     this.offsetDb = this.levelOffsetDb(this.liveRms);
-    this.gateOpen = voiceGate(this.gateOpen, this.offsetDb, gate);
+    this.gateOpen = voiceGate(this.gateOpen, this.offsetDb, gate, this.roomNoiseOffsetDb());
     const level = this.gateOpen
       ? voiceCircleState(this.offsetDb, this.bounds, Math.min(this.zone, 2), voice)
       : { size: voice.sizeRest, opacity: voice.opacityRest };

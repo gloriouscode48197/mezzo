@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  voiceCircleState, bandFraction, ringGeometry, ease, stepBand, followLevel,
+  voiceCircleState, bandFraction, ringGeometry, ease, stepBand, followLevel, voiceGate, DEFAULT_RING_SETTINGS,
   VOICE_RISE_TAU_MS, VOICE_FALL_TAU_MS,
   BAND_MIN_FRACTION, BAND_MAX_FRACTION, BAND_FULL_DB, BAND_FADE_MS, BAND_THIN_FRACTION,
   VOICE_FRACTION_END, VOICE_OPACITY_REST, REFERENCE_EDGE_PX,
@@ -123,6 +123,31 @@ describe('ease — eased, frame-rate independent motion', () => {
     const one = ease(0, 1, 32, 100);
     const two = ease(ease(0, 1, 16, 100), 1, 16, 100);
     assert.ok(Math.abs(one - two) < 1e-12);
+  });
+});
+
+describe('voiceGate — the circle rests until the level clears the floor', () => {
+  const gate = { floorDb: -60, hysteresisDb: 2, roomMarginDb: 6 };
+
+  it('with the app defaults and no room noise, it never rests a level the circle would show', () => {
+    for (const db of [-50, -30, -12, 0, 6]) assert.equal(voiceGate(false, db, DEFAULT_RING_SETTINGS.gate), true);
+    assert.equal(voiceGate(true, -Infinity, DEFAULT_RING_SETTINGS.gate), false);
+  });
+
+  it('rests until the level is the margin above measured room noise', () => {
+    assert.equal(voiceGate(false, -15, gate, -20), false); // 5 dB over room noise: under the 6 dB margin
+    assert.equal(voiceGate(false, -11.5, gate, -20), true); // 8.5 dB over: past margin + hysteresis
+  });
+
+  it('opens only above floor + hysteresis, and closes only below the floor, so it cannot flicker at the edge', () => {
+    let open = false;
+    for (const db of [-13.5, -12.5, -13.5]) open = voiceGate(open, db, gate, -20); // under -12 (floor -14 + 2)
+    assert.equal(open, false);
+    open = voiceGate(open, -11.9, gate, -20);
+    assert.equal(open, true);
+    for (const db of [-13, -13.9, -12.5, -13.5]) open = voiceGate(open, db, gate, -20); // stays above the -14 floor
+    assert.equal(open, true);
+    assert.equal(voiceGate(open, -14.1, gate, -20), false);
   });
 });
 
