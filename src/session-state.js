@@ -32,6 +32,9 @@ export const SESSION_STATES = Object.freeze({
   COMPANION_CALIBRATING: 'companionCalibrating',
   COMPANION_NEEDS_ATTENTION: 'companionNeedsAttention',
   MONITORING_ACTIVE: 'monitoringActive',
+  // Monitoring paused from the Companion (2026-10-22): the microphone is
+  // released, the profile stays selected, Resume starts it again.
+  MONITORING_PAUSED: 'monitoringPaused',
 });
 
 export function createSessionState(initial = SESSION_STATES.COMPANION_CLOSED) {

@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  voiceCircleState, bandFraction, ringGeometry, ease, stepBand, followLevel, voiceGate, stepShown, DEFAULT_RING_SETTINGS,
+  voiceCircleState, bandFraction, ringGeometry, ease, stepBand, followLevel, voiceGate, stepShown, roomMarginDbFor, DEFAULT_RING_SETTINGS,
   VOICE_RISE_TAU_MS, VOICE_FALL_TAU_MS,
   BAND_MIN_FRACTION, BAND_MAX_FRACTION, BAND_FULL_DB, BAND_FADE_MS, BAND_THIN_FRACTION,
   VOICE_FRACTION_END, VOICE_OPACITY_REST, REFERENCE_EDGE_PX,
@@ -31,13 +31,20 @@ describe('voiceCircleState — level to circle size and opacity', () => {
     }
   });
 
-  it('is small and ~40% opaque when quiet (Listening)', () => {
+  it('rests small and faint when quiet (Listening): 20% of the edge at 45% opacity', () => {
     const s = voiceCircleState(bounds.silenceDb - 8, bounds, 0);
-    assert.ok(s.size <= 0.15);
+    assert.equal(s.size, 0.2);
     assert.equal(s.opacity, VOICE_OPACITY_REST);
+    assert.equal(VOICE_OPACITY_REST, 0.45);
   });
 
-  it('stays ~40% opaque through the target range, then rises to solid at the end of range', () => {
+  it('sits comfortably inside the edge at the calibrated level, and at 80% just before Outside', () => {
+    assert.ok(Math.abs(voiceCircleState(0, bounds, 1).size - 0.45) < 1e-9);
+    assert.ok(Math.abs(voiceCircleState(bounds.targetDb, bounds, 1).size - 0.55) < 1e-9);
+    assert.ok(Math.abs(voiceCircleState(bounds.endDb, bounds, 2).size - 0.8) < 1e-9);
+  });
+
+  it('stays at rest opacity through the target range, then rises to solid at the end of range', () => {
     assert.equal(voiceCircleState(bounds.targetDb, bounds, 1).opacity, VOICE_OPACITY_REST);
     assert.equal(voiceCircleState(bounds.endDb, bounds, 2).opacity, 1);
   });
@@ -64,14 +71,15 @@ describe('bandFraction — overshoot to band thickness', () => {
     assert.equal(bandFraction(0), BAND_MIN_FRACTION);
   });
 
-  it('reaches about 22% at +4 dB and stays there', () => {
-    assert.equal(BAND_FULL_DB, 4);
-    assert.equal(bandFraction(4), BAND_MAX_FRACTION);
+  it('reaches its full 18% at +2 dB and stays there', () => {
+    assert.equal(BAND_FULL_DB, 2);
+    assert.equal(BAND_MAX_FRACTION, 0.18);
+    assert.equal(bandFraction(BAND_FULL_DB), BAND_MAX_FRACTION);
     assert.equal(bandFraction(12), BAND_MAX_FRACTION);
   });
 
   it('grows monotonically in between', () => {
-    const steps = [0, 1, 2, 3, 4].map((db) => bandFraction(db));
+    const steps = [0, 0.25, 0.5, 0.75, 1].map((f) => bandFraction(f * BAND_FULL_DB));
     for (let i = 1; i < steps.length; i++) assert.ok(steps[i] > steps[i - 1]);
   });
 
@@ -129,9 +137,21 @@ describe('ease — eased, frame-rate independent motion', () => {
 describe('voiceGate — the circle rests until the level clears the floor', () => {
   const gate = { floorDb: -60, hysteresisDb: 2, roomMarginDb: 6 };
 
-  it('with the app defaults and no room noise, it never rests a level the circle would show', () => {
-    for (const db of [-50, -30, -12, 0, 6]) assert.equal(voiceGate(false, db, DEFAULT_RING_SETTINGS.gate), true);
-    assert.equal(voiceGate(true, -Infinity, DEFAULT_RING_SETTINGS.gate), false);
+  it('with the app defaults and no room noise, rests below -25 dB and follows above it (with 1.5 dB hysteresis)', () => {
+    const g = DEFAULT_RING_SETTINGS.gate;
+    assert.equal(g.floorDb, -25);
+    for (const db of [-50, -30, -25.1]) assert.equal(voiceGate(false, db, g), false);
+    assert.equal(voiceGate(false, -24, g), false, 'reopening needs the floor plus hysteresis');
+    for (const db of [-23.4, -12, 0, 6]) assert.equal(voiceGate(false, db, g), true);
+    assert.equal(voiceGate(true, -24.9, g), true, 'once open, it holds down to the floor');
+    assert.equal(voiceGate(true, -Infinity, g), false);
+  });
+
+  it('in a noisy room (speech under 12 dB above it), the room margin drops from 4 dB to 2 dB', () => {
+    assert.equal(roomMarginDbFor(-20), 4);  // speech 20 dB above the room
+    assert.equal(roomMarginDbFor(-12), 4);  // exactly 12 dB: not noisy
+    assert.equal(roomMarginDbFor(-9.8), 2); // 9.8 dB: noisy
+    assert.equal(roomMarginDbFor(-Infinity), 4);
   });
 
   it('rests until the level is the margin above measured room noise', () => {
@@ -211,9 +231,9 @@ describe('followLevel — the visuals follow the raw level, eased in linear RMS'
     return trace;
   }
 
-  it('rises at 90ms and falls at 320ms', () => {
-    assert.equal(VOICE_RISE_TAU_MS, 90);
-    assert.equal(VOICE_FALL_TAU_MS, 320);
+  it('rises at 150ms and falls at 400ms', () => {
+    assert.equal(VOICE_RISE_TAU_MS, 150);
+    assert.equal(VOICE_FALL_TAU_MS, 400);
     // One time constant: 63% of the way, in linear RMS, each direction.
     assert.ok(Math.abs(followLevel(0, 1, VOICE_RISE_TAU_MS) - (1 - Math.exp(-1))) < 1e-12);
     assert.ok(Math.abs(followLevel(1, 0, VOICE_FALL_TAU_MS) - Math.exp(-1)) < 1e-12);
@@ -261,7 +281,7 @@ describe('stepBand — grow in, shrink out, never linger half-transparent', () =
       if (f.opacity < 1) assert.ok(f.band <= BAND_THIN_FRACTION * 1.5, 'only fades once thin');
     }
     const goneAt = (frames.findIndex((f) => f.opacity === 0) + 1) * FRAME;
-    assert.ok(goneAt <= 300, `gone after ${goneAt}ms`);
+    assert.ok(goneAt <= 500, `gone after ${goneAt}ms`); // shrinks at 150ms, then a 100ms fade
     assert.ok(goneAt - BAND_FADE_MS >= 80, 'shrinks before it fades');
   });
 

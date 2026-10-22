@@ -36,6 +36,8 @@ const LONG_NAME = 'The Kitchen And Dining Room Combined Open-Plan Space';
 const LONG_PROFILE = [{ id: 'p-long', name: LONG_NAME, speakingDb: -30, spreadDb: 4, calibratedTs: 100 }];
 
 const CHARTREUSE = 'rgb(222, 222, 101)'; // --color-accent
+const EXPANDED_EDGE = 0.6 * 382; // RING_EDGE_FRACTION of the Expanded window's short side
+const COMPACT_EDGE = 0.6 * 220;
 const SAGE = 'rgb(206, 226, 196)';       // --color-link
 
 /**
@@ -46,9 +48,12 @@ const SAGE = 'rgb(206, 226, 196)';       // --color-link
  * header comment for why that's the only call site that actually matters.
  * @param {import('@playwright/test').Page} page
  * @param {import('@playwright/test').BrowserContext} context
- * @param {{profiles?: object[], size?: {width: number, height: number}}} [options]
+ * Monitoring now opens in Compact (2026-10-22); `layout: 'expanded'` (the
+ * default here, since most of this file is about Expanded) clicks Expand
+ * first, the way a person would.
+ * @param {{profiles?: object[], size?: {width: number, height: number}, layout?: 'expanded' | 'compact'}} [options]
  */
-async function reachMonitoring(page, context, { profiles = SAVED_PROFILE, size, driven = false } = {}) {
+async function reachMonitoring(page, context, { profiles = SAVED_PROFILE, size, driven = false, layout = 'expanded' } = {}) {
   await page.addInitScript((p) => localStorage.setItem('mezzoProfiles', JSON.stringify(p)), profiles);
   const pipPage = await openCompanion(page, context);
   if (driven) await installLevelDriver(page, profiles[0]);
@@ -59,6 +64,11 @@ async function reachMonitoring(page, context, { profiles = SAVED_PROFILE, size, 
   const monitoringScreen = pipPage.locator('.pip-screen-monitoring');
   await expect(monitoringScreen).toBeVisible({ timeout: 5000 });
   await expect(monitoringScreen.locator('.mezzo-ring')).toBeVisible({ timeout: 5000 });
+  await expect(pipPage.locator('body')).toHaveAttribute('data-layout', 'compact');
+  if (layout === 'expanded') {
+    await monitoringScreen.locator('.pip-control-btn-expand').click();
+    await expect(pipPage.locator('body')).toHaveAttribute('data-layout', 'expanded');
+  }
   return { pipPage, monitoringScreen };
 }
 
@@ -126,25 +136,28 @@ test.describe('Monitoring presentation: the Range Ring', () => {
     await settleAt(page, pipPage, b.silenceDb - 8);
     const listening = await readRing(pipPage);
     expect(listening.zone).toBe(0);
-    expect(listening.edgePx).toBeCloseTo(236, 0);
-    expect(listening.voiceScale).toBeLessThan(0.2);
-    expect(listening.voiceOpacity).toBeCloseTo(0.4, 1);
+    expect(listening.edgePx).toBeCloseTo(EXPANDED_EDGE, 0);
+    expect(listening.voiceScale).toBeCloseTo(0.2, 2); // rests at 20% of the edge
+    expect(listening.voiceOpacity).toBeCloseTo(0.45, 2);
     expect(listening.edgeShadow).toContain('1.5px');
+    // At rest the edge is --color-voice at the circle's rest opacity.
+    expect(listening.edgeShadow).toMatch(/rgba\(142, 137, 123, 0\.45\)|color\(srgb 0\.55\d* 0\.53\d* 0\.48\d* \/ 0\.45\)/);
     expect(listening.bandOpacity).toBeLessThan(0.01);
 
     await settleAt(page, pipPage, 0);
     const within = await readRing(pipPage);
     expect(within.zone).toBe(1);
-    expect(within.voiceScale).toBeGreaterThan(listening.voiceScale);
-    expect(within.voiceOpacity).toBeCloseTo(0.4, 1);
+    // At the calibrated level the circle sits comfortably inside: 45%.
+    expect(within.voiceScale).toBeCloseTo(0.45, 1);
+    expect(within.voiceOpacity).toBeCloseTo(0.45, 2);
     expect(within.bandOpacity).toBeLessThan(0.01);
 
-    // Just under the end of range: Approaching is only 2 dB wide once the
-    // end of range is capped at +6 dB (engine.js's END_OF_RANGE_MAX_DB).
+    // Just under the end of range (Approaching is its last 2 dB).
     await settleAt(page, pipPage, b.endDb - 0.3);
     const approaching = await readRing(pipPage);
     expect(approaching.zone).toBe(2);
-    expect(approaching.voiceScale).toBeGreaterThan(0.85);
+    expect(approaching.voiceScale).toBeGreaterThan(0.7);
+    expect(approaching.voiceScale).toBeLessThanOrEqual(0.8);
     expect(approaching.voiceOpacity).toBeGreaterThan(0.8);
     expect(approaching.edgeShadow).toContain(SAGE);
     expect(approaching.edgeShadow).toContain('3px');
@@ -155,7 +168,7 @@ test.describe('Monitoring presentation: the Range Ring', () => {
     expect(outside.zone).toBe(3);
     expect(outside.voiceScale).toBeGreaterThan(0.99);
     expect(outside.bandOpacity).toBeGreaterThan(0.99);
-    expect(outside.bandPx).toBeGreaterThan(0.065 * 236);
+    expect(outside.bandPx).toBeGreaterThan(0.065 * EXPANDED_EDGE);
     expect(outside.edgeOpacity).toBeLessThan(0.01); // hidden under the band
   });
 
@@ -172,14 +185,14 @@ test.describe('Monitoring presentation: the Range Ring', () => {
     expect(reach).toBeLessThanOrEqual(382 / 2 + 0.5);
   });
 
-  test('a spike shorter than the 500ms dwell never shows the band', async ({ page, context }) => {
+  test('a single 150ms loud syllable within normal speech never shows the band', async ({ page, context }) => {
     const { pipPage } = await reachMonitoring(page, context, { size: { width: 382, height: 480 }, driven: true });
     const b = await rangeBoundsDb(page, SAVED_PROFILE[0].spreadDb);
-    await settleAt(page, pipPage, 0);
-    await setLevelDb(page, b.endDb + 3);
+    await settleAt(page, pipPage, 0, 1500); // fill the zone window with normal speech
+    await setLevelDb(page, b.endDb + 6);
     let maxBandOpacity = 0;
     let maxZone = 0;
-    const until = Date.now() + 300;
+    const until = Date.now() + 150;
     while (Date.now() < until) {
       const r = await readRing(pipPage);
       maxBandOpacity = Math.max(maxBandOpacity, r.bandOpacity);
@@ -236,7 +249,7 @@ test.describe('Monitoring presentation: the Range Ring', () => {
     await expect.poll(async () => (await readRing(pipPage)).zone, { timeout: 3000 }).toBe(3);
     const committedAt = Date.now();
     await expect(live).toHaveText('Outside range', { timeout: 2500 });
-    expect(Date.now() - committedAt).toBeGreaterThanOrEqual(800);
+    expect(Date.now() - committedAt).toBeGreaterThanOrEqual(700); // ~1s hold, less this poll's own lag
 
     // Out of it: announced once the new state has held, with that state's label.
     await setLevelDb(page, 0);
@@ -262,14 +275,14 @@ test.describe('Monitoring presentation: the Range Ring', () => {
     expect(await pipPage.locator('.mezzo-ring-band').evaluate((el) => getComputedStyle(el).boxShadow)).toContain(CHARTREUSE);
   });
 
-  test('Compact: a ~140px edge, and band plus glow scaled down so they never touch the window edge at maximum', async ({ page, context }) => {
+  test('Compact: a 132px edge (60% of 220), and band plus glow scaled down so they never touch the window edge at maximum', async ({ page, context }) => {
     const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 220, height: 220 }, driven: true });
     await enterCompact(pipPage, monitoringScreen);
     const b = await rangeBoundsDb(page, SAVED_PROFILE[0].spreadDb);
     await settleAt(page, pipPage, b.endDb + 8, 1800);
     const r = await readRing(pipPage);
     expect(r.zone).toBe(3);
-    expect(r.edgePx).toBeCloseTo(140, 0);
+    expect(r.edgePx).toBeCloseTo(COMPACT_EDGE, 0);
     expect(r.glowScale).toBeLessThan(1);
     const reach = r.edgePx / 2 + r.bandPx + (10 + 38 / 2) * r.glowScale;
     expect(reach).toBeLessThanOrEqual(110 + 0.5);
@@ -285,7 +298,7 @@ test.describe('Monitoring presentation: the Range Ring', () => {
     const farOver = await readRing(pipPage);
     expect(justOver.zone).toBe(3);
     expect(farOver.bandPx).toBeCloseTo(justOver.bandPx, 0);
-    expect(farOver.bandPx).toBeCloseTo(0.065 * 236, 0);
+    expect(farOver.bandPx).toBeCloseTo(0.065 * EXPANDED_EDGE, 0);
   });
 });
 
@@ -372,16 +385,26 @@ test.describe('Monitoring presentation: responsive tiers (Expanded)', () => {
 });
 
 test.describe('Monitoring presentation: explicit Compact', () => {
-  test('220×220 at rest: only the Range Ring is visible — profile hidden, Stop/Expand not yet revealed', async ({ page, context }) => {
+  test('220×220 at rest: the Range Ring with the profile name above it; Stop, Pause, and Expand not yet revealed', async ({ page, context }) => {
     const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 220, height: 220 } });
     await enterCompact(pipPage, monitoringScreen);
 
-    await expect(monitoringScreen.locator('.pip-profile-info')).toBeHidden();
+    const name = monitoringScreen.locator('.pip-profile-info');
+    await expect(name).toBeVisible();
+    await expect(name).toHaveText('Kitchen');
+    await expect(name).toHaveCSS('font-size', '11px');
+    await expect(name).toHaveCSS('text-transform', 'uppercase');
+    await expect(name).toHaveCSS('color', 'rgb(176, 171, 158)');
+    expect((await name.evaluate((el) => getComputedStyle(el).fontFamily))).toMatch(/Geist Mono/);
+    const nameBox = await name.boundingBox();
+    const ringBox = await monitoringScreen.locator('.mezzo-ring').boundingBox();
+    expect(nameBox.y + nameBox.height).toBeLessThanOrEqual(ringBox.y);
     await expect(monitoringScreen.locator('.mezzo-ring')).toBeVisible();
     const stop = monitoringScreen.locator('.pip-control-btn-stop');
     const expandBtn = monitoringScreen.locator('.pip-control-btn-expand');
     await expect(stop).toHaveCSS('opacity', '0');
     await expect(expandBtn).toHaveCSS('opacity', '0');
+    await expect(monitoringScreen.locator('.pip-control-btn-pause')).toHaveCSS('opacity', '0');
     // Never focusable-while-invisible check is separate (below) — this only
     // confirms the resting, unrevealed visual state.
     await assertNoOverflow(pipPage);
@@ -464,12 +487,12 @@ test.describe('Monitoring presentation: explicit Compact', () => {
 });
 
 test.describe('Monitoring presentation: manual resize, larger windows, and non-reference aspect ratios', () => {
-  test('a larger window (480×600) does not enlarge the ring past its 236px edge, or enlarge typography or controls', async ({ page, context }) => {
+  test('a larger window (480×600) does not enlarge the ring past its Expanded edge, or enlarge typography or controls', async ({ page, context }) => {
     const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 480, height: 600 } });
 
     const box = await monitoringScreen.locator('.mezzo-ring').boundingBox();
-    expect(box.width).toBeCloseTo(236, 0);
-    expect(box.height).toBeCloseTo(236, 0);
+    expect(box.width).toBeCloseTo(EXPANDED_EDGE, 0);
+    expect(box.height).toBeCloseTo(EXPANDED_EDGE, 0);
     await expect(monitoringScreen.locator('.pip-profile-info')).toHaveCSS('font-size', '12px');
     await assertNoOverflow(pipPage);
   });
@@ -520,5 +543,85 @@ test.describe('Monitoring presentation: visualization stability', () => {
     await expect(ring).toBeVisible();
     expect(await ring.evaluate((el) => el.dataset.testStableId)).toBe('still-here');
     await expect(monitoringScreen.locator('.mezzo-ring')).toHaveCount(1);
+  });
+});
+
+test.describe('Monitoring presentation: Compact default and Pause/Resume (2026-10-22)', () => {
+  test('Start monitoring opens Compact (220×220): ring at 60% of the short side, name above, Expand top right, Stop bottom left, Pause bottom right', async ({ page, context }) => {
+    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 220, height: 220 }, layout: 'compact' });
+    await expect(pipPage.locator('body')).toHaveAttribute('data-layout', 'compact');
+    await pipPage.mouse.move(110, 110); // reveal the corner controls
+    const ring = await monitoringScreen.locator('.mezzo-ring').boundingBox();
+    expect(ring.width).toBeCloseTo(COMPACT_EDGE, 0);
+    await expect(monitoringScreen.locator('.pip-profile-info')).toBeVisible();
+    const box = (sel) => monitoringScreen.locator(sel).boundingBox();
+    const [expandBox, stopBox, pauseBox] = await Promise.all([box('.pip-control-btn-expand'), box('.pip-control-btn-stop'), box('.pip-control-btn-pause')]);
+    expect(expandBox.x).toBeGreaterThan(150); expect(expandBox.y).toBeLessThan(40);
+    expect(stopBox.x).toBeLessThan(40); expect(stopBox.y).toBeGreaterThan(170);
+    expect(pauseBox.x).toBeGreaterThan(150); expect(pauseBox.y).toBeGreaterThan(170);
+    await expect(monitoringScreen.locator('.pip-control-btn-pause')).toHaveAttribute('aria-label', 'Pause monitoring');
+    await assertNoOverflow(pipPage);
+  });
+
+  test('Pause releases the microphone and shows a smaller, empty ring with "Paused"; Resume re-acquires it, keeps the profile, and announces it', async ({ page, context }) => {
+    // Track every microphone stream the app opens, to check it's released.
+    await page.addInitScript(() => {
+      window.__streams = [];
+      const real = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+      navigator.mediaDevices.getUserMedia = async (c) => { const st = await real(c); window.__streams.push(st); return st; };
+    });
+    const liveTracks = () => page.evaluate(() => window.__streams.flatMap((st) => st.getTracks()).filter((t) => t.readyState === 'live').length);
+    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 220, height: 220 }, layout: 'compact', driven: true });
+    const live = monitoringScreen.locator('.pip-zone-live');
+    const pause = monitoringScreen.locator('.pip-control-btn-pause');
+    expect(await liveTracks()).toBe(1);
+
+    await pause.click();
+    await expect(pause).toHaveAttribute('aria-label', 'Resume monitoring');
+    expect(await liveTracks(), 'the microphone is released').toBe(0);
+    await expect(live).toHaveText('Paused');
+    await expect(monitoringScreen.locator('.pip-profile-info')).toHaveText('Paused');
+    await expect(page.locator('#dock-status-text')).toHaveText('Monitoring is not active');
+    const ring = monitoringScreen.locator('.mezzo-ring');
+    await expect(ring).toHaveAttribute('data-paused', '');
+    await expect(ring).toHaveAttribute('data-zone', '0');
+    await expect(ring.locator('.mezzo-ring-voice')).toHaveCSS('opacity', '0');
+    await expect.poll(async () => (await ring.boundingBox()).width).toBeCloseTo(0.4 * 220, 0);
+    // Resume stays visible while paused: it's the next thing to do.
+    await pipPage.mouse.move(-10, -10);
+    await expect(pause).toHaveCSS('opacity', '1');
+
+    await pause.click();
+    await expect(pause).toHaveAttribute('aria-label', 'Pause monitoring');
+    await expect(live).toHaveText('Monitoring resumed.');
+    expect(await liveTracks(), 'the microphone is back').toBe(1);
+    await expect(monitoringScreen.locator('.pip-profile-info')).toHaveText('Kitchen');
+    await expect(ring).not.toHaveAttribute('data-paused', '');
+    await expect.poll(async () => (await ring.boundingBox()).width).toBeCloseTo(COMPACT_EDGE, 0);
+    await expect(page.locator('#dock-status-text')).toHaveText('Monitoring is active');
+  });
+
+  test('Compact: the profile name is centered above the ring, and steps aside while the over-range band shows', async ({ page, context }) => {
+    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 220, height: 220 }, layout: 'compact', driven: true });
+    const header = monitoringScreen.locator('.pip-monitoring-header');
+    const name = await monitoringScreen.locator('.pip-profile-info').boundingBox();
+    expect(Math.abs(name.x + name.width / 2 - 110)).toBeLessThan(2);
+    await expect(header).toHaveCSS('opacity', '1');
+    const b = await rangeBoundsDb(page, SAVED_PROFILE[0].spreadDb);
+    await settleAt(page, pipPage, b.endDb + 4, 1600);
+    await expect(header).toHaveCSS('opacity', '0');
+    await settleAt(page, pipPage, 0, 1600);
+    await expect(header).toHaveCSS('opacity', '1');
+  });
+
+  test('Pause and Resume are in Expanded too, as a pill beside Stop', async ({ page, context }) => {
+    const { monitoringScreen } = await reachMonitoring(page, context, { size: { width: 382, height: 480 } });
+    const pause = monitoringScreen.locator('.pip-control-btn-pause');
+    await expect(pause).toBeVisible();
+    await expect(pause).toHaveText('Pause');
+    const [p, st] = await Promise.all([pause.boundingBox(), monitoringScreen.locator('.pip-control-btn-stop').boundingBox()]);
+    expect(Math.abs(p.y - st.y)).toBeLessThan(2);
+    await pause.click();
+    await expect(pause).toHaveText('Resume');
   });
 });

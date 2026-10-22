@@ -131,18 +131,18 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
   test('At the five-profile limit, Save profile routes straight to M3, never opening M2', async ({ page, context }) => {
     await page.addInitScript(() => {
       localStorage.setItem('mezzoProfiles', JSON.stringify([
-        { id: 'p1', name: 'One', speakingDb: -30, spreadDb: 4, calibratedTs: 1 },
-        { id: 'p2', name: 'Two', speakingDb: -30, spreadDb: 4, calibratedTs: 2 },
-        { id: 'p3', name: 'Three', speakingDb: -30, spreadDb: 4, calibratedTs: 3 },
-        { id: 'p4', name: 'Four', speakingDb: -30, spreadDb: 4, calibratedTs: 4 },
-        { id: 'p5', name: 'Five', speakingDb: -30, spreadDb: 4, calibratedTs: 5 },
+        { id: 'p1', name: 'One', speakingDb: -30, spreadDb: 4, calibratedTs: 1, peakDb: 2 },
+        { id: 'p2', name: 'Two', speakingDb: -30, spreadDb: 4, calibratedTs: 2, peakDb: 2 },
+        { id: 'p3', name: 'Three', speakingDb: -30, spreadDb: 4, calibratedTs: 3, peakDb: 2 },
+        { id: 'p4', name: 'Four', speakingDb: -30, spreadDb: 4, calibratedTs: 4, peakDb: 2 },
+        { id: 'p5', name: 'Five', speakingDb: -30, spreadDb: 4, calibratedTs: 5, peakDb: 2 },
       ]));
     });
     const pipPage = await openCompanion(page, context);
 
     const readyScreen = pipPage.locator('.pip-screen-ready');
     await expect(readyScreen).toBeVisible();
-    // A selected saved profile never shows anything in the contextual-actions
+    // A selected (current-format) saved profile never shows anything in the contextual-actions
     // row at all now (2026-08-18 — Create new profile lives in the selector
     // panel's own persistent footer instead; see the dedicated cap-routing
     // coverage for that action elsewhere in this file).
@@ -994,5 +994,30 @@ test.describe('Naming flow (M2/M2a) polish — decision layer, heading typograph
     const m3Screen = pipPage.locator('.pip-screen-decision').filter({ hasText: '5 of 5 profiles saved' });
     await expect(m3Screen).toBeVisible();
     await expect(m2Screen).toBeHidden();
+  });
+});
+
+test.describe('Migration: profiles saved before the speech-band filter (2026-10-22)', () => {
+  test('a profile without a calibration peak shows "Recalibrate to use the improved sound filter." on Ready; a current one does not; nothing is deleted', async ({ page, context }) => {
+    const profiles = [
+      { id: 'old', name: 'Old office', speakingDb: -30, spreadDb: 4, calibratedTs: 1 },
+      { id: 'new', name: 'New office', speakingDb: -30, spreadDb: 4, calibratedTs: 2, peakDb: 2.4, roomNoiseDb: -49 },
+    ];
+    await page.addInitScript((p) => {
+      localStorage.setItem('mezzoProfiles', JSON.stringify(p));
+      sessionStorage.setItem('mezzoSelectedProfile', JSON.stringify(p[0]));
+    }, profiles);
+    const pipPage = await openCompanion(page, context);
+    const readyScreen = pipPage.locator('.pip-screen-ready');
+    await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Old office');
+    await expect(readyScreen.locator('.pip-ready-recalibrate-note')).toHaveText('Recalibrate to use the improved sound filter.');
+
+    await readyScreen.locator('.pip-ready-selector-trigger').click();
+    await pipPage.locator('.pip-ready-selector-row', { hasText: 'New office' }).locator('.pip-ready-selector-row-label').click();
+    await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('New office');
+    await expect(readyScreen.locator('.pip-ready-recalibrate-note')).toHaveCount(0);
+
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('mezzoProfiles')));
+    expect(stored.map((p) => p.id)).toEqual(['old', 'new']);
   });
 });

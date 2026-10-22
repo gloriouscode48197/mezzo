@@ -68,7 +68,8 @@ class FakeIntersectionObserver {
 /**
  * A minimal stand-in for the real Web Audio pipeline src/audio.js's
  * acquire() builds — just enough surface for it to run to completion
- * without throwing: createAnalyser()/createMediaStreamSource() return
+ * without throwing: createAnalyser()/createMediaStreamSource()/
+ * createBiquadFilter() return
  * plain objects accepting whatever properties/calls acquire() makes on
  * them, and close() is a no-op release() can safely call. linkedom has no
  * real AudioContext at all, so without this, ANY acquire() call (including
@@ -81,6 +82,8 @@ class FakeIntersectionObserver {
 class FakeAudioContext {
   createAnalyser() { return { fftSize: 0, smoothingTimeConstant: 0 }; }
   createMediaStreamSource() { return { connect() {} }; }
+  // The speech-band filter (src/audio.js's applyFilterSettings()).
+  createBiquadFilter() { return { type: '', frequency: { value: 0 }, connect() {}, disconnect() {} }; }
   close() {}
 }
 

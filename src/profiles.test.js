@@ -50,6 +50,7 @@ import {
   commitSavePromptName,
   SAVE_PROMPT_ACTIONS,
   MAX_SAVED_PROFILES,
+  needsRecalibration,
 } from './profiles.js';
 
 // =============================================================================
@@ -872,5 +873,59 @@ describe('getHasStartedMonitoring / setHasStartedMonitoring', () => {
     } finally {
       globalThis.localStorage = real;
     }
+  });
+});
+
+// =============================================================================
+// Peak and room noise (2026-10-22), and profiles saved before them
+// =============================================================================
+
+describe('calibration peak and room noise are saved with a profile', () => {
+  it('addSavedProfile, promoteTemporaryProfile, and updateSavedProfile keep peakDb and roomNoiseDb', () => {
+    const added = addSavedProfile(makeCalibration({ peakDb: 2.4, roomNoiseDb: -48.9 }));
+    assert.strictEqual(added.peakDb, 2.4);
+    assert.strictEqual(added.roomNoiseDb, -48.9);
+
+    const temp = { ...makeCalibration({ peakDb: 3, roomNoiseDb: -50 }), temporary: true, savedProfileId: null };
+    const { profile } = promoteTemporaryProfile(temp, 'Office');
+    assert.strictEqual(profile.peakDb, 3);
+    assert.strictEqual(profile.roomNoiseDb, -50);
+    assert.ok(!('temporary' in profile));
+
+    const updated = updateSavedProfile(added.id, { speakingDb: -31, spreadDb: 3, calibratedTs: 2, peakDb: 1.8, roomNoiseDb: -55 });
+    assert.strictEqual(updated.peakDb, 1.8);
+    assert.strictEqual(updated.roomNoiseDb, -55);
+  });
+
+  it('a recalibration without a room reading replaces the old one rather than keeping a stale room', () => {
+    const added = addSavedProfile(makeCalibration({ peakDb: 2, roomNoiseDb: -40 }));
+    const updated = updateSavedProfile(added.id, { speakingDb: -31, spreadDb: 3, calibratedTs: 2, peakDb: 2.2, roomNoiseDb: null });
+    assert.strictEqual(updated.peakDb, 2.2);
+    assert.ok(!('roomNoiseDb' in updated));
+  });
+
+  it('a save-by-matching-name (Replace) carries them too', () => {
+    addSavedProfile(makeCalibration({ name: 'Kitchen' }));
+    const temp = { ...makeCalibration({ peakDb: 2.5, roomNoiseDb: -45 }), temporary: true, savedProfileId: null };
+    const { profile } = commitSavePromptName(temp, 'kitchen');
+    assert.strictEqual(profile.peakDb, 2.5);
+    assert.strictEqual(profile.roomNoiseDb, -45);
+  });
+});
+
+describe('migration: profiles saved before the sound filter', () => {
+  it('a profile without a calibration peak needs recalibration; one with it does not', () => {
+    assert.strictEqual(needsRecalibration({ id: 'a', name: 'Old', speakingDb: -30, spreadDb: 4, calibratedTs: 1 }), true);
+    assert.strictEqual(needsRecalibration({ id: 'b', name: 'New', speakingDb: -30, spreadDb: 4, calibratedTs: 1, peakDb: 2 }), false);
+    // Room noise can be missing on a new profile (nothing measured); the peak decides.
+    assert.strictEqual(needsRecalibration({ id: 'c', name: 'New', speakingDb: -30, spreadDb: 4, calibratedTs: 1, peakDb: 2, roomNoiseDb: undefined }), false);
+    assert.strictEqual(needsRecalibration(null), false);
+  });
+
+  it('old profiles are kept as they are: nothing is deleted or rewritten on read', () => {
+    const old = [{ id: 'a', name: 'Old', speakingDb: -30, spreadDb: 4, calibratedTs: 1 }];
+    localStorage.setItem('mezzoProfiles', JSON.stringify(old));
+    assert.deepStrictEqual(getSavedProfiles(), old);
+    assert.deepStrictEqual(JSON.parse(localStorage.getItem('mezzoProfiles')), old);
   });
 });

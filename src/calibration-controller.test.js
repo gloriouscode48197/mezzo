@@ -1366,7 +1366,7 @@ describe('monitoring result identity', () => {
 // =============================================================================
 
 describe('commit writes only calibration fields, using storage-authoritative identity', () => {
-  it('updateSavedProfile is called with exactly speakingDb/spreadDb/calibratedTs', async () => {
+  it('updateSavedProfile is called with exactly the calibration fields: speakingDb/spreadDb/calibratedTs/peakDb/roomNoiseDb', async () => {
     const original = { id: 'p1', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 1 };
     const { controller, audio, scheduler, profileOps } = setup([original]);
     const done = controller.startRecalibration('p1');
@@ -1383,7 +1383,31 @@ describe('commit writes only calibration fields, using storage-authoritative ide
     controller.commitUpdateProfile();
 
     assert.strictEqual(capturedArgs.id, 'p1');
-    assert.deepStrictEqual(Object.keys(capturedArgs.fields).sort(), ['calibratedTs', 'speakingDb', 'spreadDb']);
+    assert.deepStrictEqual(Object.keys(capturedArgs.fields).sort(), ['calibratedTs', 'peakDb', 'roomNoiseDb', 'speakingDb', 'spreadDb']);
+  });
+
+  it('the result carries the capture peak and the room noise the caller measured during the 3-2-1', async () => {
+    const { controller, audio, scheduler } = setup([]);
+    const done = controller.startSessionCalibration();
+    controller.setRoomNoiseDb(-55);
+    await runToCalibrated(controller, audio, scheduler);
+    await done;
+    const { result } = controller.getState();
+    assert.strictEqual(result.roomNoiseDb, -55);
+    assert.ok(Number.isFinite(result.peakDb));
+    const temp = controller.commitStartMonitoring();
+    assert.strictEqual(temp.roomNoiseDb, -55);
+    assert.strictEqual(temp.peakDb, result.peakDb);
+  });
+
+  it('a new attempt forgets the previous attempt’s room noise', async () => {
+    const { controller, audio, scheduler } = setup([]);
+    controller.setRoomNoiseDb(-55);
+    controller.cancel();
+    const done = controller.startSessionCalibration();
+    await runToCalibrated(controller, audio, scheduler);
+    await done;
+    assert.strictEqual(controller.getState().result.roomNoiseDb, null);
   });
 
 });

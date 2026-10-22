@@ -11,31 +11,38 @@
 
 // Zone thresholds, expressed as offsets from the calibrated baseline in
 // multiples of that same calibration's own measured spread (spreadDb — see
-// calibrate() below), not fixed dB or ratio constants. This scales each
-// profile's zone widths to how variable that person's voice actually was
-// during calibration, instead of one-size-fits-all multipliers: a person who
-// calibrates with a very steady voice gets tighter zones, a person with more
-// natural dynamic range gets wider ones. Zone 0 (Listening) sits below
-// ZONE_SILENCE_SPREAD_MULT; each successive zone runs up to its multiplier;
-// zone 3 (Outside of Range) is open-ended above ZONE_ACCEPTABLE_SPREAD_MULT
-// — there's no volume tier beyond it. "Sustained/consistent outside" is a
-// duration flag owned by src/mezzo-session.js, not a louder-volume zone.
+// calibrate() below), not fixed dB or ratio constants.
 //
-// These four multipliers are a reasoned starting point, not yet validated
-// against real listening tests — the same "first-pass tunable default"
-// status the old fixed Everyday Conversation baseline had, before it was
-// retired in favor of per-profile calibration. Expect to retune by ear.
-export const ZONE_SILENCE_SPREAD_MULT = -2.0;   // baseline + this × spread -> zone 0/1 boundary
-export const ZONE_TARGET_SPREAD_MULT = 1.0;     // baseline + this × spread -> zone 1/2 boundary
-export const ZONE_ACCEPTABLE_SPREAD_MULT = 2.5; // baseline + this × spread -> zone 2/3 boundary
+// Tuned with a real voice in design/prototypes/ring-tuner.html (2026-10-22;
+// docs/prd/range-ring-and-lantern-refresh.md §5 has the reasons). The end of
+// range now normally comes from the calibration's own peaks (see
+// DEFAULT_ZONE_SETTINGS.endFrom), so speaking at the calibrated level never
+// reaches it; these spread multipliers remain the fallback for profiles
+// saved before peaks were recorded.
+//
+// Zone 0 (Listening) sits below ZONE_SILENCE_SPREAD_MULT × spread; zone 3
+// (Outside of Range) is open-ended above the end of range; zone 2
+// (Approaching) is the last APPROACHING_WIDTH_DB before it. There's no
+// volume tier beyond zone 3. "Sustained/consistent outside" is a duration
+// flag owned by src/mezzo-session.js, not a louder-volume zone.
+export const ZONE_SILENCE_SPREAD_MULT = -4.0;   // baseline + this × spread -> zone 0/1 boundary (wide: pauses between words aren't "Listening")
+export const ZONE_TARGET_SPREAD_MULT = 1.0;     // the older Within/Approaching rule, used only when approachingWidthDb is null
+export const ZONE_ACCEPTABLE_SPREAD_MULT = 2.0; // fallback end of range: baseline + this × spread
 
-// The end of range never sits more than this far above the calibrated
-// baseline, however variable the calibration was (2026-10-22): a wide
-// spread otherwise pushes the nudge so far up that it rarely shows. The
-// Within/Approaching boundary is held at or below it so the zones stay in
-// order. Kept separate from the multipliers above so it can be reverted on
-// its own.
-export const END_OF_RANGE_MAX_DB = 6;
+// Approaching is the last stretch before the end of range, a fixed width:
+// at 1 × spread, ordinary speech regularly showed the sage edge.
+export const APPROACHING_WIDTH_DB = 2;
+
+// The fallback (spread-based) end of range never sits more than this far
+// above the calibrated baseline.
+export const END_OF_RANGE_MAX_DB = 7;
+
+// The end of range from calibration peaks: the capture's 95th-percentile
+// level plus a small margin, so the speaker's own normal peaks stay inside;
+// limited only by a looser safety cap.
+export const PEAK_PERCENTILE = 95;
+export const PEAK_MARGIN_DB = 1.5;
+export const PEAKS_SAFETY_CAP_DB = 12;
 
 // Floor applied to a calibration's measured spread before it's used to
 // derive zone boundaries (see calibrate() and _computeZone() below) — never
@@ -63,26 +70,51 @@ export const INITIAL_GRACE_MS_MIN = 5000;
 export const INITIAL_GRACE_MS_MAX = 8000;
 
 // Confirmation window before a rise into zone 3 (Outside of Range) actually
-// commits. Investigated live: an ordinary ~150ms vocal attack crosses the
-// entire zone-2 band and reaches zone 3 in ~150ms, which is fast enough that
-// a brief, non-sustained spike could commit — and then reverse — before a
-// user could perceive it, and faster than the visualizer's own display
-// energy can visually catch up, so the ring was still visibly escalating
-// after the label had already dropped back down. 300ms was tried first and
-// measured against a real ~500ms vocal-emphasis event; it still let that
-// ordinary emphasis commit zone 3. Compared 300/500/700ms head to head:
-// 500ms is the smallest value that keeps that same ~500ms emphasis from
-// ever committing, and 700ms didn't filter anything more in that same
-// comparison, just added delay before genuinely sustained loud speech gets
-// its full-severity confirmation. This gate only delays the *commit* to
-// zone 3 — de-escalation and every other zone transition are untouched.
-// See processFrame() below.
-export const OUTSIDE_ENTRY_DWELL_MS = 500;
+// commits, counting only time actually over the line (2026-10-22). It was
+// 500ms when zones read the momentary level, to keep a single emphasized
+// syllable from committing; zones now read the 60th percentile of the last
+// 600ms of voiced audio (ZONE_WINDOW_MS), which already ignores a syllable,
+// so the dwell only has to bridge the last moments and can be short.
+export const OUTSIDE_ENTRY_DWELL_MS = 150;
+// Dips under the line shorter than this don't reset the dwell, and leaving
+// Outside needs this long under the line, so the band doesn't flicker
+// between words.
+export const DWELL_GRACE_MS = 200;
+// Approaching and Outside are judged on the ZONE_PERCENTILE level of the
+// voiced frames in the last ZONE_WINDOW_MS (raw per-frame level, not
+// audio.js's smoothed one); Listening on the momentary level.
+export const ZONE_WINDOW_MS = 600;
+export const ZONE_PERCENTILE = 60;
 
 // Assumed real interval between processFrame() calls. Must match the
 // caller's actual sampling cadence (audio.js's SAMPLE_INTERVAL_MS = 50) for
 // INITIAL_GRACE_MS_* to mean what its name says.
 export const FRAME_MS = 50;
+
+/**
+ * The room's noise level from raw RMS readings taken while the person is
+ * getting ready to speak (the calibration's 3-2-1): their median, in dB, so
+ * a word or two said early doesn't count as room noise. null when there's
+ * nothing usable.
+ *
+ * @param {number[]} rmsSamples
+ * @returns {number | null}
+ */
+export function measureRoomNoiseDb(rmsSamples) {
+  const usable = (rmsSamples || []).filter((x) => Number.isFinite(x) && x > 0).sort((a, b) => a - b);
+  if (!usable.length) return null;
+  return 20 * Math.log10(usable[Math.floor(usable.length / 2)]);
+}
+
+/** Speech less than this far above the room makes it a noisy room: the
+ *  circle's room margin drops, and the result screen suggests moving
+ *  closer to the mic. */
+export const NOISY_ROOM_GAP_DB = 12;
+
+/** @returns {boolean} whether this calibration was made in a noisy room */
+export function isNoisyRoom(speakingDb, roomNoiseDb) {
+  return Number.isFinite(speakingDb) && Number.isFinite(roomNoiseDb) && speakingDb - roomNoiseDb < NOISY_ROOM_GAP_DB;
+}
 
 // =============================================================================
 // Engine Class
@@ -143,21 +175,21 @@ const EPSILON = 1e-10;
 export const DEFAULT_ZONE_SETTINGS = Object.freeze({
   silenceSpreadMult: ZONE_SILENCE_SPREAD_MULT,
   targetSpreadMult: ZONE_TARGET_SPREAD_MULT,
-  approachingWidthDb: null,
+  approachingWidthDb: APPROACHING_WIDTH_DB,
   endSpreadMult: ZONE_ACCEPTABLE_SPREAD_MULT,
   endCapDb: END_OF_RANGE_MAX_DB,
   minSpreadDb: MIN_SPREAD_DB,
   outsideDwellMs: OUTSIDE_ENTRY_DWELL_MS,
-  dwellGraceMs: 0,
-  endFrom: 'spread',
-  peakPercentile: 95,
-  peakMarginDb: 2,
-  peaksSafetyCapDb: 12,
-  zoneWindowMs: 0,
-  voicedOnly: false,
-  zoneMethod: 'mean',
-  zonePercentile: 60,
-  zoneInputRaw: false,
+  dwellGraceMs: DWELL_GRACE_MS,
+  endFrom: 'peaks',
+  peakPercentile: PEAK_PERCENTILE,
+  peakMarginDb: PEAK_MARGIN_DB,
+  peaksSafetyCapDb: PEAKS_SAFETY_CAP_DB,
+  zoneWindowMs: ZONE_WINDOW_MS,
+  voicedOnly: true,
+  zoneMethod: 'percentile',
+  zonePercentile: ZONE_PERCENTILE,
+  zoneInputRaw: true,
 });
 
 export class MezzoEngine {
@@ -327,7 +359,8 @@ export class MezzoEngine {
    */
   getPeakOffsetDb() {
     const samples = this.calibrationSamples;
-    if (!samples?.length || !this.baselineRMS) return null;
+    if (!samples?.length) return Number.isFinite(this.storedPeakOffsetDb) ? this.storedPeakOffsetDb : null;
+    if (!this.baselineRMS) return null;
     const sorted = [...samples].sort((a, b) => a - b);
     const p = Math.min(100, Math.max(0, this.zoneSettings.peakPercentile)) / 100;
     const peak = sorted[Math.min(sorted.length - 1, Math.floor(p * (sorted.length - 1) + 0.5))];
@@ -656,12 +689,16 @@ export class MezzoEngine {
    * @param {{ baselineRMS: number, spreadDb?: number }} values
    * @throws {Error} If baselineRMS isn't a usable positive number
    */
-  loadCalibration({ baselineRMS, spreadDb }) {
+  loadCalibration({ baselineRMS, spreadDb, peakOffsetDb }) {
     if (typeof baselineRMS !== 'number' || !Number.isFinite(baselineRMS) || baselineRMS <= 0) {
       throw new Error('loadCalibration requires a positive, finite baselineRMS');
     }
     this.baselineRMS = baselineRMS;
-    this.calibrationSamples = null; // a loaded profile carries no samples, so 'peaks' falls back to 'spread'
+    // A loaded profile carries no samples, only its saved peak (dB vs its
+    // baseline, recorded at calibration). Profiles saved before peaks were
+    // recorded have none, and fall back to the spread rule.
+    this.calibrationSamples = null;
+    this.storedPeakOffsetDb = Number.isFinite(peakOffsetDb) ? peakOffsetDb : null;
     // Older profiles saved before spreadDb existed carry none — falls back
     // to 0, which _computeZone()'s own MIN_SPREAD_DB floor already handles
     // exactly like a freshly-measured, perfectly uniform calibration would.

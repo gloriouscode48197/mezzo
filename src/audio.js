@@ -21,8 +21,8 @@ const SAMPLE_INTERVAL_MS = 50;
 const FFT_SIZE = 2048;
 
 /**
- * Input settings. The app uses these defaults (no filter, no browser noise
- * suppression, no automatic gain); the tuning page
+ * Input settings. The app uses these defaults (the speech-band filter on,
+ * no browser noise suppression, no automatic gain); the tuning page
  * (design/prototypes/ring-tuner.html) passes its own live copy.
  *
  * speechFilter: an optional band-pass (high-pass then low-pass biquads)
@@ -33,7 +33,10 @@ const FFT_SIZE = 2048;
  *   loudness Mezzo is measuring.
  */
 export const DEFAULT_AUDIO_SETTINGS = Object.freeze({
-  speechFilter: Object.freeze({ enabled: false, highPassHz: 150, lowPassHz: 4000 }),
+  // On (2026-10-22): measuring only the speech band keeps fan rumble and hiss
+  // from moving the circle or the zones. 120 Hz to 3400 Hz, the telephone
+  // speech band, tuned in design/prototypes/ring-tuner.html.
+  speechFilter: Object.freeze({ enabled: true, highPassHz: 120, lowPassHz: 3400 }),
   noiseSuppression: false,
 });
 

@@ -1154,3 +1154,41 @@ test.describe('Companion heading punctuation audit (2026-08-16)', () => {
     await expect(creatingScreen.locator('.pip-creating-text')).toHaveText('Creating your speaking profile…');
   });
 });
+
+test.describe('Room noise and the noisy-room tip (2026-10-22)', () => {
+  // The level driver feeds every mic reading, including the 3-2-1 readings
+  // that become the room-noise level. Levels below are absolute dB.
+  async function calibrateWith(page, context, { roomDb, speechDb }) {
+    const pipPage = await openCompanion(page, context);
+    await installLevelDriver(page, { speakingDb: 0 });
+    await setLevelDb(page, roomDb);
+    await pipPage.locator('button:has-text("Create speaking profile")').click();
+    await pipPage.locator('button:has-text("I\'m ready")').click();
+    const status = pipPage.locator('.pip-calibrating-status');
+    await expect(status).toHaveText('Listening… 6s', { timeout: 8000 });
+    await setLevelDb(page, speechDb);
+    const result = pipPage.locator('.pip-screen-result');
+    await expect(result).toBeVisible({ timeout: 15000 });
+    return { pipPage, result };
+  }
+  const TIP = 'Your room is a bit noisy for how softly you speak. Try moving a little closer to your mic.';
+
+  test('speech less than 12 dB above the room shows the tip on the result screen, and the room noise and peak are saved with the profile', async ({ page, context }) => {
+    const { pipPage, result } = await calibrateWith(page, context, { roomDb: -46, speechDb: -38 });
+    await expect(result.locator('.pip-decision-tip')).toBeVisible();
+    await expect(result.locator('.pip-decision-tip')).toHaveText(TIP);
+    // Save it, then read what was stored.
+    await result.locator('.pip-decision-primary-btn').click();
+    await pipPage.locator('.pip-screen-m2 input').fill('Cafe');
+    await pipPage.locator('.pip-screen-m2 button[type="submit"]').click();
+    await expect(pipPage.locator('.pip-screen-ready')).toBeVisible({ timeout: 5000 });
+    const [saved] = await page.evaluate(() => JSON.parse(localStorage.getItem('mezzoProfiles')));
+    expect(saved.roomNoiseDb).toBeCloseTo(-46, 0);
+    expect(Number.isFinite(saved.peakDb)).toBe(true);
+  });
+
+  test('a quiet room shows no tip', async ({ page, context }) => {
+    const { result } = await calibrateWith(page, context, { roomDb: -65, speechDb: -38 });
+    await expect(result.locator('.pip-decision-tip')).toBeHidden();
+  });
+});

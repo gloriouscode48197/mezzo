@@ -138,6 +138,8 @@ export class MezzoCalibrationRing {
     this.captureStart = null;
     this.rawRms = 0;
     this.liveRms = 0;
+    this.roomNoiseRms = 0; // measured again on every attempt
+    this.gateOpen = true;
     this.currentPx = this.settings.voiceMinPx;
     this.shown = { shown: this.currentPx, settling: false };
     this.lastTime = null;

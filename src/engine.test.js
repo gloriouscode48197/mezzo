@@ -23,6 +23,9 @@ import {
   OUTSIDE_ENTRY_DWELL_MS,
   END_OF_RANGE_MAX_DB,
   DEFAULT_ZONE_SETTINGS,
+  measureRoomNoiseDb,
+  isNoisyRoom,
+  NOISY_ROOM_GAP_DB,
 } from './engine.js';
 
 // =============================================================================
@@ -34,7 +37,7 @@ import {
  * this file threads one of these through explicitly rather than relying on
  * the real performance.now() default, so duration/dwell-timing assertions
  * never depend on real wall-clock time (no flakiness, no need to actually
- * wait out OUTSIDE_ENTRY_DWELL_MS in a real test).
+ * wait out DWELL_MS in a real test).
  */
 function createClock(startMs = 0) {
   let t = startMs;
@@ -79,7 +82,7 @@ function skipGracePeriod(engine, clock, quietRms = 0.01) {
  * Create calibrated engine with known baseline
  */
 function createCalibratedEngine(baselineRMS = 0.1) {
-  const engine = new MezzoEngine();
+  const engine = new MezzoEngine({ zoneSettings: PRE_TUNING_ZONE_SETTINGS });
   const samples = Array(20).fill(baselineRMS);
   engine.calibrate(samples);
   return engine;
@@ -118,6 +121,36 @@ function effectiveSpread(engine) {
 }
 
 /**
+ * The zone rules as they were before the 2026-10-22 tuning (momentary
+ * level, end of range from 2.5 × spread capped at +6 dB, Approaching at
+ * 1 × spread, 500ms dwell, no grace). Most tests below pin the engine's
+ * mechanics (boundaries, dwell, de-escalation, grace period) and run under
+ * these explicit values, so they don't drift with tuning; the tuned
+ * defaults have their own describe block ("tuned defaults").
+ */
+const PRE_TUNING_ZONE_SETTINGS = Object.freeze({
+  ...DEFAULT_ZONE_SETTINGS,
+  silenceSpreadMult: -2,
+  targetSpreadMult: 1,
+  approachingWidthDb: null,
+  endSpreadMult: 2.5,
+  endCapDb: 6,
+  outsideDwellMs: 500,
+  dwellGraceMs: 0,
+  endFrom: 'spread',
+  peakMarginDb: 2,
+  zoneWindowMs: 0,
+  voicedOnly: false,
+  zoneMethod: 'mean',
+  zoneInputRaw: false,
+});
+const SILENCE_MULT = PRE_TUNING_ZONE_SETTINGS.silenceSpreadMult;
+const TARGET_MULT = PRE_TUNING_ZONE_SETTINGS.targetSpreadMult;
+const ACCEPTABLE_MULT = PRE_TUNING_ZONE_SETTINGS.endSpreadMult;
+const DWELL_MS = PRE_TUNING_ZONE_SETTINGS.outsideDwellMs;
+const END_CAP_DB = PRE_TUNING_ZONE_SETTINGS.endCapDb;
+
+/**
  * RMS value at a given zone-boundary multiplier of an engine's own (floored)
  * spread, offset a further amount in dB — lets tests assert zone membership
  * without hardcoding numbers tuned to the old fixed-ratio model.
@@ -140,7 +173,7 @@ function calibratedEngineWithSpread(centerRms, targetSpreadDb) {
   const centerDb = rmsToDb(centerRms);
   const low = dbToRms(centerDb - targetSpreadDb);
   const high = dbToRms(centerDb + targetSpreadDb);
-  const engine = new MezzoEngine();
+  const engine = new MezzoEngine({ zoneSettings: PRE_TUNING_ZONE_SETTINGS });
   engine.calibrate(Array(50).fill(low).concat(Array(50).fill(high)));
   return engine;
 }
@@ -151,23 +184,23 @@ function calibratedEngineWithSpread(centerRms, targetSpreadDb) {
 
 describe('Calibration', () => {
   it('should fail with no samples', () => {
-    const engine = new MezzoEngine();
+    const engine = new MezzoEngine({ zoneSettings: PRE_TUNING_ZONE_SETTINGS });
     assert.throws(() => engine.calibrate([]), /no samples provided/);
   });
 
   it('should fail with null samples', () => {
-    const engine = new MezzoEngine();
+    const engine = new MezzoEngine({ zoneSettings: PRE_TUNING_ZONE_SETTINGS });
     assert.throws(() => engine.calibrate(null), /no samples provided/);
   });
 
   it('should fail with silence-only input (all zeros)', () => {
-    const engine = new MezzoEngine();
+    const engine = new MezzoEngine({ zoneSettings: PRE_TUNING_ZONE_SETTINGS });
     const silenceSamples = Array(20).fill(0);
     assert.throws(() => engine.calibrate(silenceSamples), /silence-only/);
   });
 
   it('should trim spikes from samples', () => {
-    const engine = new MezzoEngine();
+    const engine = new MezzoEngine({ zoneSettings: PRE_TUNING_ZONE_SETTINGS });
 
     const samples = [
       0.001, 0.002,
@@ -185,7 +218,7 @@ describe('Calibration', () => {
   });
 
   it('should produce stable baseline from consistent samples', () => {
-    const engine = new MezzoEngine();
+    const engine = new MezzoEngine({ zoneSettings: PRE_TUNING_ZONE_SETTINGS });
     const samples = Array(100).fill(0.15);
 
     engine.calibrate(samples);
@@ -196,7 +229,7 @@ describe('Calibration', () => {
   });
 
   it('should reject a baseline below the usable floor even though it is not literal silence', () => {
-    const engine = new MezzoEngine();
+    const engine = new MezzoEngine({ zoneSettings: PRE_TUNING_ZONE_SETTINGS });
     // Uniform, nonzero, so it passes the plain silence-only (mean <= 0)
     // check and must be caught by the usable-floor check instead.
     const quietRms = dbToRms(MIN_USABLE_BASELINE_DB - 5);
@@ -204,12 +237,12 @@ describe('Calibration', () => {
   });
 
   it('should accept a baseline comfortably above the usable floor', () => {
-    const engine = new MezzoEngine();
+    const engine = new MezzoEngine({ zoneSettings: PRE_TUNING_ZONE_SETTINGS });
     assert.doesNotThrow(() => engine.calibrate(Array(100).fill(dbToRms(-40))));
   });
 
   it('should reject a buffer that is mostly silence with one loud outlier', () => {
-    const engine = new MezzoEngine();
+    const engine = new MezzoEngine({ zoneSettings: PRE_TUNING_ZONE_SETTINGS });
     // A single loud moment surrounded by near-silence: the trimmed *mean*
     // alone would hide this (the one outlier gets trimmed away, leaving a
     // clean, comfortably-above-floor quiet mean) — this must be caught by
@@ -221,7 +254,7 @@ describe('Calibration', () => {
   });
 
   it('should accept a realistic mix of speech and pauses', () => {
-    const engine = new MezzoEngine();
+    const engine = new MezzoEngine({ zoneSettings: PRE_TUNING_ZONE_SETTINGS });
     // 45% clearly-voiced, 55% pause — comfortably above MIN_VOICED_SAMPLE_RATIO (0.4).
     const speech = dbToRms(-20);
     const pause = dbToRms(-52);
@@ -236,7 +269,7 @@ describe('Calibration', () => {
     // whose whole range is narrower than the margin itself. Two
     // close-together speech clusters (4dB apart, under the 6dB gate), no
     // silence anywhere in the buffer.
-    const engine = new MezzoEngine();
+    const engine = new MezzoEngine({ zoneSettings: PRE_TUNING_ZONE_SETTINGS });
     const samples = Array(40).fill(dbToRms(-22)).concat(Array(40).fill(dbToRms(-18)));
     assert.doesNotThrow(() => engine.calibrate(samples));
   });
@@ -252,7 +285,7 @@ describe('Calibration', () => {
     // voice would be) means the range gate skips the check entirely — same
     // mechanism as the "continuous speech, no pauses" case above, just
     // nearer the floor.
-    const engine = new MezzoEngine();
+    const engine = new MezzoEngine({ zoneSettings: PRE_TUNING_ZONE_SETTINGS });
     const samples = Array(120).fill(dbToRms(-52));
     assert.doesNotThrow(() => engine.calibrate(samples));
     assert.ok(Math.abs(rmsToDb(engine.baselineRMS) - (-52)) < 0.5);
@@ -262,13 +295,13 @@ describe('Calibration', () => {
     // Same scenario as above, but with a little real dB fluctuation (4dB,
     // still under the 6dB range gate) instead of a perfectly uniform value —
     // closer to what a real, if very steady, voice actually sounds like.
-    const engine = new MezzoEngine();
+    const engine = new MezzoEngine({ zoneSettings: PRE_TUNING_ZONE_SETTINGS });
     const samples = Array(60).fill(dbToRms(-54)).concat(Array(60).fill(dbToRms(-50)));
     assert.doesNotThrow(() => engine.calibrate(samples));
   });
 
   it('should reject an unstable environment (spread too wide)', () => {
-    const engine = new MezzoEngine();
+    const engine = new MezzoEngine({ zoneSettings: PRE_TUNING_ZONE_SETTINGS });
     // Alternating quiet/loud throughout — well above MAX_SPREAD_DB in
     // trimmed dB standard deviation, reading as an inconsistent environment
     // rather than a single steady voice with wide natural range.
@@ -279,7 +312,7 @@ describe('Calibration', () => {
   });
 
   it('computes a nonzero spreadDb from varied samples', () => {
-    const engine = new MezzoEngine();
+    const engine = new MezzoEngine({ zoneSettings: PRE_TUNING_ZONE_SETTINGS });
     const samples = Array(40).fill(dbToRms(-22)).concat(Array(40).fill(dbToRms(-18)));
     engine.calibrate(samples);
     assert.ok(engine.spreadDb > 0, 'nonzero variation should produce a nonzero spread');
@@ -287,7 +320,7 @@ describe('Calibration', () => {
   });
 
   it('getCalibrationValues exposes both baselineRMS and spreadDb after calibration', () => {
-    const engine = new MezzoEngine();
+    const engine = new MezzoEngine({ zoneSettings: PRE_TUNING_ZONE_SETTINGS });
     const samples = Array(40).fill(dbToRms(-22)).concat(Array(40).fill(dbToRms(-18)));
     engine.calibrate(samples);
     const values = engine.getCalibrationValues();
@@ -296,7 +329,7 @@ describe('Calibration', () => {
   });
 
   it('getCalibrationValues reports nulls before calibration', () => {
-    const engine = new MezzoEngine();
+    const engine = new MezzoEngine({ zoneSettings: PRE_TUNING_ZONE_SETTINGS });
     const values = engine.getCalibrationValues();
     assert.strictEqual(values.baselineRMS, null);
     assert.strictEqual(values.spreadDb, null);
@@ -305,7 +338,7 @@ describe('Calibration', () => {
 
 describe('loadCalibration', () => {
   it('sets baselineRMS, spreadDb, and calibrationComplete directly, with no sample validation', () => {
-    const engine = new MezzoEngine();
+    const engine = new MezzoEngine({ zoneSettings: PRE_TUNING_ZONE_SETTINGS });
     engine.loadCalibration({ baselineRMS: 0.05, spreadDb: 5 });
     assert.strictEqual(engine.baselineRMS, 0.05);
     assert.strictEqual(engine.spreadDb, 5);
@@ -313,13 +346,13 @@ describe('loadCalibration', () => {
   });
 
   it('defaults spreadDb to 0 when omitted, e.g. a profile saved before spreadDb existed', () => {
-    const engine = new MezzoEngine();
+    const engine = new MezzoEngine({ zoneSettings: PRE_TUNING_ZONE_SETTINGS });
     engine.loadCalibration({ baselineRMS: 0.05 });
     assert.strictEqual(engine.spreadDb, 0);
   });
 
   it('rejects a non-positive or non-finite baselineRMS', () => {
-    const engine = new MezzoEngine();
+    const engine = new MezzoEngine({ zoneSettings: PRE_TUNING_ZONE_SETTINGS });
     assert.throws(() => engine.loadCalibration({ baselineRMS: 0 }), /positive, finite baselineRMS/);
     assert.throws(() => engine.loadCalibration({ baselineRMS: -0.01 }), /positive, finite baselineRMS/);
     assert.throws(() => engine.loadCalibration({ baselineRMS: NaN }), /positive, finite baselineRMS/);
@@ -327,7 +360,7 @@ describe('loadCalibration', () => {
   });
 
   it('a loaded calibration is immediately usable by startMonitoring()/processFrame(), same as calibrate()', () => {
-    const engine = new MezzoEngine();
+    const engine = new MezzoEngine({ zoneSettings: PRE_TUNING_ZONE_SETTINGS });
     engine.loadCalibration({ baselineRMS: 0.1, spreadDb: 3 });
     engine.startMonitoring();
     const clock = createClock();
@@ -337,10 +370,10 @@ describe('loadCalibration', () => {
   });
 
   it('preserves the real measured spread — unlike feeding a synthetic uniform sample array through calibrate(), which always measures spreadDb as 0', () => {
-    const viaLoad = new MezzoEngine();
+    const viaLoad = new MezzoEngine({ zoneSettings: PRE_TUNING_ZONE_SETTINGS });
     viaLoad.loadCalibration({ baselineRMS: 0.1, spreadDb: 6 });
 
-    const viaSyntheticCalibrate = new MezzoEngine();
+    const viaSyntheticCalibrate = new MezzoEngine({ zoneSettings: PRE_TUNING_ZONE_SETTINGS });
     viaSyntheticCalibrate.calibrate(Array(100).fill(0.1));
 
     assert.strictEqual(viaLoad.spreadDb, 6);
@@ -363,7 +396,7 @@ describe('loadCalibration', () => {
 //
 // Zones 0-2 classify immediately (no debounce) — every processFrame() call
 // reflects the current RMS right away, same as always. Zone 3 (Outside of
-// Range) is the one exception: entry is gated behind OUTSIDE_ENTRY_DWELL_MS
+// Range) is the one exception: entry is gated behind DWELL_MS
 // of continuous qualification (see engine.js's _resolveZone()) — a brief
 // spike is held at zone 2 (Approaching End of Range) instead of committing
 // and then immediately reversing. De-escalation out of zone 3, and every
@@ -380,7 +413,7 @@ describe('Zone Classification', () => {
 
   it('zone 0 (Listening) below the silence boundary', () => {
     const { engine, clock } = readyEngine(baseline);
-    engine.processFrame(rmsAtBoundary(engine, ZONE_SILENCE_SPREAD_MULT, -0.5), clock.tick());
+    engine.processFrame(rmsAtBoundary(engine, SILENCE_MULT, -0.5), clock.tick());
     assert.strictEqual(engine.getZone(), 0);
   });
 
@@ -392,38 +425,38 @@ describe('Zone Classification', () => {
 
   it('zone 1 at the silence boundary (inclusive)', () => {
     const { engine, clock } = readyEngine(baseline);
-    engine.processFrame(rmsAtBoundary(engine, ZONE_SILENCE_SPREAD_MULT, 0), clock.tick());
+    engine.processFrame(rmsAtBoundary(engine, SILENCE_MULT, 0), clock.tick());
     assert.strictEqual(engine.getZone(), 1);
   });
 
   it('zone 1 at the target boundary (inclusive)', () => {
     const { engine, clock } = readyEngine(baseline);
-    engine.processFrame(rmsAtBoundary(engine, ZONE_TARGET_SPREAD_MULT, 0), clock.tick());
+    engine.processFrame(rmsAtBoundary(engine, TARGET_MULT, 0), clock.tick());
     assert.strictEqual(engine.getZone(), 1);
   });
 
   it('zone 2 (Within Range, acceptable) just above the target boundary', () => {
     const { engine, clock } = readyEngine(baseline);
-    engine.processFrame(rmsAtBoundary(engine, ZONE_TARGET_SPREAD_MULT, 0.5), clock.tick());
+    engine.processFrame(rmsAtBoundary(engine, TARGET_MULT, 0.5), clock.tick());
     assert.strictEqual(engine.getZone(), 2);
   });
 
   it('zone 2 at the acceptable boundary (inclusive)', () => {
     const { engine, clock } = readyEngine(baseline);
-    engine.processFrame(rmsAtBoundary(engine, ZONE_ACCEPTABLE_SPREAD_MULT, 0), clock.tick());
+    engine.processFrame(rmsAtBoundary(engine, ACCEPTABLE_MULT, 0), clock.tick());
     assert.strictEqual(engine.getZone(), 2);
   });
 
   it('zone 3 (Outside of Range) is held at zone 2 until the entry dwell completes', () => {
     const { engine, clock } = readyEngine(baseline);
-    engine.processFrame(rmsAtBoundary(engine, ZONE_ACCEPTABLE_SPREAD_MULT, 0.5), clock.tick());
+    engine.processFrame(rmsAtBoundary(engine, ACCEPTABLE_MULT, 0.5), clock.tick());
     assert.strictEqual(engine.getZone(), 2, 'held pending confirmation on the first qualifying frame');
   });
 
-  it('zone 3 commits once the signal has qualified continuously for OUTSIDE_ENTRY_DWELL_MS', () => {
+  it('zone 3 commits once the signal has qualified continuously for DWELL_MS', () => {
     const { engine, clock } = readyEngine(baseline);
-    const loud = rmsAtBoundary(engine, ZONE_ACCEPTABLE_SPREAD_MULT, 0.5);
-    processForDuration(engine, clock, loud, OUTSIDE_ENTRY_DWELL_MS - FRAME_MS);
+    const loud = rmsAtBoundary(engine, ACCEPTABLE_MULT, 0.5);
+    processForDuration(engine, clock, loud, DWELL_MS - FRAME_MS);
     assert.strictEqual(engine.getZone(), 2, 'still pending just before the dwell completes');
     engine.processFrame(loud, clock.tick());
     assert.strictEqual(engine.getZone(), 3, 'confirmed once the dwell has elapsed');
@@ -431,8 +464,8 @@ describe('Zone Classification', () => {
 
   it('zone 3 stays 3 arbitrarily far above the acceptable boundary, once confirmed (open-ended, no ceiling)', () => {
     const { engine, clock } = readyEngine(baseline);
-    const veryLoud = rmsAtBoundary(engine, ZONE_ACCEPTABLE_SPREAD_MULT, 50);
-    processForDuration(engine, clock, veryLoud, OUTSIDE_ENTRY_DWELL_MS);
+    const veryLoud = rmsAtBoundary(engine, ACCEPTABLE_MULT, 50);
+    processForDuration(engine, clock, veryLoud, DWELL_MS);
     assert.strictEqual(engine.getZone(), 3);
   });
 
@@ -440,15 +473,15 @@ describe('Zone Classification', () => {
     const { engine, clock } = readyEngine(baseline);
     const steps = [
       { rms: baseline, zone: 1 },
-      { rms: rmsAtBoundary(engine, ZONE_TARGET_SPREAD_MULT, 0.5), zone: 2 },
-      { rms: rmsAtBoundary(engine, ZONE_ACCEPTABLE_SPREAD_MULT, 0.5), zone: 2 }, // pending -> reads as 2
+      { rms: rmsAtBoundary(engine, TARGET_MULT, 0.5), zone: 2 },
+      { rms: rmsAtBoundary(engine, ACCEPTABLE_MULT, 0.5), zone: 2 }, // pending -> reads as 2
     ];
     steps.forEach(({ rms, zone }) => {
       engine.processFrame(rms, clock.tick());
       assert.strictEqual(engine.getZone(), zone, `rms ${rms}`);
     });
     // Holding at the same (zone-3-qualifying) level confirms it shortly after.
-    processForDuration(engine, clock, steps[2].rms, OUTSIDE_ENTRY_DWELL_MS);
+    processForDuration(engine, clock, steps[2].rms, DWELL_MS);
     assert.strictEqual(engine.getZone(), 3);
   });
 });
@@ -478,9 +511,9 @@ describe('Zone Threshold Scaling', () => {
   spreadCases.forEach((targetSpreadDb) => {
     it(`boundaries stay strictly ordered at spreadDb=${targetSpreadDb}`, () => {
       const engine = calibratedEngineWithSpread(baseline, targetSpreadDb);
-      const silenceRms = rmsAtBoundary(engine, ZONE_SILENCE_SPREAD_MULT, 0);
-      const targetRms = rmsAtBoundary(engine, ZONE_TARGET_SPREAD_MULT, 0);
-      const acceptableRms = rmsAtBoundary(engine, ZONE_ACCEPTABLE_SPREAD_MULT, 0);
+      const silenceRms = rmsAtBoundary(engine, SILENCE_MULT, 0);
+      const targetRms = rmsAtBoundary(engine, TARGET_MULT, 0);
+      const acceptableRms = rmsAtBoundary(engine, ACCEPTABLE_MULT, 0);
       assert.ok(silenceRms < targetRms, `silence boundary (${silenceRms}) should be below target boundary (${targetRms})`);
       assert.ok(targetRms < acceptableRms, `target boundary (${targetRms}) should be below acceptable boundary (${acceptableRms})`);
     });
@@ -491,19 +524,19 @@ describe('Zone Threshold Scaling', () => {
       const clock = createClock();
       skipGracePeriod(engine, clock, engine.baselineRMS * 0.01);
 
-      engine.processFrame(rmsAtBoundary(engine, ZONE_SILENCE_SPREAD_MULT, -0.5), clock.tick());
+      engine.processFrame(rmsAtBoundary(engine, SILENCE_MULT, -0.5), clock.tick());
       assert.strictEqual(engine.getZone(), 0, 'just below the silence boundary');
 
       engine.processFrame(engine.baselineRMS, clock.tick());
       assert.strictEqual(engine.getZone(), 1, 'at the calibrated baseline itself');
 
-      engine.processFrame(rmsAtBoundary(engine, ZONE_TARGET_SPREAD_MULT, 0.5), clock.tick());
+      engine.processFrame(rmsAtBoundary(engine, TARGET_MULT, 0.5), clock.tick());
       assert.strictEqual(engine.getZone(), 2, 'just above the target boundary');
 
-      const loud = rmsAtBoundary(engine, ZONE_ACCEPTABLE_SPREAD_MULT, 0.5);
+      const loud = rmsAtBoundary(engine, ACCEPTABLE_MULT, 0.5);
       engine.processFrame(loud, clock.tick());
       assert.strictEqual(engine.getZone(), 2, 'just above the acceptable boundary, still pending confirmation');
-      processForDuration(engine, clock, loud, OUTSIDE_ENTRY_DWELL_MS);
+      processForDuration(engine, clock, loud, DWELL_MS);
       assert.strictEqual(engine.getZone(), 3, 'confirmed once the entry dwell elapses');
     });
   });
@@ -528,7 +561,7 @@ describe('Zone Threshold Scaling', () => {
     assert.ok(Math.abs(engine.spreadDb - 1) < 0.01);
     assert.strictEqual(effectiveSpread(engine), MIN_SPREAD_DB);
 
-    const justAboveMeasuredSpread = rmsAtBoundary(engine, ZONE_TARGET_SPREAD_MULT, 0); // uses the floored spread already
+    const justAboveMeasuredSpread = rmsAtBoundary(engine, TARGET_MULT, 0); // uses the floored spread already
     engine.startMonitoring();
     const clock = createClock();
     skipGracePeriod(engine, clock, engine.baselineRMS * 0.01);
@@ -545,12 +578,12 @@ describe('Outside-of-Range Entry Dwell', () => {
   const baseline = 0.1;
 
   function outsideRms(engine) {
-    return rmsAtBoundary(engine, ZONE_ACCEPTABLE_SPREAD_MULT, 1); // solidly zone-3-qualifying
+    return rmsAtBoundary(engine, ACCEPTABLE_MULT, 1); // solidly zone-3-qualifying
   }
 
   it('a brief spike shorter than the dwell never commits zone 3', () => {
     const { engine, clock } = readyEngine(baseline);
-    processForDuration(engine, clock, outsideRms(engine), OUTSIDE_ENTRY_DWELL_MS - 100);
+    processForDuration(engine, clock, outsideRms(engine), DWELL_MS - 100);
     assert.strictEqual(engine.getZone(), 2);
     engine.processFrame(baseline, clock.tick()); // drops back before confirming
     assert.strictEqual(engine.getZone(), 1);
@@ -560,18 +593,18 @@ describe('Outside-of-Range Entry Dwell', () => {
     const { engine, clock } = readyEngine(baseline);
     const loud = outsideRms(engine);
     const justUnder = clock.now();
-    processForDuration(engine, clock, loud, OUTSIDE_ENTRY_DWELL_MS - FRAME_MS);
+    processForDuration(engine, clock, loud, DWELL_MS - FRAME_MS);
     assert.strictEqual(engine.getZone(), 2, 'not yet confirmed one frame before the dwell elapses');
     engine.processFrame(loud, clock.tick());
     assert.strictEqual(engine.getZone(), 3, 'confirmed the frame the dwell elapses');
-    assert.ok(clock.now() - justUnder >= OUTSIDE_ENTRY_DWELL_MS);
+    assert.ok(clock.now() - justUnder >= DWELL_MS);
   });
 
   it('a sustained multi-second event confirms around the dwell and then stays', () => {
     const { engine, clock } = readyEngine(baseline);
     const loud = outsideRms(engine);
-    processForDuration(engine, clock, loud, OUTSIDE_ENTRY_DWELL_MS);
-    assert.strictEqual(engine.getZone(), 3, 'confirmed by ~OUTSIDE_ENTRY_DWELL_MS in');
+    processForDuration(engine, clock, loud, DWELL_MS);
+    assert.strictEqual(engine.getZone(), 3, 'confirmed by ~DWELL_MS in');
     processForDuration(engine, clock, loud, 2000);
     assert.strictEqual(engine.getZone(), 3, 'still 3 after 2 continuous seconds');
   });
@@ -590,12 +623,12 @@ describe('Outside-of-Range Entry Dwell', () => {
   it('cancels and restarts the dwell timer on a fresh rise rather than resuming a stale one', () => {
     const { engine, clock } = readyEngine(baseline);
     const loud = outsideRms(engine);
-    processForDuration(engine, clock, loud, OUTSIDE_ENTRY_DWELL_MS - 50); // 250ms in, not yet confirmed
+    processForDuration(engine, clock, loud, DWELL_MS - 50); // 250ms in, not yet confirmed
     engine.processFrame(baseline, clock.tick()); // cancel
     assert.strictEqual(engine.getZone(), 1);
-    // Rise again; must take a full fresh OUTSIDE_ENTRY_DWELL_MS, not just the
+    // Rise again; must take a full fresh DWELL_MS, not just the
     // remaining ~50ms from the cancelled attempt.
-    processForDuration(engine, clock, loud, OUTSIDE_ENTRY_DWELL_MS - FRAME_MS);
+    processForDuration(engine, clock, loud, DWELL_MS - FRAME_MS);
     assert.strictEqual(engine.getZone(), 2, 'a fresh dwell window, not a resumed stale one');
     engine.processFrame(loud, clock.tick());
     assert.strictEqual(engine.getZone(), 3);
@@ -603,7 +636,7 @@ describe('Outside-of-Range Entry Dwell', () => {
 
   it('de-escalation out of a confirmed zone 3 is still immediate', () => {
     const { engine, clock } = readyEngine(baseline);
-    processForDuration(engine, clock, outsideRms(engine), OUTSIDE_ENTRY_DWELL_MS);
+    processForDuration(engine, clock, outsideRms(engine), DWELL_MS);
     assert.strictEqual(engine.getZone(), 3);
     engine.processFrame(baseline, clock.tick());
     assert.strictEqual(engine.getZone(), 1, 'drops immediately, no dwell on the way down');
@@ -611,7 +644,7 @@ describe('Outside-of-Range Entry Dwell', () => {
 
   it('resets the pending dwell on stopMonitoring()', () => {
     const { engine, clock } = readyEngine(baseline);
-    processForDuration(engine, clock, outsideRms(engine), OUTSIDE_ENTRY_DWELL_MS - 100);
+    processForDuration(engine, clock, outsideRms(engine), DWELL_MS - 100);
     assert.strictEqual(engine.getZone(), 2);
     assert.notStrictEqual(engine.pendingOutsideSince, null);
     engine.stopMonitoring();
@@ -623,7 +656,7 @@ describe('Outside-of-Range Entry Dwell', () => {
     engine.startMonitoring();
     const clock = createClock();
     skipGracePeriod(engine, clock, baseline * 0.1);
-    processForDuration(engine, clock, outsideRms(engine), OUTSIDE_ENTRY_DWELL_MS - 100);
+    processForDuration(engine, clock, outsideRms(engine), DWELL_MS - 100);
     assert.notStrictEqual(engine.pendingOutsideSince, null);
 
     engine.stopMonitoring();
@@ -642,8 +675,8 @@ describe('Recovery', () => {
 
   it('returns to a lower zone as soon as volume drops, once outside was actually confirmed', () => {
     const { engine, clock } = readyEngine(baseline);
-    const loud = rmsAtBoundary(engine, ZONE_ACCEPTABLE_SPREAD_MULT, 1);
-    processForDuration(engine, clock, loud, OUTSIDE_ENTRY_DWELL_MS);
+    const loud = rmsAtBoundary(engine, ACCEPTABLE_MULT, 1);
+    processForDuration(engine, clock, loud, DWELL_MS);
     assert.strictEqual(engine.getZone(), 3);
 
     engine.processFrame(quietRms, clock.tick());
@@ -663,14 +696,14 @@ describe('Recovery', () => {
 
 describe('Lifecycle', () => {
   it('should not allow starting without calibration', () => {
-    const engine = new MezzoEngine();
+    const engine = new MezzoEngine({ zoneSettings: PRE_TUNING_ZONE_SETTINGS });
     assert.throws(() => engine.startMonitoring(), /calibration not complete/);
   });
 
   it('should reset zone state on stop', () => {
     const { engine, clock } = readyEngine(0.1);
-    const loud = rmsAtBoundary(engine, ZONE_ACCEPTABLE_SPREAD_MULT, 1);
-    processForDuration(engine, clock, loud, OUTSIDE_ENTRY_DWELL_MS);
+    const loud = rmsAtBoundary(engine, ACCEPTABLE_MULT, 1);
+    processForDuration(engine, clock, loud, DWELL_MS);
     assert.strictEqual(engine.getZone(), 3);
 
     engine.stopMonitoring();
@@ -764,7 +797,7 @@ describe('Grace Period', () => {
 
 describe('Invariants', () => {
   it('should never alert before calibration', () => {
-    const engine = new MezzoEngine();
+    const engine = new MezzoEngine({ zoneSettings: PRE_TUNING_ZONE_SETTINGS });
     const clock = createClock();
     engine.processFrame(0.5, clock.tick());
     engine.processFrame(0.5, clock.tick());
@@ -805,20 +838,20 @@ describe('Edge Cases', () => {
 
   it('should handle rapid zone transitions (zone 3 confirmed first, then de-escalates immediately)', () => {
     const { engine, clock } = readyEngine(0.1);
-    const loud = rmsAtBoundary(engine, ZONE_ACCEPTABLE_SPREAD_MULT, 1);
+    const loud = rmsAtBoundary(engine, ACCEPTABLE_MULT, 1);
 
-    processForDuration(engine, clock, loud, OUTSIDE_ENTRY_DWELL_MS);
+    processForDuration(engine, clock, loud, DWELL_MS);
     assert.strictEqual(engine.getZone(), 3);
 
     engine.processFrame(0.1, clock.tick());
     assert.strictEqual(engine.getZone(), 1);
 
-    processForDuration(engine, clock, loud, OUTSIDE_ENTRY_DWELL_MS);
+    processForDuration(engine, clock, loud, DWELL_MS);
     assert.strictEqual(engine.getZone(), 3);
   });
 
   it('should handle single sample calibration with repeated value', () => {
-    const engine = new MezzoEngine();
+    const engine = new MezzoEngine({ zoneSettings: PRE_TUNING_ZONE_SETTINGS });
     const samples = [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1];
     engine.calibrate(samples);
     assert.ok(Math.abs(engine.baselineRMS - 0.1) < 1e-9);
@@ -830,7 +863,7 @@ describe('Edge Cases', () => {
     // deviation at all would read as Outside Range.
     const { engine, clock } = readyEngine(0.1);
     assert.ok(engine.spreadDb < 1e-9, `expected ~zero measured spread, got ${engine.spreadDb}`);
-    engine.processFrame(rmsAtBoundary(engine, ZONE_TARGET_SPREAD_MULT, 0), clock.tick());
+    engine.processFrame(rmsAtBoundary(engine, TARGET_MULT, 0), clock.tick());
     assert.strictEqual(engine.getZone(), 1, 'boundary is MIN_SPREAD_DB away from baseline, not 0 away');
   });
 });
@@ -842,16 +875,16 @@ describe('Edge Cases', () => {
 describe('Success Criteria', () => {
   it('a brief loud spike is held at Approaching, not committed to Outside — the dwell IS the spike protection at this layer now', () => {
     const { engine, clock } = readyEngine(0.1);
-    engine.processFrame(rmsAtBoundary(engine, ZONE_TARGET_SPREAD_MULT, 0.5), clock.tick());
+    engine.processFrame(rmsAtBoundary(engine, TARGET_MULT, 0.5), clock.tick());
     assert.strictEqual(engine.getZone(), 2);
   });
 
   it('crossing the acceptable boundary reaches Outside of Range only once the entry dwell elapses', () => {
     const { engine, clock } = readyEngine(0.1);
-    const loud = rmsAtBoundary(engine, ZONE_ACCEPTABLE_SPREAD_MULT, 0.5);
+    const loud = rmsAtBoundary(engine, ACCEPTABLE_MULT, 0.5);
     engine.processFrame(loud, clock.tick());
     assert.strictEqual(engine.getZone(), 2);
-    processForDuration(engine, clock, loud, OUTSIDE_ENTRY_DWELL_MS);
+    processForDuration(engine, clock, loud, DWELL_MS);
     assert.strictEqual(engine.getZone(), 3);
   });
 
@@ -862,8 +895,8 @@ describe('Success Criteria', () => {
   });
 
   it('behavior is deterministic', () => {
-    const engine1 = new MezzoEngine();
-    const engine2 = new MezzoEngine();
+    const engine1 = new MezzoEngine({ zoneSettings: PRE_TUNING_ZONE_SETTINGS });
+    const engine2 = new MezzoEngine({ zoneSettings: PRE_TUNING_ZONE_SETTINGS });
 
     const samples = Array(20).fill(0.1);
     engine1.calibrate(samples);
@@ -899,7 +932,7 @@ describe('Success Criteria', () => {
 describe('MezzoEngine — dwell grace (tuner setting; the app default is 0)', () => {
   const rmsAt = (offsetDb) => Math.pow(10, (-30 + offsetDb) / 20);
   function engineWith(dwellGraceMs) {
-    const engine = new MezzoEngine({ zoneSettings: { ...DEFAULT_ZONE_SETTINGS, dwellGraceMs } });
+    const engine = new MezzoEngine({ zoneSettings: { ...PRE_TUNING_ZONE_SETTINGS, dwellGraceMs } });
     engine.loadCalibration({ baselineRMS: rmsAt(0), spreadDb: 4 });
     engine.startMonitoring();
     engine.gracePeriodActive = false;
@@ -920,8 +953,7 @@ describe('MezzoEngine — dwell grace (tuner setting; the app default is 0)', ()
   }
   const speech = (cycles) => Array.from({ length: cycles }, () => [1, 1, 1, 1, 0, 0]).flat(); // 200ms over, 100ms dip
 
-  it('the app default (0) is unchanged: any dip restarts the count', () => {
-    assert.strictEqual(DEFAULT_ZONE_SETTINGS.dwellGraceMs, 0);
+  it('with no grace, any dip restarts the count', () => {
     const { zones } = run(engineWith(0), speech(6));
     assert.ok(!zones.includes(3), 'loud speech with 100ms dips never commits');
   });
@@ -966,15 +998,8 @@ describe('MezzoEngine — end of range from calibration peaks, and a short-term 
   const rmsAt = (db) => Math.pow(10, db / 20);
   // A calibration that varies like real speech: -42 dB ± up to 5 dB.
   const samples = Array.from({ length: 120 }, (_, i) => rmsAt(-42 + 5 * Math.sin(i * 0.7)));
-  const engineWith = (zone = {}) => new MezzoEngine({ zoneSettings: { ...DEFAULT_ZONE_SETTINGS, ...zone } });
+  const engineWith = (zone = {}) => new MezzoEngine({ zoneSettings: { ...PRE_TUNING_ZONE_SETTINGS, ...zone } });
 
-  it('the app defaults are unchanged: end of range from spread, momentary zones', () => {
-    assert.strictEqual(DEFAULT_ZONE_SETTINGS.endFrom, 'spread');
-    assert.strictEqual(DEFAULT_ZONE_SETTINGS.zoneWindowMs, 0);
-    const a = engineWith(); a.calibrate(samples);
-    const b = engineWith({ endFrom: 'spread' }); b.calibrate(samples);
-    assert.deepStrictEqual(a.getRangeBoundsDb(), b.getRangeBoundsDb());
-  });
 
   it("'peaks' puts the end of range at the chosen percentile plus the margin, limited only by its own safety cap", () => {
     const engine = engineWith({ endFrom: 'peaks', peakPercentile: 95, peakMarginDb: 2, endCapDb: 3, peaksSafetyCapDb: 12 });
@@ -1133,10 +1158,101 @@ describe('MezzoEngine — end of range from calibration peaks, and a short-term 
   });
 });
 
+describe('MezzoEngine — tuned defaults (2026-10-22)', () => {
+  const rmsAt = (db) => Math.pow(10, db / 20);
+  // Speech that varies like real speech around -42 dB.
+  const samples = Array.from({ length: 120 }, (_, i) => rmsAt(-42 + 3 * Math.sin(i * 0.7)));
+
+  it('are the tuned values', () => {
+    assert.deepStrictEqual({ ...DEFAULT_ZONE_SETTINGS }, {
+      silenceSpreadMult: -4, targetSpreadMult: 1, approachingWidthDb: 2, endSpreadMult: 2, endCapDb: 7, minSpreadDb: 2,
+      outsideDwellMs: 150, dwellGraceMs: 200,
+      endFrom: 'peaks', peakPercentile: 95, peakMarginDb: 1.5, peaksSafetyCapDb: 12,
+      zoneWindowMs: 600, voicedOnly: true, zoneMethod: 'percentile', zonePercentile: 60, zoneInputRaw: true,
+    });
+  });
+
+  it('peaks mode: the end of range is the 95th-percentile level + 1.5 dB, and Approaching the last 2 dB before it', () => {
+    const engine = new MezzoEngine();
+    engine.calibrate(samples);
+    const peak = engine.getPeakOffsetDb();
+    const { targetDb, endDb } = engine.getRangeBoundsDb();
+    assert.ok(Math.abs(endDb - (peak + 1.5)) < 1e-9);
+    assert.ok(Math.abs(targetDb - (endDb - 2)) < 1e-9);
+    // Speaking at any level from the calibration never reads Outside.
+    for (const rms of samples) assert.notStrictEqual(engine._computeZone(rms), 3);
+  });
+
+  it('a saved profile’s stored peak is used as-is; a profile without one falls back to the spread rule', () => {
+    const withPeak = new MezzoEngine();
+    withPeak.loadCalibration({ baselineRMS: rmsAt(-42), spreadDb: 2, peakOffsetDb: 3 });
+    assert.strictEqual(withPeak.getRangeBoundsDb().endDb, 4.5);
+    const legacy = new MezzoEngine();
+    legacy.loadCalibration({ baselineRMS: rmsAt(-42), spreadDb: 2 });
+    assert.strictEqual(legacy.getPeakOffsetDb(), null);
+    assert.strictEqual(legacy.getRangeBoundsDb().endDb, 4); // 2 × spread, under the 7 dB cap
+    assert.strictEqual(legacy.getRangeBoundsDb().silenceDb, -8); // -4 × spread
+  });
+
+  it('the peaks safety cap is 12 dB', () => {
+    const engine = new MezzoEngine();
+    engine.loadCalibration({ baselineRMS: rmsAt(-42), spreadDb: 2, peakOffsetDb: 15 });
+    assert.strictEqual(engine.getRangeBoundsDb().endDb, 12);
+  });
+
+  function monitor(peakOffsetDb = 3) {
+    const engine = new MezzoEngine();
+    engine.loadCalibration({ baselineRMS: rmsAt(-42), spreadDb: 2, peakOffsetDb });
+    engine.startMonitoring();
+    engine.gracePeriodActive = false;
+    return engine;
+  }
+
+  it('voiced-only percentile zones: a single 150ms loud syllable within normal speech never reaches Outside', () => {
+    const engine = monitor();
+    const { endDb } = engine.getRangeBoundsDb();
+    for (let t = 0; t < 3000; t += 50) {
+      engine.processFrame(rmsAt(t >= 1500 && t < 1650 ? -42 + endDb + 12 : -42 + Math.sin(t / 90)), t, true);
+      assert.notStrictEqual(engine.getZone(), 3, `at ${t}ms`);
+    }
+  });
+
+  it('voiced-only percentile zones: from silence, a sustained loud level commits Outside within the window plus the dwell', () => {
+    const engine = monitor();
+    const { endDb } = engine.getRangeBoundsDb();
+    for (let t = 0; t < 2000; t += 50) engine.processFrame(rmsAt(-80), t, false);
+    let at = Infinity;
+    for (let t = 2000; t < 4000; t += 50) {
+      engine.processFrame(rmsAt(-42 + endDb + 3), t, true);
+      if (engine.getZone() === 3) { at = t - 2000; break; }
+    }
+    assert.ok(at <= 400, `Outside after ${at}ms`);
+  });
+
+  it('dwell 150ms with 200ms grace: Outside holds through a short dip between words, and leaves after the grace', () => {
+    const engine = monitor();
+    const { endDb } = engine.getRangeBoundsDb();
+    let t = 0;
+    for (; t < 1500; t += 50) engine.processFrame(rmsAt(-42 + endDb + 4), t, true);
+    assert.strictEqual(engine.getZone(), 3);
+    // A 100ms dip (pause between words): the 600ms window still reads loud,
+    // and the grace would hold it anyway.
+    for (const end = t + 100; t < end; t += 50) engine.processFrame(rmsAt(-80), t, false);
+    assert.strictEqual(engine.getZone(), 3);
+    // Back to normal speech: leaves once the window and the grace agree.
+    let left = null;
+    for (const end = t + 2000; t < end; t += 50) {
+      engine.processFrame(rmsAt(-42), t, true);
+      if (engine.getZone() !== 3) { left = t; break; }
+    }
+    assert.ok(left !== null, 'leaves Outside');
+  });
+});
+
 describe('MezzoEngine — range bounds for presentation', () => {
   for (const spreadDb of [4, 1]) { // 1 exercises the MIN_SPREAD_DB floor
     it(`boundaries match classification exactly (spread ${spreadDb} dB)`, () => {
-      const engine = new MezzoEngine();
+      const engine = new MezzoEngine({ zoneSettings: PRE_TUNING_ZONE_SETTINGS });
       engine.loadCalibration({ baselineRMS: Math.pow(10, -30 / 20), spreadDb });
       const { silenceDb, targetDb, endDb } = engine.getRangeBoundsDb();
       const rmsAt = (offsetDb) => Math.pow(10, (-30 + offsetDb) / 20);
@@ -1152,9 +1268,9 @@ describe('MezzoEngine — range bounds for presentation', () => {
   }
 
   it('caps the end of range at baseline +6 dB (endDb = min(2.5 × spread, 6)), for the circle and the nudge alike', () => {
-    assert.strictEqual(END_OF_RANGE_MAX_DB, 6);
+    assert.strictEqual(END_CAP_DB, 6);
     const engineFor = (spreadDb) => {
-      const engine = new MezzoEngine();
+      const engine = new MezzoEngine({ zoneSettings: PRE_TUNING_ZONE_SETTINGS });
       engine.loadCalibration({ baselineRMS: Math.pow(10, -30 / 20), spreadDb });
       return engine;
     };
@@ -1167,7 +1283,7 @@ describe('MezzoEngine — range bounds for presentation', () => {
   });
 
   it('keeps the zones in order when the spread is wider than the cap', () => {
-    const engine = new MezzoEngine();
+    const engine = new MezzoEngine({ zoneSettings: PRE_TUNING_ZONE_SETTINGS });
     engine.loadCalibration({ baselineRMS: Math.pow(10, -30 / 20), spreadDb: 8 });
     const { silenceDb, targetDb, endDb } = engine.getRangeBoundsDb();
     assert.strictEqual(endDb, 6);
@@ -1179,9 +1295,26 @@ describe('MezzoEngine — range bounds for presentation', () => {
   });
 
   it('reports silence and an uncalibrated engine as -Infinity, never a number', () => {
-    const engine = new MezzoEngine();
+    const engine = new MezzoEngine({ zoneSettings: PRE_TUNING_ZONE_SETTINGS });
     assert.strictEqual(engine.getLevelOffsetDb(0.1), -Infinity);
     engine.loadCalibration({ baselineRMS: 0.03, spreadDb: 4 });
     assert.strictEqual(engine.getLevelOffsetDb(0), -Infinity);
+  });
+});
+
+describe('room noise and the noisy-room rule', () => {
+  const rmsAt = (db) => Math.pow(10, db / 20);
+  it('room noise is the median of the 3-2-1 readings, so a word said early does not count', () => {
+    const readings = [...Array(50).fill(rmsAt(-50)), ...Array(10).fill(rmsAt(-30))];
+    assert.ok(Math.abs(measureRoomNoiseDb(readings) - -50) < 1e-9);
+    assert.strictEqual(measureRoomNoiseDb([]), null);
+    assert.strictEqual(measureRoomNoiseDb([0, NaN]), null);
+  });
+
+  it('a room is noisy when speech is less than 12 dB above it', () => {
+    assert.strictEqual(NOISY_ROOM_GAP_DB, 12);
+    assert.strictEqual(isNoisyRoom(-39.2, -48.9), true);  // 9.7 dB
+    assert.strictEqual(isNoisyRoom(-40, -52), false);     // exactly 12 dB: not noisy
+    assert.strictEqual(isNoisyRoom(-39.2, null), false);  // not measured
   });
 });
