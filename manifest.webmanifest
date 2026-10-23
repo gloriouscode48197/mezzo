@@ -4,35 +4,35 @@
   "description": "A gentle way to stay aware of your speaking volume.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#1a1a2e",
-  "theme_color": "#1a1a2e",
+  "background_color": "#2D2E31",
+  "theme_color": "#2D2E31",
   "icons": [
     {
-      "src": "icons/icon-16.svg",
+      "src": "icons/icon-16.svg?v=2",
       "sizes": "16x16",
       "type": "image/svg+xml",
       "purpose": "any"
     },
     {
-      "src": "icons/icon-32.svg",
+      "src": "icons/icon-32.svg?v=2",
       "sizes": "32x32",
       "type": "image/svg+xml",
       "purpose": "any"
     },
     {
-      "src": "icons/icon-64.svg",
+      "src": "icons/icon-64.svg?v=2",
       "sizes": "64x64",
       "type": "image/svg+xml",
       "purpose": "any"
     },
     {
-      "src": "icons/icon-128.svg",
+      "src": "icons/icon-128.svg?v=2",
       "sizes": "128x128",
       "type": "image/svg+xml",
       "purpose": "any"
     },
     {
-      "src": "icons/icon-512.svg",
+      "src": "icons/icon-512.svg?v=2",
       "sizes": "512x512",
       "type": "image/svg+xml",
       "purpose": "any"
