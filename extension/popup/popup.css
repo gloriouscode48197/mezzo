@@ -30,6 +30,14 @@
   --radius-control: 3px;
   --font-body: 'Geist', system-ui, sans-serif;
   --font-mono: 'Geist Mono', ui-monospace, monospace;
+  /* The Companion's spacing scale (src/mezzo-session.js, "Rhythm"). */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --footer-inset: 20px;
 }
 
 * { box-sizing: border-box; }
@@ -49,14 +57,16 @@ body {
   flex-direction: column;
   align-items: center;
   text-align: center;
-  padding: 24px 20px 18px;
+  /* Same top padding and button position in all three states: the line
+     above the button always reserves two lines. */
+  padding: var(--space-4) var(--space-4) var(--footer-inset);
 }
 
 .popup-head {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
 }
 
 .wordmark {
@@ -72,7 +82,7 @@ body {
 .open-label {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
   margin: 0;
   font-family: var(--font-mono);
   font-size: 11px;
@@ -95,9 +105,10 @@ body {
 }
 
 .lede {
-  margin: 0 0 18px;
-  font-size: 13px;
-  line-height: 1.5;
+  margin: 0 0 var(--space-4);
+  min-height: calc(2 * 1.45em);
+  font-size: 14px;
+  line-height: 1.45;
   color: var(--color-text-muted);
   text-wrap: pretty;
 }
@@ -126,17 +137,17 @@ body {
 .btn-outline:hover { background: color-mix(in srgb, var(--color-text) 8%, transparent); }
 
 .note {
-  margin: 10px 0 0;
-  font-size: 11px;
-  line-height: 1.4;
+  margin: var(--space-3) 0 0;
+  font-size: 12px;
+  line-height: 1.45;
   color: var(--color-text-muted);
 }
 
 .popup-links {
   display: flex;
   align-items: center;
-  gap: 16px;
-  margin-top: 18px;
+  gap: var(--space-4);
+  margin-top: var(--space-5);
 }
 
 .popup-link {
@@ -159,8 +170,8 @@ body {
 
 .settings-panel {
   width: 100%;
-  margin-top: 14px;
-  padding-top: 14px;
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
   border-top: 1px solid color-mix(in srgb, var(--color-text) 12%, transparent);
 }
 
@@ -174,8 +185,8 @@ body {
 .dev-url {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-top: 12px;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
   text-align: left;
 }
 .dev-url-label {
@@ -198,7 +209,7 @@ body {
 .dev-url-actions {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: var(--space-4);
 }
 .btn-small {
   width: auto;

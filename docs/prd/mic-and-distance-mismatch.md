@@ -176,7 +176,7 @@ No new canonical strings. This PRD reuses **Recalibrate**, **Speaking profile**,
 
 ### 6.3 Placement and layout
 
-- The note sits in Ready's existing contextual-actions slot (`.pip-ready-contextual-actions`), between the selector trigger and **Start monitoring**. That keeps CLAUDE.md's fixed Ready order (heading, label, selector, contextual actions, Start monitoring, disclaimer). For a saved profile this slot is empty today, except for a profile saved before the speech-band filter, which shows "This profile was made before Mezzo's improved sound filter. Recalibrate for more accurate nudges."
+- The note sits in Ready's existing contextual-actions slot (`.pip-ready-contextual-actions`), between the selector trigger and **Start monitoring**. That keeps CLAUDE.md's fixed Ready order (heading, label, selector, contextual actions, Start monitoring, disclaimer). For a saved profile this slot is empty today, except for a profile saved before the speech-band filter, which shows "Made before the new sound filter. Recalibrate"
 - **If both notes apply, show only the filter note.** One fresh calibration fixes both, since it uses the new filter and the current mic, so a second note would only repeat the same remedy.
 - The slot must reserve the note's height whenever a profile is selected, so the note appearing or disappearing **never moves Start monitoring** (the original Ready PRD's anchoring rule). Window size stays 380×364.
 - Not a modal, banner, toast, or full-screen decision state. It's quiet inline text in muted Geist (`--color-text-muted`), with **Recalibrate** as an inline sage link (`.pip-inline-link`), exactly like the filter note already in this slot.

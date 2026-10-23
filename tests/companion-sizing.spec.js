@@ -50,7 +50,7 @@ import { openCompanion } from './support/open-companion.js';
 import { recalibrateFromSelector } from './support/recalibrate-from-selector.js';
 
 test.describe('Companion: Ready-screen button width cap', () => {
-  test('Start monitoring matches the approved ~224px width target, narrower than the speaking-profile selector, centered, not the old ~240px/full-width treatment', async ({ page, context }) => {
+  test('Start monitoring shares the 280px column with the speaking-profile selector, centered (rhythm pass, 2026-10-23)', async ({ page, context }) => {
     await page.addInitScript(() => {
       localStorage.setItem('mezzoProfiles', JSON.stringify([
         { id: 'p-work', name: 'Work', speakingDb: -30, spreadDb: 4, calibratedTs: 100 },
@@ -63,17 +63,10 @@ test.describe('Companion: Ready-screen button width cap', () => {
     await expect(startBtn).toBeVisible();
 
     const startBox = await startBtn.boundingBox();
-    // .pip-ready-start-btn's own width:100%/max-width:224px — this
-    // sandbox's real layout width is always far more than 224px (see this
-    // file's own header comment), so max-width always wins and this is a
-    // reliable check of the real target, not just an untested CSS value.
-    expect(startBox.width).toBeCloseTo(224, 0);
-
-    // Narrower than the selector above it (.pip-ready-selector-wrap, 260px)
-    // — the explicit requirement this width rule exists to satisfy, not
-    // just an width in isolation.
+    // One column (--col-width, 280px): the button and the selector match.
+    expect(startBox.width).toBeCloseTo(280, 0);
     const selectorBox = await pipPage.locator('.pip-ready-selector-wrap').boundingBox();
-    expect(startBox.width).toBeLessThan(selectorBox.width);
+    expect(startBox.width).toBeCloseTo(selectorBox.width, 0);
 
     // Centered — via .pip-screen's own align-items:center, same as before
     // this pass (only the width value itself changed, not how it centers).
@@ -93,9 +86,10 @@ test.describe('Companion: Ready-screen button width cap', () => {
     const readyScreen = pipPage.locator('.pip-screen-ready');
     await expect(readyScreen).toBeVisible();
 
-    // Narrower than the button's own 224px max-width target — width:100%
-    // must shrink it to fit rather than holding 224px and overflowing.
+    // Narrower than the 280px column — the button must shrink to fit
+    // rather than holding its width and overflowing.
     await pipPage.setViewportSize({ width: 200, height: 512 });
+    await expect.poll(() => readyScreen.evaluate((el) => el.getBoundingClientRect().width)).toBe(200);
 
     const startBtn = pipPage.locator('.pip-ready-start-btn');
     const [startBox, screenBox] = await Promise.all([
@@ -692,18 +686,7 @@ test.describe('Ready-screen spacing and separator (2026-08-15 pass)', () => {
     expect(gapLabelToSelector).toBeLessThan(16);
   });
 
-  test('a selected saved profile leaves the contextual-actions row empty, and Start monitoring sits ~24px below the closed selector (2026-08-19)', async ({ page, context }) => {
-    // Create new profile moved into the selector panel's own persistent
-    // footer, and Recalibrate already moved into the panel's per-row icons
-    // (2026-08-17) — a saved profile selected now leaves the contextual-
-    // actions row with nothing in it at all (only the Temporary profile's
-    // own "Save profile" link still appears there), and its own min-height
-    // reservation was removed to match (2026-08-19) — see that class's own
-    // comment in src/mezzo-session.js. Start monitoring's own margin-top
-    // dropped to 4px in the same pass, landing the total gap from the
-    // closed selector to Start monitoring at the approved ~24px target
-    // (10px selector->actions + 0px empty row + 10px actions->start + 4px
-    // margin) — see .pip-ready-start-btn's own comment for the exact math.
+  test('a selected saved profile leaves the contextual-actions row empty and out of the layout, and Start monitoring sits 24px below the closed selector (rhythm pass, 2026-10-23)', async ({ page, context }) => {
     await page.addInitScript(() => {
       localStorage.setItem('mezzoProfiles', JSON.stringify([
         { id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 100, peakDb: 2 }, // current format: no recalibrate note
@@ -716,29 +699,13 @@ test.describe('Ready-screen spacing and separator (2026-08-15 pass)', () => {
 
     const actions = readyScreen.locator('.pip-ready-contextual-actions');
     await expect(actions).toBeEmpty();
+    await expect(actions).toBeHidden(); // no leftover gap
 
-    const [triggerBox, actionsBox, startBox] = await Promise.all([
+    const [triggerBox, startBox] = await Promise.all([
       readyScreen.locator('.pip-ready-selector-trigger').boundingBox(),
-      actions.boundingBox(),
       readyScreen.locator('.pip-ready-start-btn').boundingBox(),
     ]);
-
-    // The one number that actually matters per the approved target: the
-    // closed selector's own bottom edge to Start monitoring's own top
-    // edge, regardless of how many (now largely collapsed) elements sit
-    // between them.
-    const gapSelectorToStart = startBox.y - (triggerBox.y + triggerBox.height);
-    expect(gapSelectorToStart).toBeCloseTo(24, 0);
-
-    // Sub-measurements, kept for diagnostic precision: the now-empty
-    // actions row contributes ~0px of its own height, and the two
-    // remaining base flex gaps plus Start monitoring's own margin-top
-    // account for the rest.
-    const gapSelectorToActions = actionsBox.y - (triggerBox.y + triggerBox.height);
-    const gapActionsToStart = startBox.y - (actionsBox.y + actionsBox.height);
-    expect(actionsBox.height).toBeLessThanOrEqual(1);
-    expect(gapSelectorToActions).toBeCloseTo(10, 0);
-    expect(gapActionsToStart).toBeCloseTo(14, 0);
+    expect(startBox.y - (triggerBox.y + triggerBox.height)).toBeCloseTo(24, 0);
   });
 
   test('the standalone Recalibrate link, its pipe separator, and the standalone Create new profile link are all absent from the Ready action row (2026-08-17/2026-08-18 — both moved into the selector panel)', async ({ page, context }) => {

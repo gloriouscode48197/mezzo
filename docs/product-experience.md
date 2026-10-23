@@ -274,7 +274,7 @@ C1 ("Create speaking profile" / "Talk for a few seconds so Mezzo can learn the s
 
 ### Active Calibration
 
-Calibrating's heading follows the phase — "Get ready" through the 3-2-1, then "Speak at your meeting volume" while listening (with a "Recalibrating {name}" label above it when recalibrating a saved profile) — then a six-segment level meter, a status line and a hint, and a Cancel link:
+Calibrating's heading follows the phase — "Get ready" through the 3-2-1, then "Speak at your meeting volume" while listening (with a "Recalibrating {name}" label above it when recalibrating a saved profile). The heading stays put at the top; below it, centered above Cancel, one slot shows the 3-2-1 number and then "Listening… Ns", with the six-segment level meter and a hint beneath:
 
 * **3-2-1** — only the countdown number, in the meter's place, and "Stay quiet for a moment…": the room's own noise level is measured from these readings and saved with the profile, so silence helps. The meter stays hidden.
 * **Listening, six seconds** — the meter appears; "Listening… Ns", counting down / "Keep talking until the timer ends." The meter's lit segments follow the live, filtered microphone level, so the user can see their voice being picked up without being shown a target. It completes automatically; there is no manual "I'm done" action.
@@ -313,7 +313,7 @@ When the Companion is in its Ready state, show, always in this order:
 1. Ready heading — see "Ready Heading" below
 2. "Speaking profile" label
 3. A collapsed selector trigger, showing the currently selected profile's name (or "Unsaved profile")
-4. A contextual line for that selection: **Save profile** for the temporary profile; for a saved profile, nothing — or "This profile was made before Mezzo's improved sound filter. Recalibrate for more accurate nudges." when it was saved before calibration peaks were recorded — **Recalibrate** there is an inline link that recalibrates that profile (see "Profile Model")
+4. A contextual line for that selection: **Save profile** for the temporary profile; for a saved profile, nothing — or "Made before the new sound filter. Recalibrate" when it was saved before calibration peaks were recorded — **Recalibrate** there is an inline link that recalibrates that profile (see "Profile Model")
 5. Start monitoring
 6. A privacy disclaimer
 
@@ -485,7 +485,7 @@ The Companion should feel like a quiet instrument—not a dashboard.
 
 Before monitoring ever begins, the Companion moves through several distinct screens — Welcome, the calibration-introduction step (C1), Calibrating, and Ready, plus recovery and decision screens (Microphone Access Blocked, the calibration result, and the profile save/replace/delete decisions covered under "Profile Model") — before reaching Monitoring itself, which has two layouts, Compact and Expanded. See below for each.
 
-It uses the Lantern visual system throughout (`docs/prd/range-ring-and-lantern-refresh.md` §4): one dark theme, Geist type, cream primary buttons, sage text links, and chartreuse reserved for one meaning inside the Companion — the over-range band. Screens come in three layers: a flat screen, the Ready selector's menu panel over a dimmed screen, and decision states, which turn the whole window a lighter grey with a 44px header bar naming the decision and actions pinned to the bottom.
+Every screen follows one spacing scale and one 280px column, in three layouts: a sequence (Calibrating), with the heading fixed at the top so nothing moves between steps; a single choice (Welcome, the calibration introduction, Ready), centered, with 24px between groups; and a decision (the result and save/update/delete screens), centered below the decision bar. It uses the Lantern visual system throughout (`docs/prd/range-ring-and-lantern-refresh.md` §4): one dark theme, Geist type, cream primary buttons, sage text links, and chartreuse reserved for one meaning inside the Companion — the over-range band. Screens come in three layers: a flat screen, the Ready selector's menu panel over a dimmed screen, and decision states, which turn the whole window a lighter grey with a 44px header bar naming the decision and actions pinned to the bottom.
 
 ---
 
@@ -499,7 +499,7 @@ Purpose: the first thing a genuinely new user sees inside the Companion — a de
 
 Target size: shared with every other pre-monitoring screen — see "Companion Sizing."
 
-Reached exactly once: the very first time the Companion opens with zero saved profiles and no temporary profile (see "Profile Model"). Shows the lowercase "mezzo" wordmark as its heading, "A gentle nudge when you're talking louder than you'd like. First, a quick voice calibration.", and "Mezzo doesn't record audio or transcribe speech." at the bottom. The window's own title reads "Mezzo, welcome." here. Its one action, **Create speaking profile**, opens the calibration-introduction screen (C1) — this does not itself request microphone access. There is no secondary dismiss action on Welcome; closing the Companion remains available through the native window control regardless of which screen is showing.
+Reached exactly once: the very first time the Companion opens with zero saved profiles and no temporary profile (see "Profile Model"). Shows the lowercase "mezzo" wordmark as its heading, "A gentle nudge when you're talking louder than you'd like. First, a quick voice calibration.", then **Create speaking profile** with "Mezzo doesn't record audio or transcribe speech." beneath it. The window's own title reads "Mezzo, welcome." here. Its one action, **Create speaking profile**, opens the calibration-introduction screen (C1) — this does not itself request microphone access. There is no secondary dismiss action on Welcome; closing the Companion remains available through the native window control regardless of which screen is showing.
 
 Once a saved profile or an unsaved profile exists, the Companion never shows Welcome again for the rest of that Companion-open lifetime.
 

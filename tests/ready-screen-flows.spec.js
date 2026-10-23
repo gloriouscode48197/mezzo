@@ -840,7 +840,7 @@ test.describe('Naming flow (M2/M2a) polish — decision layer, heading typograph
     expect(gapWarningToActions).toBeGreaterThan(gapInputToWarning);
   });
 
-  test('Save is the one bottom-pinned action and Cancel sits in the header bar; keyboard order runs input, then Save, with Cancel before the input', async ({ page, context }) => {
+  test('Save is the one action below the name field and Cancel sits in the header bar; keyboard order runs input, then Save, with Cancel before the input', async ({ page, context }) => {
     const pipPage = await openCompanion(page, context);
     await pipPage.setViewportSize({ width: 382, height: 512 });
     const m2Screen = await openM2(pipPage);
@@ -854,10 +854,11 @@ test.describe('Naming flow (M2/M2a) polish — decision layer, heading typograph
     await expect(saveBtn).toHaveText('Save');
     await expect(cancelBtn).toHaveText('Cancel');
 
-    // Visual placement: Cancel at the top (header bar), Save at the bottom.
-    const [screenBox, saveBox, cancelBox] = await Promise.all([m2Screen.boundingBox(), saveBtn.boundingBox(), cancelBtn.boundingBox()]);
+    // Visual placement: Cancel at the top (header bar); Save 24px below the
+    // name field, in the stack centered below the bar (rhythm pass).
+    const [screenBox, saveBox, cancelBox, inputBox] = await Promise.all([m2Screen.boundingBox(), saveBtn.boundingBox(), cancelBtn.boundingBox(), m2Screen.locator('input[type="text"]').boundingBox()]);
     expect(cancelBox.y).toBeLessThan(screenBox.y + 44);
-    expect((screenBox.y + screenBox.height) - (saveBox.y + saveBox.height)).toBeLessThanOrEqual(24);
+    expect(Math.round(saveBox.y - (inputBox.y + inputBox.height))).toBe(24);
 
     // Keyboard order — input already has focus (showM2Screen() focuses it).
     // A disabled button is never a native tab stop, so a name is typed
@@ -874,7 +875,7 @@ test.describe('Naming flow (M2/M2a) polish — decision layer, heading typograph
     await expect(cancelBtn).toBeFocused();
   });
 
-  test('at a narrower supported width, Save stays full-width at the bottom and Cancel stays in the header, with no horizontal scrolling', async ({ page, context }) => {
+  test('at a narrower supported width, Save stays full-width inside the screen edges and Cancel stays in the header, with no horizontal scrolling', async ({ page, context }) => {
     const pipPage = await openCompanion(page, context);
     await pipPage.setViewportSize({ width: 220, height: 512 });
     const m2Screen = await openM2(pipPage);
@@ -883,7 +884,7 @@ test.describe('Naming flow (M2/M2a) polish — decision layer, heading typograph
     const cancelBtn = m2Screen.locator('.pip-decision-bar-cancel');
     const [screenBox, saveBox, cancelBox] = await Promise.all([m2Screen.boundingBox(), saveBtn.boundingBox(), cancelBtn.boundingBox()]);
     expect(cancelBox.y).toBeLessThan(saveBox.y);
-    expect(saveBox.width).toBeGreaterThan(screenBox.width - 2 * 24 - 2); // full width inside the 24px gutters
+    expect(saveBox.width).toBeGreaterThan(screenBox.width - 2 * 32 - 2); // full width inside the 32px screen edges
 
     const { scrollWidth, clientWidth } = await m2Screen.evaluate((el) => ({ scrollWidth: el.scrollWidth, clientWidth: el.clientWidth }));
     expect(scrollWidth).toBeLessThanOrEqual(clientWidth + 1);
@@ -1011,7 +1012,7 @@ test.describe('Migration: profiles saved before the speech-band filter (2026-10-
     const readyScreen = pipPage.locator('.pip-screen-ready');
     await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Old office');
     const note = readyScreen.locator('.pip-ready-recalibrate-note');
-    await expect(note).toHaveText("This profile was made before Mezzo's improved sound filter. Recalibrate for more accurate nudges.");
+    await expect(note).toHaveText('Made before the new sound filter. Recalibrate');
     const link = note.locator('.pip-inline-link');
     await expect(link).toHaveText('Recalibrate');
     await expect(link).toHaveAccessibleName('Recalibrate Old office');

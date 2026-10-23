@@ -608,7 +608,7 @@ test.describe('Companion: selector native semantics (Batch 2)', () => {
 
     // Closed trigger ellipses rather than growing the pill or wrapping.
     const triggerBox = await readyScreen.locator('.pip-ready-selector-trigger').boundingBox();
-    expect(triggerBox.width).toBeLessThanOrEqual(260);
+    expect(triggerBox.width).toBeLessThanOrEqual(280); // the 280px column
 
     await readyScreen.locator('.pip-ready-selector-trigger').click();
     const panel = pipPage.locator('.pip-ready-selector-panel');

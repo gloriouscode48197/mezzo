@@ -162,7 +162,7 @@ test.describe('Companion: decision layer (Lantern)', () => {
 
     const m3Screen = await openM3(pipPage);
     const reference = await readStyle(m3Screen.locator('.pip-decision-content h1'));
-    expect(reference.fontSize).toBe('24px');
+    expect(reference.fontSize).toBe('20px'); // the rhythm pass's one heading size
     await m3Screen.locator('.pip-decision-bar-cancel').click();
 
     const readyScreen = pipPage.locator('.pip-screen-ready');
@@ -217,7 +217,7 @@ test.describe('Companion: decision layer (Lantern)', () => {
     await expect(deleteScreen.locator('.pip-decision-bar-cancel')).toBeInViewport();
   });
 
-  test('actions are pinned to the bottom of the window and keep the shared 320px button cap', async ({ page, context }) => {
+  test('heading, subtext and actions are one stack centered below the bar, with the buttons at the 280px column width (rhythm pass, 2026-10-23)', async ({ page, context }) => {
     await page.addInitScript(() => {
       localStorage.setItem('mezzoProfiles', JSON.stringify([
         { id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 100 },
@@ -228,10 +228,12 @@ test.describe('Companion: decision layer (Lantern)', () => {
       await pipPage.setViewportSize({ width: 382, height });
       const deleteScreen = await openDeleteScreen(pipPage, 'Kitchen');
       const layer = await readDecisionLayer(deleteScreen);
-      expect(layer.actionsBottomGap).toBeGreaterThanOrEqual(0);
-      expect(layer.actionsBottomGap).toBeLessThanOrEqual(24); // the actions' own 20px bottom padding, not floating mid-screen
+      const headingTop = await deleteScreen.locator('.pip-decision-heading').evaluate((el, top) => el.getBoundingClientRect().top - top, 0);
+      const spaceAbove = headingTop - (layer.barTop + layer.barHeight);
       const deleteBox = await deleteScreen.locator('button:has-text("Delete")').boundingBox();
-      expect(deleteBox.width).toBeLessThanOrEqual(320.5);
+      const screenBox = await deleteScreen.boundingBox();
+      expect(Math.abs(spaceAbove - (screenBox.y + screenBox.height - (deleteBox.y + deleteBox.height)))).toBeLessThanOrEqual(1);
+      expect(deleteBox.width).toBeCloseTo(280, 0);
       await deleteScreen.locator('.pip-decision-bar-cancel').click();
       await expect(pipPage.locator('.pip-screen-ready')).toBeVisible({ timeout: 3000 });
     }
@@ -449,7 +451,7 @@ test.describe('Companion: selector surface and caret badge (2026-08-20)', () => 
     await expect(readyScreen).toBeVisible({ timeout: 10000 }); // generous under parallel-worker load, matching this suite's established convention
 
     const wrap = readyScreen.locator('.pip-ready-selector-wrap');
-    expect((await wrap.boundingBox()).width).toBeCloseTo(260, 0);
+    expect((await wrap.boundingBox()).width).toBeCloseTo(280, 0); // the 280px column (rhythm pass)
 
     await readyScreen.locator('.pip-ready-selector-trigger').click();
     const panel = pipPage.locator('.pip-ready-selector-panel');

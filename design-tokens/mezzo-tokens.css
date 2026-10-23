@@ -114,6 +114,15 @@
   --radius-icon-btn: var(--radius-control);
 
   /* Spacing */
+  /* The spacing scale (2026-10-23): 8 within a group, 12 between a status
+     line or primary button and what belongs to it, 24 between groups, 32
+     at screen edges. Companion, website and extension popup alike. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
   --space-nav: 24px 32px;
   --space-page-gap: 48px;
   --space-section: 72px;

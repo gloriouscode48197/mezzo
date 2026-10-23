@@ -322,7 +322,7 @@ const CALIBRATING_HINT_PREPARING = 'Stay quiet for a moment…';
 const NOISY_ROOM_TIP = 'Your room is a bit noisy for how softly you speak. Try moving a little closer to your mic.';
 // Ready, under a profile saved before the speech-band filter and peaks.
 // "Recalibrate" in it is an inline link (see renderContextualActions()).
-const RECALIBRATE_NOTE = ['This profile was made before Mezzo\'s improved sound filter. ', 'Recalibrate', ' for more accurate nudges.'];
+const RECALIBRATE_NOTE = ['Made before the new sound filter. ', 'Recalibrate', ''];
 const CALIBRATING_HINT_LISTENING = 'Keep talking until the timer ends.';
 // The Calibrating heading follows the phase: the 3-2-1 asks for quiet, then
 // listening names the target volume (see setCalibratingPhase()).
@@ -1507,25 +1507,8 @@ export function createMezzoSession({
         text-align: center;
       }
 
-      /* margin-top (2026-08-16 pass, C1/"Create speaking profile" only —
-         Welcome and C0 keep the shared 12px base gap unchanged, so this is
-         scoped to just C1's own primary button rather than raising the
-         shared rule above): the heading-to-paragraph relationship stays at
-         that same base 12px gap, untouched, while the paragraph-to-button
-         gap gets noticeably larger — reusing this file's own established
-         "add margin-top on top of an unchanged base gap" pattern (see
-         .pip-screen-result/.pip-screen-m1's own .pip-decision-body rule)
-         rather than a new, isolated arbitrary value. 14px on top of the
-         12px base gives ~26px between the paragraph and "I'm ready". */
-      .pip-screen-c1 .pip-intro-primary-btn {
-        margin-top: 14px;
-      }
-      /* Welcome: the wordmark (its heading) and the body read as one group,
-         16px apart, centered in the space above the privacy line and the
-         button, which sit at the bottom. */
-      .pip-screen-welcome .pip-welcome-wordmark { margin-top: auto; }
-      .pip-screen-welcome .pip-intro-body { margin-top: 4px; } /* + the screen's 12px gap = 16px */
-      .pip-screen-welcome .pip-intro-disclaimer { margin-top: auto; }
+      /* C1's spacing: see the Rhythm block at the end. */
+      /* Welcome's spacing: see the Rhythm block at the end. */
       h1.pip-welcome-wordmark {
         margin: 0;
         font-family: var(--font-display);
@@ -2895,6 +2878,201 @@ export function createMezzoSession({
           opacity: 1;
         }
       }
+
+      /* ════════════════════════════════════════════════════════════════
+         Rhythm (2026-10-23). One spacing scale and one column for every
+         screen, applied last so it wins over older one-off values. Space
+         shows what belongs together:
+           --space-2 (8)   within a group
+           --space-3 (12)  a status line and its visual; a primary button
+                           and its fine print
+           --space-5 (24)  between groups
+           --space-6 (32)  screen edges (top and sides)
+         Footer links (Cancel) sit 20px from the bottom.
+         Type, at most four styles a screen: eyebrow (Geist Mono 11px,
+         uppercase, tracked, muted), heading (20px, 500, tight, two lines
+         at most), body/status (14–15px), helper/fine print (12px, muted).
+         Three templates:
+           A. Sequence (Calibrating, Creating): eyebrow + heading at a fixed
+              top; the middle slot centered in the space above Cancel.
+           B. Single choice (Welcome, C1, Ready, C0, Calibration failed):
+              the whole stack centered; heading, 24, the control group,
+              24, primary button → 12 → fine print.
+           C. Decision (result, M1, M2, M3, Delete): the slate bar, then
+              heading → 8 → subtext, 24, the buttons (8 apart, column
+              width), the whole stack centered below the bar.
+         ════════════════════════════════════════════════════════════════ */
+      /* --space-1 … --space-6 come from design-tokens/mezzo-tokens.css. */
+      :root {
+        --col-width: 280px;
+        --footer-inset: 20px;
+      }
+
+      /* Type */
+      p.pip-h1, h1.pip-h1, .pip-h1 {
+        font-size: 20px;
+        font-weight: var(--weight-medium);
+        line-height: 1.25;
+        letter-spacing: var(--tracking-heading);
+        max-width: var(--col-width);
+        text-wrap: balance;
+      }
+      .pip-ready-profile-label,
+      .pip-calibrating-subheading,
+      .pip-decision-bar-title {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        letter-spacing: var(--tracking-label);
+        text-transform: uppercase;
+        color: var(--color-text-muted);
+      }
+      .pip-intro-body,
+      .pip-decision-body,
+      .pip-creating-text {
+        font-size: 14px;
+        line-height: 1.45;
+        max-width: var(--col-width);
+      }
+      .pip-intro-disclaimer,
+      .pip-ready-disclaimer,
+      .pip-calibrating-hint,
+      .pip-decision-tip,
+      .pip-decision-warning,
+      .pip-ready-recalibrate-note {
+        font-size: 12px;
+        line-height: 1.45;
+        max-width: var(--col-width);
+        min-height: 0;
+        margin: 0;
+      }
+      .pip-ready-selector-trigger { font-size: 15px; }
+
+      /* One column: controls, helper text and buttons share its width. */
+      .pip-ready-selector-wrap,
+      .pip-ready-start-btn,
+      .pip-intro-primary-btn,
+      .pip-name-input,
+      .pip-decision-actions,
+      .pip-screen-decision .pip-decision-actions,
+      .pip-decision-form .pip-decision-actions {
+        width: var(--col-width);
+        max-width: 100%;
+        box-sizing: border-box;
+      }
+      .pip-decision-primary-btn,
+      .pip-decision-secondary-btn { width: 100%; max-width: none; }
+
+      /* ── B. Single choice ── */
+      .pip-screen-welcome,
+      .pip-screen-c1,
+      .pip-screen-c0,
+      .pip-screen-failed,
+      .pip-screen-ready {
+        justify-content: center;
+        gap: 0;
+        padding: var(--space-6);
+      }
+      .pip-screen-welcome > *,
+      .pip-screen-c1 > *,
+      .pip-screen-c0 > *,
+      .pip-screen-failed > *,
+      .pip-screen-ready > * { margin: 0; flex-shrink: 0; }
+      /* Heading → 8 → its subtext (one group). */
+      .pip-screen-welcome > .pip-intro-body,
+      .pip-screen-c1 > .pip-intro-body { margin-top: var(--space-2); }
+      /* Between groups. */
+      .pip-screen-c0 > .pip-c0-illustration,
+      .pip-screen-ready > .pip-ready-profile-label,
+      .pip-screen-welcome > .pip-intro-primary-btn,
+      .pip-screen-c1 > .pip-intro-primary-btn,
+      .pip-screen-c0 > .pip-intro-primary-btn,
+      .pip-screen-failed > .pip-decision-actions,
+      .pip-screen-ready > .pip-ready-start-btn { margin-top: var(--space-5); }
+      /* Within the control group. */
+      .pip-screen-c0 > .pip-intro-body,
+      .pip-screen-ready > .pip-ready-selector-wrap,
+      .pip-screen-ready > .pip-ready-contextual-actions { margin-top: var(--space-2); }
+      .pip-screen-ready > .pip-ready-contextual-actions:empty { display: none; }
+      /* Primary button → 12 → its fine print or text link. */
+      .pip-screen-welcome > .pip-intro-disclaimer,
+      .pip-screen-c1 > .pip-text-btn,
+      .pip-screen-c0 > .pip-text-btn,
+      .pip-screen-failed > .pip-text-btn,
+      .pip-screen-ready > .pip-ready-disclaimer { margin-top: var(--space-3); }
+      .pip-screen-ready > .pip-ready-heading { min-height: 0; }
+      .pip-c0-illustration { max-width: 44px; }
+      /* The sound-filter note: one line at the 280px column, centered;
+         it wraps only in a manually narrowed window. */
+      .pip-ready-recalibrate-note { text-align: center; }
+
+      /* ── A. Sequence ── */
+      .pip-screen-calibrating {
+        justify-content: flex-start;
+        gap: 0;
+        padding: var(--space-6) var(--space-6) calc(var(--footer-inset) + 24px + var(--space-5));
+      }
+      .pip-calibrating-top {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        flex-shrink: 0;
+      }
+      .pip-calibrating-subheading { margin: 0 0 var(--space-2); }
+      p.pip-h1.pip-calibrating-heading { margin: 0; }
+      .pip-calibrating-middle {
+        flex: 1 1 auto;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+      }
+      /* The number and the status line share one slot, one height. */
+      .pip-calibrating-slot {
+        position: relative;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+      }
+      .pip-calibrating-status { margin: 0; min-height: 0; }
+      .pip-calibrating-count { top: 50%; }
+      .pip-calibrating-visual { margin: var(--space-3) 0 0; }
+      .pip-calibrating-hint { margin-top: var(--space-3); text-align: center; }
+      .pip-calibrating-cancel { bottom: var(--footer-inset); }
+      .pip-screen-creating {
+        gap: var(--space-3);
+        padding: var(--space-6);
+      }
+
+      /* ── C. Decision ── */
+      .pip-decision-bar { padding: 0 var(--space-4); }
+      .pip-screen-decision > .pip-decision-content,
+      .pip-decision-form > .pip-decision-content {
+        flex: 0 0 auto;
+        margin-top: auto;
+        gap: var(--space-2);
+        padding: var(--space-5) var(--space-6) 0;
+      }
+      .pip-screen-decision > .pip-decision-content:last-child { margin-bottom: auto; padding-bottom: var(--space-5); }
+      .pip-screen-decision > .pip-decision-actions,
+      .pip-decision-form > .pip-decision-actions {
+        flex: 0 0 auto;
+        gap: var(--space-2);
+        margin: var(--space-5) auto auto;
+        padding: 0 0 var(--space-5);
+      }
+      .pip-decision-form { flex: 1 1 auto; justify-content: flex-start; }
+      /* Decision screens have no side padding of their own: keep the 32px edges. */
+      .pip-screen-decision > .pip-decision-actions,
+      .pip-decision-form > .pip-decision-actions { max-width: calc(100% - 2 * var(--space-6)); }
+      .pip-decision-tip { margin: 0; }
+
+      /* ── Monitoring: controls inset 12 from the window's edges. ── */
+      .pip-control-btn-compact,
+      body[data-layout="compact"] .pip-control-btn-expand { top: var(--space-3); right: var(--space-3); }
+      .pip-control-btn-stop { bottom: var(--space-3); left: var(--space-3); }
     `;
     pipDoc.head.appendChild(style);
 
@@ -2932,17 +3110,19 @@ export function createMezzoSession({
     welcomeBody.textContent = "A gentle nudge when you're talking louder than you'd like. First, a quick voice calibration.";
     welcomeScreen.appendChild(welcomeBody);
 
-    const welcomeDisclaimer = pipDoc.createElement('p');
-    welcomeDisclaimer.className = 'pip-intro-disclaimer';
-    welcomeDisclaimer.textContent = "Mezzo doesn't record audio or transcribe speech.";
-    welcomeScreen.appendChild(welcomeDisclaimer);
-
+    // The primary action, then its fine print (the Single-choice template:
+    // button → 12 → fine print).
     const welcomePrimaryBtn = pipDoc.createElement('button');
     welcomePrimaryBtn.type = 'button';
     welcomePrimaryBtn.className = 'pip-intro-primary-btn';
     welcomePrimaryBtn.textContent = 'Create speaking profile';
     welcomePrimaryBtn.addEventListener('click', handleWelcomeCalibrateClick);
     welcomeScreen.appendChild(welcomePrimaryBtn);
+
+    const welcomeDisclaimer = pipDoc.createElement('p');
+    welcomeDisclaimer.className = 'pip-intro-disclaimer';
+    welcomeDisclaimer.textContent = "Mezzo doesn't record audio or transcribe speech.";
+    welcomeScreen.appendChild(welcomeDisclaimer);
 
     layout.appendChild(welcomeScreen);
     welcomeScreenEl = welcomeScreen;
@@ -3191,48 +3371,63 @@ export function createMezzoSession({
     const calibratingScreen = pipDoc.createElement('div');
     calibratingScreen.className = 'pip-screen pip-screen-calibrating hidden';
 
+    // The Sequence template: the eyebrow and heading sit at a fixed top
+    // position (.pip-calibrating-top), and the middle slot is centered in
+    // the space between them and Cancel, so nothing moves when the 3-2-1
+    // ends.
+    const calibratingTop = pipDoc.createElement('div');
+    calibratingTop.className = 'pip-calibrating-top';
+    calibratingScreen.appendChild(calibratingTop);
+
     const calibratingSubheading = pipDoc.createElement('div');
     calibratingSubheading.className = 'pip-calibrating-subheading';
     calibratingSubheading.setAttribute('aria-live', 'polite');
-    calibratingScreen.appendChild(calibratingSubheading);
+    calibratingTop.appendChild(calibratingSubheading);
     calibratingSubheadingEl = calibratingSubheading;
 
     const calibratingHeading = pipDoc.createElement('p');
     calibratingHeading.className = 'pip-h1 pip-calibrating-heading';
     calibratingHeading.textContent = CALIBRATING_HEADING_PREPARING;
-    calibratingScreen.appendChild(calibratingHeading);
+    calibratingTop.appendChild(calibratingHeading);
     calibratingHeadingEl = calibratingHeading;
+
+    const calibratingMiddle = pipDoc.createElement('div');
+    calibratingMiddle.className = 'pip-calibrating-middle';
+    calibratingScreen.appendChild(calibratingMiddle);
+
+    // One slot for the 3-2-1 number and the status line ("Preparing
+    // microphone…", then "Listening… {n}s"), so they sit in the same place.
+    // The status is aria-hidden: assistive tech gets exactly two one-time
+    // announcements instead (calibratingAnnounceEl, below), since narrating
+    // every visible tick was found to be noisy, not helpful.
+    const calibratingSlot = pipDoc.createElement('div');
+    calibratingSlot.className = 'pip-calibrating-slot';
+    calibratingMiddle.appendChild(calibratingSlot);
+    const calibratingCount = pipDoc.createElement('div');
+    calibratingCount.className = 'pip-calibrating-count';
+    calibratingCount.setAttribute('aria-hidden', 'true'); // the one-time announcement covers it
+    calibratingSlot.appendChild(calibratingCount);
+    calibratingCountEl = calibratingCount;
+    const calibratingStatus = pipDoc.createElement('div');
+    calibratingStatus.className = 'pip-calibrating-status';
+    calibratingStatus.setAttribute('aria-hidden', 'true');
+    calibratingSlot.appendChild(calibratingStatus);
+    calibratingStatusEl = calibratingStatus;
 
     // Segmented level meter (PRD §8): six segments that follow the live,
     // filtered level, so the user can see their voice being picked up
     // during capture. role="meter", 0–6. Hidden (keeping its space) during
-    // the 3-2-1, when the countdown number stands in its place and the room
-    // is asked to be quiet; see setCalibratingPhase().
+    // the 3-2-1, when the room is asked to be quiet; see
+    // setCalibratingPhase().
     const calibratingVisual = pipDoc.createElement('div');
     calibratingVisual.className = 'pip-calibrating-visual';
-    calibratingScreen.appendChild(calibratingVisual);
+    calibratingMiddle.appendChild(calibratingVisual);
     levelMeter = new MezzoLevelMeter(calibratingVisual);
-    const calibratingCount = pipDoc.createElement('div');
-    calibratingCount.className = 'pip-calibrating-count';
-    calibratingCount.setAttribute('aria-hidden', 'true'); // the one-time announcement covers it
-    calibratingVisual.appendChild(calibratingCount);
-    calibratingCountEl = calibratingCount;
-
-    // Visible status text ("Preparing microphone…", blank during the 3-2-1,
-    // then "Listening… {n}s") — aria-hidden. Assistive tech gets
-    // exactly two one-time announcements instead (calibratingAnnounceEl,
-    // below): narrating every visible tick was found to be noisy, not
-    // helpful, for a fast countdown like this one.
-    const calibratingStatus = pipDoc.createElement('div');
-    calibratingStatus.className = 'pip-calibrating-status';
-    calibratingStatus.setAttribute('aria-hidden', 'true');
-    calibratingScreen.appendChild(calibratingStatus);
-    calibratingStatusEl = calibratingStatus;
 
     const calibratingHint = pipDoc.createElement('p');
     calibratingHint.className = 'pip-calibrating-hint';
     calibratingHint.textContent = CALIBRATING_HINT_PREPARING;
-    calibratingScreen.appendChild(calibratingHint);
+    calibratingMiddle.appendChild(calibratingHint);
     calibratingHintEl = calibratingHint;
 
     // Static, visually-hidden live region carrying exactly two one-time

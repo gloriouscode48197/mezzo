@@ -22,6 +22,7 @@ import { installLevelDriver, setLevelDb } from './support/drive-level.js';
 test.describe('First-time copy and calibration-entry routing', () => {
   test('Welcome shows the approved copy and has no secondary dismiss action', async ({ page, context }) => {
     const pipPage = await openCompanion(page, context);
+    await pipPage.setViewportSize({ width: 380, height: 364 });
     const welcomeScreen = pipPage.locator('.pip-screen-welcome');
     await expect(welcomeScreen).toBeVisible();
 
@@ -34,17 +35,19 @@ test.describe('First-time copy and calibration-entry routing', () => {
       const cs = getComputedStyle(el);
       return [cs.fontSize, cs.fontWeight, cs.letterSpacing, cs.color, cs.textTransform, cs.fontFamily.split(',')[0]];
     })).toEqual(['30px', '600', '-1.35px', 'rgb(243, 235, 222)', 'lowercase', 'Geist']);
-    // Wordmark and body read as one group, about 16px apart; the privacy
-    // line and the button sit at the bottom.
+    // The Single-choice layout (rhythm pass): wordmark → 8 → body; 24; the
+    // button → 12 → its fine print; the whole stack centered.
     const [markBox, bodyBox, privacyBox, buttonBox] = await Promise.all([
       wordmark.boundingBox(),
       welcomeScreen.locator('.pip-intro-body').boundingBox(),
       welcomeScreen.locator('.pip-intro-disclaimer').boundingBox(),
       welcomeScreen.locator('.pip-intro-primary-btn').boundingBox(),
     ]);
-    expect(Math.abs(bodyBox.y - (markBox.y + markBox.height) - 16)).toBeLessThanOrEqual(1);
-    expect(privacyBox.y - (bodyBox.y + bodyBox.height)).toBeGreaterThan(30);
-    expect(pipPage.viewportSize().height - (buttonBox.y + buttonBox.height)).toBeLessThan(40);
+    expect(Math.round(bodyBox.y - (markBox.y + markBox.height))).toBe(8);
+    expect(Math.round(buttonBox.y - (bodyBox.y + bodyBox.height))).toBe(24);
+    expect(Math.round(privacyBox.y - (buttonBox.y + buttonBox.height))).toBe(12);
+    const screenH = await welcomeScreen.evaluate((el) => el.getBoundingClientRect().height);
+    expect(Math.abs(markBox.y - (screenH - (privacyBox.y + privacyBox.height)))).toBeLessThanOrEqual(1);
     await expect(welcomeScreen).not.toContainText('Welcome');
     await expect(welcomeScreen.locator('.pip-intro-body')).toHaveText(
       "A gentle nudge when you're talking louder than you'd like. First, a quick voice calibration."
@@ -568,7 +571,7 @@ test.describe('Calibration-stall reliability correction (acquisition timeout)', 
     expect(elapsedMs).toBeGreaterThanOrEqual(2700);
   });
 
-  test('Calibrating matches PRD §8: heading; the 3-2-1 number with "Stay quiet for a moment…" (meter hidden); then a six-segment meter about 52px below the heading, "Listening… Ns", the meeting-volume hint; Cancel pinned to the bottom', async ({ page, context }) => {
+  test('Calibrating matches PRD §8: heading; the 3-2-1 number with "Stay quiet for a moment…" (meter hidden); then "Listening… Ns" above a six-segment meter, then the hint; Cancel pinned to the bottom', async ({ page, context }) => {
     const pipPage = await openCompanion(page, context);
     await pipPage.locator('button:has-text("Create speaking profile")').click();
     await pipPage.locator('button:has-text("I\'m ready")').click();
@@ -611,11 +614,13 @@ test.describe('Calibration-stall reliability correction (acquisition timeout)', 
     await expect(heading).toHaveText('Speak at your meeting volume');
     await expect(meter).toBeVisible();
     await expect(count).toBeHidden();
+    // The Sequence layout (rhythm pass): status above the meter, 12 apart,
+    // the hint 12 below; the meter centered. See tests/rhythm.spec.js.
     const meterBox = await meter.boundingBox();
-    const headingBox = await heading.boundingBox();
-    expect(Math.abs(meterBox.y - (headingBox.y + headingBox.height) - 52)).toBeLessThanOrEqual(2);
+    const statusBox = await status.boundingBox();
+    expect(meterBox.y).toBeGreaterThan(statusBox.y + statusBox.height);
     expect(Math.abs(meterBox.x + meterBox.width / 2 - (pipPage.viewportSize().width / 2))).toBeLessThan(2);
-    expect(await style(hint, ['fontSize', 'color'])).toEqual({ fontSize: '13px', color: 'rgb(176, 171, 158)' });
+    expect(await style(hint, ['fontSize', 'color'])).toEqual({ fontSize: '12px', color: 'rgb(176, 171, 158)' });
 
     // The old bar and its hint are gone.
     await expect(screen.locator('.pip-calibrating-meter-row, .pip-calibrating-meter-hint')).toHaveCount(0);
@@ -915,10 +920,10 @@ test.describe('Companion-wide visual-language consistency (2026-08-14 pass)', ()
     });
     expect(style).toEqual({
       fontFamily: 'Geist, system-ui, sans-serif',
-      fontSize: '24px',
-      fontWeight: '600',
-      lineHeight: '27.6px',
-      letterSpacing: '-0.96px',
+      fontSize: '20px', // the rhythm pass's one heading size
+      fontWeight: '500',
+      lineHeight: '25px',
+      letterSpacing: '-0.8px',
       color: 'rgb(243, 235, 222)',
     });
     await expect(failedMessage).toHaveText("Didn't catch enough clear speech — let's try again");
