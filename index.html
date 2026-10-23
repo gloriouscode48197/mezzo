@@ -7,8 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="design-tokens/mezzo-tokens.css?v=12">
-  <link rel="stylesheet" href="landing.css?v=17">
+  <link rel="stylesheet" href="design-tokens/mezzo-tokens.css?v=13">
+  <link rel="stylesheet" href="landing.css?v=18">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" sizes="16x16" href="icons/icon-16.svg">
   <link rel="icon" type="image/svg+xml" sizes="32x32" href="icons/icon-32.svg">
@@ -232,37 +232,28 @@
       </div>
     </main>
 
-    <!-- ── Dock — the minimal, read-only status surface shown for as long as
-         the Companion stays open. The 2026-08-17 redesign intentionally
-         drops the old illustrative Companion-window preview entirely (see
-         docs/product-experience.md's own updated "Companion Preview"
-         section) and collapses the status readout to the one externally
-         meaningful distinction — is monitoring actually active right now,
-         or not — rather than surfacing every one of the Companion's own
-         internal session states (Welcome/Ready/Calibrating/decision
-         screens/Needs-attention all read as "not active" here; see
-         src/home-dock.js's dockStatusCopy()). Plain text, not the old
-         dot-and-pill: the status text itself changes color for the active
-         case (see landing.css's own .dock-status-text-active), but its
-         wording alone ("Monitoring is active" vs. "Monitoring is not
-         active") is what carries the meaning, never color by itself. Never
-         shows profile names, calibration progress, or any monitoring/
-         profile control — those all live inside the Companion itself.
-         Close Companion is this page's one lifecycle exception — a recovery
-         action for when the Companion's native ✕ isn't reachable, calling
-         the exact same session.endSession() the native control already
-         triggers (see src/home-dock.js). ── -->
-    <main id="state-dock" class="state-view page-content hidden">
-      <div class="state-col">
-        <p id="dock-status-text" class="dock-status-text">Monitoring is not active</p>
-        <h1 class="type-section-heading state-heading">Your Companion is open</h1>
-        <p class="type-body dock-body-copy">Keep this page open while using Mezzo.<br>Closing it will also close the Mezzo Companion.</p>
-        <button id="btn-close-companion" type="button" class="btn-outline btn-close-companion">Close Companion</button>
+    <!-- ── Running (internally the Dock): shown for as long as the Companion
+         is open, on the website's one cream surface (2026-10-22). A small
+         "Companion open" label, the heading, a line of body, the privacy
+         line, and Close Companion as a quiet text link: the recovery action
+         for a Companion window buried behind others, calling the same
+         session.endSession() the native ✕ triggers (src/home-dock.js). The
+         live region announces "Mezzo is running." once on arrival. Never
+         shows profile names, calibration progress, or monitoring controls;
+         those live inside the Companion. ── -->
+    <main id="state-dock" class="state-view page-content state-running hidden">
+      <div class="state-col running-col">
+        <p class="running-label"><span class="running-dot" aria-hidden="true"></span>Companion open</p>
+        <h1 class="type-section-heading state-heading">Mezzo is running</h1>
+        <p class="type-body running-body">Your Companion is open in its own window. Switch to your meeting whenever you're ready.</p>
+        <p class="type-microcopy running-privacy">Mezzo only measures volume. Nothing you say is recorded.</p>
+        <button id="btn-close-companion" type="button" class="running-close">Close Companion</button>
+        <p id="running-live" class="running-live" role="status" aria-live="polite"></p>
       </div>
     </main>
 
   </div>
 
-  <script src="landing.js?v=3" type="module"></script>
+  <script src="landing.js?v=4" type="module"></script>
 </body>
 </html>

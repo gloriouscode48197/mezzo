@@ -56,6 +56,19 @@
   --color-btn-primary-bg: var(--color-accent);
   --color-btn-primary-text: var(--color-on-accent);
   --color-btn-secondary-border: color-mix(in srgb, var(--color-text) 30%, transparent);
+  --color-nav-active: var(--color-accent);   /* Active nav link underline */
+}
+
+/* ── Cream (2026-10-22): the website's one light surface, used only while
+   Home shows the running state (the Companion is open). Charcoal text on
+   cream: #2D2E31 is 11.5:1, muted #5F5B52 5.7:1. Hairlines, the active nav
+   underline, and focus rings are charcoal. The Companion never uses it. ── */
+[data-surface="cream"] {
+  --color-bg: #F3EBDE;
+  --color-text: #2D2E31;
+  --color-text-muted: #5F5B52;
+  --color-link: #2D2E31;                     /* also the focus ring */
+  --color-nav-active: #2D2E31;
 }
 
 
@@ -66,6 +79,7 @@
 [data-surface="dark"],
 [data-surface="light"],
 [data-surface="mid"],
+[data-surface="cream"],
 .surface-dark,
 .surface-light,
 .surface-mid {
@@ -251,7 +265,7 @@ p, li, figcaption, label { text-wrap: pretty; }
 .nav-link-active {
   color: var(--color-text);
   cursor: default;
-  border-bottom: 2px solid var(--color-accent);
+  border-bottom: 2px solid var(--color-nav-active);
 }
 
 /* ═══════════════════════════════════════════

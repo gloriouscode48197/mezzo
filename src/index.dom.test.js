@@ -558,7 +558,9 @@ describe('Opening the Mezzo Companion', () => {
     document.getElementById('btn-open-companion').click();
     await tick(2);
     assert.strictEqual(visibleStateId(document), 'state-dock');
-    assert.strictEqual(document.getElementById('dock-status-text').textContent, 'Monitoring is not active');
+    // The running state: cream, "Mezzo is running", announced once.
+    assert.strictEqual(document.body.dataset.surface, 'cream');
+    assert.strictEqual(document.getElementById('running-live').textContent, 'Mezzo is running.');
     assert.strictEqual(window.location.href, locationBefore, 'opening the Companion must never navigate this page anywhere');
   });
 
@@ -570,7 +572,9 @@ describe('Opening the Mezzo Companion', () => {
     document.getElementById('btn-open-companion').click();
     await tick(2);
     assert.strictEqual(visibleStateId(document), 'state-dock');
-    assert.strictEqual(document.getElementById('dock-status-text').textContent, 'Monitoring is not active');
+    // The running state: cream, "Mezzo is running", announced once.
+    assert.strictEqual(document.body.dataset.surface, 'cream');
+    assert.strictEqual(document.getElementById('running-live').textContent, 'Mezzo is running.');
   });
 
   it('the Dock shows no profile name, calibration progress, or monitoring/profile controls', async () => {
@@ -616,7 +620,9 @@ describe('Close Companion', () => {
     document.getElementById('btn-open-companion').click();
     await tick(2);
     assert.strictEqual(visibleStateId(document), 'state-dock');
-    assert.strictEqual(document.getElementById('dock-status-text').textContent, 'Monitoring is not active');
+    // The running state: cream, "Mezzo is running", announced once.
+    assert.strictEqual(document.body.dataset.surface, 'cream');
+    assert.strictEqual(document.getElementById('running-live').textContent, 'Mezzo is running.');
     assert.strictEqual(JSON.parse(localStorage.getItem('mezzoProfiles')).length, 1, 'reopening must never duplicate or lose the saved profile');
   });
 });

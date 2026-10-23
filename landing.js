@@ -31,7 +31,7 @@ initHomeDock({
   btnEnableMicrophone: document.getElementById('btn-enable-microphone'),
   btnOpenCompanion: document.getElementById('btn-open-companion'),
   btnCloseCompanion: document.getElementById('btn-close-companion'),
-  dockStatusText: document.getElementById('dock-status-text'),
+  runningLiveEl: document.getElementById('running-live'),
   baseUrl: new URL('.', window.location.href).href,
 });
 

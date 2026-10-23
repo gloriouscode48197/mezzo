@@ -378,36 +378,62 @@ body {
   margin-bottom: var(--space-circle-to-button);
 }
 
-/* Close Companion — the Dock's one lifecycle exception (see index.html's
-   #state-dock comment and CLAUDE.md). Secondary button. */
-.btn-close-companion { margin-top: 32px; }
-
+/* ── Running (2026-10-22): what this page shows while the Companion is
+   open (internally still the Dock, #state-dock). Cream surface
+   (data-surface="cream", set by src/home-dock.js while it shows); a small
+   "Companion open" label, the heading, one line of body, the privacy line,
+   and Close Companion as a quiet text link: the recovery action for a
+   Companion window buried behind others. ── */
 .btn-outline:active { transform: scale(0.98); }
 
-/* ── Dock status — a plain text line above the Dock's heading, the one live
-   element in this state (see src/home-dock.js's renderDockStatus()). The
-   wording carries the meaning; color only accents the active case. ── */
-.dock-status-text {
-  margin-bottom: 14px;
+.running-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 14px;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 11px;
   letter-spacing: var(--tracking-label);
   text-transform: uppercase;
   color: var(--color-text-muted);
 }
-
-.dock-status-text-active { color: var(--color-accent); }
-
-.dock-body-copy {
-  max-width: 340px;
-  margin: 0 auto;
-  line-height: 1.65;
+.running-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-text);
 }
-
 #state-dock .state-heading { font-size: 32px; }
-
-@media (min-width: 480px) {
-  #state-dock .state-heading { white-space: nowrap; }
+.running-body {
+  max-width: 380px;
+  margin: 12px auto 0;
+  line-height: 1.6;
+  color: var(--color-text-muted);
+}
+.running-privacy {
+  margin-top: 20px;
+  color: var(--color-text-muted);
+}
+.running-close {
+  margin-top: 16px;
+  padding: 2px 0;
+  background: none;
+  border: none;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--color-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.running-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
 }
 
 /* ═══════════════════════════════════════════
@@ -434,8 +460,14 @@ body {
   .home-hero-subhead { font-size: 20px; }
   .home-hero-inner { grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 56px; }
   .home-hero-illustration { justify-self: end; }
-  .home-how { padding-top: 80px; padding-bottom: 88px; }
-  .home-how-inner { grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); gap: 64px; }
+  /* How it works: one centered column, so it doesn't repeat the hero's
+     two columns. Heading and intro centered; the steps list a centered
+     640px column, its steps and chips left-aligned inside it. */
+  .home-how { padding-top: 88px; padding-bottom: 96px; }
+  .home-how-inner { grid-template-columns: minmax(0, 1fr); gap: 40px; justify-items: center; }
+  .home-how-intro { text-align: center; }
+  .home-how-lede { max-width: 520px; margin-inline: auto; }
+  .home-steps { width: 100%; max-width: 640px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
