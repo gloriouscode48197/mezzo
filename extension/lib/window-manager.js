@@ -11,12 +11,13 @@ import { computeCompanionBounds } from './positioning.js';
 const WINDOW_ID_KEY = 'mezzoCompanionWindowId';
 // A normal Chrome window, not a bare popup: it keeps the address bar, whose
 // site controls are how someone fixes a blocked microphone (Home's denied
-// state points there), and it's wide enough for Home's two-column layout.
-// Still its own window, so Mezzo never becomes a tab beside the meeting
-// (switching tabs can trigger Meet's automatic mini window, which closes
-// the Companion).
-const COMPANION_WIDTH = 1000;
-const COMPANION_HEIGHT = 760;
+// state points there). Narrow, since once the Companion is open this
+// window mostly shows the running page, and a big one covers the call;
+// Home stacks to one column at this width. Still its own window, so Mezzo
+// never becomes a tab beside the meeting (switching tabs can trigger Meet's
+// automatic mini window, which closes the Companion).
+const COMPANION_WIDTH = 560;
+const COMPANION_HEIGHT = 720;
 
 async function getStoredWindowId() {
   const stored = await chrome.storage.session.get(WINDOW_ID_KEY);

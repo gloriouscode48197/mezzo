@@ -64,13 +64,13 @@ describe('extension: Mezzo address', () => {
 describe('extension: Mezzo window', () => {
   beforeEach(() => { globalThis.chrome = fakeChrome(); });
 
-  it('opens a normal window (with an address bar), 1000×760, not a bare popup', async () => {
+  it('opens a normal window (with an address bar), 560×720, not a bare popup', async () => {
     const { MezzoWindowManager } = await import('../extension/lib/window-manager.js');
     await MezzoWindowManager.openOrFocus({ url: 'https://mezzo-one.vercel.app/index.html', focused: true });
     const [opts] = globalThis.chrome.created;
     assert.equal(opts.type, 'normal');
-    assert.equal(opts.width, 1000);
-    assert.equal(opts.height, 760);
+    assert.equal(opts.width, 560);
+    assert.equal(opts.height, 720);
   });
 });
 
