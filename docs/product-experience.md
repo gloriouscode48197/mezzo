@@ -274,10 +274,10 @@ C1 ("Create speaking profile" / "Talk for a few seconds so Mezzo can learn the s
 
 ### Active Calibration
 
-Calibrating shows "Keep speaking at the level you want to maintain" (with a "Recalibrating {name}" label above it when recalibrating a saved profile), a six-segment level meter, a status line and a hint, and a Cancel link:
+Calibrating's heading follows the phase — "Get ready" through the 3-2-1, then "Speak at your meeting volume" while listening (with a "Recalibrating {name}" label above it when recalibrating a saved profile) — then a six-segment level meter, a status line and a hint, and a Cancel link:
 
 * **3-2-1** — only the countdown number, in the meter's place, and "Stay quiet for a moment…": the room's own noise level is measured from these readings and saved with the profile, so silence helps. The meter stays hidden.
-* **Listening, six seconds** — the meter appears; "Listening… Ns", counting down / "Use the volume you want for your meetings." The meter's lit segments follow the live, filtered microphone level, so the user can see their voice being picked up without being shown a target. It completes automatically; there is no manual "I'm done" action.
+* **Listening, six seconds** — the meter appears; "Listening… Ns", counting down / "Keep talking until the timer ends." The meter's lit segments follow the live, filtered microphone level, so the user can see their voice being picked up without being shown a target. It completes automatically; there is no manual "I'm done" action.
 * **Cancel** stops capture, discards the partial samples, and returns to where calibration started.
 
 Two one-time screen-reader announcements mark the start of each phase; nothing is announced every second. With reduced motion, the segments follow the level directly, without easing. Exact sizes and values: `docs/prd/range-ring-and-lantern-refresh.md` §8.
@@ -294,7 +294,7 @@ A brief "Creating your speaking profile…" moment, then a decision screen whose
 * **Keep temporarily** — keeps it as the temporary profile, selected on Ready ("Available until you close the Companion")
 * **Discard** — throws it away and restores the previous selection (or Welcome, if nothing else exists)
 
-**Recalibrate, on a saved profile**, does not touch that profile yet. The same heading and question, with:
+**Recalibrate, on a saved profile**, does not touch that profile yet. It shows "New calibration ready" / "Save it to "{name}"?", with:
 
 * **Update "{name}"** — overwrites the saved profile's calibration in place, keeping its name and identity, and returns to Ready with it selected
 * **Keep temporarily** — leaves the saved profile completely untouched, and keeps the new calibration as the temporary profile instead, selected on return
@@ -310,7 +310,7 @@ There is exactly one Start monitoring, reachable only from the Companion's own R
 
 When the Companion is in its Ready state, show, always in this order:
 
-1. Ready heading — see "First-Conversation Copy" below
+1. Ready heading — see "Ready Heading" below
 2. "Speaking profile" label
 3. A collapsed selector trigger, showing the currently selected profile's name (or "Unsaved profile")
 4. A contextual line for that selection: **Save profile** for the temporary profile; for a saved profile, nothing — or "This profile was made before Mezzo's improved sound filter. Recalibrate for more accurate nudges." when it was saved before calibration peaks were recorded — **Recalibrate** there is an inline link that recalibrates that profile (see "Profile Model")
@@ -329,9 +329,9 @@ Selecting Recalibrate or Create new profile (both in the selector panel) should 
 
 Monitoring should never begin automatically on its own, without this explicit action. This lets the user start monitoring sessions, recalibrate a profile, or run a fresh calibration, at any point in the day, entirely inside the Companion — Mezzo (Home/Dock) is never involved in any of these decisions.
 
-## First-Conversation Copy
+## Ready Heading
 
-The Ready heading reads "Ready for your first conversation" until the user has actually started monitoring for the first time — not merely calibrated, saved, recalibrated, switched profiles, opened and closed a decision state, or closed and reopened Mezzo before ever starting a session. Once monitoring has started for the first time, ever, every later Ready state shows "Ready for your next conversation" instead. This is a one-way, persisted condition: it survives Companion restarts and never reverts back to the first-conversation copy.
+"Ready for your first conversation" appears only right after first setup: monitoring has never started (a one-way, persisted condition that survives Companion restarts) and no profile has been saved yet. Every other time — any saved profile, or once monitoring has started — Ready reads "Ready when you are." The "Speaking profile" eyebrow above the selector has no colon.
 
 ## Deferred: Post-Session Acknowledgment
 
@@ -519,7 +519,7 @@ Target size: fixed, shared with every other pre-monitoring screen — see "Compa
 
 Reached whenever the Companion opens with a usable profile (saved or temporary) already available, and always after stopping monitoring. Every Companion open goes through Welcome or Ready — never straight to Monitoring — with one exception: **Reopen Companion** after an involuntary close resumes monitoring if it was running (see "Recovery → Mezzo Companion Closed").
 
-Ready's layout is always, in this order: the first/next-conversation heading, a "Speaking profile" label, a collapsed selector trigger, contextual actions for whichever profile is selected, Start monitoring, and a privacy disclaimer — see "Start Monitoring" above for the full behavior, and "Profile Model" for the selector's grouped contents and every contextual action.
+Ready's layout is always, in this order: the heading (see "Ready Heading"), a "Speaking profile" label, a collapsed selector trigger, contextual actions for whichever profile is selected, Start monitoring, and a privacy disclaimer — see "Start Monitoring" above for the full behavior, and "Profile Model" for the selector's grouped contents and every contextual action.
 
 The selector opens a menu panel attached to its trigger, over a dimmed screen; the panel scrolls internally without ever changing the Companion's own window size (see "Companion Sizing"). Each row carries its own Recalibrate and Delete (or, for the temporary profile, Discard) icon actions, and **Create new profile** sits in the panel's footer. The selected profile is marked distinctly from a hovered or keyboard-focused one.
 

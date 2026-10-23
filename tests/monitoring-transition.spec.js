@@ -80,12 +80,12 @@ test.describe('Companion: calibration -> Ready -> Monitoring -> Ready', () => {
     await expect.poll(() => ring.evaluate((el) => el.style.getPropertyValue('--voice-size')), { timeout: 5000 }).not.toBe('');
 
     // Stop -> straight back to Ready (no forced save prompt) — the
-    // Temporary profile stays selected, and the heading is now "next
-    // conversation" since monitoring has now actually started once.
+    // Temporary profile stays selected, and the heading is now "Ready when
+    // you are" since monitoring has now actually started once.
     await pipPage.getByRole('button', { name: 'Stop monitoring' }).click({ force: true }); // a hover-revealed icon in Compact
     await expect(monitoringScreen).toBeHidden();
     await expect(readyScreen).toBeVisible();
-    await expect(readyScreen.locator('.pip-ready-heading')).toHaveText('Ready for your next conversation');
+    await expect(readyScreen.locator('.pip-ready-heading')).toHaveText('Ready when you are');
     await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Temporary profile');
   });
 
@@ -106,8 +106,8 @@ test.describe('Companion: calibration -> Ready -> Monitoring -> Ready', () => {
 
     const m1Screen = pipPage.locator('.pip-screen-m1');
     await expect(m1Screen).toBeVisible({ timeout: 15000 });
-    await expect(m1Screen.locator('.pip-decision-heading')).toHaveText('Your new speaking profile is ready');
-    await expect(m1Screen.locator('.pip-decision-body')).toHaveText('What would you like to do with it?');
+    await expect(m1Screen.locator('.pip-decision-heading')).toHaveText('New calibration ready');
+    await expect(m1Screen.locator('.pip-decision-body')).toHaveText('Save it to "Kitchen"?');
     await expect(m1Screen.locator('button', { hasText: 'Start monitoring' })).toHaveCount(0);
 
     await m1Screen.locator('.pip-decision-primary-btn', { hasText: 'Update "Kitchen"' }).click();

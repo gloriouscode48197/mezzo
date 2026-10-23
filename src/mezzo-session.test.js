@@ -44,6 +44,8 @@ const {
   C0_COPY,
   saveProfileNameCopy,
   replaceButtonLabel,
+  recalibrationQuestion,
+  readyHeadingCopy,
   computeReadyContentHeight,
   MEZZO_COMPANION_READY_WIDTH,
   MEZZO_COMPANION_READY_BASE_HEIGHT,
@@ -438,5 +440,26 @@ describe('Monitoring sizes', () => {
 
   it('Compact does not equal the Ready/pre-monitoring size', () => {
     assert.notDeepStrictEqual(MEZZO_COMPANION_COMPACT_SIZE, { width: MEZZO_COMPANION_READY_WIDTH, height: MEZZO_COMPANION_READY_BASE_HEIGHT });
+  });
+});
+
+describe('readyHeadingCopy', () => {
+  it('"Ready for your first conversation" only right after first setup: nothing monitored yet and no saved profiles', () => {
+    assert.strictEqual(readyHeadingCopy({ hasStartedMonitoring: false, savedProfileCount: 0 }), 'Ready for your first conversation');
+  });
+  it('"Ready when you are" once there\'s a saved profile, or monitoring has started', () => {
+    assert.strictEqual(readyHeadingCopy({ hasStartedMonitoring: false, savedProfileCount: 1 }), 'Ready when you are');
+    assert.strictEqual(readyHeadingCopy({ hasStartedMonitoring: true, savedProfileCount: 0 }), 'Ready when you are');
+    assert.strictEqual(readyHeadingCopy({ hasStartedMonitoring: true, savedProfileCount: 3 }), 'Ready when you are');
+  });
+});
+
+describe('recalibrationQuestion', () => {
+  it('asks to save the new calibration to the named profile, in straight quotes', () => {
+    assert.strictEqual(recalibrationQuestion('Home Office'), 'Save it to "Home Office"?');
+  });
+  it('falls back without a name', () => {
+    assert.strictEqual(recalibrationQuestion(undefined), 'Save it to this profile?');
+    assert.strictEqual(recalibrationQuestion(''), 'Save it to this profile?');
   });
 });

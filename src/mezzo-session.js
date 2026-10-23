@@ -269,6 +269,16 @@ export function saveProfileNameCopy(resolution) {
  * long or unusual profile name still produces an understandable label
  * without any separate aria-label needed.
  */
+/** Ready's heading. */
+export function readyHeadingCopy({ hasStartedMonitoring, savedProfileCount }) {
+  return !hasStartedMonitoring && savedProfileCount === 0 ? 'Ready for your first conversation' : 'Ready when you are';
+}
+
+/** M1's question under "New calibration ready": the profile it would update. */
+export function recalibrationQuestion(targetName) {
+  return targetName ? `Save it to "${targetName}"?` : 'Save it to this profile?';
+}
+
 export function replaceButtonLabel(targetName) {
   return targetName ? `Update "${targetName}"` : 'Update this profile';
 }
@@ -313,7 +323,11 @@ const NOISY_ROOM_TIP = 'Your room is a bit noisy for how softly you speak. Try m
 // Ready, under a profile saved before the speech-band filter and peaks.
 // "Recalibrate" in it is an inline link (see renderContextualActions()).
 const RECALIBRATE_NOTE = ['This profile was made before Mezzo\'s improved sound filter. ', 'Recalibrate', ' for more accurate nudges.'];
-const CALIBRATING_HINT_LISTENING = 'Use the volume you want for your meetings.';
+const CALIBRATING_HINT_LISTENING = 'Keep talking until the timer ends.';
+// The Calibrating heading follows the phase: the 3-2-1 asks for quiet, then
+// listening names the target volume (see setCalibratingPhase()).
+const CALIBRATING_HEADING_PREPARING = 'Get ready';
+const CALIBRATING_HEADING_LISTENING = 'Speak at your meeting volume';
 // How often the 3-2-1 mic check reads the level — audio.js's own sampling
 // interval during capture, so the circle moves the same way before and after.
 const MIC_CHECK_INTERVAL_MS = 50;
@@ -717,6 +731,7 @@ export function createMezzoSession({
   // button label is still dynamic (see replaceButtonLabel()).
   let m1ScreenEl = null;
   let m1HeadingEl = null;
+  let m1BodyEl = null;
   let m1ReplaceBtn = null;
   let m1KeepBtn = null;
   let m1DiscardBtn = null;
@@ -821,6 +836,7 @@ export function createMezzoSession({
   let levelMeter = null; // MezzoLevelMeter: six segments following the live level (3-2-1 mic check, then capture)
   let calibratingHintEl = null; // CALIBRATING_HINT_PREPARING during the countdown, then CALIBRATING_HINT_LISTENING
   let calibratingCountEl = null; // the 3-2-1 number, in the meter's place until listening starts
+  let calibratingHeadingEl = null; // CALIBRATING_HEADING_PREPARING, then CALIBRATING_HEADING_LISTENING
   let micCheckTimer = null; // reads the mic level during the 3-2-1 so the circle can react before capture — see startMicCheck()
   let micCheckSamples = []; // those readings, which become the room-noise level (finishMicCheck())
   let calibratingCountdownTimer = null;
@@ -1547,7 +1563,10 @@ export function createMezzoSession({
         max-width: 320px;
         margin-inline: auto;
       }
-      .pip-intro-primary-btn:hover { opacity: 0.88; }
+      /* Same hover as Start monitoring (.btn-primary): never dimmed, so every
+         primary button stays the same cream. Dimming read as gray on the
+         lighter decision background. */
+      .pip-intro-primary-btn:hover { background: color-mix(in srgb, var(--color-btn-primary-bg) 86%, var(--color-text)); }
 
       /* C0's address-bar illustration — schematic, not photorealistic:
          enough to point at "the icon in your address bar" without
@@ -2384,7 +2403,7 @@ export function createMezzoSession({
         overflow-wrap: anywhere;
         line-height: 1.3;
       }
-      .pip-decision-primary-btn:hover { opacity: 0.88; }
+      .pip-decision-primary-btn:hover { background: color-mix(in srgb, var(--color-btn-primary-bg) 86%, var(--color-text)); }
       .pip-decision-primary-btn:disabled { opacity: 0.5; cursor: default; }
       .pip-decision-secondary-btn {
         width: 100%;
@@ -3057,7 +3076,11 @@ export function createMezzoSession({
     const readyLabel = pipDoc.createElement('div');
     readyLabel.id = 'pip-ready-profile-label';
     readyLabel.className = 'pip-ready-profile-label';
-    readyLabel.textContent = 'Speaking profile:';
+    readyLabel.textContent = 'Speaking profile';
+    // No visible colon on the eyebrow; its aria-label keeps one, so the
+    // selector's accessible name still reads "Speaking profile: {name}"
+    // (see the trigger's aria-labelledby below).
+    readyLabel.setAttribute('aria-label', 'Speaking profile:');
     readyScreen.appendChild(readyLabel);
 
     // Trigger and panel share one position:relative wrapper (see
@@ -3091,7 +3114,8 @@ export function createMezzoSession({
     const selectorTriggerName = pipDoc.createElement('span');
     selectorTriggerName.id = 'pip-ready-selector-trigger-name';
     selectorTriggerName.className = 'pip-ready-selector-trigger-name';
-    // aria-labelledby chains the static "Speaking profile:" label with the
+    // aria-labelledby chains the static "Speaking profile" label (its colon
+    // visually hidden) with the
     // dynamic selected-name span, in that order, so the trigger's computed
     // accessible name is "Speaking profile: {name}" (e.g. "Speaking
     // profile: Presentation") rather than the bare name alone — found
@@ -3175,8 +3199,9 @@ export function createMezzoSession({
 
     const calibratingHeading = pipDoc.createElement('p');
     calibratingHeading.className = 'pip-h1 pip-calibrating-heading';
-    calibratingHeading.textContent = 'Keep speaking at the level you want to maintain';
+    calibratingHeading.textContent = CALIBRATING_HEADING_PREPARING;
     calibratingScreen.appendChild(calibratingHeading);
+    calibratingHeadingEl = calibratingHeading;
 
     // Segmented level meter (PRD §8): six segments that follow the live,
     // filtered level, so the user can see their voice being picked up
@@ -3370,7 +3395,7 @@ export function createMezzoSession({
     const m1Heading = pipDoc.createElement('h1');
     m1Heading.className = 'pip-h1 pip-decision-heading';
     m1Heading.tabIndex = -1; // programmatically focusable only — see showM1Screen()'s own focus call
-    m1Heading.textContent = 'Your new speaking profile is ready';
+    m1Heading.textContent = 'New calibration ready';
     m1Card.appendChild(m1Heading);
     m1HeadingEl = m1Heading;
 
@@ -3382,8 +3407,8 @@ export function createMezzoSession({
     // removed outright along with this — it had no other caller.
     const m1Body = pipDoc.createElement('p');
     m1Body.className = 'pip-decision-body';
-    m1Body.textContent = 'What would you like to do with it?';
-    m1Card.appendChild(m1Body);
+    m1Card.appendChild(m1Body); // recalibrationQuestion(), set in showM1Screen()
+    m1BodyEl = m1Body;
     m1TipEl = buildNoisyRoomTip();
     m1Card.appendChild(m1TipEl);
 
@@ -4132,9 +4157,13 @@ export function createMezzoSession({
     if (readyHeadingEl) {
       // No terminal period (2026-08-16 heading-punctuation audit) — see
       // this file's own module-level note on Companion heading punctuation.
-      readyHeadingEl.textContent = getHasStartedMonitoring()
-        ? 'Ready for your next conversation'
-        : 'Ready for your first conversation';
+      // "Ready for your first conversation" only right after first setup
+      // (nothing monitored yet, no saved profiles); otherwise "Ready when
+      // you are".
+      readyHeadingEl.textContent = readyHeadingCopy({
+        hasStartedMonitoring: getHasStartedMonitoring(),
+        savedProfileCount: getSavedProfiles().length,
+      });
     }
 
     // Re-resolve the active selection fresh — a saved profile may have been
@@ -5120,6 +5149,7 @@ export function createMezzoSession({
    *  meter shows (CSS keys off data-phase). */
   function setCalibratingPhase(phase) {
     if (calibratingScreenEl) calibratingScreenEl.dataset.phase = phase;
+    if (calibratingHeadingEl) calibratingHeadingEl.textContent = phase === 'listening' ? CALIBRATING_HEADING_LISTENING : CALIBRATING_HEADING_PREPARING;
     if (phase !== 'countdown' && calibratingCountEl) calibratingCountEl.textContent = '';
   }
 
@@ -5525,6 +5555,7 @@ export function createMezzoSession({
     // restoreDecisionFocus() below falls back to the selector trigger.
     const targetName = calibrationController.getTargetSnapshot()?.name;
     if (m1ReplaceBtn) m1ReplaceBtn.textContent = replaceButtonLabel(targetName);
+    if (m1BodyEl) m1BodyEl.textContent = recalibrationQuestion(targetName);
     layoutMode = LAYOUT_MODES.EXPANDED;
     if (pipDocument?.body) pipDocument.body.setAttribute('data-layout', LAYOUT_MODES.EXPANDED);
     resizeCompanionToContent(MEZZO_COMPANION_READY_SIZE);
@@ -5975,6 +6006,7 @@ export function createMezzoSession({
     selectorExpanded = false;
     m1ScreenEl = null;
     m1HeadingEl = null;
+    m1BodyEl = null;
     m1ReplaceBtn = null;
     m1KeepBtn = null;
     m1DiscardBtn = null;
@@ -6025,6 +6057,7 @@ export function createMezzoSession({
     levelMeter = null;
     calibratingHintEl = null;
     calibratingCountEl = null;
+    calibratingHeadingEl = null;
     stopCalibratingCountdown();
     stopPreparationCountdown();
     clearPreparingMessageTimers();

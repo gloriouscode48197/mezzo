@@ -131,16 +131,15 @@ test.describe('First-time copy and calibration-entry routing', () => {
     expect(scrollHeight).toBeLessThanOrEqual(clientHeight + 1);
   });
 
-  test('C2 shows the approved heading', async ({ page, context }) => {
+  test('C2\'s heading follows the phase: "Get ready" through the 3-2-1, then "Speak at your meeting volume"', async ({ page, context }) => {
     const pipPage = await openCompanion(page, context);
     await pipPage.locator('button:has-text("Create speaking profile")').click();
     await pipPage.locator('button:has-text("I\'m ready")').click();
 
     const calibratingScreen = pipPage.locator('.pip-screen-calibrating');
     await expect(calibratingScreen).toBeVisible();
-    await expect(calibratingScreen.locator('.pip-calibrating-heading')).toHaveText(
-      'Keep speaking at the level you want to maintain'
-    );
+    await expect(calibratingScreen.locator('.pip-calibrating-heading')).toHaveText('Get ready');
+    await expect(calibratingScreen.locator('.pip-calibrating-heading')).toHaveText('Speak at your meeting volume', { timeout: 8000 });
   });
 
   test('C0 shows the approved copy when microphone access is blocked, and Try again retries in-app', async ({ page, context }) => {
@@ -579,7 +578,7 @@ test.describe('Calibration-stall reliability correction (acquisition timeout)', 
     const style = (loc, props) => loc.evaluate((el, ps) => Object.fromEntries(ps.map((p) => [p, getComputedStyle(el)[p]])), props);
 
     const heading = screen.locator('.pip-calibrating-heading');
-    await expect(heading).toHaveText('Keep speaking at the level you want to maintain');
+    await expect(heading).toHaveText('Get ready');
     expect(await style(heading, ['fontSize', 'fontWeight', 'textAlign', 'color'])).toEqual({ fontSize: '20px', fontWeight: '500', textAlign: 'center', color: 'rgb(243, 235, 222)' });
 
     // No progress ring or voice circle any more.
@@ -608,7 +607,8 @@ test.describe('Calibration-stall reliability correction (acquisition timeout)', 
     await expect(status).toHaveText('');
     await expect(status).toHaveText('Listening… 6s', { timeout: 8000 });
     expect(await style(status, ['fontSize', 'fontWeight', 'color'])).toEqual({ fontSize: '15px', fontWeight: '500', color: 'rgb(206, 226, 196)' });
-    await expect(hint).toHaveText('Use the volume you want for your meetings.');
+    await expect(hint).toHaveText('Keep talking until the timer ends.');
+    await expect(heading).toHaveText('Speak at your meeting volume');
     await expect(meter).toBeVisible();
     await expect(count).toBeHidden();
     const meterBox = await meter.boundingBox();
@@ -1050,20 +1050,15 @@ test.describe('Companion heading punctuation audit (2026-08-16)', () => {
       localStorage.setItem('mezzoProfiles', JSON.stringify([
         { id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 200 },
       ]));
-      // The first/next-conversation heading is a one-way flag driven by
-      // whether Monitoring has ever actually started (getHasStartedMonitoring()),
-      // never by whether a saved profile exists — set it directly so this
-      // test can check the "next" phrasing without a real monitoring
-      // session (see setHasStartedMonitoring()'s own storage key).
+      // With a saved profile, Ready says "Ready when you are" (the "first
+      // conversation" heading is only for right after first setup).
       localStorage.setItem('mezzoHasStartedMonitoring', 'true');
     });
     const pipPage = await openCompanion(page, context);
     const readyScreen = pipPage.locator('.pip-screen-ready');
     await expect(readyScreen).toBeVisible();
 
-    // Ready — next-conversation phrasing (the "first" phrasing is checked
-    // separately below).
-    await expect(readyScreen.locator('.pip-ready-heading')).toHaveText('Ready for your next conversation');
+    await expect(readyScreen.locator('.pip-ready-heading')).toHaveText('Ready when you are');
 
     // C1, reached via Create new profile.
     await createNewProfileFromSelector(pipPage);
@@ -1077,9 +1072,7 @@ test.describe('Companion heading punctuation audit (2026-08-16)', () => {
     await recalibrateFromSelector(pipPage, 'Kitchen');
     const calibratingScreen = pipPage.locator('.pip-screen-calibrating');
     await expect(calibratingScreen).toBeVisible();
-    await expect(calibratingScreen.locator('.pip-calibrating-heading')).toHaveText(
-      'Keep speaking at the level you want to maintain'
-    );
+    await expect(calibratingScreen.locator('.pip-calibrating-heading')).toHaveText('Get ready');
     await calibratingScreen.locator('button:has-text("Cancel")').click();
     await expect(readyScreen).toBeVisible({ timeout: 3000 });
 
@@ -1088,9 +1081,11 @@ test.describe('Companion heading punctuation audit (2026-08-16)', () => {
     // test's own value is in sweeping every reachable heading in one pass
     // rather than each screen's copy test individually re-confirming it.
     const allHeadingTexts = [
-      'Ready for your next conversation',
+      'Ready when you are',
       'Create speaking profile',
-      'Keep speaking at the level you want to maintain',
+      'Get ready',
+      'Speak at your meeting volume',
+      'New calibration ready',
     ];
     for (const text of allHeadingTexts) {
       expect(text.endsWith('.')).toBe(false);
@@ -1124,7 +1119,7 @@ test.describe('Companion heading punctuation audit (2026-08-16)', () => {
     await pipPage.waitForTimeout(12000);
     const m1Screen = pipPage.locator('.pip-screen-m1');
     await expect(m1Screen).toBeVisible({ timeout: 15000 });
-    await expect(m1Screen.locator('.pip-decision-heading')).toHaveText('Your new speaking profile is ready');
+    await expect(m1Screen.locator('.pip-decision-heading')).toHaveText('New calibration ready');
   });
 
   test('C0\'s heading carries no terminal period (MIC_PERMISSION_DENIED, the only code that reaches C0 organically from a fresh Companion open)', async ({ page, context }) => {

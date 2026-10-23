@@ -1027,6 +1027,38 @@ test.describe('Migration: profiles saved before the speech-band filter (2026-10-
     expect(stored.map((p) => p.id)).toEqual(['old', 'new']);
   });
 
+  test('after Update, the sound-filter note clears: the profile now has a calibration peak', async ({ page, context }) => {
+    test.setTimeout(45000);
+    await page.addInitScript(() => {
+      if (sessionStorage.getItem('seeded')) return;
+      sessionStorage.setItem('seeded', '1');
+      localStorage.setItem('mezzoProfiles', JSON.stringify([{ id: 'old', name: 'Old office', speakingDb: -30, spreadDb: 4, calibratedTs: 1 }]));
+    });
+    const pipPage = await openCompanion(page, context);
+    const readyScreen = pipPage.locator('.pip-screen-ready');
+    const note = readyScreen.locator('.pip-ready-recalibrate-note');
+    await expect(note).toBeVisible();
+
+    await note.locator('.pip-inline-link').click();
+    const m1Screen = pipPage.locator('.pip-screen-m1');
+    await expect(m1Screen).toBeVisible({ timeout: 20000 });
+    await m1Screen.locator('.pip-decision-primary-btn', { hasText: 'Update "Old office"' }).click();
+
+    await expect(readyScreen).toBeVisible({ timeout: 5000 });
+    await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Old office');
+    await expect(note).toHaveCount(0);
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('mezzoProfiles')));
+    expect(stored).toHaveLength(1);
+    expect(stored[0].id).toBe('old');
+    expect(Number.isFinite(stored[0].peakDb)).toBe(true);
+
+    // And it stays cleared after reopening the Companion.
+    await page.locator('#btn-close-companion').click();
+    const reopened = await openCompanion(page, context);
+    await expect(reopened.locator('.pip-screen-ready .pip-ready-selector-trigger-name')).toHaveText('Old office');
+    await expect(reopened.locator('.pip-ready-recalibrate-note')).toHaveCount(0);
+  });
+
   test('the note\'s Recalibrate link starts recalibrating that profile', async ({ page, context }) => {
     await page.addInitScript(() => {
       const p = [{ id: 'old', name: 'Old office', speakingDb: -30, spreadDb: 4, calibratedTs: 1 }];

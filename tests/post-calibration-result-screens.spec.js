@@ -706,7 +706,7 @@ test.describe('"Your new speaking profile is ready" (Variant 1 — session mode)
   });
 });
 
-test.describe('"Your new speaking profile is ready" (Variant 2 — recalibrating a saved profile)', () => {
+test.describe('"New calibration ready" (Variant 2 — recalibrating a saved profile)', () => {
   test('recalibrating a saved profile shows the exact copy, the correct safely-rendered name in the primary button, and no Start monitoring', async ({ page, context }) => {
     await page.addInitScript(() => {
       localStorage.setItem('mezzoProfiles', JSON.stringify([
@@ -720,8 +720,8 @@ test.describe('"Your new speaking profile is ready" (Variant 2 — recalibrating
 
     const m1Screen = pipPage.locator('.pip-screen-m1');
     await expect(m1Screen).toBeVisible({ timeout: 15000 });
-    await expect(m1Screen.locator('.pip-decision-heading')).toHaveText('Your new speaking profile is ready');
-    await expect(m1Screen.locator('.pip-decision-body')).toHaveText('What would you like to do with it?');
+    await expect(m1Screen.locator('.pip-decision-heading')).toHaveText('New calibration ready');
+    await expect(m1Screen.locator('.pip-decision-body')).toHaveText('Save it to "Kitchen"?');
     await expect(m1Screen.locator('.pip-decision-primary-btn')).toHaveText('Update "Kitchen"');
     await expect(m1Screen.locator('.pip-decision-primary-btn')).toHaveAccessibleName('Update "Kitchen"');
     await expect(m1Screen.locator('.pip-decision-secondary-btn:not(.pip-decision-discard-btn)')).toHaveText('Keep temporarily');

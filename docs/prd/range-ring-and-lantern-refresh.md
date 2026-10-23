@@ -236,7 +236,7 @@ Revised 2026-10-22. The user must see live feedback that their voice is being ca
 
 Top to bottom, at the shared 380×364 pre-monitoring size (revised again 2026-10-22: a segmented level meter replaces the progress ring and voice circle):
 
-- **Heading:** "Keep speaking at the level you want to maintain". Geist 500, 20px, cream, centered, `text-wrap: balance`. When recalibrating a saved profile, the existing "Recalibrating {name}" mono label stays above it.
+- **Heading:** "Get ready" during the 3-2-1, then "Speak at your meeting volume" while listening. Geist 500, 20px, cream, centered, `text-wrap: balance`. When recalibrating a saved profile, the existing "Recalibrating {name}" mono label stays above it.
 - **Level meter**, centered about 52px below the heading:
   - Six segments, 34×14px, 6px gaps, 2px corners. Lit segments are sage (#CEE2C4); unlit ones are cream at 12%.
   - The lit count follows the live, filtered microphone level, eased like the Range Ring (150ms rise, 400ms fall), on the old meter's -55 to -30 dB scale, so normal speech lights about 3–4 segments.
@@ -245,9 +245,9 @@ Top to bottom, at the shared 380×364 pre-monitoring size (revised again 2026-10
   - Why a meter: it says "your voice is being picked up" without suggesting a target size or a range that doesn't exist yet. The ring and circle looked like Monitoring before there was anything to monitor.
 - **The 3-2-1**: only the countdown number (Geist 500, 36px, cream) in the meter's place, with "Stay quiet for a moment…" below; the meter is hidden while the room's noise is measured.
 - **Status**, 18px below the meter: "Preparing microphone…" (if acquiring is slow), empty during the 3-2-1, then "Listening… Ns" counting down. Sage, 15px, weight 500, `aria-hidden`. This is the only time cue.
-- **Hint**, 6px below: "Stay quiet for a moment…" during the 3-2-1, then "Use the volume you want for your meetings." 13px, muted (#B0AB9E).
+- **Hint**, 6px below: "Stay quiet for a moment…" during the 3-2-1, then "Keep talking until the timer ends." 13px, muted (#B0AB9E).
 
-*Changed during build: the meter showed during the 3-2-1 as a mic check, and the hints said "talk normally"; the 3-2-1 now asks for quiet (it measures the room), and the hint names the target: the volume you want for meetings.*
+*Changed during build: the meter showed during the 3-2-1 as a mic check, and the copy said "talk normally"; the 3-2-1 now asks for quiet (it measures the room), and the listening heading names the target: your meeting volume.*
 - **Cancel**, a sage text link pinned to the bottom. Behavior unchanged.
 - **Room noise** is measured from the 3-2-1's readings (§5.6) and saved with the profile.
 
@@ -398,7 +398,7 @@ This makes the refresh reviewable as small, safe steps and leaves one place to c
 2. **Band maximum.** At what dB over the end of range should the band reach full thickness? The ring experiment used about +4 dB.
 3. **Live-region debounce.** Confirm about 1 second and "into/out of Outside range only" with a screen-reader user if possible.
 4. **Sustained drift.** Keep `SUSTAINED_DRIFT_MS` as a separate effect, or fold it into band intensity?
-5. **Calibrating.** Resolved 2026-10-22: a six-segment level meter that follows the voice, with "Use the volume you want for your meetings." (§8). It replaced a progress ring with a voice circle inside.
+5. **Calibrating.** Resolved 2026-10-22: a six-segment level meter that follows the voice, with "Speak at your meeting volume" / "Keep talking until the timer ends." (§8). It replaced a progress ring with a voice circle inside.
 6. **Website chartreuse buttons.** Confirmed in design; revisit if it ever causes confusion with the in-product nudge.
 
 ---
