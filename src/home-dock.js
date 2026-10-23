@@ -334,21 +334,100 @@ export function initHomeDock({
   function handleSessionStateChange(state) {
     if (state === session.SESSION_STATES.COMPANION_CLOSED) {
       running = false;
+      // Closed by something other than Close Companion (another mini
+      // window, such as Meet's, or the Companion's own ✕): stay on the
+      // cream page and offer to reopen it.
+      if (session.hasReopenOffer?.()) {
+        showRunningVariant('closed');
+        if (runningLiveEl) runningLiveEl.textContent = 'The Companion closed.';
+        return;
+      }
       if (runningLiveEl) runningLiveEl.textContent = '';
-      transitionToState('home');
-      if (pipSupported) refreshMicState();
+      goHome();
       return;
     }
     transitionToState('dock');
+    showRunningVariant('open');
     if (!running) {
       running = true;
       if (runningLiveEl) runningLiveEl.textContent = 'Mezzo is running.';
     }
   }
 
+  function goHome() {
+    transitionToState('home');
+    if (pipSupported) refreshMicState();
+  }
+
+  // ── The running page's two variants: the Companion open, or closed with
+  //    a reopen offer. Same page, same cream surface. ──
+  const RUNNING_COPY = {
+    open: {
+      label: 'Companion open',
+      heading: 'Mezzo is running',
+      body: "Your Companion is open in its own window. Switch to your meeting whenever you're ready.",
+    },
+    closed: {
+      label: 'Companion closed',
+      heading: 'The Companion closed',
+      body: "Another mini window, like Meet's, may have closed it. Reopen it to pick up where you left off.",
+    },
+  };
+  function showRunningVariant(variant) {
+    if (!stateDock) return;
+    const copy = RUNNING_COPY[variant];
+    stateDock.dataset.variant = variant;
+    const set = (sel, text) => { const el = stateDock.querySelector(sel); if (el) el.textContent = text; };
+    set('.running-label-text', copy.label);
+    set('.running-heading', copy.heading);
+    set('.running-body', copy.body);
+    const reopen = stateDock.querySelector('.running-reopen');
+    if (reopen) reopen.hidden = variant !== 'closed';
+    if (btnCloseCompanion) btnCloseCompanion.hidden = variant === 'closed';
+    renderMeetTip();
+  }
+
+  async function handleReopenClick() {
+    // A real click: Document PiP needs it to open the window.
+    await session.reopenCompanion();
+  }
+
+  function handleReopenDoneClick() {
+    session.dismissReopenOffer();
+    if (runningLiveEl) runningLiveEl.textContent = '';
+    goHome();
+  }
+
+  // ── The one-time Meet tip. The extension opens Mezzo with ?from=meet when
+  //    it was launched from a Meet call; that's remembered, the tip shows on
+  //    the running page until dismissed, and never again after. ──
+  const MEET_DETECTED_KEY = 'mezzoMeetDetected';
+  const MEET_TIP_DISMISSED_KEY = 'mezzoMeetTipDismissed';
+  const readFlag = (key) => { try { return localStorage.getItem(key) === '1'; } catch { return false; } };
+  const writeFlag = (key) => { try { localStorage.setItem(key, '1'); } catch { /* storage unavailable */ } };
+  try {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('from') === 'meet') {
+      writeFlag(MEET_DETECTED_KEY);
+      url.searchParams.delete('from');
+      window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+    }
+  } catch { /* no usable URL: nothing to remember */ }
+  function renderMeetTip() {
+    const tip = stateDock?.querySelector('.running-tip');
+    if (tip) tip.hidden = !(readFlag(MEET_DETECTED_KEY) && !readFlag(MEET_TIP_DISMISSED_KEY));
+  }
+  function handleMeetTipDismiss() {
+    writeFlag(MEET_TIP_DISMISSED_KEY);
+    renderMeetTip();
+  }
+
   btnEnableMicrophone?.addEventListener('click', handleEnableMicrophoneClick);
   btnOpenCompanion?.addEventListener('click', handleLaunchCompanionClick);
   btnCloseCompanion?.addEventListener('click', handleCloseCompanionClick);
+  stateDock?.querySelector('#btn-reopen-companion')?.addEventListener('click', handleReopenClick);
+  stateDock?.querySelector('#btn-reopen-done')?.addEventListener('click', handleReopenDoneClick);
+  stateDock?.querySelector('#btn-meet-tip-dismiss')?.addEventListener('click', handleMeetTipDismiss);
 
   // PiP support is a static browser capability, not something that changes
   // at runtime — decided once, here, rather than re-checked per interaction.

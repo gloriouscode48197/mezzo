@@ -331,6 +331,7 @@ describe('createMezzoSession construction', () => {
     const expectedKeys = [
       'SESSION_STATES', 'getSessionState', 'subscribe', 'isPipSupported',
       'init', 'requestMicrophoneAccess', 'startMonitoring', 'stopMonitoring', 'endSession',
+      'hasReopenOffer', 'reopenCompanion', 'dismissReopenOffer', // Reopen Companion (2026-10-23)
     ];
     assert.deepStrictEqual(Object.keys(session).sort(), expectedKeys.sort());
   });

@@ -426,6 +426,46 @@ body {
   text-underline-offset: 2px;
   cursor: pointer;
 }
+/* Reopen Companion: a charcoal button with cream text, Done beside it. */
+.running-reopen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  margin-top: 24px;
+}
+.running-reopen[hidden] { display: none; }
+.running-reopen-btn {
+  padding: 12px 22px;
+  border: none;
+  border-radius: var(--radius-control);
+  background: var(--color-text);
+  color: var(--color-bg);
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+.running-reopen-btn:hover { background: color-mix(in srgb, var(--color-text) 88%, var(--color-bg)); }
+.running-reopen .running-done { margin-top: 0; }
+
+/* The one-time Meet tip. */
+.running-tip {
+  max-width: 420px;
+  margin: 32px auto 0;
+  padding: 14px 18px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  text-align: left;
+}
+.running-tip-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+.running-tip .running-tip-dismiss { margin-top: 8px; }
+
 .running-live {
   position: absolute;
   width: 1px;

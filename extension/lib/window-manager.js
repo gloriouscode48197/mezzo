@@ -75,6 +75,12 @@ export const MezzoWindowManager = {
     return createWindow(url, focused, senderTabId);
   },
 
+  /** The Mezzo window, if it's open (the popup's "running" state). */
+  getExistingWindow: getValidExistingWindow,
+
+  /** Focuses the Mezzo window, restoring it if minimized. */
+  focusWindow,
+
   /** Clear the stored reference (called from the onRemoved listener). */
   async clearIfMatches(windowId) {
     const stored = await getStoredWindowId();
@@ -82,6 +88,6 @@ export const MezzoWindowManager = {
   },
 };
 
-chrome.windows.onRemoved.addListener((windowId) => {
+globalThis.chrome?.windows?.onRemoved?.addListener((windowId) => {
   MezzoWindowManager.clearIfMatches(windowId);
 });

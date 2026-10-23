@@ -170,7 +170,8 @@
       // auto-starts monitoring, so there's no meaningful distinction left
       // between "start with last profile" and "let me pick a profile"
       // (both land in the same place); background.js clears the badge too.
-      sendMessageSafely({ type: 'OPEN_MEZZO', focused: false });
+      // platform: lets Mezzo show its one-time Meet tip (see background.js).
+      sendMessageSafely({ type: 'OPEN_MEZZO', focused: false, platform: platform.name });
       removeBanner();
     });
     const dismiss = () => {

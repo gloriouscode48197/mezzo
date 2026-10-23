@@ -1,20 +1,47 @@
 /**
- * Mezzo extension popup — same palette as the web app's design tokens,
- * hardcoded here rather than fetched (extension pages shouldn't depend on
- * a remote stylesheet loading in time, and Google Fonts isn't declared in
- * the manifest's CSP) — system serif/sans stand in for Noto Serif JP/Sora.
+ * Mezzo extension popup — the Lantern palette and type, matching the web
+ * app's design tokens (design-tokens/mezzo-tokens.css). Hardcoded here
+ * rather than fetched: extension pages shouldn't depend on a remote
+ * stylesheet, and the manifest's content security policy doesn't allow
+ * Google Fonts, so Geist and Geist Mono are bundled (fonts/, SIL Open Font
+ * License).
  */
 
-* {
-  box-sizing: border-box;
+@font-face {
+  font-family: 'Geist';
+  src: url('fonts/geist-latin.woff2') format('woff2');
+  font-weight: 400 600;
+  font-display: swap;
 }
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('fonts/geist-mono-latin.woff2') format('woff2');
+  font-weight: 400 500;
+  font-display: swap;
+}
+
+:root {
+  --color-bg: #2D2E31;        /* charcoal */
+  --color-text: #F3EBDE;      /* cream */
+  --color-text-muted: #B0AB9E;
+  --color-accent: #DEDE65;    /* chartreuse */
+  --color-on-accent: #2D2E31;
+  --color-link: #CEE2C4;      /* sage */
+  --radius-control: 3px;
+  --font-body: 'Geist', system-ui, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, monospace;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
 
 body {
   margin: 0;
   width: 280px;
-  background: #F0EBE2;
-  color: #3C3B3F;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
 }
 
 .popup {
@@ -22,76 +49,123 @@ body {
   flex-direction: column;
   align-items: center;
   text-align: center;
-  padding: 24px 20px;
+  padding: 24px 20px 18px;
+}
+
+.popup-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
 }
 
 .wordmark {
-  font-family: Georgia, "Iowan Old Style", "Times New Roman", serif;
-  font-weight: 400;
-  font-size: 22px;
-  margin: 0 0 6px;
-  color: #3C3B3F;
+  margin: 0;
+  font-weight: 600;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: -0.045em;
+  text-transform: lowercase;
+  color: var(--color-text);
 }
 
-.tagline {
-  font-size: 12px;
-  line-height: 150%;
-  color: #6B6560;
-  margin: 0 0 20px;
+.open-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-link);
+}
+.open-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-link);
 }
 
-.btn-primary {
+.state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   width: 100%;
+}
+
+.lede {
+  margin: 0 0 18px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+  text-wrap: pretty;
+}
+
+.btn-primary,
+.btn-outline {
+  width: 100%;
+  padding: 11px 18px;
+  border-radius: var(--radius-control);
+  font-family: var(--font-body);
   font-size: 14px;
   font-weight: 500;
-  color: #F0EBE2;
-  background: #C4593A;
-  padding: 11px 20px;
-  border: none;
-  border-radius: 100px;
   cursor: pointer;
-  transition: background-color 0.2s ease;
 }
+.btn-primary {
+  border: none;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+.btn-primary:hover { background: color-mix(in srgb, var(--color-accent) 86%, var(--color-text)); }
+.btn-outline {
+  border: 1px solid color-mix(in srgb, var(--color-text) 30%, transparent);
+  background: transparent;
+  color: var(--color-text);
+}
+.btn-outline:hover { background: color-mix(in srgb, var(--color-text) 8%, transparent); }
 
-.btn-primary:hover {
-  background: #AE4D31;
+.note {
+  margin: 10px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--color-text-muted);
 }
 
 .popup-links {
   display: flex;
   align-items: center;
   gap: 16px;
-  margin-top: 16px;
+  margin-top: 18px;
 }
 
 .popup-link {
-  font-size: 12px;
-  color: #C4593A;
-  text-decoration: none;
-  background: none;
-  border: none;
   padding: 0;
+  border: none;
+  background: none;
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--color-link);
+  text-decoration: none;
   cursor: pointer;
-  font-family: inherit;
 }
+.popup-link:hover { text-decoration: underline; }
 
-.popup-link:hover {
-  text-decoration: underline;
+:focus-visible {
+  outline: 2px solid var(--color-link);
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
 .settings-panel {
   width: 100%;
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid #D8D0C3;
-}
-
-.settings-panel.hidden {
-  display: none;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid color-mix(in srgb, var(--color-text) 12%, transparent);
 }
 
 .settings-note {
-  font-size: 12px;
-  color: #8A827A;
   margin: 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
 }

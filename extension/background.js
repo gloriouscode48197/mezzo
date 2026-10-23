@@ -31,7 +31,9 @@ const MEZZO_BASE_URL = 'https://mezzo-one.vercel.app';
 const MEZZO_ENTRY_URL = `${MEZZO_BASE_URL}/index.html`;
 
 const BADGE_TEXT = '●'; // ● — an ambient "something's here" cue, not an alarm
-const BADGE_COLOR = '#C4593A'; // Mezzo's hanko accent
+// Lantern palette: a chartreuse dot on charcoal.
+const BADGE_COLOR = '#2D2E31';
+const BADGE_TEXT_COLOR = '#DEDE65';
 
 /**
  * Open Mezzo, or refocus/restore the existing window. It always lands on
@@ -42,8 +44,11 @@ const BADGE_COLOR = '#C4593A'; // Mezzo's hanko accent
  * used for meeting-prompt launches so the meeting stays undisturbed
  * whenever possible.
  */
-async function openMezzo({ focused = true, senderTabId = null } = {}) {
-  await MezzoWindowManager.openOrFocus({ url: MEZZO_ENTRY_URL, focused, senderTabId });
+async function openMezzo({ focused = true, senderTabId = null, platform = null } = {}) {
+  // Launched from a Meet call: Mezzo shows a one-time tip about Meet's own
+  // mini window (see src/home-dock.js). Only used when the window is new.
+  const url = platform === 'Google Meet' ? `${MEZZO_ENTRY_URL}?from=meet` : MEZZO_ENTRY_URL;
+  await MezzoWindowManager.openOrFocus({ url, focused, senderTabId });
 }
 
 function setBadge(tabId, active) {
@@ -51,6 +56,7 @@ function setBadge(tabId, active) {
   chrome.action.setBadgeText({ tabId, text: active ? BADGE_TEXT : '' });
   if (active) {
     chrome.action.setBadgeBackgroundColor({ tabId, color: BADGE_COLOR });
+    chrome.action.setBadgeTextColor?.({ tabId, color: BADGE_TEXT_COLOR });
   }
 }
 
@@ -64,6 +70,7 @@ chrome.runtime.onMessage.addListener((message, sender) => {
     openMezzo({
       focused: message.focused,
       senderTabId: sender?.tab?.id ?? null,
+      platform: message.platform ?? null,
     });
     if (sender?.tab?.id) setBadge(sender.tab.id, false);
   }

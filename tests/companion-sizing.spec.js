@@ -334,6 +334,9 @@ test.describe('Companion: preferInitialWindowPlacement on every open and reopen 
     await expect(pipPage.locator('.pip-screen-ready')).toBeVisible();
 
     await pipPage.close();
+    // A native close offers Reopen Companion; Done drops the offer (and any
+    // Temporary profile) and returns to Home.
+    await page.locator('#btn-reopen-done').click();
     await expect(page.locator('#btn-open-companion')).toBeVisible({ timeout: 10000 });
 
     const pipWindowPromise = context.waitForEvent('page');
@@ -403,6 +406,9 @@ test.describe('Companion: preferInitialWindowPlacement on every open and reopen 
     // handlePipClose()) — Kitchen's saved calibration is untouched, so the
     // reopened Companion lands back on Ready with it still selected.
     await pipPage.close();
+    // A native close offers Reopen Companion; Done drops the offer (and any
+    // Temporary profile) and returns to Home.
+    await page.locator('#btn-reopen-done').click();
     await expect(page.locator('#btn-open-companion')).toBeVisible({ timeout: 10000 });
 
     const pipWindowPromise = context.waitForEvent('page');
@@ -433,6 +439,9 @@ test.describe('Companion: preferInitialWindowPlacement on every open and reopen 
     // see handlePipClose()'s unconditional unsavedProfile = null), so the
     // reopened Companion has nothing usable and lands back on Welcome.
     await pipPage.close();
+    // A native close offers Reopen Companion; Done drops the offer (and any
+    // Temporary profile) and returns to Home.
+    await page.locator('#btn-reopen-done').click();
     await expect(page.locator('#btn-open-companion')).toBeVisible({ timeout: 10000 });
 
     const pipWindowPromise = context.waitForEvent('page');
@@ -460,6 +469,9 @@ test.describe('Companion: preferInitialWindowPlacement on every open and reopen 
     await expect(pipPage.locator('.pip-screen-calibrating')).toBeVisible({ timeout: 5000 });
 
     await pipPage.close();
+    // A native close offers Reopen Companion; Done drops the offer (and any
+    // Temporary profile) and returns to Home.
+    await page.locator('#btn-reopen-done').click();
     await expect(page.locator('#btn-open-companion')).toBeVisible({ timeout: 10000 });
 
     const pipWindowPromise = context.waitForEvent('page');

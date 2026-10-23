@@ -6,22 +6,35 @@
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <div class="popup">
-    <h1 class="wordmark">Mezzo</h1>
-    <p class="tagline">No recording. No transcription. Just volume.</p>
-
-    <button id="btn-open-monitoring" class="btn-primary">Open Companion</button>
-
-    <div class="popup-links">
-      <a id="link-privacy" class="popup-link" href="#">Privacy</a>
-      <button id="btn-settings" class="popup-link popup-link-button" type="button">Settings</button>
+  <main class="popup" data-state="not-running">
+    <div class="popup-head">
+      <h1 class="wordmark">mezzo</h1>
+      <p class="open-label" hidden><span class="open-dot" aria-hidden="true"></span>Open</p>
     </div>
 
-    <div id="settings-panel" class="settings-panel hidden">
+    <!-- Not running: Mezzo has no window open. -->
+    <section class="state state-not-running">
+      <p class="lede">A gentle nudge when you're talking louder than you'd like.</p>
+      <button id="btn-open-mezzo" type="button" class="btn-primary">Open Mezzo</button>
+      <p class="note">Opens in its own window. Only measures volume.</p>
+    </section>
+
+    <!-- Running: Mezzo's window exists. -->
+    <section class="state state-running" hidden>
+      <p class="lede">Mezzo is open in its own window.</p>
+      <button id="btn-show-mezzo" type="button" class="btn-outline">Show Mezzo window</button>
+    </section>
+
+    <nav class="popup-links" aria-label="More">
+      <a id="link-privacy" class="popup-link" href="#">Privacy</a>
+      <button id="btn-settings" class="popup-link" type="button" aria-expanded="false" aria-controls="settings-panel">Settings</button>
+    </nav>
+
+    <div id="settings-panel" class="settings-panel" hidden>
       <p class="settings-note">More settings coming soon.</p>
     </div>
-  </div>
+  </main>
 
-  <script src="popup.js"></script>
+  <script src="popup.js" type="module"></script>
 </body>
 </html>

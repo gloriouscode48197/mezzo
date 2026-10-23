@@ -31,10 +31,13 @@ import { expect } from '@playwright/test';
 /**
  * @param {import('@playwright/test').Page} page
  * @param {import('@playwright/test').BrowserContext} context
+ * @param {{ skipNavigation?: boolean }} [options]
  * @returns {Promise<import('@playwright/test').Page>} the Companion's own page
  */
-export async function openCompanion(page, context) {
-  await page.goto('/index.html');
+export async function openCompanion(page, context, { skipNavigation = false } = {}) {
+  // skipNavigation: the test already loaded the page it needs (e.g. with a
+  // query string) and wants the Companion opened from there.
+  if (!skipNavigation) await page.goto('/index.html');
   await context.grantPermissions(['microphone'], { origin: new URL(page.url()).origin });
 
   // Waits for whichever of Home's two reachable-from-here mic sub-states

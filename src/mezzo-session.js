@@ -631,6 +631,16 @@ export function createMezzoSession({
   let activeProfile = null;
   let isMonitoringActive = false;
   let isPageUnloading = false;
+  // Reopen Companion (2026-10-23). Only endSession() (Home's Close Companion
+  // link) closes the Companion on purpose from this page's side; the
+  // native ✕ and being replaced by another picture-in-picture window (Meet's
+  // mini window, screen sharing) look the same from inside, so either of
+  // those leaves a reopen offer: the profile (an unsaved one included, still
+  // in memory only) and whether monitoring was running. Home shows Reopen
+  // and Done; Reopen restores both, Done drops the offer.
+  let closingOnPurpose = false;
+  let reopenOffer = null;     // { profile, unsaved, resumeMonitoring } | null
+  let pendingRestore = null;  // the offer being reopened, read once the window exists
 
   // Explicit, Companion-internal — never inferred from pipWindow's actual
   // dimensions. Only meaningful while sessionState is monitoringActive;
@@ -3876,17 +3886,52 @@ export function createMezzoSession({
     // profile count itself; every open lands there, never straight into
     // Monitoring.
     activeProfile = resolveActiveProfile();
+    const restore = pendingRestore;
+    pendingRestore = null;
+    if (restore) {
+      // Reopen: the same profile as before the close, the unsaved one too.
+      unsavedProfile = restore.unsaved ?? null;
+      activeProfile = restore.profile ?? activeProfile;
+    }
     enterPipReadyMode();
+    // Reopen after an involuntary close picks up where it left off: if
+    // monitoring was running, it starts again with the same profile. A
+    // fresh open from Home always stops at Welcome or Ready.
+    if (restore?.resumeMonitoring && activeProfile) await resumeMonitoringFromPipReady();
 
     return true;
   }
 
+  /** Whether the Companion closed in a way Home should offer to undo (see
+   *  reopenOffer). */
+  function hasReopenOffer() {
+    return reopenOffer !== null;
+  }
+
+  /** Reopen Companion: from Home's click (Document PiP needs it), with the
+   *  profile and monitoring state the close interrupted. */
+  async function reopenCompanion() {
+    if (!reopenOffer) return startMonitoring();
+    pendingRestore = reopenOffer;
+    reopenOffer = null;
+    const opened = await startMonitoring();
+    if (!opened) pendingRestore = null;
+    return opened;
+  }
+
+  /** Done: the person doesn't want the Companion back. */
+  function dismissReopenOffer() {
+    reopenOffer = null;
+  }
+
   /** Full teardown: stop monitoring, release the mic, close the Companion. */
   function endSession() {
+    reopenOffer = null;
     calibrationController.cancel(); // safe from any status, including idle — covers ending mid-calibration
     if (isMonitoringActive) teardownMonitoringEngine();
     activeCircle = null;
     if (pipWindow) {
+      closingOnPurpose = true; // read by handlePipClose(): this close is not offered back
       try { pipWindow.close(); } catch { /* ignore */ }
     }
     sessionState.set(SESSION_STATES.COMPANION_CLOSED);
@@ -5904,6 +5949,11 @@ export function createMezzoSession({
   function handlePipClose() {
     const wasActive = isMonitoringActive; // capture before teardownMonitoringEngine clears it
     const wasTemporary = isTemporaryProfile(activeProfile);
+    const onPurpose = closingOnPurpose;
+    closingOnPurpose = false;
+    if (!onPurpose && !isPageUnloading) {
+      reopenOffer = { profile: activeProfile, unsaved: unsavedProfile, resumeMonitoring: wasActive };
+    }
 
     // Covers every state the Companion could have been in when it closed —
     // idle/Ready (a harmless no-op), mid-Calibrating (stops capture,
@@ -6084,5 +6134,8 @@ export function createMezzoSession({
     startMonitoring,
     stopMonitoring,
     endSession,
+    hasReopenOffer,
+    reopenCompanion,
+    dismissReopenOffer,
   };
 }

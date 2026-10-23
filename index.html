@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="design-tokens/mezzo-tokens.css?v=13">
-  <link rel="stylesheet" href="landing.css?v=18">
+  <link rel="stylesheet" href="landing.css?v=19">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" sizes="16x16" href="icons/icon-16.svg">
   <link rel="icon" type="image/svg+xml" sizes="32x32" href="icons/icon-32.svg">
@@ -243,17 +243,28 @@
          those live inside the Companion. ── -->
     <main id="state-dock" class="state-view page-content state-running hidden">
       <div class="state-col running-col">
-        <p class="running-label"><span class="running-dot" aria-hidden="true"></span>Companion open</p>
-        <h1 class="type-section-heading state-heading">Mezzo is running</h1>
+        <p class="running-label"><span class="running-dot" aria-hidden="true"></span><span class="running-label-text">Companion open</span></p>
+        <h1 class="type-section-heading state-heading running-heading">Mezzo is running</h1>
         <p class="type-body running-body">Your Companion is open in its own window. Switch to your meeting whenever you're ready.</p>
         <p class="type-microcopy running-privacy">Mezzo only measures volume. Nothing you say is recorded.</p>
+        <!-- After an involuntary close (another mini window, or its own ✕):
+             reopen it, or say you're done. See src/home-dock.js. -->
+        <div class="running-reopen" hidden>
+          <button id="btn-reopen-companion" type="button" class="running-reopen-btn">Reopen Companion</button>
+          <button id="btn-reopen-done" type="button" class="running-close running-done">Done</button>
+        </div>
         <button id="btn-close-companion" type="button" class="running-close">Close Companion</button>
+        <!-- Shown once, after a launch from a Meet call, until dismissed. -->
+        <aside class="running-tip" hidden aria-label="Tip">
+          <p class="running-tip-text">Meet may open its own mini window when you switch tabs or share your screen, which closes Mezzo's. You can turn it off in Meet's site settings: Automatic picture-in-picture.</p>
+          <button id="btn-meet-tip-dismiss" type="button" class="running-close running-tip-dismiss">Got it</button>
+        </aside>
         <p id="running-live" class="running-live" role="status" aria-live="polite"></p>
       </div>
     </main>
 
   </div>
 
-  <script src="landing.js?v=4" type="module"></script>
+  <script src="landing.js?v=5" type="module"></script>
 </body>
 </html>

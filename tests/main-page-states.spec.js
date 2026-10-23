@@ -348,3 +348,84 @@ test.describe('Main page: How it works layout (2026-10-22)', () => {
     expect(await css('.home-how-intro', 'textAlign')).not.toBe('center');
   });
 });
+
+test.describe('Main page: Reopen Companion and the Meet tip (2026-10-23)', () => {
+  const PROFILE = [{ id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 100, peakDb: 2 }];
+
+  test('closed by something else (another mini window, or its own ✕): the cream page offers Reopen, which brings monitoring back with the same profile', async ({ page, context }) => {
+    await page.addInitScript((p) => localStorage.setItem('mezzoProfiles', JSON.stringify(p)), PROFILE);
+    let pipPage = await openCompanion(page, context);
+    await pipPage.locator('.pip-ready-start-btn').click();
+    await expect(pipPage.locator('.pip-screen-monitoring')).toBeVisible({ timeout: 5000 });
+
+    // Another picture-in-picture window would close it the same way.
+    await pipPage.close();
+    const running = page.locator('#state-dock');
+    await expect(running).toBeVisible();
+    await expect(page.locator('body')).toHaveAttribute('data-surface', 'cream');
+    await expect(running.locator('.running-label')).toHaveText('Companion closed');
+    await expect(running.locator('h1')).toHaveText('The Companion closed');
+    const reopen = running.locator('#btn-reopen-companion');
+    await expect(reopen).toBeVisible();
+    await page.mouse.move(0, 0); // off the button (the last click left the pointer where it now sits)
+    await expect(reopen).toHaveCSS('background-color', 'rgb(45, 46, 49)'); // charcoal
+    await expect(reopen).toHaveCSS('color', 'rgb(243, 235, 222)');         // cream
+    await expect(running.locator('#btn-reopen-done')).toBeVisible();
+    await expect(running.locator('#btn-close-companion')).toBeHidden();
+    await expect(page.locator('#running-live')).toHaveText('The Companion closed.');
+
+    const pipPromise = context.waitForEvent('page');
+    await reopen.click();
+    pipPage = await pipPromise;
+    await expect(pipPage.locator('.pip-screen-monitoring')).toBeVisible({ timeout: 8000 });
+    await expect(pipPage.locator('.pip-profile-info')).toHaveText('Kitchen');
+    await expect(running.locator('h1')).toHaveText('Mezzo is running');
+    await expect(running.locator('#btn-reopen-companion')).toBeHidden();
+    await expect(running.locator('#btn-close-companion')).toBeVisible();
+  });
+
+  test('Done drops the offer and returns to the dark granted page', async ({ page, context }) => {
+    await page.addInitScript((p) => localStorage.setItem('mezzoProfiles', JSON.stringify(p)), PROFILE);
+    const pipPage = await openCompanion(page, context);
+    await expect(pipPage.locator('.pip-screen-ready')).toBeVisible({ timeout: 10000 });
+    await pipPage.close();
+    await page.locator('#btn-reopen-done').click();
+    await expect(page.locator('#mic-granted')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('body')).toHaveAttribute('data-surface', 'dark');
+  });
+
+  test('Close Companion (on purpose) never offers Reopen: straight back to the granted page', async ({ page, context }) => {
+    await page.addInitScript((p) => localStorage.setItem('mezzoProfiles', JSON.stringify(p)), PROFILE);
+    const pipPage = await openCompanion(page, context);
+    await expect(pipPage.locator('.pip-screen-ready')).toBeVisible({ timeout: 10000 });
+    await page.locator('#btn-close-companion').click();
+    await expect(page.locator('#mic-granted')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('#btn-reopen-companion')).toBeHidden();
+  });
+
+  test('the Meet tip: shown on the running page after a launch from a Meet call, until dismissed, then never again', async ({ page, context }) => {
+    await page.addInitScript((p) => localStorage.setItem('mezzoProfiles', JSON.stringify(p)), PROFILE);
+    await page.goto('/index.html?from=meet');
+    await expect(page).toHaveURL(/\/index\.html$/); // the flag is read and removed from the address
+    let pipPage = await openCompanion(page, context, { skipNavigation: true });
+    await expect(pipPage.locator('.pip-screen-ready')).toBeVisible({ timeout: 10000 });
+    const tip = page.locator('#state-dock .running-tip');
+    await expect(tip).toBeVisible();
+    await expect(tip).toHaveText(/Meet may open its own mini window when you switch tabs or share your screen, which closes Mezzo's\. You can turn it off in Meet's site settings: Automatic picture-in-picture\./);
+    await tip.locator('#btn-meet-tip-dismiss').click();
+    await expect(tip).toBeHidden();
+
+    await page.locator('#btn-close-companion').click();
+    await expect(page.locator('#mic-granted')).toBeVisible({ timeout: 5000 });
+    pipPage = await openCompanion(page, context);
+    await expect(pipPage.locator('.pip-screen-ready')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('#state-dock .running-tip')).toBeHidden();
+  });
+
+  test('no tip without a Meet launch', async ({ page, context }) => {
+    await page.addInitScript((p) => localStorage.setItem('mezzoProfiles', JSON.stringify(p)), PROFILE);
+    const pipPage = await openCompanion(page, context);
+    await expect(pipPage.locator('.pip-screen-ready')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('#state-dock .running-tip')).toBeHidden();
+  });
+});
