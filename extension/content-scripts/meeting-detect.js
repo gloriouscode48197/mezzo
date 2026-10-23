@@ -81,9 +81,9 @@
 
     loadBannerFonts();
     const shadow = bannerHost.attachShadow({ mode: 'closed' });
-    // Lantern, matching the extension popup: a charcoal card, the
-    // chartreuse ring from Mezzo's icon, a chartreuse primary button with
-    // 3px corners, and a sage text link.
+    // Lantern, matching the extension popup: a charcoal card, a cream
+    // ring, a cream primary button with 3px corners, and a sage text link.
+    // No chartreuse: it's reserved for the nudge (Outside range).
     shadow.innerHTML = `
       <style>
         :host { all: initial; }
@@ -108,7 +108,7 @@
           height: 22px;
           box-sizing: border-box;
           border-radius: 50%;
-          border: 3px solid #DEDE65;
+          border: 3px solid #F3EBDE;
           margin-top: 1px;
         }
         .body { flex: 1; min-width: 0; }
@@ -131,12 +131,12 @@
           padding: 9px 16px;
           border: none;
           border-radius: 3px;
-          background: #DEDE65;
+          background: #F3EBDE;
           color: #2D2E31;
           font-size: 13px;
           font-weight: 500;
         }
-        .btn-start:hover { background: #E6E68A; }
+        .btn-start:hover { background: #F3EBDE; } /* never dimmed: cream stays cream */
         .btn-dismiss {
           padding: 0;
           border: none;

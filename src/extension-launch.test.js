@@ -193,8 +193,11 @@ describe('extension: meeting banner', () => {
   const src = readFileSync(new URL('../extension/content-scripts/meeting-detect.js', import.meta.url), 'utf8');
   const manifest = JSON.parse(readFileSync(new URL('../extension/manifest.json', import.meta.url), 'utf8'));
 
-  it('is Lantern: charcoal card, chartreuse ring and button with 3px corners, sage link; no serif or hanko orange', () => {
-    for (const c of ['#2D2E31', '#DEDE65', '#CEE2C4', '#F3EBDE']) assert.ok(src.includes(c), c);
+  it('is Lantern: charcoal card, cream ring and cream button with 3px corners, sage link; no chartreuse, serif or hanko orange', () => {
+    for (const c of ['#2D2E31', '#CEE2C4', '#F3EBDE']) assert.ok(src.includes(c), c);
+    // Chartreuse is reserved for the nudge (Outside range): never buttons or UI chrome.
+    for (const c of ['#dede65', '#e6e68a']) assert.ok(!src.toLowerCase().includes(c), `no ${c} in the banner`);
+    assert.match(src, /\.btn-start \{[^}]*background: #F3EBDE;[^}]*color: #2D2E31;/);
     assert.match(src, /border-radius: 3px/);
     for (const old of ['Georgia', '#C4593A', '#F0EBE2', '#AE4D31', '100px']) assert.ok(!src.includes(old), old);
   });
