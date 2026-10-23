@@ -1607,27 +1607,10 @@ export function createMezzoSession({
          inline delete/discard) has no equivalent in a native select.
          Reference-matched (Batch 2): a centered, borderless pill — border:0
          explicitly, not a low-contrast border left to read as invisible.
-         Surface (2026-08-20, restored after manual review found multiple
-         contrast failures in the #57524A lightening below — see this
-         file's own history: #222222 (Batch 2) -> #333333 (a same-day
-         "first pass," rejected then as reading too dark) -> #57524A (the
-         lightening this correction reverts). #57524A's own trigger/row
-         text contrast (5.20:1) looked fine in isolation, but several
-         *other* selector elements that keep their color unchanged when the
-         surface lightens quietly failed against it: --hanko-fill as a
-         foreground (the row-check mark, the Create new profile text, both
-         focus outlines) dropped to 1.78-2.91:1, and the row-action icons'
-         idle muted color dropped to ~1.9:1 — well under both the 4.5:1
-         text and 3:1 icon/indicator thresholds. #333333 is the confirmed,
-         re-accepted value (not #222222): row/trigger text
-         (rgba(222,210,194,0.92)) against it is 7.45:1. See the row-check/
-         footer-action/row-action rules below for the three foreground
-         colors that needed their own small, same-hue-family adjustment to
-         clear AA now that they sit on this darker surface again — those
-         adjustments are new; the surface reversion itself is not.
-         .pip-ready-selector-panel below shares this exact value so the
-         closed trigger and its expanded panel still read as one
-         component. */
+         Surface: the menu layer (--color-bg-menu, PRD §7), shared with
+         .pip-ready-selector-panel below so the closed trigger and its
+         open panel read as one component. Trigger text on it clears
+         4.5:1. */
       .pip-ready-selector-trigger {
         display: flex;
         align-items: center;
@@ -1648,10 +1631,7 @@ export function createMezzoSession({
         flex-shrink: 0;
         text-align: left;
       }
-      /* Lighter still on hover — #3B3B3B, the same +8-per-channel step
-         already used pre-Batch-2 (#222222 -> #2a2a2a), scaled to this
-         base. Text contrast on it: 6.65:1, still comfortably clearing
-         AA. */
+      /* Lighter on hover (--color-bg-menu-hover); text still clears 4.5:1. */
       .pip-ready-selector-trigger:hover { background: var(--color-bg-menu-hover); }
       /* Open state (PRD §7): the trigger stays above the scrim, lifted to
          the hover surface with a faint sage edge while its panel is open. */
@@ -1706,23 +1686,9 @@ export function createMezzoSession({
          — only the (non-symmetric) glyph inside visibly rotates, so "must
          not shift vertically or horizontally" holds by construction, not
          by extra positioning rules.
-         Color (2026-08-20, corrected same day after manual review): was
-         var(--hanko-fill), this Companion's orange accent — reserved for
-         primary/affirmative actions (Save, Create new profile) elsewhere,
-         so using it here too read as implying the caret was itself such
-         an action rather than a plain disclosure affordance. Now
-         var(--stone) (#8A827A), an existing warm neutral already defined
-         in this file's shared token set — not a new color, and nowhere
-         near the orange family, so it can't be confused with it. Checked
-         against the correct applicable standard for a graphical icon
-         (WCAG 1.4.11 Non-text Contrast, 3:1 — not the 4.5:1 text
-         threshold): white-on-stone is 3.78:1, comfortably clearing it —
-         unaffected by the 2026-08-20 trigger/panel surface reversion
-         below, since this badge carries its own explicit --stone
-         background rather than inheriting the trigger's. --stone itself
-         is 6.88x the luminance of the selector's own (restored) #333333
-         surface (see .pip-ready-selector-trigger's own contrast notes),
-         staying clearly visible against it. */
+         Color: a faint cream disc with a cream glyph — a plain disclosure
+         affordance, not an action color, and clear of 3:1 against the
+         menu surface (WCAG 1.4.11). */
       .pip-ready-selector-chevron {
         display: inline-flex;
         align-items: center;
@@ -1877,21 +1843,8 @@ export function createMezzoSession({
          Sentence case in the DOM (not forced uppercase via CSS, unlike
          .pip-ready-contextual-link/.pip-text-btn's own treatment) — this
          reads as a persistent list action, not a secondary link.
-         Color (2026-08-20, part of the #333333 surface restoration): plain
-         var(--hanko-fill) (#C4593A), fine as a foreground everywhere else
-         it's used (paired with light text ON it as a button fill, or
-         against the lighter #3c3b3f screen surface), only reaches 2.91:1
-         used bare as TEXT here against this panel's #333333 — well under
-         the 4.5:1 normal-text minimum, and it gets worse, not better, on
-         :hover/:focus-visible (3.76:1) since their own lighter background
-         narrows the gap further. #DC9C89 is the same hue/saturation
-         (13.5°, 54%) lightened just enough to clear AA in every state this
-         button renders in: 5.51:1 at rest, 4.58:1 on :hover/:focus-visible
-         — not a new accent, the existing hanko hue tuned for legibility as
-         foreground-on-dark rather than as a fill. Reused by
-         .pip-ready-selector-row-check and both focus outlines below for
-         the same reason, so every hanko-as-foreground use in this panel
-         reads as one consistent shade. */
+         Color: sage (--color-link), the Companion's text-link color, which
+         clears 4.5:1 on the menu panel at rest and on hover/focus. */
       .pip-ready-selector-footer-action {
         display: block;
         width: 100%;
@@ -1974,11 +1927,7 @@ export function createMezzoSession({
       .pip-ready-selector-row-radio:checked ~ .pip-ready-selector-row-label .pip-ready-selector-row-name {
         font-weight: var(--weight-medium);
       }
-      /* Color (2026-08-20): #DC9C89, not var(--hanko-fill) — same reason
-         and same value as .pip-ready-selector-footer-action's own color
-         comment (bare hanko-fill only reaches 2.91:1 as foreground against
-         this panel's #333333, under the 3:1 icon minimum this checkmark
-         needs). */
+      /* The checkmark: a small sage dot (PRD §9a), clear of 3:1 on the panel. */
       .pip-ready-selector-row-check {
         flex-shrink: 0;
         visibility: hidden;
@@ -1991,10 +1940,7 @@ export function createMezzoSession({
       /* Redirects the hidden radio's own focus ring onto the visible label
          — outline, not a background/color-only change, so the indicator
          itself also survives forced-colors/high-contrast presentation.
-         #DC9C89 (2026-08-20), not var(--hanko-fill) — see
-         .pip-ready-selector-footer-action's own color comment; a focus
-         indicator needs 3:1 against its surroundings and bare hanko-fill
-         only reaches 2.91:1 here. */
+         The 2px sage focus ring used everywhere (PRD §9a). */
       .pip-ready-selector-row-radio:focus-visible ~ .pip-ready-selector-row-label {
         outline: 2px solid var(--color-link);
         outline-offset: 2px;
@@ -2014,16 +1960,8 @@ export function createMezzoSession({
          never accidentally activate it, and activating it can never check
          the radio (see handleSelectorRowChange() / the row action's own
          click handler, both unchanged from before Batch 2).
-         Idle color alpha (2026-08-20: 0.55 -> 0.75): this icon is visible
-         (opacity:1) whenever its row is hovered, even before the icon
-         itself is hovered/focused — at 0.55 against the row's own hover
-         tint on #333333, it measured 2.34:1, under the 3:1 minimum for a
-         meaningful icon (this pre-dates the #57524A surface — it measured
-         2.67:1 against the original #222222 too, already a shortfall, so
-         it's fixed here as part of this same contrast audit rather than
-         left in place). 0.75 clears it at 3.09:1 in that same idle-visible
-         state. Its own :hover/:focus-visible color below is unchanged and
-         was already passing (6.25-5.58:1). */
+         Idle color: muted text at 75%, so the icon clears 3:1 on a hovered
+         row even before the icon itself is hovered or focused. */
       .pip-ready-selector-row-action {
         flex-shrink: 0;
         display: flex;
@@ -2519,33 +2457,10 @@ export function createMezzoSession({
          interactive content of its own), so it can never cover essential
          controls in any functional sense even though it visually floats
          above them.
-         Surface (2026-08-20 pass, supersedes the 2026-08-15 light-washi
-         treatment): the toast now shares #222222 with the modal-card
-         system — a light, warm-neutral toast sitting alongside the
-         selector surface (at the time this pass was made, briefly
-         lightened to #57524A, since restored to #333333 — see
-         .pip-ready-selector-trigger's own comment for that history)
-         reversed the exact problem the 2026-08-15 pass was trying to
-         solve, reading as its own competing surface rather than
-         recognizable, consistent transient feedback. #222222 (with light
-         text and this Companion's own established elevation shadow)
-         reads unambiguously as a notification laid over the regular
-         Companion surface, distinct from both the lighter #3c3b3f screen
-         behind it and the (now darker again) selector — never confusable
-         with a dropdown/selector surface, per the approved spec. Still a modest
-         10px rounded rectangle (matching .pip-ready-selector-panel's own
-         corner radius), never a capsule/pill. Contrast checked directly:
-         the light text below against #222222 is 13.4:1 (the exact figure
-         already recorded for .pip-decision-heading against this same
-         background elsewhere in this file).
-         No border (2026-08-20 manual-review correction): an orange-tinted
-         accent border briefly existed here and read as an unintended
-         warning/alert color rather than neutral transient feedback —
-         removed outright rather than replaced with a different colored
-         border. Separation from the regular Companion surface behind it
-         comes from the #222222 background's own contrast against #3c3b3f
-         plus the existing elevation shadow below; no border of any color
-         is needed on top of that. */
+         Surface: --color-bg-raised with soft cream text and the elevation
+         shadow — reads as a notification over the screen, never as the
+         selector's menu surface. A 10px rounded rectangle, never a pill.
+         No border: separation comes from the surface and the shadow. */
       .pip-toast {
         position: absolute;
         left: 20px;
@@ -2586,10 +2501,9 @@ export function createMezzoSession({
          descendant — confirmed by inspection of every ancestor rule in
          this file), and is positioned in JS (see positionTooltip()) from
          the target button's own getBoundingClientRect(), clamped to stay
-         within the real Companion viewport on every side. Same dark
-         #222222 surface as the modal-card/toast system, for one
-         consistent "this is a small piece of transient UI chrome, not
-         page content" family across all three. pointer-events:none (like
+         within the real Companion viewport on every side. Same raised
+         surface as the toast, so small transient chrome reads as one
+         family. pointer-events:none (like
          the toast) — it must never block clicks or pointer movement, and
          has no interactive content of its own to receive them anyway.
          Shown/hidden via the shared .hidden utility class (display:none),

@@ -157,7 +157,7 @@ No new canonical strings. This PRD reuses **Recalibrate**, **Speaking profile**,
 
 - The note sits in Ready's existing contextual-actions slot (`.pip-ready-contextual-actions`), between the selector trigger and **Start monitoring**. That keeps CLAUDE.md's fixed Ready order (heading, label, selector, contextual actions, Start monitoring, disclaimer). For a saved profile this slot is empty today.
 - The slot must reserve the note's height whenever a profile is selected, so the note appearing or disappearing **never moves Start monitoring** (the original Ready PRD's anchoring rule). Window size stays 380×364.
-- Not a modal, banner, toast, or full-screen decision state. It's quiet inline text, styled with `.type-microcopy`/the existing contextual-link treatment.
+- Not a modal, banner, toast, or full-screen decision state. It's quiet inline text in muted Geist (`--color-text-muted`, like the existing "Recalibrate to use the improved sound filter." note in this slot), with the link in sage (`--color-link`), the Companion's text-link color.
 
 ### 6.4 Copy
 
@@ -166,13 +166,13 @@ Recommended (sentence case, descriptive, no judgment):
 > Calibrated with {calibrated mic}. Now using {current mic}.
 > **Recalibrate**
 
-- **Recalibrate** is a text link using `.pip-ready-contextual-link` and the canonical string. It runs exactly the existing Recalibrate flow for the selected profile. For a saved profile that ends in the existing Replace / Keep as unsaved decision state, so nothing is lost by tapping it. This adds a second entry point next to the selector panel's per-row Recalibrate icon. That's deliberate: the note is useless if the remedy is hidden inside a closed panel.
+- **Recalibrate** is a text link using `.pip-ready-contextual-link` and the canonical string. It runs exactly the existing Recalibrate flow for the selected profile. For a saved profile that ends in the existing Replace / Keep temporarily / Discard decision state, so nothing is lost by tapping it. This adds a second entry point next to the selector panel's per-row Recalibrate icon. That's deliberate: the note is useless if the remedy is hidden inside a closed panel.
 - Long labels truncate with an ellipsis in the visible text. The full sentence goes in the element's accessible text and `title`.
 - Fallback if both names can't fit legibly at 380px (decide in design review):
   > Your microphone has changed since this profile was calibrated.
   > **Recalibrate**
 
-Copy must never use: warning, alert, mismatch, wrong, incorrect, error, "for accurate results," "may be inaccurate," or any icon read as a warning (no ⚠, no red/orange). Mezzo orange stays reserved for Outside range.
+Copy must never use: warning, alert, mismatch, wrong, incorrect, error, "for accurate results," "may be inaccurate," or any icon read as a warning (no ⚠, no red). No chartreuse: inside the Companion it is reserved for the over-range band (`docs/prd/range-ring-and-lantern-refresh.md` §4.2).
 
 ### 6.5 Privacy
 
@@ -312,7 +312,7 @@ A conservative later candidate, only once real usage data exists: a passive, pos
 - Back on mic A and Ready shown again: no note.
 - Profile saved before this change (no `calibratedMic`): no note, ever, until it's next recalibrated and replaced.
 - Labels unavailable (empty): no note.
-- The note's **Recalibrate**, on a saved profile, reaches the existing Replace / Keep as unsaved decision state. Replace stores the new mic; Keep as unsaved leaves the saved profile's mic untouched.
+- The note's **Recalibrate**, on a saved profile, reaches the existing Replace / Keep temporarily / Discard decision state. Replace stores the new mic; Keep as unsaved leaves the saved profile's mic untouched.
 - Saving an unsaved profile, and replacing via a matching name, both persist its `calibratedMic`.
 - The mic indicator stays off throughout Ready, including while the note is evaluated.
 - C2 shows **Using {mic}** once capture starts.
@@ -353,7 +353,7 @@ Do not:
 - Block, delay, or confirm Start monitoring because of the note.
 - Use a modal, toast, banner, or full-screen decision state for the note.
 - Add anything to Monitoring.
-- Use warning, alert, error, or mismatch language, warning icons, or Mezzo orange in the note.
+- Use warning, alert, error, or mismatch language, warning icons, or chartreuse in the note.
 - Backfill `calibratedMic` on existing profiles.
 - Send `calibratedMic` anywhere outside `localStorage`.
 - Edit `docs/product-experience.md` before this ships.

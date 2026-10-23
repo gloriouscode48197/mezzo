@@ -692,7 +692,7 @@ The visualization behaves like a natural system. Changes should feel like change
 * **The container stays fixed.** The ring never causes surrounding layout changes; it scales with the window's short side.
 * **Motion communicates state**, never decoration: the circle rises quickly and falls gently, settles to rest over a second when the user stops speaking, and the band grows from a thin ring and shrinks back before fading, so it doesn't flicker at the edge.
 * **Silence and room noise don't move it.** A speech-band filter keeps fan rumble and hiss out of the level, and the circle stays at rest unless the voice is clearly above the room's measured noise.
-* **Color reinforces state; it is not the primary channel.** Grey-taupe for the voice, sage for approaching, chartreuse only over range. With reduced motion, changes are immediate rather than eased.
+* **Color reinforces state; it is not the primary channel.** Grey-taupe for the voice, sage for approaching, chartreuse only over range. With reduced motion, the circle still follows the voice, and the band appears at a fixed thickness instead of growing.
 
 Tuned values live in the ring, zone and audio settings objects (`src/range-ring.js`, `src/engine.js`, `src/audio.js`); the public playground at `/playground/` drives a frozen copy of them live.
 

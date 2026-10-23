@@ -2,8 +2,8 @@
 
 ## Product Requirements Document
 
-**Status:** Proposed<br>
-**Implementation status:** Not implemented. Nothing in this document describes shipped behavior. `docs/product-experience.md` must not be updated until it ships.<br>
+**Status:** Implemented<br>
+**Implementation status:** Built on the `v3` branch (2026-10). This document describes what ships; each rule that changed during the build carries a *Changed during build* note with the reason. `docs/product-experience.md` describes the current behavior.<br>
 **Milestone:** V2 (polish, consistency, implementation quality). This is a visual and presentation change. It adds no new functionality.<br>
 **Product:** Mezzo<br>
 **Feature area:** Monitoring visualization, Companion visual system, Home page, design tokens<br>
@@ -63,7 +63,8 @@ The selector panel, decision states (save, replace, delete), and ordinary screen
 
 ### Non-goals
 
-- Changing zone classification, thresholds, calibration math, or `OUTSIDE_ENTRY_DWELL_MS` (`src/engine.js` stays the source of truth).
+- Changing how zones are defined beyond §5.3–§5.4 (`src/engine.js` stays the source of truth; the ring never classifies zones itself).
+  *Changed during build: zones were tuned with a real voice in the ring tuner; the old rules let normal speech peaks read as Outside range and delayed a loud start.*
 - New features, settings, or controls. User-selectable glow colors and alternative shapes are explicitly out of scope (see §12).
 - Changing the decision-state rule. Save, replace, and delete stay full-screen states, never modals.
 - Changing canonical copy, except where §6 removes the visible status label.
@@ -74,7 +75,9 @@ The selector panel, decision states (save, replace, delete), and ordinary screen
 
 ### 4.1 Theme
 
-One dark theme for both Home and the Companion.
+One dark theme for both Home and the Companion, with one exception: the running page is cream (§9).
+
+*Changed during build: the running page is cream; the dark Companion needs contrast behind it.*
 
 ### 4.2 Color roles
 
@@ -88,10 +91,12 @@ Each color has one job. The key rule: **chartreuse is Mezzo's brand color on the
 | `--color-accent` | `#DEDE65` (chartreuse) | Primary button, highlighted words (as text color), text selection | Over-range band and glow only |
 | `--color-text` | `#F3EBDE` (cream) | Headings, main text | Headings, primary buttons |
 | `--color-link` | `#CEE2C4` (sage) | Small accents | Text links, Approaching edge |
-| `--color-text-muted` | `#ABA698` | Body, captions | Labels, hints, profile name |
+| `--color-text-muted` | `#B0AB9E` | Body, captions | Labels, hints, profile name |
 | `--color-voice` | `#8E897B` | | Voice circle (at 40% opacity at rest) |
 
-Contrast (checked against `#2D2E31`): cream 11.5:1, sage 9.9:1, chartreuse 9.5:1, muted text 5.6:1. Dark text on chartreuse 9.5:1.
+Contrast (checked against `#2D2E31`): cream 11.5:1, sage 9.9:1, chartreuse 9.5:1, muted text 5.9:1. Dark text on chartreuse 9.5:1.
+
+*Changed during build: muted text is `#B0AB9E`, not `#ABA698`, matching the tokens and §8.*
 
 This replaces "Mezzo orange" (`--hanko-text` and the `--zone-*-color` tokens). Orange is retired.
 
@@ -166,6 +171,8 @@ Attention rises in three steps, each using brightness and size, which work in pe
 - **No flicker at the edge:** the band grows from a thin ring and shrinks back before fading (grow 150 ms, shrink 150 ms, fade 100 ms).
 - Sustained drift (`SUSTAINED_DRIFT_MS`) still only feeds analytics.
 
+*Changed during build: zones were tuned with a real voice in the ring tuner; the old rules let normal speech peaks read as Outside range and delayed a loud start.*
+
 ### 5.5 Motion
 
 - **The circle follows the momentary level:** the raw per-frame level, lightly smoothed (100 ms), then eased in linear RMS (rise 150 ms, fall 400 ms) before conversion to dB. Easing in RMS makes a rise read quickly and a fall settle gently.
@@ -189,6 +196,8 @@ Attention rises in three steps, each using brightness and size, which work in pe
   - Its accessible name is always "Stop monitoring".
 - **What Stop does:** it ends the session, releases the microphone, and returns to Ready with the current profile still selected.
 - **No pause:** an earlier Pause/Resume was removed. Stop and Start monitoring cover it, and one control keeps the peripheral window quiet.
+
+*Changed during build: Monitoring opens in Compact instead of Expanded, and Pause was removed; Compact is the peripheral view the product is for, and one control keeps it quiet.*
 - Band and glow are scaled so they never touch the window edge.
 
 ### 5.8 Implementation boundary
@@ -240,6 +249,8 @@ Top to bottom, at the shared 380×364 pre-monitoring size (revised again 2026-10
 - **Room noise** is measured from the 3-2-1's readings (§5.6) and saved with the profile.
 
 The horizontal meter bar, "Background sounds may move the meter too.", the progress ring and the calibrating voice circle are all removed.
+
+*Changed during build: a segmented level meter replaced the filling progress ring, which felt rushed.*
 
 **Accessibility.** The existing live region is kept, with its two one-time announcements ("Get ready. Calibration starts in 3 seconds." and "Listening for 6 seconds."). Nothing is announced every second.
 
@@ -300,7 +311,17 @@ Layout, heading, and the "Open Mezzo Companion" button unchanged. Copy:
 
 Unchanged. The address-bar chip shows the page's real host (`window.location.host`), never a hard-coded one.
 
-### Dock and unsupported browser
+### Running page (Dock)
+
+While the Companion is open, the page turns cream (`[data-surface="cream"]`, charcoal text): a "Companion open" label, "Mezzo is running", "Your Companion is open in its own window. Switch to your meeting whenever you're ready.", the privacy line, and a quiet charcoal **Close Companion** link.
+
+*Changed during build: the running page is cream, not dark; the dark Companion needs contrast behind it.*
+
+**Reopen Companion.** Chrome allows one picture-in-picture window at a time, and the newest wins. After any close other than Close Companion (another mini window, or the Companion's own ✕, which look the same), the page stays cream with "The Companion closed", a charcoal **Reopen Companion** button and a **Done** link. Reopen opens it from that click with the same profile (a temporary one too) and resumes monitoring if it was running; Done returns to the granted state. After a launch from a Meet call, a one-time tip explains Meet's Automatic picture-in-picture setting.
+
+*Changed during build: Reopen Companion was added because Meet's mini window and screen sharing close the Companion.*
+
+### Unsupported browser
 
 Same type, colors, and buttons; copy unchanged.
 
@@ -335,11 +356,13 @@ This makes the refresh reviewable as small, safe steps and leaves one place to c
 
 ### 11.1 Functional
 
-1. Monitoring renders the Range Ring as in §5. Zone classification is unchanged.
+1. Monitoring renders the Range Ring as in §5. Zones follow §5.3–§5.4: end of range from calibration peaks, a 600 ms percentile window over voiced frames, and a 150 ms dwell with 200 ms grace.
+   *Changed during build: zones were tuned with a real voice in the ring tuner; the old rules let normal speech peaks read as Outside range and delayed a loud start.*
 2. The band never appears before the engine commits zone 3.
 3. No visible text changes during monitoring.
 4. A hidden live region announces state changes per §6.
-5. Compact renders the same ring at Compact size; hover/focus-revealed controls are unchanged.
+5. Monitoring opens in Compact (220×220) and renders the same ring at every size; Stop and Expand are revealed on hover or focus. There is no Pause.
+   *Changed during build: Compact became the default and Pause was removed (see §5.7).*
 6. Menu and decision states follow §7.
 7. Calibrating follows §8.
 8. Home follows §9.
@@ -349,7 +372,8 @@ This makes the refresh reviewable as small, safe steps and leaves one place to c
 
 - All text meets 4.5:1 (see §4.2).
 - States differ in brightness and size, not only hue.
-- Respect `prefers-reduced-motion`: replace easing with short crossfades and keep the band static instead of growing smoothly.
+- Respect `prefers-reduced-motion`: the voice circle still follows the voice; the band appears at a fixed thickness with only its 100 ms fade, and doesn't grow. The calibrating meter follows the level directly, without easing.
+  *Changed during build: the circle keeps following the voice and the band appears without growing, instead of crossfades; the ring is the feedback.*
 - The hidden live region is the only spoken output during monitoring.
 
 ---
@@ -376,9 +400,11 @@ This makes the refresh reviewable as small, safe steps and leaves one place to c
 
 ## 14. Acceptance Criteria
 
-- Within range, the only things on the Monitoring screen are the profile name, the faint circle, the range edge, the Compact toggle, and Stop monitoring.
+- Monitoring opens in Compact. Within range, the only things on screen are the profile name, the faint circle and the range edge; Stop and Expand appear on hover or focus. There is no Pause.
+  *Changed during build: Compact default, no Pause (see §5.7).*
 - Approaching, the circle is visibly brighter and the edge is a thick sage line.
-- Over range (after the 500ms dwell), the chartreuse band appears and grows with level; a brief spike under the dwell shows no band.
+- Over range (after the 150 ms dwell, with 200 ms grace), the chartreuse band appears and grows with level; a single emphasized syllable shows no band, and speaking at the calibrated level never shows it.
+  *Changed during build: zones were tuned with a real voice in the ring tuner; the old rules let normal speech peaks read as Outside range and delayed a loud start.*
 - No visible text changes while talking.
 - A screen reader hears state changes no more than about once per second.
 - Chartreuse appears in the Companion only in the over-range band.
@@ -400,7 +426,8 @@ This makes the refresh reviewable as small, safe steps and leaves one place to c
 
 Do not:
 
-- Change zone thresholds, smoothing, or `OUTSIDE_ENTRY_DWELL_MS`.
+- Change the zone rules in §5.3–§5.4 without re-tuning them against a real voice.
+  *Changed during build: zones were tuned with a real voice in the ring tuner; the old rules let normal speech peaks read as Outside range and delayed a loud start.*
 - Use chartreuse for anything in the Companion except the over-range band.
 - Show changing text during monitoring.
 - Turn decision states into modals.

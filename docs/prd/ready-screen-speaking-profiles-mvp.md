@@ -6,6 +6,7 @@
 **Implementation status:** Implemented in `a7b8b80` ("Implement Ready screen and speaking profile flows"), with a follow-up copy/routing correction in `bb3cbab` ("Align calibration copy and routing")<br>
 **Implementation verification:** 273/273 unit tests (`npm test`) and 15/15 serial Playwright tests (`npx playwright test --workers=1`) passing as of `bb3cbab`<br>
 **Documentation reconciled:** 2026-08-02 — see "Implementation Notes" at the end of this document for where the shipped behavior departs from what's written below, and see `docs/product-experience.md` for the canonical, current-state description this PRD's settled behavior was promoted into<br>
+**Later changes:** superseded in places by the v3 Lantern refresh (`docs/prd/range-ring-and-lantern-refresh.md`): "Keep as unsaved" now reads **Keep temporarily**, the unsaved profile is labeled "Temporary profile", decision states gained **Discard**, and orange is retired. `docs/product-experience.md` describes the current behavior.<br>
 **Product:** Mezzo<br>
 **Feature area:** Calibration, Ready screen, speaking-profile selection, saving, replacement, deletion, and the five-profile cap
 
