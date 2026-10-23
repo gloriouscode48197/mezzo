@@ -23,12 +23,12 @@
  */
 
 import { MezzoWindowManager } from './lib/window-manager.js';
+import { getBaseUrl } from './lib/mezzo-url.js';
 
-const MEZZO_BASE_URL = 'https://mezzo-one.vercel.app';
 // index.html is the canonical Home/Dock page and direct Companion launcher
 // (try-it.html still works — it's a compatibility redirect straight back to
-// this same URL — but pointing here directly skips that extra hop).
-const MEZZO_ENTRY_URL = `${MEZZO_BASE_URL}/index.html`;
+// this same URL — but pointing here directly skips that extra hop). The base
+// is the live site, or a developer's override (see lib/mezzo-url.js).
 
 const BADGE_TEXT = '●'; // ● — an ambient "something's here" cue, not an alarm
 // Lantern palette: a chartreuse dot on charcoal.
@@ -47,7 +47,8 @@ const BADGE_TEXT_COLOR = '#DEDE65';
 async function openMezzo({ focused = true, senderTabId = null, platform = null } = {}) {
   // Launched from a Meet call: Mezzo shows a one-time tip about Meet's own
   // mini window (see src/home-dock.js). Only used when the window is new.
-  const url = platform === 'Google Meet' ? `${MEZZO_ENTRY_URL}?from=meet` : MEZZO_ENTRY_URL;
+  const entry = `${await getBaseUrl()}/index.html`;
+  const url = platform === 'Google Meet' ? `${entry}?from=meet` : entry;
   await MezzoWindowManager.openOrFocus({ url, focused, senderTabId });
 }
 

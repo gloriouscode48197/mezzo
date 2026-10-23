@@ -79,7 +79,11 @@
     bannerHost.id = BANNER_HOST_ID;
     bannerHost.style.cssText = 'all: initial; position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 2147483647;';
 
+    loadBannerFonts();
     const shadow = bannerHost.attachShadow({ mode: 'closed' });
+    // Lantern, matching the extension popup: a charcoal card, the
+    // chartreuse ring from Mezzo's icon, a chartreuse primary button with
+    // 3px corners, and a sage text link.
     shadow.innerHTML = `
       <style>
         :host { all: initial; }
@@ -87,81 +91,93 @@
           display: flex;
           align-items: flex-start;
           gap: 14px;
-          min-width: 320px;
-          max-width: 380px;
-          padding: 18px 20px;
-          background: #F0EBE2;
-          border-radius: 14px;
-          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.28);
-          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-          color: #3C3B3F;
+          width: 340px;
+          box-sizing: border-box;
+          padding: 16px 16px 18px 18px;
+          background: #2D2E31;
+          border: 1px solid rgba(243, 235, 222, 0.12);
+          border-radius: 8px;
+          box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+          font-family: "Mezzo Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
+          color: #F3EBDE;
+          -webkit-font-smoothing: antialiased;
         }
         .ring {
           flex-shrink: 0;
-          width: 32px;
-          height: 32px;
+          width: 22px;
+          height: 22px;
+          box-sizing: border-box;
           border-radius: 50%;
-          border: 3px solid #C4593A;
-          margin-top: 2px;
+          border: 3px solid #DEDE65;
+          margin-top: 1px;
         }
         .body { flex: 1; min-width: 0; }
         .title {
-          font-family: Georgia, "Iowan Old Style", "Times New Roman", serif;
-          font-size: 16px;
           margin: 0 0 4px;
+          font-size: 15px;
+          font-weight: 500;
+          line-height: 1.35;
+          letter-spacing: -0.01em;
         }
         .subtitle {
-          font-size: 13px;
-          line-height: 145%;
-          color: #6B6560;
           margin: 0 0 14px;
+          font-size: 13px;
+          line-height: 1.45;
+          color: #B0AB9E;
         }
-        .actions { display: flex; align-items: center; gap: 14px; }
+        .actions { display: flex; align-items: center; gap: 16px; }
+        button { font-family: inherit; cursor: pointer; }
         .btn-start {
-          font-size: 13px;
-          font-weight: 600;
-          color: #F0EBE2;
-          background: #C4593A;
-          padding: 9px 18px;
+          padding: 9px 16px;
           border: none;
-          border-radius: 100px;
-          cursor: pointer;
+          border-radius: 3px;
+          background: #DEDE65;
+          color: #2D2E31;
+          font-size: 13px;
+          font-weight: 500;
         }
-        .btn-start:hover { background: #AE4D31; }
+        .btn-start:hover { background: #E6E68A; }
         .btn-dismiss {
-          font-size: 13px;
-          color: #8A827A;
-          background: none;
-          border: none;
           padding: 0;
-          cursor: pointer;
+          border: none;
+          background: none;
+          color: #CEE2C4;
+          font-size: 13px;
         }
         .btn-dismiss:hover { text-decoration: underline; }
         .btn-close {
           flex-shrink: 0;
-          width: 20px;
-          height: 20px;
-          border: none;
-          background: none;
-          color: #8A827A;
-          font-size: 16px;
-          line-height: 1;
-          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 24px;
+          height: 24px;
+          margin: -4px -4px 0 0;
           padding: 0;
+          border: none;
+          border-radius: 3px;
+          background: none;
+          color: #B0AB9E;
         }
-        .btn-close:hover { color: #3C3B3F; }
+        .btn-close:hover { color: #F3EBDE; background: rgba(243, 235, 222, 0.08); }
+        button:focus-visible {
+          outline: 2px solid #CEE2C4;
+          outline-offset: 2px;
+        }
       </style>
-      <div class="card">
-        <div class="ring"></div>
+      <div class="card" role="region" aria-label="Mezzo">
+        <div class="ring" aria-hidden="true"></div>
         <div class="body">
-          <p class="title">Meeting Detected</p>
+          <p class="title">Meeting detected</p>
           <p class="subtitle">Monitor with Mezzo?</p>
           <div class="actions">
-            <button class="btn-start" type="button">Open Companion</button>
-            <button class="btn-dismiss" type="button">Not Now</button>
+            <button class="btn-start" type="button">Open Mezzo</button>
+            <button class="btn-dismiss" type="button">Not now</button>
           </div>
         </div>
-        <button class="btn-close" type="button" aria-label="Dismiss">&times;</button>
+        <button class="btn-close" type="button" aria-label="Dismiss">
+          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M1 1l8 8M9 1L1 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </button>
       </div>
     `;
 
@@ -183,6 +199,22 @@
 
     (document.body || document.documentElement).appendChild(bannerHost);
     console.log(`[Mezzo] banner shown for ${platform.name}`);
+  }
+
+  // Geist for the banner. @font-face inside a shadow root isn't applied, so
+  // the font is registered on the page itself, under a family name only the
+  // banner uses (the page's own fonts are untouched). Falls back to the
+  // system font if it can't load.
+  let bannerFontsLoaded = false;
+  function loadBannerFonts() {
+    if (bannerFontsLoaded || typeof FontFace === 'undefined') return;
+    bannerFontsLoaded = true;
+    try {
+      const url = chrome.runtime.getURL('popup/fonts/geist-latin.woff2');
+      const face = new FontFace('Mezzo Geist', `url("${url}") format("woff2")`, { weight: '400 600' });
+      document.fonts.add(face);
+      face.load().catch(() => {});
+    } catch { /* system font */ }
   }
 
   function removeBanner() {

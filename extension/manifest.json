@@ -36,6 +36,18 @@
     "https://mezzo-one.vercel.app/*"
   ],
 
+  "web_accessible_resources": [
+    {
+      "resources": ["popup/fonts/geist-latin.woff2"],
+      "matches": [
+        "https://meet.google.com/*",
+        "https://*.zoom.us/*",
+        "https://teams.microsoft.com/*",
+        "https://teams.live.com/*"
+      ]
+    }
+  ],
+
   "content_scripts": [
     {
       "matches": [

@@ -384,11 +384,7 @@ If no saved profile exists yet — including when the last session used an unsav
 
 # Meeting Prompt Journey
 
-When a supported meeting is detected, the extension may offer:
-
-Open Mezzo
-
-Not Now
+When a supported meeting is detected, the extension shows a small banner at the top of the meeting page: "Meeting detected" / "Monitor with Mezzo?", with **Open Mezzo** and **Not now** (and a close control). It uses the Lantern look of the extension popup: a charcoal card, the chartreuse ring, a chartreuse button, a sage link.
 
 Selecting Open Mezzo should:
 
@@ -401,7 +397,7 @@ Do not imply that monitoring begins directly from the meeting prompt.
 
 The user should always begin monitoring intentionally.
 
-Today, "Open Mezzo" opens (or focuses) Mezzo in its own popup window, on Home; the user still clicks Open Mezzo Companion there, since Chrome only opens a Companion from a click inside the Mezzo page. From a Google Meet call, the running page shows the one-time Meet tip (see "Dock"). The in-Meet "Meeting Detected" banner itself has not been restyled to Lantern yet.
+Today, "Open Mezzo" opens (or focuses) Mezzo in its own Chrome window — a normal window with an address bar, about 1000×760, beside the meeting — on Home; the user still clicks Open Mezzo Companion there, since Chrome only opens a Companion from a click inside the Mezzo page. It's a separate window rather than a tab next to the meeting, since switching tabs can trigger Meet's mini window; and it keeps the address bar, since its site controls are how someone fixes a blocked microphone. From a Google Meet call, the running page shows the one-time Meet tip (see "Dock").
 
 ## Extension Popup
 
@@ -410,7 +406,7 @@ The toolbar popup has two states, decided only by whether Mezzo's own window exi
 * **Not running** — the "mezzo" wordmark, "A gentle nudge when you're talking louder than you'd like.", an **Open Mezzo** button, "Opens in its own window. Only measures volume.", and Privacy and Settings links.
 * **Running** — the wordmark with an "Open" label, "Mezzo is open in its own window.", and **Show Mezzo window**, which focuses (and restores) that window.
 
-It never shows profile or monitoring state. The toolbar badge marks a detected meeting in charcoal and chartreuse.
+It never shows profile or monitoring state. In a locally loaded (developer) copy only, Settings has a Mezzo address field, so the extension can open a preview deployment instead of the live site. The toolbar badge marks a detected meeting in charcoal and chartreuse.
 
 ---
 

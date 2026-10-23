@@ -81,6 +81,48 @@ describe('extension popup', () => {
     assert.match(css, /fonts\/geist-latin\.woff2/);
   });
 
+  it('the developer address field is hidden in a store install', async () => {
+    const { document, init } = setup();
+    await init();
+    assert.ok(document.getElementById('dev-url-form').hidden);
+  });
+
+  it('an unpacked install shows the developer address field, saves a preview address, and resets to the live site', async () => {
+    const store = {};
+    const { document } = parseHTML(html);
+    const chromeApi = {
+      runtime: { sendMessage: () => {}, getManifest: () => ({ version: '1' }) },
+      tabs: { create: () => {} },
+      storage: { local: {
+        get: async (k) => (k in store ? { [k]: store[k] } : {}),
+        set: async (o) => Object.assign(store, o),
+        remove: async (k) => { delete store[k]; },
+      } },
+    };
+    await initPopup(document, { windows: { getExistingWindow: async () => null, focusWindow: async () => {} }, chromeApi, closePopup: () => {} });
+    const form = document.getElementById('dev-url-form');
+    const status = document.getElementById('dev-url-status');
+    assert.ok(!form.hidden);
+    assert.equal(status.textContent, 'Opens the live site.');
+
+    document.getElementById('dev-url-input').value = 'https://mezzo-git-v3-me.vercel.app/';
+    form.dispatchEvent(new document.defaultView.Event('submit'));
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(store.mezzoDevBaseUrl, 'https://mezzo-git-v3-me.vercel.app');
+    assert.equal(status.textContent, 'Opens https://mezzo-git-v3-me.vercel.app');
+
+    document.getElementById('dev-url-input').value = 'http://example.com';
+    form.dispatchEvent(new document.defaultView.Event('submit'));
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(store.mezzoDevBaseUrl, 'https://mezzo-git-v3-me.vercel.app');
+    assert.equal(status.textContent, 'Use an https address, or http://localhost.');
+
+    document.getElementById('dev-url-reset').click();
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(store.mezzoDevBaseUrl, undefined);
+    assert.equal(status.textContent, 'Opens the live site.');
+  });
+
   it('the toolbar badge uses the new palette, not hanko orange', () => {
     assert.ok(!background.includes('#C4593A'));
     assert.match(background, /BADGE_COLOR = '#2D2E31'/);

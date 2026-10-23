@@ -32,6 +32,16 @@
 
     <div id="settings-panel" class="settings-panel" hidden>
       <p class="settings-note">More settings coming soon.</p>
+      <!-- Developer installs only (see lib/mezzo-url.js). -->
+      <form id="dev-url-form" class="dev-url" hidden>
+        <label class="dev-url-label" for="dev-url-input">Mezzo address (developer)</label>
+        <input id="dev-url-input" class="dev-url-input" type="url" placeholder="https://mezzo-one.vercel.app" spellcheck="false" autocomplete="off">
+        <div class="dev-url-actions">
+          <button id="dev-url-save" class="btn-outline btn-small" type="submit">Save</button>
+          <button id="dev-url-reset" class="popup-link" type="button">Use live site</button>
+        </div>
+        <p id="dev-url-status" class="settings-note" role="status"></p>
+      </form>
     </div>
   </main>
 

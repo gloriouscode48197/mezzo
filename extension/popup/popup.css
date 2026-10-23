@@ -169,3 +169,39 @@ body {
   font-size: 12px;
   color: var(--color-text-muted);
 }
+
+/* Developer-only Mezzo address (unpacked installs). */
+.dev-url {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  text-align: left;
+}
+.dev-url-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+.dev-url-input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--color-text) 30%, transparent);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: 12px;
+}
+.dev-url-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.btn-small {
+  width: auto;
+  padding: 7px 14px;
+  font-size: 12px;
+}
