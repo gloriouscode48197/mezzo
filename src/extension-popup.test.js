@@ -89,8 +89,10 @@ describe('extension popup', () => {
     assert.equal(calls.closed, 1);
   });
 
-  it('the Lantern palette only: charcoal, cream, chartreuse button with 3px corners, sage links; no serif, no old cream or hanko orange', () => {
-    for (const color of ['#2D2E31', '#F3EBDE', '#DEDE65', '#CEE2C4']) assert.ok(css.includes(color), color);
+  it('the Lantern palette only: charcoal, a cream primary button with 3px corners (chartreuse is reserved for the nudge), sage links; no serif, no old cream or hanko orange', () => {
+    for (const color of ['#2D2E31', '#F3EBDE', '#CEE2C4']) assert.ok(css.includes(color), color);
+    assert.ok(!css.includes('#DEDE65'), 'no chartreuse in the popup');
+    assert.match(css, /\.btn-primary \{[^}]*background: var\(--color-btn-primary-bg\)/);
     assert.match(css, /--radius-control: 3px/);
     for (const old of ['Georgia', '#C4593A', '#F0EBE2', '#AE4D31', '100px']) assert.ok(!css.includes(old), old);
     assert.match(css, /font-family: 'Geist'/);

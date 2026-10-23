@@ -24,8 +24,10 @@
   --color-bg: #2D2E31;        /* charcoal */
   --color-text: #F3EBDE;      /* cream */
   --color-text-muted: #B0AB9E;
-  --color-accent: #DEDE65;    /* chartreuse */
-  --color-on-accent: #2D2E31;
+  /* Chartreuse is reserved for the over-range nudge; the popup's primary
+     button is cream, like the Companion's. */
+  --color-btn-primary-bg: #F3EBDE;   /* cream */
+  --color-btn-primary-text: #2D2E31;
   --color-link: #CEE2C4;      /* sage */
   --radius-control: 3px;
   --font-body: 'Geist', system-ui, sans-serif;
@@ -125,10 +127,10 @@ body {
 }
 .btn-primary {
   border: none;
-  background: var(--color-accent);
-  color: var(--color-on-accent);
+  background: var(--color-btn-primary-bg);
+  color: var(--color-btn-primary-text);
 }
-.btn-primary:hover { background: color-mix(in srgb, var(--color-accent) 86%, var(--color-text)); }
+.btn-primary:hover { background: var(--color-btn-primary-bg); } /* never dimmed, like the Companion: cream stays cream */
 .btn-outline {
   border: 1px solid color-mix(in srgb, var(--color-text) 30%, transparent);
   background: transparent;
@@ -230,3 +232,8 @@ body {
   padding-block: 4px;
   box-sizing: border-box;
 }
+
+/* Helper and fine print: balanced lines, no orphans. */
+.note,
+.settings-note,
+.dev-url-label { text-wrap: balance; }

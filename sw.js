@@ -3,7 +3,7 @@
  * Enables offline support and PWA installation
  */
 
-const CACHE_NAME = 'mezzo-v31';
+const CACHE_NAME = 'mezzo-v32';
 const ASSETS = [
   '/',
   '/index.html',

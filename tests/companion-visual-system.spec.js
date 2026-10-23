@@ -50,7 +50,7 @@ async function openDeleteScreen(pipPage, profileName) {
   const panel = pipPage.locator('.pip-ready-selector-panel');
   await expect(panel).toBeVisible();
   await panel.locator(`button[aria-label="Delete ${profileName} profile"]`).click();
-  const deleteScreen = pipPage.locator('.pip-screen-decision').filter({ hasText: `Delete "${profileName}"?` });
+  const deleteScreen = pipPage.locator('.pip-screen-decision').filter({ hasText: `Delete “${profileName}”?` });
   await expect(deleteScreen).toBeVisible();
   return deleteScreen;
 }
@@ -141,13 +141,13 @@ test.describe('Companion: decision layer (Lantern)', () => {
     // SAVED one instead to reach 06b.
     await readyScreen.locator('.pip-ready-selector-trigger').click();
     await pipPage.locator('.pip-ready-selector-panel button[aria-label="Delete One profile"]').click();
-    const deleteScreen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Delete "One"?' });
+    const deleteScreen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Delete “One”?' });
     const del = await readDecisionLayer(deleteScreen);
     expect(del).toMatchObject({
       background: 'rgb(56, 57, 60)', barIsFirst: true, title: 'Delete profile',
       cancelInBar: true, cancelText: 'Cancel', modalCards: 0, dialogRole: false,
     });
-    await expect(deleteScreen.locator('.pip-decision-content h1')).toHaveText('Delete "One"?');
+    await expect(deleteScreen.locator('.pip-decision-content h1')).toHaveText('Delete “One”?');
   });
 
   test('every decision heading (five-profile limit, delete) shares the exact same h1 typography as "Your new speaking profile is ready"', async ({ page, context }) => {
@@ -169,7 +169,7 @@ test.describe('Companion: decision layer (Lantern)', () => {
     await expect(readyScreen).toBeVisible({ timeout: 3000 });
     await readyScreen.locator('.pip-ready-selector-trigger').click();
     await pipPage.locator('.pip-ready-selector-panel button[aria-label="Delete One profile"]').click();
-    const deleteScreen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Delete "One"?' });
+    const deleteScreen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Delete “One”?' });
     expect(await readStyle(deleteScreen.locator('.pip-decision-content h1'))).toEqual(reference);
   });
 
@@ -188,7 +188,7 @@ test.describe('Companion: decision layer (Lantern)', () => {
     await expect(readyScreen).toBeVisible({ timeout: 3000 });
     await readyScreen.locator('.pip-ready-selector-trigger').click();
     await pipPage.locator('.pip-ready-selector-panel button[aria-label="Delete One profile"]').click();
-    const deleteScreen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Delete "One"?' });
+    const deleteScreen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Delete “One”?' });
     await expect(deleteScreen.locator('h1')).toHaveCount(1);
     expect(await deleteScreen.locator('.pip-decision-heading').evaluate((el) => el.tagName)).toBe('H1');
   });
@@ -989,7 +989,7 @@ test.describe('Companion: row-action tooltips (2026-08-20)', () => {
     await waitForCapture(pipPage);
     const m1Screen = pipPage.locator('.pip-screen-m1');
     await expect(m1Screen).toBeVisible({ timeout: 15000 });
-    await expect(m1Screen.locator('.pip-decision-primary-btn')).toHaveText('Update "Home Office"');
+    await expect(m1Screen.locator('.pip-decision-primary-btn')).toHaveText('Update “Home Office”');
   });
 
   /** Tooltip CSS/compact treatment, consistent with the dark modal/toast
@@ -1180,7 +1180,7 @@ test.describe('Companion: expanded-panel positioning and overflow (2026-08-20)',
     await expect(tooltip).toBeVisible({ timeout: 8000 });
     await expect(tooltip).toHaveText('Delete');
     await deleteBtn.click();
-    const deleteScreen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Delete "Profile 5"?' });
+    const deleteScreen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Delete “Profile 5”?' });
     await expect(deleteScreen).toBeVisible();
   });
 

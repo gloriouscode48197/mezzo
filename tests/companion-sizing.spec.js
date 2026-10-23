@@ -104,7 +104,7 @@ test.describe('Companion: Ready-screen button width cap', () => {
     expect(scrollWidth).toBeLessThanOrEqual(clientWidth + 1);
   });
 
-  test('M1 (Update "{name}"/Keep temporarily/Discard) actions never exceed 320px either', async ({ page, context }) => {
+  test('M1 (Update “{name}”/Keep temporarily/Discard) actions never exceed 320px either', async ({ page, context }) => {
     await page.addInitScript(() => {
       localStorage.setItem('mezzoProfiles', JSON.stringify([
         { id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 200 },

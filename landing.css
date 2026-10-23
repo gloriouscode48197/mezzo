@@ -505,3 +505,10 @@ body {
   .page { transition: none; }
   .reveal { transition: none; }
 }
+
+/* Helper and fine print: balanced lines, no orphans (2026-10-23). */
+.home-hero-privacy,
+.hero-address-bar-caption,
+.running-privacy,
+.home-step .type-body,
+.home-how-intro p { text-wrap: balance; }

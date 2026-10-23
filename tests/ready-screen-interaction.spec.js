@@ -353,7 +353,7 @@ test.describe('Companion: selector row Recalibrate icon (2026-08-17)', () => {
     await expect(m1Screen).toBeVisible({ timeout: 15000 });
     // The primary button names the exact profile that was targeted — Home
     // Office, not Kitchen.
-    await expect(m1Screen.locator('.pip-decision-primary-btn')).toHaveText('Update "Home Office"');
+    await expect(m1Screen.locator('.pip-decision-primary-btn')).toHaveText('Update “Home Office”');
 
     // Discard (never selects/deletes anything) returns to Ready with the
     // ORIGINAL selection (Kitchen) untouched — confirming the icon click
@@ -584,7 +584,7 @@ test.describe('Companion: selector native semantics (Batch 2)', () => {
     // (which would otherwise change the trigger's displayed name first).
     await panel.locator('button[aria-label="Delete Home Office profile"]').click();
 
-    const deleteScreen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Delete "Home Office"?' });
+    const deleteScreen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Delete “Home Office”?' });
     await expect(deleteScreen).toBeVisible();
     await deleteScreen.locator('button:has-text("Cancel")').click();
 
@@ -775,7 +775,7 @@ test.describe('Companion: selector section grouping and trigger accessible name 
     await expect(deleteBtn).toBeVisible();
 
     await deleteBtn.click();
-    const deleteScreen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Delete "Kitchen"?' });
+    const deleteScreen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Delete “Kitchen”?' });
     await expect(deleteScreen).toBeVisible();
     await deleteScreen.locator('button:has-text("Cancel")').click();
     await expect(readyScreen).toBeVisible();
@@ -812,7 +812,7 @@ test.describe('Companion: selector section grouping and trigger accessible name 
     await trigger.click();
     panel = pipPage.locator('.pip-ready-selector-panel');
     await panel.locator('button[aria-label="Delete Home Office profile"]').click();
-    const deleteScreen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Delete "Home Office"?' });
+    const deleteScreen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Delete “Home Office”?' });
     await expect(deleteScreen).toBeVisible();
     await deleteScreen.locator('button:has-text("Delete")').click();
     await expect(readyScreen).toBeVisible({ timeout: 5000 });

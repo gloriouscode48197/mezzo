@@ -294,9 +294,9 @@ A brief processing moment — "Saving your calibration…" when recalibrating a 
 * **Keep temporarily** — keeps it as the temporary profile, selected on Ready ("Available until you close the Companion")
 * **Discard** — throws it away and restores the previous selection (or Welcome, if nothing else exists)
 
-**Recalibrate, on a saved profile**, does not touch that profile yet. It shows "New calibration ready" / "Save it to "{name}"?", with:
+**Recalibrate, on a saved profile**, does not touch that profile yet. It shows "New calibration ready" / "Save it to “{name}”?", with:
 
-* **Update "{name}"** — overwrites the saved profile's calibration in place, keeping its name and identity, and returns to Ready with it selected
+* **Update “{name}”** — overwrites the saved profile's calibration in place, keeping its name and identity, and returns to Ready with it selected
 * **Keep temporarily** — leaves the saved profile completely untouched, and keeps the new calibration as the temporary profile instead, selected on return
 * **Discard** — leaves everything as it was
 
@@ -636,8 +636,8 @@ Ready's selector shows whichever profile is currently active, and opens a panel 
 
 With the temporary profile selected, Ready offers **Save profile** (the result screen's **Save speaking profile** does the same). Below the five-profile limit, this opens a naming screen — "Name this profile" — with Cancel and Save actions; Save stays disabled until a name is entered.
 
-* A name that doesn't match any saved profile's name creates a new saved profile, selects it, and removes the unsaved profile. A toast confirms: `Profile "{Name}" saved`.
-* A name that matches an existing saved profile's name instead — trimmed, case-insensitive; a saved profile's own stored display name and casing are never changed by this comparison — shows a warning (`A profile named "{Name}" already exists.`) and changes the button from Save to Update. Updating overwrites that profile's calibration in place, exactly as Recalibrate's own Update would, removes the unsaved profile, and selects the updated profile. A toast confirms instead: `Profile "{Name}" updated`.
+* A name that doesn't match any saved profile's name creates a new saved profile, selects it, and removes the unsaved profile. A toast confirms: `Profile “{Name}” saved`.
+* A name that matches an existing saved profile's name instead — trimmed, case-insensitive; a saved profile's own stored display name and casing are never changed by this comparison — shows a warning (`A profile named “{Name}” already exists.`) and changes the button from Save to Update. Updating overwrites that profile's calibration in place, exactly as Recalibrate's own Update would, removes the unsaved profile, and selects the updated profile. A toast confirms instead: `Profile “{Name}” updated`.
 * **Cancel** returns to Ready, leaving the unsaved profile exactly as it was.
 
 Both Save and Update show a brief processing state on their own button, and guard against a duplicate submission, before the toast appears. The toast is transient, announces itself politely to assistive tech, and never shifts Ready's layout or takes focus.

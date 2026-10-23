@@ -114,14 +114,14 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
     const m2Screen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Name this profile' });
     await expect(m2Screen).toBeVisible();
     await m2Screen.locator('input[type="text"]').fill('Kitchen');
-    await expect(m2Screen.locator('.pip-decision-warning')).toHaveText('A profile named "Kitchen" already exists.');
+    await expect(m2Screen.locator('.pip-decision-warning')).toHaveText('A profile named “Kitchen” already exists.');
     const submitBtn = m2Screen.locator('button[type="submit"]');
     await expect(submitBtn).toHaveText('Update');
     await submitBtn.click();
 
     await expect(readyScreen).toBeVisible({ timeout: 3000 });
     await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Kitchen');
-    await expect(pipPage.locator('.pip-toast-card')).toHaveText('Profile "Kitchen" updated');
+    await expect(pipPage.locator('.pip-toast-card')).toHaveText('Profile “Kitchen” updated');
 
     // Still exactly one saved profile — Update updates in place, never adds a duplicate.
     await readyScreen.locator('.pip-ready-selector-trigger').click();
@@ -230,7 +230,7 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
     await expect(panel).toBeVisible();
     await panel.locator('button[aria-label="Delete Kitchen profile"]').click();
 
-    const deleteScreen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Delete "Kitchen"?' });
+    const deleteScreen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Delete “Kitchen”?' });
     await expect(deleteScreen).toBeVisible();
     await expect(deleteScreen).toContainText("This permanently removes the saved speaking profile. This can't be undone.");
 
@@ -285,7 +285,7 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
 
     await readyScreen.locator('.pip-ready-selector-trigger').click();
     await panel.locator('button[aria-label="Delete Charlie profile"]').click();
-    const deleteScreen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Delete "Charlie"?' });
+    const deleteScreen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Delete “Charlie”?' });
     await deleteScreen.locator('button:has-text("Delete")').click();
 
     await expect(readyScreen).toBeVisible({ timeout: 3000 });
@@ -306,7 +306,7 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
     await readyScreen.locator('.pip-ready-selector-trigger').click();
     const panel = pipPage.locator('.pip-ready-selector-panel');
     await panel.locator('button[aria-label="Delete Kitchen profile"]').click();
-    const deleteScreen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Delete "Kitchen"?' });
+    const deleteScreen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Delete “Kitchen”?' });
     await deleteScreen.locator('button:has-text("Delete")').click();
 
     await expect(pipPage.locator('.pip-screen-welcome')).toBeVisible({ timeout: 3000 });
@@ -327,7 +327,7 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
       await expect(readyScreen).toBeVisible();
       await readyScreen.locator('.pip-ready-selector-trigger').click();
       await panel.locator(`button[aria-label="Delete ${name} profile"]`).click();
-      const deleteScreen = pipPage.locator('.pip-screen-decision').filter({ hasText: `Delete "${name}"?` });
+      const deleteScreen = pipPage.locator('.pip-screen-decision').filter({ hasText: `Delete “${name}”?` });
       const confirmBtn = deleteScreen.locator('.pip-delete-confirm-btn');
       await expect(confirmBtn).toHaveText('Delete');
       await expect(confirmBtn).toBeEnabled();
@@ -353,7 +353,7 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
     await readyScreen.locator('.pip-ready-selector-trigger').click();
     const panel = pipPage.locator('.pip-ready-selector-panel');
     await panel.locator('button[aria-label="Delete Home Office profile"]').click();
-    const deleteScreen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Delete "Home Office"?' });
+    const deleteScreen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Delete “Home Office”?' });
     await deleteScreen.locator('button:has-text("Delete")').click();
 
     await expect(readyScreen).toBeVisible({ timeout: 3000 });
@@ -381,7 +381,7 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
     await readyScreen.locator('.pip-ready-selector-trigger').click();
     const panel = pipPage.locator('.pip-ready-selector-panel');
     await panel.locator('button[aria-label="Delete Kitchen profile"]').click();
-    const deleteScreen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Delete "Kitchen"?' });
+    const deleteScreen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Delete “Kitchen”?' });
     await deleteScreen.locator('button:has-text("Delete")').click();
     await expect(readyScreen).toBeVisible({ timeout: 3000 });
     await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Home Office');
@@ -417,7 +417,7 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
     await readyScreen.locator('.pip-ready-selector-trigger').click();
     const panel = pipPage.locator('.pip-ready-selector-panel');
     await panel.locator('button[aria-label="Delete Kitchen profile"]').click();
-    const deleteScreen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Delete "Kitchen"?' });
+    const deleteScreen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Delete “Kitchen”?' });
     // Class-based, not text-based: the confirm button's own text changes to
     // "Deleting…" the moment it's clicked, which a text:"Delete" locator
     // would stop matching.
@@ -453,7 +453,7 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
     await readyScreen.locator('.pip-ready-selector-trigger').click();
     const panel = pipPage.locator('.pip-ready-selector-panel');
     await panel.locator('button[aria-label="Delete Kitchen profile"]').click();
-    const deleteScreen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Delete "Kitchen"?' });
+    const deleteScreen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Delete “Kitchen”?' });
     const confirmBtn = deleteScreen.locator('button:has-text("Delete")');
     const cancelBtn = deleteScreen.locator('button:has-text("Cancel")');
     await confirmBtn.click();
@@ -512,7 +512,7 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
     await readyScreen.locator('.pip-ready-selector-trigger').click();
     const panel = pipPage.locator('.pip-ready-selector-panel');
     await panel.locator('button[aria-label="Delete Kitchen profile"]').click();
-    const deleteScreen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Delete "Kitchen"?' });
+    const deleteScreen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Delete “Kitchen”?' });
     const confirmBtn = deleteScreen.locator('.pip-delete-confirm-btn');
     const cancelBtn = deleteScreen.locator('.pip-decision-bar-cancel'); // Cancel lives in the header bar (PRD §7)
     await confirmBtn.click();
@@ -1043,7 +1043,7 @@ test.describe('Migration: profiles saved before the speech-band filter (2026-10-
     await note.locator('.pip-inline-link').click();
     const m1Screen = pipPage.locator('.pip-screen-m1');
     await expect(m1Screen).toBeVisible({ timeout: 20000 });
-    await m1Screen.locator('.pip-decision-primary-btn', { hasText: 'Update "Old office"' }).click();
+    await m1Screen.locator('.pip-decision-primary-btn', { hasText: 'Update “Old office”' }).click();
 
     await expect(readyScreen).toBeVisible({ timeout: 5000 });
     await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Old office');

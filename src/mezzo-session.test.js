@@ -193,7 +193,7 @@ describe('saveProfileNameCopy', () => {
     const copy = saveProfileNameCopy({ kind: SAVE_PROMPT_ACTIONS.UPDATE, profile: { id: 'p1', name: 'Kitchen' } });
     assert.strictEqual(copy.disabled, false);
     assert.strictEqual(copy.buttonLabel, 'Update');
-    assert.strictEqual(copy.warningText, 'A profile named "Kitchen" already exists.');
+    assert.strictEqual(copy.warningText, 'A profile named “Kitchen” already exists.');
   });
 
   it('update warning text uses the profile\'s actual stored name, not whatever the user typed', () => {
@@ -201,7 +201,7 @@ describe('saveProfileNameCopy', () => {
     // real stored object — this just confirms saveProfileNameCopy renders
     // that name verbatim, casing included, rather than the raw input.
     const copy = saveProfileNameCopy({ kind: SAVE_PROMPT_ACTIONS.UPDATE, profile: { id: 'p1', name: 'Coffee Shop' } });
-    assert.match(copy.warningText, /"Coffee Shop"/);
+    assert.match(copy.warningText, /“Coffee Shop”/);
     assert.strictEqual(copy.buttonLabel, 'Update');
   });
 
@@ -244,8 +244,8 @@ describe('saveProfileNameCopy', () => {
 // =============================================================================
 
 describe('replaceButtonLabel', () => {
-  it('names the target profile, in straight double quotes', () => {
-    assert.strictEqual(replaceButtonLabel('Kitchen'), 'Update "Kitchen"');
+  it('names the target profile, in curly quotes', () => {
+    assert.strictEqual(replaceButtonLabel('Kitchen'), 'Update “Kitchen”');
   });
 
   it('falls back to a neutral label if the target snapshot is somehow missing, without inventing a fake name', () => {
@@ -455,8 +455,8 @@ describe('readyHeadingCopy', () => {
 });
 
 describe('recalibrationQuestion', () => {
-  it('asks to save the new calibration to the named profile, in straight quotes', () => {
-    assert.strictEqual(recalibrationQuestion('Home Office'), 'Save it to "Home Office"?');
+  it('asks to save the new calibration to the named profile, in curly quotes', () => {
+    assert.strictEqual(recalibrationQuestion('Home Office'), 'Save it to “Home Office”?');
   });
   it('falls back without a name', () => {
     assert.strictEqual(recalibrationQuestion(undefined), 'Save it to this profile?');

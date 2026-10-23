@@ -7,7 +7,7 @@
  * now bridges real capture ending and a result screen appearing; both
  * result variants ("Your new speaking profile is ready") now share
  * identical heading/body copy, differing only in Variant 2's dynamic
- * Update "{name}" primary button; both variants gained Keep temporarily
+ * Update “{name}” primary button; both variants gained Keep temporarily
  * and Discard; "Unsaved profile" is now user-facing "Temporary profile"
  * throughout. See CLAUDE.md's Slice 2 revision notes for the full product
  * rationale and docs/prd/ready-screen-speaking-profiles-mvp.md's own
@@ -721,9 +721,9 @@ test.describe('"New calibration ready" (Variant 2 — recalibrating a saved prof
     const m1Screen = pipPage.locator('.pip-screen-m1');
     await expect(m1Screen).toBeVisible({ timeout: 15000 });
     await expect(m1Screen.locator('.pip-decision-heading')).toHaveText('New calibration ready');
-    await expect(m1Screen.locator('.pip-decision-body')).toHaveText('Save it to "Kitchen"?');
-    await expect(m1Screen.locator('.pip-decision-primary-btn')).toHaveText('Update "Kitchen"');
-    await expect(m1Screen.locator('.pip-decision-primary-btn')).toHaveAccessibleName('Update "Kitchen"');
+    await expect(m1Screen.locator('.pip-decision-body')).toHaveText('Save it to “Kitchen”?');
+    await expect(m1Screen.locator('.pip-decision-primary-btn')).toHaveText('Update “Kitchen”');
+    await expect(m1Screen.locator('.pip-decision-primary-btn')).toHaveAccessibleName('Update “Kitchen”');
     await expect(m1Screen.locator('.pip-decision-secondary-btn:not(.pip-decision-discard-btn)')).toHaveText('Keep temporarily');
     // Try again removed (2026-08-18) — no residual trace of it anywhere.
     await expect(m1Screen.locator('.pip-decision-redo-btn')).toHaveCount(0);
@@ -732,7 +732,7 @@ test.describe('"New calibration ready" (Variant 2 — recalibrating a saved prof
     // Exactly these three decisions, in this order — nothing extra, nothing
     // missing, no leftover fourth peer action.
     await expect(m1Screen.locator('.pip-decision-actions button')).toHaveText([
-      'Update "Kitchen"', 'Keep temporarily', 'Discard',
+      'Update “Kitchen”', 'Keep temporarily', 'Discard',
     ]);
     // "Speak again" is fully retired from this screen.
     await expect(m1Screen).not.toContainText('Speak again');
@@ -761,14 +761,14 @@ test.describe('"New calibration ready" (Variant 2 — recalibrating a saved prof
     // textContent (via .textContent()), not innerHTML — proves this was
     // ever only ever set as text, never parsed as markup (element.textContent
     // assignment, same convention as every other interpolated name in this
-    // Companion — Delete "{name}"?, etc.).
+    // Companion — Delete “{name}”?, etc.).
     const label = await m1Screen.locator('.pip-decision-primary-btn').textContent();
-    expect(label).toBe(`Update "${trickyName}"`);
+    expect(label).toBe(`Update “${trickyName}”`);
     // No actual <script> element was ever created on the page.
     await expect(pipPage.locator('script:has-text("alert(1)")')).toHaveCount(0);
   });
 
-  test('Update "{name}" updates the existing profile in place — same id/name, new calibration values, no duplicate', async ({ page, context }) => {
+  test('Update “{name}” updates the existing profile in place — same id/name, new calibration values, no duplicate', async ({ page, context }) => {
     await page.addInitScript(() => {
       localStorage.setItem('mezzoProfiles', JSON.stringify([
         { id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 200 },
@@ -781,7 +781,7 @@ test.describe('"New calibration ready" (Variant 2 — recalibrating a saved prof
 
     const m1Screen = pipPage.locator('.pip-screen-m1');
     await expect(m1Screen).toBeVisible({ timeout: 15000 });
-    await m1Screen.locator('.pip-decision-primary-btn', { hasText: 'Update "Kitchen"' }).click();
+    await m1Screen.locator('.pip-decision-primary-btn', { hasText: 'Update “Kitchen”' }).click();
 
     await expect(readyScreen).toBeVisible({ timeout: 3000 });
     await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Kitchen');

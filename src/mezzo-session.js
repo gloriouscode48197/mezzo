@@ -230,7 +230,7 @@ export function saveProfileNameCopy(resolution) {
   switch (resolution?.kind) {
     case SAVE_PROMPT_ACTIONS.UPDATE:
       return {
-        warningText: `A profile named "${resolution.profile.name}" already exists.`,
+        warningText: `A profile named “${resolution.profile.name}” already exists.`,
         buttonLabel: 'Update',
         disabled: false,
       };
@@ -262,10 +262,10 @@ export function saveProfileNameCopy(resolution) {
  * new speaking profile is ready" / "What would you like to do with it?",
  * built directly into each screen's own DOM, no copy function needed for
  * either), and the target name lives only here, in the one place it's
- * actually decision-relevant: the primary button itself. Straight double
- * quotes, matching CLAUDE.md's escaping convention for interpolated names
- * elsewhere (Delete "{name}"?, A profile named "{name}" already exists.,
- * etc.) — the button's own visible text is also its accessible name, so a
+ * actually decision-relevant: the primary button itself. Curly quotes,
+ * matching CLAUDE.md's convention for interpolated names elsewhere
+ * (Delete “{name}”?, A profile named “{name}” already exists., etc.) —
+ * the button's own visible text is also its accessible name, so a
  * long or unusual profile name still produces an understandable label
  * without any separate aria-label needed.
  */
@@ -276,11 +276,11 @@ export function readyHeadingCopy({ hasStartedMonitoring, savedProfileCount }) {
 
 /** M1's question under "New calibration ready": the profile it would update. */
 export function recalibrationQuestion(targetName) {
-  return targetName ? `Save it to "${targetName}"?` : 'Save it to this profile?';
+  return targetName ? `Save it to “${targetName}”?` : 'Save it to this profile?';
 }
 
 export function replaceButtonLabel(targetName) {
-  return targetName ? `Update "${targetName}"` : 'Update this profile';
+  return targetName ? `Update “${targetName}”` : 'Update this profile';
 }
 
 // The one and only signal for "this profile is a runtime-only calibration
@@ -2948,6 +2948,14 @@ export function createMezzoSession({
         min-height: 0;
         margin: 0;
       }
+      /* Helper and fine print: balanced lines, no orphans. */
+      .pip-intro-disclaimer,
+      .pip-ready-disclaimer,
+      .pip-calibrating-hint,
+      .pip-decision-tip,
+      .pip-decision-warning,
+      .pip-ready-recalibrate-note,
+      .pip-ready-selector-row-note { text-wrap: balance; }
       .pip-ready-selector-trigger { font-size: 15px; }
 
       /* One column: controls, helper text and buttons share its width. */
@@ -4988,7 +4996,7 @@ export function createMezzoSession({
     if (!pipWindow) return;
     pendingDeleteProfileId = profile.id;
     decisionTriggerEl = triggerBtn ?? null;
-    if (deleteHeadingEl) deleteHeadingEl.textContent = `Delete "${profile.name}"?`;
+    if (deleteHeadingEl) deleteHeadingEl.textContent = `Delete “${profile.name}”?`;
     // Reset from any prior failed attempt — a fresh open should never carry
     // over a stale error message or a Cancel button a previous attempt left
     // disabled (see handleDeleteConfirm()'s failure branch below).
@@ -5991,7 +5999,7 @@ export function createMezzoSession({
       // untouched, unrelated to this revision's own explicitly-scoped
       // save-confirmation toast, and still reserved for the later
       // toast-feedback work otherwise.
-      showToast(isUpdate ? `Profile "${profile.name}" updated` : 'Speaking profile saved');
+      showToast(isUpdate ? `Profile “${profile.name}” updated` : 'Speaking profile saved');
       restoreDecisionFocus();
     });
   }
