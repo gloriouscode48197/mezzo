@@ -328,7 +328,7 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
       await readyScreen.locator('.pip-ready-selector-trigger').click();
       await panel.locator(`button[aria-label="Delete ${name} profile"]`).click();
       const deleteScreen = pipPage.locator('.pip-screen-decision').filter({ hasText: `Delete "${name}"?` });
-      const confirmBtn = deleteScreen.locator('.pip-decision-primary-btn');
+      const confirmBtn = deleteScreen.locator('.pip-delete-confirm-btn');
       await expect(confirmBtn).toHaveText('Delete');
       await expect(confirmBtn).toBeEnabled();
       await confirmBtn.click();
@@ -421,7 +421,7 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
     // Class-based, not text-based: the confirm button's own text changes to
     // "Deleting…" the moment it's clicked, which a text:"Delete" locator
     // would stop matching.
-    const confirmBtn = deleteScreen.locator('.pip-decision-primary-btn');
+    const confirmBtn = deleteScreen.locator('.pip-delete-confirm-btn');
     const cancelBtn = deleteScreen.locator('.pip-decision-bar-cancel'); // Cancel lives in the header bar (PRD §7)
 
     await confirmBtn.click();
@@ -513,7 +513,7 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
     const panel = pipPage.locator('.pip-ready-selector-panel');
     await panel.locator('button[aria-label="Delete Kitchen profile"]').click();
     const deleteScreen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Delete "Kitchen"?' });
-    const confirmBtn = deleteScreen.locator('.pip-decision-primary-btn');
+    const confirmBtn = deleteScreen.locator('.pip-delete-confirm-btn');
     const cancelBtn = deleteScreen.locator('.pip-decision-bar-cancel'); // Cancel lives in the header bar (PRD §7)
     await confirmBtn.click();
 

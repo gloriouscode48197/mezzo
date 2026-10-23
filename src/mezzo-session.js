@@ -837,6 +837,8 @@ export function createMezzoSession({
   let calibratingHintEl = null; // CALIBRATING_HINT_PREPARING during the countdown, then CALIBRATING_HINT_LISTENING
   let calibratingCountEl = null; // the 3-2-1 number, in the meter's place until listening starts
   let calibratingHeadingEl = null; // CALIBRATING_HEADING_PREPARING, then CALIBRATING_HEADING_LISTENING
+  let creatingEyebrowEl = null; // the same "Recalibrating {name}" eyebrow as Calibrating
+  let creatingTextEl = null; // "Saving your calibration…" (a saved profile) or "Creating your speaking profile…"
   let micCheckTimer = null; // reads the mic level during the 3-2-1 so the circle can react before capture — see startMicCheck()
   let micCheckSamples = []; // those readings, which become the room-noise level (finishMicCheck())
   let calibratingCountdownTimer = null;
@@ -2899,8 +2901,10 @@ export function createMezzoSession({
               the whole stack centered; heading, 24, the control group,
               24, primary button → 12 → fine print.
            C. Decision (result, M1, M2, M3, Delete): the slate bar, then
-              heading → 8 → subtext, 24, the buttons (8 apart, column
+              heading → 8 → subtext, 24, the buttons (16 apart, column
               width), the whole stack centered below the bar.
+         Hit areas: every control at least 24px tall (from padding), with
+         at least 16px of clear space between adjacent hit areas.
          ════════════════════════════════════════════════════════════════ */
       /* --space-1 … --space-6 come from design-tokens/mezzo-tokens.css. */
       :root {
@@ -2927,8 +2931,7 @@ export function createMezzoSession({
         color: var(--color-text-muted);
       }
       .pip-intro-body,
-      .pip-decision-body,
-      .pip-creating-text {
+      .pip-decision-body {
         font-size: 14px;
         line-height: 1.45;
         max-width: var(--col-width);
@@ -3006,11 +3009,14 @@ export function createMezzoSession({
       .pip-ready-recalibrate-note { text-align: center; }
 
       /* ── A. Sequence ── */
-      .pip-screen-calibrating {
+      .pip-screen-calibrating,
+      .pip-screen-creating {
         justify-content: flex-start;
         gap: 0;
         padding: var(--space-6) var(--space-6) calc(var(--footer-inset) + 24px + var(--space-5));
       }
+      .pip-sequence-spacer { visibility: hidden; }
+      .pip-sequence-spacer-meter { height: 14px; }
       .pip-calibrating-top {
         display: flex;
         flex-direction: column;
@@ -3041,10 +3047,6 @@ export function createMezzoSession({
       .pip-calibrating-visual { margin: var(--space-3) 0 0; }
       .pip-calibrating-hint { margin-top: var(--space-3); text-align: center; }
       .pip-calibrating-cancel { bottom: var(--footer-inset); }
-      .pip-screen-creating {
-        gap: var(--space-3);
-        padding: var(--space-6);
-      }
 
       /* ── C. Decision ── */
       .pip-decision-bar { padding: 0 var(--space-4); }
@@ -3059,7 +3061,7 @@ export function createMezzoSession({
       .pip-screen-decision > .pip-decision-actions,
       .pip-decision-form > .pip-decision-actions {
         flex: 0 0 auto;
-        gap: var(--space-2);
+        gap: var(--space-4); /* 16px clear between stacked buttons (the tap-target rule) */
         margin: var(--space-5) auto auto;
         padding: 0 0 var(--space-5);
       }
@@ -3068,6 +3070,31 @@ export function createMezzoSession({
       .pip-screen-decision > .pip-decision-actions,
       .pip-decision-form > .pip-decision-actions { max-width: calc(100% - 2 * var(--space-6)); }
       .pip-decision-tip { margin: 0; }
+
+      /* ── Hit areas: every control at least 24px tall (padding, not
+         bigger text), with at least 16px of clear space between adjacent
+         hit areas. Text links get their height from padding. ── */
+      .pip-text-btn,
+      .pip-ready-contextual-link,
+      .pip-ready-selector-footer-action {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 24px;
+        padding-block: 4px;
+        box-sizing: border-box;
+      }
+      .pip-ready-contextual-link { padding-inline: 4px; }
+      /* The inline Recalibrate: a 24px-tall hit area within its line. */
+      .pip-ready-recalibrate-note { line-height: 24px; }
+      .pip-inline-link { display: inline-block; line-height: 24px; padding-inline: 2px; }
+      /* A link under a button: 16px clear between the two hit areas. */
+      .pip-screen-c1 > .pip-text-btn,
+      .pip-screen-c0 > .pip-text-btn,
+      .pip-screen-failed > .pip-text-btn { margin-top: var(--space-4); }
+      /* Ready: the link or note under the dropdown, 16px clear (12 asked
+         for, but 16 is the floor between hit areas), then 24 to Start. */
+      .pip-screen-ready > .pip-ready-contextual-actions { margin-top: var(--space-4); }
 
       /* ── Monitoring: controls inset 12 from the window's edges. ── */
       .pip-control-btn-compact,
@@ -3491,20 +3518,48 @@ export function createMezzoSession({
     //    focused h1. Single-stage throughout — no checkmark/"done" state of
     //    its own; the result screen behind it communicates completion. See
     //    showCreatingTransition() for the timing model. ──
+    // The Sequence template, like Calibrating: the same eyebrow and
+    // heading position, and the spinner in the same slot the 3-2-1 number
+    // and "Listening… Ns" use. The meter and hint rows are kept as
+    // invisible spacers so the slot lands in exactly the same place. No
+    // Cancel: there's nothing left to cancel.
     const creatingScreen = pipDoc.createElement('div');
-    creatingScreen.className = 'pip-screen pip-screen-creating hidden';
+    creatingScreen.className = 'pip-screen pip-screen-creating pip-screen-sequence hidden';
 
+    const creatingTop = pipDoc.createElement('div');
+    creatingTop.className = 'pip-calibrating-top';
+    creatingScreen.appendChild(creatingTop);
+    const creatingEyebrow = pipDoc.createElement('div');
+    creatingEyebrow.className = 'pip-calibrating-subheading';
+    creatingTop.appendChild(creatingEyebrow);
+    creatingEyebrowEl = creatingEyebrow;
+    const creatingText = pipDoc.createElement('p');
+    creatingText.className = 'pip-h1 pip-calibrating-heading pip-creating-text';
+    creatingText.textContent = 'Creating your speaking profile…';
+    creatingText.setAttribute('aria-hidden', 'true'); // decorative visible text — the announcement below is what assistive tech hears
+    creatingTop.appendChild(creatingText);
+    creatingTextEl = creatingText;
+
+    const creatingMiddle = pipDoc.createElement('div');
+    creatingMiddle.className = 'pip-calibrating-middle';
+    creatingScreen.appendChild(creatingMiddle);
+    const creatingSlot = pipDoc.createElement('div');
+    creatingSlot.className = 'pip-calibrating-slot';
+    creatingMiddle.appendChild(creatingSlot);
     const creatingIcon = pipDoc.createElement('div');
     creatingIcon.className = 'pip-creating-icon';
     creatingIcon.setAttribute('aria-hidden', 'true');
     creatingIcon.innerHTML = '<span class="pip-creating-spinner"></span>';
-    creatingScreen.appendChild(creatingIcon);
-
-    const creatingText = pipDoc.createElement('p');
-    creatingText.className = 'pip-creating-text';
-    creatingText.textContent = 'Creating your speaking profile…';
-    creatingText.setAttribute('aria-hidden', 'true'); // decorative visible text — the announcement below is what assistive tech hears
-    creatingScreen.appendChild(creatingText);
+    creatingSlot.appendChild(creatingIcon);
+    const creatingMeterSpacer = pipDoc.createElement('div');
+    creatingMeterSpacer.className = 'pip-calibrating-visual pip-sequence-spacer pip-sequence-spacer-meter';
+    creatingMeterSpacer.setAttribute('aria-hidden', 'true');
+    creatingMiddle.appendChild(creatingMeterSpacer);
+    const creatingHintSpacer = pipDoc.createElement('p');
+    creatingHintSpacer.className = 'pip-calibrating-hint pip-sequence-spacer';
+    creatingHintSpacer.setAttribute('aria-hidden', 'true');
+    creatingHintSpacer.textContent = '\u00a0';
+    creatingMiddle.appendChild(creatingHintSpacer);
 
     // Visually-hidden, single-fire live region — announces once, as soon
     // as this screen appears, rather than narrating a spinner it can't
@@ -3851,6 +3906,18 @@ export function createMezzoSession({
     m3Card.appendChild(m3Body);
     m3BodyEl = m3Body;
 
+    // Manage profiles: back to Ready with the selector open, where each
+    // saved profile has its Delete.
+    const m3Actions = pipDoc.createElement('div');
+    m3Actions.className = 'pip-decision-actions';
+    const m3Manage = pipDoc.createElement('button');
+    m3Manage.type = 'button';
+    m3Manage.className = 'pip-decision-primary-btn pip-m3-manage-btn';
+    m3Manage.textContent = 'Manage profiles';
+    m3Manage.addEventListener('click', handleM3ManageProfiles);
+    m3Actions.appendChild(m3Manage);
+    m3Screen.appendChild(m3Actions);
+
     layout.appendChild(m3Screen);
     m3ScreenEl = m3Screen;
     m3CloseBtn = m3Close;
@@ -3911,7 +3978,7 @@ export function createMezzoSession({
 
     const deleteConfirmBtnEl = pipDoc.createElement('button');
     deleteConfirmBtnEl.type = 'button';
-    deleteConfirmBtnEl.className = 'pip-decision-primary-btn';
+    deleteConfirmBtnEl.className = 'pip-decision-secondary-btn pip-delete-confirm-btn'; // an outline button: a destructive action shouldn't be the bright default
     deleteConfirmBtnEl.textContent = 'Delete';
     deleteConfirmBtnEl.addEventListener('click', handleDeleteConfirm);
     deleteActions.appendChild(deleteConfirmBtnEl);
@@ -5543,6 +5610,11 @@ export function createMezzoSession({
     if (pipDocument?.body) pipDocument.body.setAttribute('data-layout', LAYOUT_MODES.EXPANDED);
     resizeCompanionToContent(MEZZO_COMPANION_READY_SIZE);
     activeCircle = null;
+    // Recalibrating a saved profile saves a calibration; everything else
+    // creates a speaking profile. The eyebrow carries over from Calibrating.
+    const savingCalibration = state?.mode === 'recalibrate';
+    if (creatingTextEl) creatingTextEl.textContent = savingCalibration ? 'Saving your calibration…' : 'Creating your speaking profile…';
+    if (creatingEyebrowEl) creatingEyebrowEl.textContent = calibratingSubheadingEl?.textContent ?? '';
     showOnlyScreen(creatingScreenEl);
     sessionState.set(SESSION_STATES.COMPANION_READY);
     // Announced once, immediately, independent of the paint-confirmation
@@ -5550,7 +5622,7 @@ export function createMezzoSession({
     // the way the spinner's own perceptibility is, and delaying it to
     // match the visual gate would only add latency an AT user gains
     // nothing from.
-    if (creatingAnnounceEl) creatingAnnounceEl.textContent = 'Creating your speaking profile.';
+    if (creatingAnnounceEl) creatingAnnounceEl.textContent = savingCalibration ? 'Saving your calibration.' : 'Creating your speaking profile.';
 
     // Confirm the spinner has actually had a chance to paint before doing
     // anything else. Root-caused via manual real-Chrome acceptance testing
@@ -5958,6 +6030,12 @@ export function createMezzoSession({
     restoreDecisionFocus();
   }
 
+  /** Manage profiles: Ready, with the selector open so a profile can be deleted. */
+  function handleM3ManageProfiles() {
+    showReadyScreen();
+    openSelectorPanel();
+  }
+
   // ===========================================================================
   // Shared decision-state processing/focus/toast helpers
   // ===========================================================================
@@ -6253,6 +6331,8 @@ export function createMezzoSession({
     calibratingHintEl = null;
     calibratingCountEl = null;
     calibratingHeadingEl = null;
+    creatingEyebrowEl = null;
+    creatingTextEl = null;
     stopCalibratingCountdown();
     stopPreparationCountdown();
     clearPreparingMessageTimers();

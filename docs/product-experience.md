@@ -286,7 +286,7 @@ If microphone access is blocked or denied at this point — access must have bee
 
 ### On Completion
 
-A brief "Creating your speaking profile…" moment, then a decision screen whose actions depend on why calibration was run. If speech sat less than 12 dB above the room's own noise, either screen also says: "Your room is a bit noisy for how softly you speak. Try moving a little closer to your mic."
+A brief processing moment — "Saving your calibration…" when recalibrating a saved profile, otherwise "Creating your speaking profile…", with a spinner where the countdown was and no Cancel — then a decision screen whose actions depend on why calibration was run. If speech sat less than 12 dB above the room's own noise, either screen also says: "Your room is a bit noisy for how softly you speak. Try moving a little closer to your mic."
 
 **A new profile** (Create speaking profile, Create new profile, or Recalibrate on the temporary profile) shows "Your new speaking profile is ready" / "What would you like to do with it?":
 
@@ -646,7 +646,7 @@ Recalibrate remains the primary, deliberate way to intentionally update a known 
 
 ## Five-Profile Limit
 
-Five saved profiles is the maximum. The limit applies only to saved profiles — an unsaved profile stays fully usable even when five are already saved. Selecting **Save profile** (or **Create new profile**) while at the limit doesn't open the naming screen or start calibration; instead it shows a dedicated screen: `5 of 5 profiles saved` / `Delete a saved profile before saving this one.` — a Cancel action only, no delete or replacement control embedded in it. The user has to open the selector, delete a saved profile there, then choose Save profile again.
+Five saved profiles is the maximum. The limit applies only to saved profiles — an unsaved profile stays fully usable even when five are already saved. Selecting **Save profile** (or **Create new profile**) while at the limit doesn't open the naming screen or start calibration; instead it shows a dedicated screen: `5 of 5 profiles saved` / `Delete a saved profile before saving this one.` — with **Manage profiles**, which returns to Ready with the selector open so a saved profile can be deleted there, and Cancel in the bar. The user has to open the selector, delete a saved profile there, then choose Save profile again.
 
 ## Discarding an Unsaved Profile
 
@@ -654,7 +654,7 @@ Discard, from the selector's own row-level control, removes the unsaved profile 
 
 ## Deleting a Saved Profile
 
-Deleting a saved profile uses a dedicated, full-screen confirmation — never a small floating dialog or a browser-native confirmation — asking plainly whether to permanently remove it. Canceling changes nothing. Confirming shows a brief processing state on Delete, with Cancel disabled for that same moment, before actually removing it — then, if it was the selected profile, falls back in order: the unsaved profile, if one exists; otherwise the most recently used remaining saved profile; otherwise Welcome, if nothing usable is left at all. If removal doesn't succeed, both actions become available again, the profile stays in the library exactly as it was, the current selection is untouched, and a brief, calm message explains it didn't work — the screen never remains stuck on its processing state.
+Deleting a saved profile uses a dedicated, full-screen confirmation — never a small floating dialog or a browser-native confirmation — with **Delete** as an outline button (a destructive action isn't the bright default) and Cancel in the bar, asking plainly whether to permanently remove it. Canceling changes nothing. Confirming shows a brief processing state on Delete, with Cancel disabled for that same moment, before actually removing it — then, if it was the selected profile, falls back in order: the unsaved profile, if one exists; otherwise the most recently used remaining saved profile; otherwise Welcome, if nothing usable is left at all. If removal doesn't succeed, both actions become available again, the profile stays in the library exactly as it was, the current selection is untouched, and a brief, calm message explains it didn't work — the screen never remains stuck on its processing state.
 
 Renaming a saved profile does not exist as a feature yet. If it's ever built, it belongs here too, alongside delete.
 

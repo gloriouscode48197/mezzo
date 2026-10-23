@@ -216,3 +216,17 @@ body {
   padding: 7px 14px;
   font-size: 12px;
 }
+
+/* "You're on Mezzo." has no button: text → 16 → links. Only the states
+   with a button reserve two lines above it. */
+.popup[data-state="here"] .lede { min-height: 0; margin-bottom: 0; }
+.popup[data-state="here"] .popup-links { margin-top: var(--space-4); }
+
+/* Hit areas: at least 24px tall, 16px apart. */
+.popup-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding-block: 4px;
+  box-sizing: border-box;
+}

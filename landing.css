@@ -415,9 +415,15 @@ body {
   margin-top: var(--space-5);
   color: var(--color-text-muted);
 }
+.running-close[hidden] { display: none; } /* inline-flex below would otherwise override [hidden] */
 .running-close {
   margin-top: var(--space-4);
-  padding: 2px 0;
+  /* A 24px-tall hit area from padding (the tap-target rule). */
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 4px 0;
+  box-sizing: border-box;
   background: none;
   border: none;
   font-family: var(--font-body);
