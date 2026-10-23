@@ -383,7 +383,7 @@ If no saved profile exists yet — including when the last session used an unsav
 
 # Meeting Prompt Journey
 
-When a supported meeting is detected, the extension shows a small banner at the top of the meeting page: "Meeting detected" / "Monitor with Mezzo?", with **Open Mezzo** and **Not now** (and a close control). It uses the Lantern look of the extension popup: a charcoal card, the chartreuse ring, a chartreuse button, a sage link.
+When a supported meeting is detected, the extension shows a small banner at the top of the meeting page: "Meeting detected" / "Monitor with Mezzo?", with **Open Mezzo** and **Not now** (and a close control). It uses the Lantern look of the extension popup: a charcoal card, a cream ring, a cream button, a sage link.
 
 Selecting Open Mezzo should:
 
@@ -406,7 +406,7 @@ The toolbar popup has three states, decided by where Mezzo's Home is open (any t
 * **The tab in front** (the active tab of the focused window) — the wordmark with an "Open" label and "You're on Mezzo." No button.
 * **Open elsewhere** — the wordmark with an "Open" label, "Mezzo is already open.", and **Go to Mezzo**, which focuses that window (restoring it if minimized) and activates that tab.
 
-It never shows profile or monitoring state. In a locally loaded (developer) copy only, Settings has a Mezzo address field, so the extension can open a preview deployment instead of the live site. The toolbar badge marks a detected meeting in charcoal and chartreuse.
+It never shows profile or monitoring state. In a locally loaded (developer) copy only, Settings has a Mezzo address field, so the extension can open a preview deployment instead of the live site. The toolbar badge marks a detected meeting with a cream dot on charcoal.
 
 ---
 
@@ -485,7 +485,7 @@ The Companion should feel like a quiet instrument—not a dashboard.
 
 Before monitoring ever begins, the Companion moves through several distinct screens — Welcome, the calibration-introduction step (C1), Calibrating, and Ready, plus recovery and decision screens (Microphone Access Blocked, the calibration result, and the profile save/replace/delete decisions covered under "Profile Model") — before reaching Monitoring itself, which has two layouts, Compact and Expanded. See below for each.
 
-Every screen follows one spacing scale and one 280px column, in three layouts: a sequence (Calibrating), with the heading fixed at the top so nothing moves between steps; a single choice (Welcome, the calibration introduction, Ready), centered, with 24px between groups; and a decision (the result and save/update/delete screens), centered below the decision bar. It uses the Lantern visual system throughout (`docs/prd/range-ring-and-lantern-refresh.md` §4): one dark theme, Geist type, cream primary buttons, sage text links, and chartreuse reserved for one meaning inside the Companion — the over-range band. Screens come in three layers: a flat screen, the Ready selector's menu panel over a dimmed screen, and decision states, which turn the whole window a lighter grey with a 44px header bar naming the decision and actions pinned to the bottom.
+Every screen follows one spacing scale and one 280px column, in three layouts: a sequence (Calibrating), with the heading fixed at the top so nothing moves between steps; a single choice (Welcome, the calibration introduction, Ready), centered, with 24px between groups; and a decision (the result and save/update/delete screens), centered below the decision bar. It uses the Lantern visual system throughout (`docs/prd/range-ring-and-lantern-refresh.md` §4): one dark theme, Geist type, cream primary buttons, sage text links, and chartreuse reserved for one meaning inside the product (the Companion and the extension) — the over-range band. Screens come in three layers: a flat screen, the Ready selector's menu panel over a dimmed screen, and decision states, which turn the whole window a lighter grey with a 44px header bar naming the decision and actions pinned to the bottom.
 
 ---
 

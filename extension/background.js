@@ -31,9 +31,10 @@ import { getBaseUrl } from './lib/mezzo-url.js';
 // is the live site, or a developer's override (see lib/mezzo-url.js).
 
 const BADGE_TEXT = '●'; // ● — an ambient "something's here" cue, not an alarm
-// Lantern palette: a chartreuse dot on charcoal.
+// Lantern palette: a cream dot on charcoal (chartreuse is only the
+// Outside range nudge inside the product).
 const BADGE_COLOR = '#2D2E31';
-const BADGE_TEXT_COLOR = '#DEDE65';
+const BADGE_TEXT_COLOR = '#F3EBDE';
 
 /**
  * Open Mezzo, or refocus/restore the existing window. It always lands on

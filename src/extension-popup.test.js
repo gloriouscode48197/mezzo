@@ -144,6 +144,6 @@ describe('extension popup', () => {
   it('the toolbar badge uses the new palette, not hanko orange', () => {
     assert.ok(!background.includes('#C4593A'));
     assert.match(background, /BADGE_COLOR = '#2D2E31'/);
-    assert.match(background, /BADGE_TEXT_COLOR = '#DEDE65'/);
+    assert.match(background, /BADGE_TEXT_COLOR = '#F3EBDE'/); // cream: chartreuse is only the nudge
   });
 });
