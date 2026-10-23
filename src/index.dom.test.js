@@ -558,9 +558,9 @@ describe('Opening the Mezzo Companion', () => {
     document.getElementById('btn-open-companion').click();
     await tick(2);
     assert.strictEqual(visibleStateId(document), 'state-dock');
-    // The running state: cream, "Mezzo is running", announced once.
+    // The running state: cream, its status line announced.
     assert.strictEqual(document.body.dataset.surface, 'cream');
-    assert.strictEqual(document.getElementById('running-live').textContent, 'Mezzo is running.');
+    assert.strictEqual(document.getElementById('running-live').textContent, 'Monitoring is not active.');
     assert.strictEqual(window.location.href, locationBefore, 'opening the Companion must never navigate this page anywhere');
   });
 
@@ -572,9 +572,9 @@ describe('Opening the Mezzo Companion', () => {
     document.getElementById('btn-open-companion').click();
     await tick(2);
     assert.strictEqual(visibleStateId(document), 'state-dock');
-    // The running state: cream, "Mezzo is running", announced once.
+    // The running state: cream, its status line announced.
     assert.strictEqual(document.body.dataset.surface, 'cream');
-    assert.strictEqual(document.getElementById('running-live').textContent, 'Mezzo is running.');
+    assert.strictEqual(document.getElementById('running-live').textContent, 'Monitoring is not active.');
   });
 
   it('the Dock shows no profile name, calibration progress, or monitoring/profile controls', async () => {
@@ -593,6 +593,15 @@ describe('Opening the Mezzo Companion', () => {
 // =============================================================================
 // Close Companion — Dock's one lifecycle exception, Dock -> Home
 // =============================================================================
+
+describe('dockStatusCopy', () => {
+  it('reads "Monitoring is active" only while monitoring, "not active" for every other state', async () => {
+    const { dockStatusCopy } = await import('./home-dock.js');
+    const S = { MONITORING_ACTIVE: 'a', COMPANION_READY: 'r', COMPANION_CALIBRATING: 'c', COMPANION_NEEDS_ATTENTION: 'n' };
+    assert.strictEqual(dockStatusCopy('a', S), 'Monitoring is active');
+    for (const s of ['r', 'c', 'n']) assert.strictEqual(dockStatusCopy(s, S), 'Monitoring is not active');
+  });
+});
 
 describe('Close Companion', () => {
   it('returns Dock to Home', async () => {
@@ -620,9 +629,9 @@ describe('Close Companion', () => {
     document.getElementById('btn-open-companion').click();
     await tick(2);
     assert.strictEqual(visibleStateId(document), 'state-dock');
-    // The running state: cream, "Mezzo is running", announced once.
+    // The running state: cream, its status line announced.
     assert.strictEqual(document.body.dataset.surface, 'cream');
-    assert.strictEqual(document.getElementById('running-live').textContent, 'Mezzo is running.');
+    assert.strictEqual(document.getElementById('running-live').textContent, 'Monitoring is not active.');
     assert.strictEqual(JSON.parse(localStorage.getItem('mezzoProfiles')).length, 1, 'reopening must never duplicate or lose the saved profile');
   });
 });

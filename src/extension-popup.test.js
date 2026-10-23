@@ -1,7 +1,7 @@
 /**
- * The browser extension's popup (extension/popup/): two states — not
- * running ("Open Mezzo") and running ("Show Mezzo window"), decided only by
- * whether Mezzo's window exists.
+ * The browser extension's popup (extension/popup/): three states — Mezzo
+ * not open ("Open Mezzo"), Mezzo the tab in front ("You're on Mezzo."), and
+ * Mezzo open elsewhere ("Go to Mezzo").
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
@@ -13,18 +13,21 @@ const html = readFileSync(new URL('../extension/popup/popup.html', import.meta.u
 const css = readFileSync(new URL('../extension/popup/popup.css', import.meta.url), 'utf8');
 const background = readFileSync(new URL('../extension/background.js', import.meta.url), 'utf8');
 
-function setup({ existing = null } = {}) {
+function setup({ where = null } = {}) {
+  // where: null (not open), 'here' (the tab in front), 'elsewhere'
   const { document } = parseHTML(html);
   const calls = { messages: [], focused: [], tabs: [], closed: 0 };
-  const windows = {
-    getExistingWindow: async () => existing,
-    focusWindow: async (win) => { calls.focused.push(win.id); },
+  const mezzoTab = where ? { id: 42, windowId: 3, active: where === 'here' } : null;
+  const tabs = {
+    findMezzoTab: async () => mezzoTab,
+    isFrontTab: async (t) => where === 'here' && t === mezzoTab,
+    focusTab: async (t) => { calls.focused.push(t.id); },
   };
   const chromeApi = {
     runtime: { sendMessage: (m) => calls.messages.push(m) },
     tabs: { create: (o) => calls.tabs.push(o.url) },
   };
-  return { document, calls, init: () => initPopup(document, { windows, chromeApi, closePopup: () => { calls.closed += 1; } }) };
+  return { document, calls, init: () => initPopup(document, { tabs, chromeApi, closePopup: () => { calls.closed += 1; } }) };
 }
 const visible = (el) => !el.hidden;
 
@@ -39,7 +42,8 @@ describe('extension popup', () => {
     assert.equal(notRunning.querySelector('.lede').textContent, "A gentle nudge when you're talking louder than you'd like.");
     assert.equal(notRunning.querySelector('button').textContent, 'Open Mezzo');
     assert.equal(notRunning.querySelector('.note').textContent, 'Opens in its own window. Only measures volume.');
-    assert.ok(!visible(document.querySelector('.state-running')));
+    assert.ok(!visible(document.querySelector('.state-here')));
+    assert.ok(!visible(document.querySelector('.state-elsewhere')));
     assert.ok(!visible(document.querySelector('.open-label')));
     assert.equal(document.getElementById('link-privacy').textContent, 'Privacy');
     assert.equal(document.getElementById('btn-settings').textContent, 'Settings');
@@ -55,24 +59,34 @@ describe('extension popup', () => {
     assert.equal(calls.closed, 1);
   });
 
-  it('running (the window exists): the sage "Open" label, the line, and "Show Mezzo window", which focuses it', async () => {
-    const { document, calls, init } = setup({ existing: { id: 42, state: 'minimized' } });
+  it('Mezzo is the tab in front: the sage "Open" label and "You\'re on Mezzo.", no button', async () => {
+    const { document, init } = setup({ where: 'here' });
     await init();
-    assert.equal(document.querySelector('.popup').dataset.state, 'running');
+    assert.equal(document.querySelector('.popup').dataset.state, 'here');
     assert.ok(visible(document.querySelector('.open-label')));
-    assert.equal(document.querySelector('.open-label').textContent.trim(), 'Open');
-    const running = document.querySelector('.state-running');
-    assert.ok(visible(running));
-    assert.equal(running.querySelector('.lede').textContent, 'Mezzo is open in its own window.');
-    assert.equal(running.querySelector('button').textContent, 'Show Mezzo window');
+    const here = document.querySelector('.state-here');
+    assert.ok(visible(here));
+    assert.equal(here.querySelector('.lede').textContent, "You're on Mezzo.");
+    assert.equal(here.querySelector('button'), null);
     assert.ok(!visible(document.querySelector('.state-not-running')));
-    // No profile name or monitoring detail.
+    assert.ok(!visible(document.querySelector('.state-elsewhere')));
+  });
+
+  it('Mezzo is open elsewhere: "Mezzo is already open." and "Go to Mezzo", which brings that tab forward', async () => {
+    const { document, calls, init } = setup({ where: 'elsewhere' });
+    await init();
+    assert.equal(document.querySelector('.popup').dataset.state, 'elsewhere');
+    const elsewhere = document.querySelector('.state-elsewhere');
+    assert.ok(visible(elsewhere));
+    assert.equal(elsewhere.querySelector('.lede').textContent, 'Mezzo is already open.');
+    assert.equal(elsewhere.querySelector('button').textContent, 'Go to Mezzo');
     assert.doesNotMatch(document.body.textContent, /profile/i);
 
-    document.getElementById('btn-show-mezzo').click();
+    document.getElementById('btn-go-to-mezzo').click();
     await new Promise((r) => setTimeout(r, 0));
     assert.deepEqual(calls.focused, [42]);
     assert.deepEqual(calls.messages, []);
+    assert.equal(calls.closed, 1);
   });
 
   it('the Lantern palette only: charcoal, cream, chartreuse button with 3px corners, sage links; no serif, no old cream or hanko orange', () => {
@@ -101,7 +115,7 @@ describe('extension popup', () => {
         remove: async (k) => { delete store[k]; },
       } },
     };
-    await initPopup(document, { windows: { getExistingWindow: async () => null, focusWindow: async () => {} }, chromeApi, closePopup: () => {} });
+    await initPopup(document, { tabs: { findMezzoTab: async () => null, isFrontTab: async () => false, focusTab: async () => {} }, chromeApi, closePopup: () => {} });
     const form = document.getElementById('dev-url-form');
     const status = document.getElementById('dev-url-status');
     assert.ok(!form.hidden);

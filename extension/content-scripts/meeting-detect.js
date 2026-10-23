@@ -186,9 +186,10 @@
       // auto-starts monitoring, so there's no meaningful distinction left
       // between "start with last profile" and "let me pick a profile"
       // (both land in the same place); background.js clears the badge too.
-      // platform: lets Mezzo show its one-time Meet tip (see background.js).
-      // screen: lets the window open fully on this screen (lib/positioning.js).
-      sendMessageSafely({ type: 'OPEN_MEZZO', focused: true, platform: platform.name, screen: availableScreen() });
+      // Brings an open Mezzo forward instead of opening a second one
+      // (lib/window-manager.js). screen: lets a new window open fully on
+      // this screen (lib/positioning.js).
+      sendMessageSafely({ type: 'OPEN_MEZZO', focused: true, screen: availableScreen() });
       removeBanner();
     });
     const dismiss = () => {

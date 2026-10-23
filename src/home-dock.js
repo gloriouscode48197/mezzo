@@ -69,6 +69,15 @@ const FADE_IN_MS = 350;
  * @param {string} elements.baseUrl - passed straight through to createMezzoSession().
  * @returns {{ session: object, isPipSupported: () => boolean }}
  */
+/**
+ * The running page's status line: whether monitoring is active, nothing
+ * finer. Every other Companion state (Welcome, Ready, Calibrating, a
+ * decision) reads "not active".
+ */
+export function dockStatusCopy(state, SESSION_STATES) {
+  return state === SESSION_STATES.MONITORING_ACTIVE ? 'Monitoring is active' : 'Monitoring is not active';
+}
+
 export function initHomeDock({
   stateHome,
   stateUnsupported,
@@ -327,13 +336,15 @@ export function initHomeDock({
    * Dock is driven entirely off session state, never a direct call from a
    * click handler — COMPANION_CLOSED always means Home (back to the granted
    * page once the permission check confirms it), everything else means the
-   * running state (internally the Dock). The page doesn't track what the
-   * Companion is doing inside: "Companion open" is all it says.
+   * running state (internally the Dock). The status line says only whether
+   * monitoring is active (dockStatusCopy()); it never reads zone or profile.
    */
   let running = false;
+  let lastStatus = null;
   function handleSessionStateChange(state) {
     if (state === session.SESSION_STATES.COMPANION_CLOSED) {
       running = false;
+      lastStatus = null;
       // Closed by something other than Close Companion (another mini
       // window, such as Meet's, or the Companion's own ✕): stay on the
       // cream page and offer to reopen it.
@@ -348,10 +359,13 @@ export function initHomeDock({
     }
     transitionToState('dock');
     showRunningVariant('open');
-    if (!running) {
-      running = true;
-      if (runningLiveEl) runningLiveEl.textContent = 'Mezzo is running.';
-    }
+    running = true;
+    const status = dockStatusCopy(state, session.SESSION_STATES);
+    stateDock?.querySelector('.running-label-text')?.replaceChildren(status);
+    if (stateDock) stateDock.dataset.monitoring = String(state === session.SESSION_STATES.MONITORING_ACTIVE);
+    // Announce the status when it changes, not on every inner state change.
+    if (status !== lastStatus && runningLiveEl) runningLiveEl.textContent = `${status}.`;
+    lastStatus = status;
   }
 
   function goHome() {
@@ -363,9 +377,9 @@ export function initHomeDock({
   //    a reopen offer. Same page, same cream surface. ──
   const RUNNING_COPY = {
     open: {
-      label: 'Companion open',
-      heading: 'Mezzo is running',
-      body: "Your Companion is open in its own window. Switch to your meeting whenever you're ready.",
+      label: null, // the live status line (dockStatusCopy())
+      heading: 'Your Companion is open',
+      body: 'Keep this page open while using Mezzo. Closing it will also close the Mezzo Companion.',
     },
     closed: {
       label: 'Companion closed',
@@ -378,13 +392,14 @@ export function initHomeDock({
     const copy = RUNNING_COPY[variant];
     stateDock.dataset.variant = variant;
     const set = (sel, text) => { const el = stateDock.querySelector(sel); if (el) el.textContent = text; };
-    set('.running-label-text', copy.label);
+    if (copy.label) set('.running-label-text', copy.label);
     set('.running-heading', copy.heading);
     set('.running-body', copy.body);
     const reopen = stateDock.querySelector('.running-reopen');
     if (reopen) reopen.hidden = variant !== 'closed';
     if (btnCloseCompanion) btnCloseCompanion.hidden = variant === 'closed';
-    renderMeetTip();
+    const privacy = stateDock.querySelector('.running-privacy');
+    if (privacy) privacy.hidden = variant !== 'closed';
   }
 
   async function handleReopenClick() {
@@ -398,36 +413,11 @@ export function initHomeDock({
     goHome();
   }
 
-  // ── The one-time Meet tip. The extension opens Mezzo with ?from=meet when
-  //    it was launched from a Meet call; that's remembered, the tip shows on
-  //    the running page until dismissed, and never again after. ──
-  const MEET_DETECTED_KEY = 'mezzoMeetDetected';
-  const MEET_TIP_DISMISSED_KEY = 'mezzoMeetTipDismissed';
-  const readFlag = (key) => { try { return localStorage.getItem(key) === '1'; } catch { return false; } };
-  const writeFlag = (key) => { try { localStorage.setItem(key, '1'); } catch { /* storage unavailable */ } };
-  try {
-    const url = new URL(window.location.href);
-    if (url.searchParams.get('from') === 'meet') {
-      writeFlag(MEET_DETECTED_KEY);
-      url.searchParams.delete('from');
-      window.history.replaceState(null, '', url.pathname + url.search + url.hash);
-    }
-  } catch { /* no usable URL: nothing to remember */ }
-  function renderMeetTip() {
-    const tip = stateDock?.querySelector('.running-tip');
-    if (tip) tip.hidden = !(readFlag(MEET_DETECTED_KEY) && !readFlag(MEET_TIP_DISMISSED_KEY));
-  }
-  function handleMeetTipDismiss() {
-    writeFlag(MEET_TIP_DISMISSED_KEY);
-    renderMeetTip();
-  }
-
   btnEnableMicrophone?.addEventListener('click', handleEnableMicrophoneClick);
   btnOpenCompanion?.addEventListener('click', handleLaunchCompanionClick);
   btnCloseCompanion?.addEventListener('click', handleCloseCompanionClick);
   stateDock?.querySelector('#btn-reopen-companion')?.addEventListener('click', handleReopenClick);
   stateDock?.querySelector('#btn-reopen-done')?.addEventListener('click', handleReopenDoneClick);
-  stateDock?.querySelector('#btn-meet-tip-dismiss')?.addEventListener('click', handleMeetTipDismiss);
 
   // PiP support is a static browser capability, not something that changes
   // at runtime — decided once, here, rather than re-checked per interaction.

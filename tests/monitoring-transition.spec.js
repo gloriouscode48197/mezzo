@@ -70,7 +70,7 @@ test.describe('Companion: calibration -> Ready -> Monitoring -> Ready', () => {
     const monitoringScreen = pipPage.locator('.pip-screen-monitoring');
     await expect(monitoringScreen).toBeVisible();
     await expect(monitoringScreen.locator('.mezzo-ring')).toBeVisible();
-    await expect(page.locator('#state-dock h1')).toHaveText('Mezzo is running');
+    await expect(page.locator('#state-dock .running-label')).toHaveText('Monitoring is active');
 
     // Live fake-mic levels actually reach the Range Ring — not just a screen
     // that's technically un-hidden but never updates: the ring carries a
@@ -126,7 +126,7 @@ test.describe('Companion: calibration -> Ready -> Monitoring -> Ready', () => {
     const monitoringScreen = pipPage.locator('.pip-screen-monitoring');
     await expect(monitoringScreen).toBeVisible();
     await expect(monitoringScreen.locator('.mezzo-ring')).toBeVisible();
-    await expect(page.locator('#state-dock h1')).toHaveText('Mezzo is running');
+    await expect(page.locator('#state-dock .running-label')).toHaveText('Monitoring is active');
 
     const ring = monitoringScreen.locator('.mezzo-ring');
     await expect(ring).toHaveAttribute('data-zone', /^[0-3]$/);

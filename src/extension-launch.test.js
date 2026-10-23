@@ -8,6 +8,7 @@ import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { placeWindow } from '../extension/lib/positioning.js';
+import { isMezzoHome, findMezzoTab, isFrontTab } from '../extension/lib/mezzo-tabs.js';
 import { LIVE_BASE_URL, normalizeBaseUrl, isUnpacked, getBaseUrl, setBaseUrlOverride, clearBaseUrlOverride } from '../extension/lib/mezzo-url.js';
 
 function fakeChrome({ unpacked = true } = {}) {
@@ -30,6 +31,7 @@ function fakeChrome({ unpacked = true } = {}) {
       },
     },
     focused: [],
+    tabs: { query: async () => [], update: async () => {} },
     windows: {
       create: async (o) => { created.push(o); return { id: 7 }; },
       get: async () => { throw new Error('none'); },
@@ -82,16 +84,75 @@ describe('extension: Mezzo window', () => {
   });
 });
 
-describe('extension: Mezzo window, existing', () => {
-  it('an existing window is brought to the front and restored, never re-created', async () => {
-    const chrome = fakeChrome();
-    chrome.storage.session.get = async () => ({ mezzoCompanionWindowId: 9 });
-    chrome.windows.get = async (id) => ({ id, state: 'minimized' });
+describe('extension: no second Mezzo', () => {
+  const LIVE = 'https://mezzo-one.vercel.app';
+  const withTabs = (tabs, focusedWindowId = 1) => {
+    const chrome = fakeChrome({ unpacked: false });
+    chrome.queries = [];
+    chrome.updates = [];
+    chrome.tabs = {
+      query: async (q) => { chrome.queries.push(q); return tabs; },
+      update: async (id, o) => { chrome.updates.push(['tab', id, o]); },
+    };
+    chrome.windows.getLastFocused = async () => ({ id: focusedWindowId, focused: true });
+    chrome.windows.get = async (id) => ({ id, state: id === 2 ? 'minimized' : 'normal' });
+    chrome.windows.update = async (id, o) => { chrome.updates.push(['window', id, o]); };
+    return chrome;
+  };
+
+  it('recognizes Mezzo Home on the live site only, not other pages or sites', () => {
+    assert.ok(isMezzoHome(`${LIVE}/`, LIVE));
+    assert.ok(isMezzoHome(`${LIVE}/index.html?x=1#y`, LIVE));
+    assert.ok(isMezzoHome(`${LIVE}/try-it.html`, LIVE));
+    assert.ok(!isMezzoHome(`${LIVE}/privacy.html`, LIVE));
+    assert.ok(!isMezzoHome(`${LIVE}/playground/`, LIVE));
+    assert.ok(!isMezzoHome('https://evil.example/index.html', LIVE));
+    assert.ok(!isMezzoHome(undefined, LIVE));
+  });
+
+  it('finds Mezzo in any tab of any window, using the site host permission (no "tabs" permission)', async () => {
+    const chrome = withTabs([{ id: 5, windowId: 2, active: false, url: `${LIVE}/index.html` }]);
+    const tab = await findMezzoTab(chrome);
+    assert.equal(tab.id, 5);
+    assert.deepEqual(chrome.queries, [{ url: 'https://mezzo-one.vercel.app/*' }]);
+    const manifest = JSON.parse(readFileSync(new URL('../extension/manifest.json', import.meta.url), 'utf8'));
+    assert.ok(!manifest.permissions.includes('tabs'));
+    assert.ok(manifest.host_permissions.includes('https://mezzo-one.vercel.app/*'));
+  });
+
+  it('prefers the Mezzo tab in the focused window, then an active one', async () => {
+    const tabs = [
+      { id: 1, windowId: 3, active: true, url: `${LIVE}/` },
+      { id: 2, windowId: 1, active: false, url: `${LIVE}/` },
+      { id: 3, windowId: 1, active: false, url: `${LIVE}/privacy.html` },
+    ];
+    assert.equal((await findMezzoTab(withTabs(tabs))).id, 2);
+    assert.equal((await findMezzoTab(withTabs(tabs, 9))).id, 1);
+  });
+
+  it('"in front" means the active tab of the focused window', async () => {
+    const chrome = withTabs([]);
+    assert.equal(await isFrontTab({ id: 1, windowId: 1, active: true }, chrome), true);
+    assert.equal(await isFrontTab({ id: 1, windowId: 1, active: false }, chrome), false);
+    assert.equal(await isFrontTab({ id: 1, windowId: 4, active: true }, chrome), false);
+  });
+
+  it('an open Mezzo, wherever it is, is brought forward (window focused and restored, tab activated), never opened twice', async () => {
+    const chrome = withTabs([{ id: 5, windowId: 2, active: false, url: `${LIVE}/index.html` }]);
     globalThis.chrome = chrome;
     const { MezzoWindowManager } = await import('../extension/lib/window-manager.js');
-    await MezzoWindowManager.openOrFocus({ url: 'https://mezzo-one.vercel.app/index.html' });
+    await MezzoWindowManager.openOrFocus({ url: `${LIVE}/index.html` });
     assert.equal(chrome.created.length, 0);
-    assert.deepEqual(chrome.created.focusedUpdates, [{ id: 9, focused: true, state: 'normal' }]);
+    assert.deepEqual(chrome.updates, [['window', 2, { focused: true, state: 'normal' }], ['tab', 5, { active: true }]]);
+  });
+
+  it('with no Mezzo open, a new focused window', async () => {
+    const chrome = withTabs([{ id: 7, windowId: 1, active: true, url: `${LIVE}/privacy.html` }]);
+    globalThis.chrome = chrome;
+    const { MezzoWindowManager } = await import('../extension/lib/window-manager.js');
+    await MezzoWindowManager.openOrFocus({ url: `${LIVE}/index.html` });
+    assert.equal(chrome.created.length, 1);
+    assert.equal(chrome.created[0].focused, true);
   });
 });
 
@@ -139,7 +200,7 @@ describe('extension: meeting banner', () => {
   });
 
   it('"Open Mezzo" asks for a focused window and sends the screen it was clicked on', () => {
-    assert.match(src, /type: 'OPEN_MEZZO', focused: true, platform: platform\.name, screen: availableScreen\(\)/);
+    assert.match(src, /type: 'OPEN_MEZZO', focused: true, screen: availableScreen\(\)/);
     assert.doesNotMatch(src, /focused: false/);
   });
 

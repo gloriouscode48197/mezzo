@@ -380,10 +380,10 @@ body {
 
 /* ── Running (2026-10-22): what this page shows while the Companion is
    open (internally still the Dock, #state-dock). Cream surface
-   (data-surface="cream", set by src/home-dock.js while it shows); a small
-   "Companion open" label, the heading, one line of body, the privacy line,
-   and Close Companion as a quiet text link: the recovery action for a
-   Companion window buried behind others. ── */
+   (data-surface="cream", set by src/home-dock.js while it shows); a status
+   line ("Monitoring is active / not active"), the heading, one line of
+   guidance, and Close Companion as a quiet text link: the recovery action
+   for a Companion window buried behind others. ── */
 .btn-outline:active { transform: scale(0.98); }
 
 .running-label {
@@ -410,6 +410,7 @@ body {
   line-height: 1.6;
   color: var(--color-text-muted);
 }
+.running-privacy[hidden] { display: none; }
 .running-privacy {
   margin-top: 20px;
   color: var(--color-text-muted);
@@ -448,23 +449,6 @@ body {
 }
 .running-reopen-btn:hover { background: color-mix(in srgb, var(--color-text) 88%, var(--color-bg)); }
 .running-reopen .running-done { margin-top: 0; }
-
-/* The one-time Meet tip. */
-.running-tip {
-  max-width: 420px;
-  margin: 32px auto 0;
-  padding: 14px 18px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  text-align: left;
-}
-.running-tip-text {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--color-text-muted);
-}
-.running-tip .running-tip-dismiss { margin-top: 8px; }
 
 .running-live {
   position: absolute;

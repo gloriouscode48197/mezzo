@@ -19,10 +19,15 @@
       <p class="note">Opens in its own window. Only measures volume.</p>
     </section>
 
-    <!-- Running: Mezzo's window exists. -->
-    <section class="state state-running" hidden>
-      <p class="lede">Mezzo is open in its own window.</p>
-      <button id="btn-show-mezzo" type="button" class="btn-outline">Show Mezzo window</button>
+    <!-- Mezzo is the tab in front: nothing to do. -->
+    <section class="state state-here" hidden>
+      <p class="lede">You're on Mezzo.</p>
+    </section>
+
+    <!-- Mezzo is open in another tab or window. -->
+    <section class="state state-elsewhere" hidden>
+      <p class="lede">Mezzo is already open.</p>
+      <button id="btn-go-to-mezzo" type="button" class="btn-outline">Go to Mezzo</button>
     </section>
 
     <nav class="popup-links" aria-label="More">

@@ -239,13 +239,13 @@ test.describe('Main page: running (Companion open)', () => {
 
     const running = page.locator('#state-dock');
     await expect(running).toBeVisible();
-    await expect(running.locator('.running-label')).toHaveText('Companion open');
+    await expect(running.locator('.running-label')).toHaveText('Monitoring is not active');
     await expect(running.locator('.running-label')).toHaveCSS('font-size', '11px');
-    await expect(running.locator('.running-label')).toHaveCSS('text-transform', 'uppercase');
-    await expect(running.locator('h1')).toHaveText('Mezzo is running');
-    await expect(running.locator('.running-body')).toHaveText("Your Companion is open in its own window. Switch to your meeting whenever you're ready.");
-    await expect(running.locator('.running-privacy')).toHaveText('Mezzo only measures volume. Nothing you say is recorded.');
-    await expect(page.locator('#running-live')).toHaveText('Mezzo is running.');
+    await expect(running.locator('.running-label .running-dot')).toBeVisible();
+    await expect(running.locator('h1')).toHaveText('Your Companion is open');
+    await expect(running.locator('.running-body')).toHaveText('Keep this page open while using Mezzo. Closing it will also close the Mezzo Companion.');
+    await expect(running.locator('.running-privacy')).toBeHidden();
+    await expect(page.locator('#running-live')).toHaveText('Monitoring is not active.');
 
     // Cream, as a token set: page and header background, charcoal text and
     // wordmark, muted #5F5B52, charcoal divider and active-nav underline.
@@ -259,14 +259,14 @@ test.describe('Main page: running (Companion open)', () => {
     expect(await css('.nav-link-active', 'borderBottomColor')).toBe('rgb(45, 46, 49)');
 
     // Close Companion: the quiet charcoal link, 13px, underlined, ~16px
-    // below the privacy line, with the charcoal focus ring.
+    // below the body, with the charcoal focus ring.
     const close = running.locator('#btn-close-companion');
     await expect(close).toHaveText('Close Companion');
     expect(await css('#btn-close-companion', 'fontSize')).toBe('13px');
     expect(await css('#btn-close-companion', 'color')).toBe('rgb(45, 46, 49)');
     expect(await css('#btn-close-companion', 'textDecorationLine')).toBe('underline');
-    const [privacyBox, closeBox] = await Promise.all([running.locator('.running-privacy').boundingBox(), close.boundingBox()]);
-    expect(Math.abs(closeBox.y - (privacyBox.y + privacyBox.height) - 16)).toBeLessThanOrEqual(4);
+    const [bodyBox, closeBox] = await Promise.all([running.locator('.running-body').boundingBox(), close.boundingBox()]);
+    expect(Math.abs(closeBox.y - (bodyBox.y + bodyBox.height) - 16)).toBeLessThanOrEqual(4);
     await close.focus();
     await page.keyboard.press('Shift+Tab'); await page.keyboard.press('Tab'); // keyboard focus, for :focus-visible
     expect(await css('#btn-close-companion', 'outlineColor')).toBe('rgb(45, 46, 49)');
@@ -281,18 +281,30 @@ test.describe('Main page: running (Companion open)', () => {
     expect(await css('body', 'backgroundColor')).toBe('rgb(45, 46, 49)');
   });
 
-  test('stays "Companion open" whatever the Companion is doing (Ready, Calibrating, Monitoring): the page does not track it', async ({ page, context }) => {
+  test('the status line is the only thing that changes: "not active" on Ready and Calibrating, "active" while monitoring, live', async ({ page, context }) => {
     await page.addInitScript((profiles) => {
       localStorage.setItem('mezzoProfiles', JSON.stringify(profiles));
     }, SAVED_PROFILE);
     const pipPage = await openCompanion(page, context);
     await expect(pipPage.locator('.pip-screen-ready')).toBeVisible({ timeout: 10000 });
     const label = page.locator('#state-dock .running-label');
-    await expect(label).toHaveText('Companion open');
+    const h1 = page.locator('#state-dock h1');
+    await expect(label).toHaveText('Monitoring is not active');
+
+    await pipPage.locator('.pip-ready-start-btn').click();
+    await expect(pipPage.locator('.pip-screen-monitoring')).toBeVisible({ timeout: 5000 });
+    await expect(label).toHaveText('Monitoring is active');
+    await expect(page.locator('#running-live')).toHaveText('Monitoring is active.');
+    await expect(h1).toHaveText('Your Companion is open');
+
+    await pipPage.locator('.pip-control-btn-stop').click();
+    await expect(pipPage.locator('.pip-screen-ready')).toBeVisible({ timeout: 5000 });
+    await expect(label).toHaveText('Monitoring is not active');
+
     await recalibrateFromSelector(pipPage, 'Kitchen');
     await expect(pipPage.locator('.pip-screen-calibrating')).toBeVisible({ timeout: 10000 });
-    await expect(label).toHaveText('Companion open');
-    await expect(page.locator('#state-dock h1')).toHaveText('Mezzo is running');
+    await expect(label).toHaveText('Monitoring is not active');
+    await expect(h1).toHaveText('Your Companion is open');
   });
 
   test('no illustrative Companion-window preview or status dot remains', async ({ page, context }) => {
@@ -349,7 +361,7 @@ test.describe('Main page: How it works layout (2026-10-22)', () => {
   });
 });
 
-test.describe('Main page: Reopen Companion and the Meet tip (2026-10-23)', () => {
+test.describe('Main page: Reopen Companion (2026-10-23)', () => {
   const PROFILE = [{ id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 100, peakDb: 2 }];
 
   test('closed by something else (another mini window, or its own ✕): the cream page offers Reopen, which brings monitoring back with the same profile', async ({ page, context }) => {
@@ -379,7 +391,8 @@ test.describe('Main page: Reopen Companion and the Meet tip (2026-10-23)', () =>
     pipPage = await pipPromise;
     await expect(pipPage.locator('.pip-screen-monitoring')).toBeVisible({ timeout: 8000 });
     await expect(pipPage.locator('.pip-profile-info')).toHaveText('Kitchen');
-    await expect(running.locator('h1')).toHaveText('Mezzo is running');
+    await expect(running.locator('h1')).toHaveText('Your Companion is open');
+    await expect(running.locator('.running-label')).toHaveText('Monitoring is active');
     await expect(running.locator('#btn-reopen-companion')).toBeHidden();
     await expect(running.locator('#btn-close-companion')).toBeVisible();
   });
@@ -403,29 +416,15 @@ test.describe('Main page: Reopen Companion and the Meet tip (2026-10-23)', () =>
     await expect(page.locator('#btn-reopen-companion')).toBeHidden();
   });
 
-  test('the Meet tip: shown on the running page after a launch from a Meet call, until dismissed, then never again', async ({ page, context }) => {
-    await page.addInitScript((p) => localStorage.setItem('mezzoProfiles', JSON.stringify(p)), PROFILE);
-    await page.goto('/index.html?from=meet');
-    await expect(page).toHaveURL(/\/index\.html$/); // the flag is read and removed from the address
-    let pipPage = await openCompanion(page, context, { skipNavigation: true });
-    await expect(pipPage.locator('.pip-screen-ready')).toBeVisible({ timeout: 10000 });
-    const tip = page.locator('#state-dock .running-tip');
-    await expect(tip).toBeVisible();
-    await expect(tip).toHaveText(/Meet may open its own mini window when you switch tabs or share your screen, which closes Mezzo's\. You can turn it off in Meet's site settings: Automatic picture-in-picture\./);
-    await tip.locator('#btn-meet-tip-dismiss').click();
-    await expect(tip).toBeHidden();
-
-    await page.locator('#btn-close-companion').click();
-    await expect(page.locator('#mic-granted')).toBeVisible({ timeout: 5000 });
-    pipPage = await openCompanion(page, context);
-    await expect(pipPage.locator('.pip-screen-ready')).toBeVisible({ timeout: 10000 });
-    await expect(page.locator('#state-dock .running-tip')).toBeHidden();
-  });
-
-  test('no tip without a Meet launch', async ({ page, context }) => {
+  test('no Meet tip, on the running page or the closed page', async ({ page, context }) => {
     await page.addInitScript((p) => localStorage.setItem('mezzoProfiles', JSON.stringify(p)), PROFILE);
     const pipPage = await openCompanion(page, context);
     await expect(pipPage.locator('.pip-screen-ready')).toBeVisible({ timeout: 10000 });
-    await expect(page.locator('#state-dock .running-tip')).toBeHidden();
+    await expect(page.locator('#state-dock')).not.toContainText('Automatic picture-in-picture');
+    await expect(page.locator('.running-tip')).toHaveCount(0);
+    await pipPage.close();
+    await expect(page.locator('#btn-reopen-companion')).toBeVisible();
+    await expect(page.locator('#state-dock')).not.toContainText('Automatic picture-in-picture');
+    await expect(page.locator('#state-dock .running-privacy')).toBeVisible(); // the closed page keeps its privacy line
   });
 });

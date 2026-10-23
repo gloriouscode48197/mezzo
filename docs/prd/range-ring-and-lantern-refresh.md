@@ -313,11 +313,13 @@ Unchanged. The address-bar chip shows the page's real host (`window.location.hos
 
 ### Running page (Dock)
 
-While the Companion is open, the page turns cream (`[data-surface="cream"]`, charcoal text): a "Companion open" label, "Mezzo is running", "Your Companion is open in its own window. Switch to your meeting whenever you're ready.", the privacy line, and a quiet charcoal **Close Companion** link.
+While the Companion is open, the page turns cream (`[data-surface="cream"]`, charcoal text): a status line ("Monitoring is not active" / "Monitoring is active", live), "Your Companion is open", "Keep this page open while using Mezzo. Closing it will also close the Mezzo Companion.", and a quiet charcoal **Close Companion** link.
+
+*Changed during build: the running page went back to the original wording and status line after a live Meet test; the privacy line shows only on the closed page.*
 
 *Changed during build: the running page is cream, not dark; the dark Companion needs contrast behind it.*
 
-**Reopen Companion.** Chrome allows one picture-in-picture window at a time, and the newest wins. After any close other than Close Companion (another mini window, or the Companion's own ✕, which look the same), the page stays cream with "The Companion closed", a charcoal **Reopen Companion** button and a **Done** link. Reopen opens it from that click with the same profile (a temporary one too) and resumes monitoring if it was running; Done returns to the granted state. After a launch from a Meet call, a one-time tip explains Meet's Automatic picture-in-picture setting.
+**Reopen Companion.** Chrome allows one picture-in-picture window at a time, and the newest wins. After any close other than Close Companion (another mini window, or the Companion's own ✕, which look the same), the page stays cream with "The Companion closed", a charcoal **Reopen Companion** button and a **Done** link. Reopen opens it from that click with the same profile (a temporary one too) and resumes monitoring if it was running; Done returns to the granted state.
 
 *Changed during build: Reopen Companion was added because Meet's mini window and screen sharing close the Companion.*
 

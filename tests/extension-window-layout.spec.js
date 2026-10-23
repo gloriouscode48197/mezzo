@@ -58,12 +58,10 @@ test.describe('Home at the extension window size (800 wide)', () => {
     await shot(page, '3-denied');
   });
 
-  test('running, then closed with Reopen, Done and the Meet tip', async ({ page, context }) => {
-    await page.goto('/index.html?from=meet');
-    const pipPage = await openCompanion(page, context, { skipNavigation: true });
+  test('running, then closed with Reopen and Done', async ({ page, context }) => {
+    const pipPage = await openCompanion(page, context);
     const running = page.locator('#state-dock');
     await expect(running).toBeVisible();
-    await expect(running.locator('.running-tip')).toBeVisible();
     await expectNoSidewaysScroll(page);
     await shot(page, '4-running');
 

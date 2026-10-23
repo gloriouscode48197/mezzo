@@ -54,7 +54,7 @@ From the user's perspective there are only two named product experiences.
 Mezzo is Picture-in-Picture–first: the Mezzo Companion is the one operational surface. Mezzo (the browser page) is not part of that operational workflow — it has exactly two narrow jobs, depending on whether a Companion exists yet:
 
 * **Before a Companion exists:** introduce the product, and — as one narrow, deliberate exception — prepare and request microphone access (see "Learn About Mezzo," below, and CLAUDE.md's Non-Negotiable Decisions, "permission should follow understanding"). Still no profile selection and no calibration; its one operational action beyond the permission gate itself is opening the Mezzo Companion.
-* **While a Companion is open:** stay open to keep the Companion running, say so ("Mezzo is running"), and offer one recovery action (Close Companion) for when the Companion's own native ✕ isn't reachable. If the Companion closes without the user asking this page to close it (another picture-in-picture window replaced it, or its own ✕), it offers to reopen it.
+* **While a Companion is open:** stay open to keep the Companion running, say whether monitoring is active, and offer one recovery action (Close Companion) for when the Companion's own native ✕ isn't reachable. If the Companion closes without the user asking this page to close it (another picture-in-picture window replaced it, or its own ✕), it offers to reopen it.
 
 Every other responsibility that used to live here — preparing for monitoring, selecting/calibrating/recalibrating a profile, managing the saved-profile library, managing an active session, recovering monitoring — now belongs to the Mezzo Companion alone. Users may still move between these two states of the same page, but they should never feel like they're doing anything there beyond "get me to the Companion" and "I can see it's running."
 
@@ -132,15 +132,14 @@ Internal term only (retired name: Anchor page) — see Canonical Terminology in 
 
 The running state (cream surface, charcoal text, the website's one light theme):
 
-* a small "Companion open" label, "Mezzo is running", and "Your Companion is open in its own window. Switch to your meeting whenever you're ready."
-* the privacy line, "Mezzo only measures volume. Nothing you say is recorded."
-* **Close Companion**, a quiet text link: the recovery action for a Companion buried behind other windows — the one thing this page is allowed to do beyond saying it's running
-* its live region announces "Mezzo is running." once on arrival
-* after a launch from a Google Meet call (the extension adds `?from=meet`), a one-time tip about Meet's own mini window, until dismissed
+* a status line (Geist Mono, small, with a dot): "Monitoring is not active" until monitoring starts, then "Monitoring is active", updating live — the only thing on the page that changes, announced to screen readers when it does
+* "Your Companion is open"
+* "Keep this page open while using Mezzo. Closing it will also close the Mezzo Companion."
+* **Close Companion**, a quiet text link: the recovery action for a Companion buried behind other windows — the one thing this page is allowed to do
 
-It does not track what the Companion is doing inside (Ready, Calibrating, Monitoring all read the same): no status line, no calibration UI, no profile UI, no Start monitoring, no Stop, no Save.
+The status line collapses the Companion's states to one distinction: Welcome, Ready, Calibrating and every decision screen all read "not active." No calibration UI, no profile UI, no Start monitoring, no Stop, no Save.
 
-**Reopen Companion.** Chrome allows one picture-in-picture window at a time, and the newest wins: Meet's mini window (opened manually, or automatically on a tab switch or screen share) closes the Companion. When the Companion closes in any way other than this page's Close Companion link — which includes its own native ✕, since the two look the same from inside — the page stays on the cream surface with "The Companion closed", a **Reopen Companion** button and a **Done** link. Reopen opens it again from that click with the same profile (an unsaved one included, still in memory only), and resumes monitoring if it was running. Done returns to the granted page.
+**Reopen Companion.** Chrome allows one picture-in-picture window at a time, and the newest wins: Meet's mini window (opened manually, or automatically on a tab switch or screen share) closes the Companion. When the Companion closes in any way other than this page's Close Companion link — which includes its own native ✕, since the two look the same from inside — the page stays on the cream surface with "The Companion closed", a **Reopen Companion** button and a **Done** link. Reopen opens it again from that click with the same profile (an unsaved one included, still in memory only), and resumes monitoring if it was running. Done returns to the granted page. That page keeps the privacy line, "Mezzo only measures volume. Nothing you say is recorded."
 
 The Mezzo Companion, not the Dock, is meant to stay available across an entire meeting-filled day — monitoring starts and stops independently inside it, session by session, without the Companion needing to reopen.
 
@@ -397,14 +396,15 @@ Do not imply that monitoring begins directly from the meeting prompt.
 
 The user should always begin monitoring intentionally.
 
-Today, "Open Mezzo" opens Mezzo in its own Chrome window, in front and focused (or brings the existing one forward) — a normal window with an address bar, about 800×720, lined up with the meeting window's right edge and kept fully on screen — on Home; the user still clicks Open Mezzo Companion there, since Chrome only opens a Companion from a click inside the Mezzo page. It's a separate window rather than a tab next to the meeting, since switching tabs can trigger Meet's mini window; and it keeps the address bar, since its site controls are how someone fixes a blocked microphone. From a Google Meet call, the running page shows the one-time Meet tip (see "Dock").
+Today, "Open Mezzo" opens Mezzo in its own Chrome window, in front and focused (or brings the existing one forward) — a normal window with an address bar, about 800×720, lined up with the meeting window's right edge and kept fully on screen — on Home; the user still clicks Open Mezzo Companion there, since Chrome only opens a Companion from a click inside the Mezzo page. It's a separate window rather than a tab next to the meeting, since switching tabs can trigger Meet's mini window; and it keeps the address bar, since its site controls are how someone fixes a blocked microphone. There is never a second Mezzo: both the toolbar popup and the meeting banner find Mezzo's Home in any tab of any window (matching the site's address, not only the window the extension made) and bring that one forward instead.
 
 ## Extension Popup
 
-The toolbar popup has two states, decided only by whether Mezzo's own window exists:
+The toolbar popup has three states, decided by where Mezzo's Home is open (any tab, any window):
 
-* **Not running** — the "mezzo" wordmark, "A gentle nudge when you're talking louder than you'd like.", an **Open Mezzo** button, "Opens in its own window. Only measures volume.", and Privacy and Settings links.
-* **Running** — the wordmark with an "Open" label, "Mezzo is open in its own window.", and **Show Mezzo window**, which focuses (and restores) that window.
+* **Not open** — the "mezzo" wordmark, "A gentle nudge when you're talking louder than you'd like.", an **Open Mezzo** button, "Opens in its own window. Only measures volume.", and Privacy and Settings links.
+* **The tab in front** (the active tab of the focused window) — the wordmark with an "Open" label and "You're on Mezzo." No button.
+* **Open elsewhere** — the wordmark with an "Open" label, "Mezzo is already open.", and **Go to Mezzo**, which focuses that window (restoring it if minimized) and activates that tab.
 
 It never shows profile or monitoring state. In a locally loaded (developer) copy only, Settings has a Mezzo address field, so the extension can open a preview deployment instead of the live site. The toolbar badge marks a detected meeting in charcoal and chartreuse.
 
@@ -453,7 +453,7 @@ Recovery should feel like a normal part of the experience rather than an error c
 
 # Dock Experience
 
-See "Dock" under Product Mental Model for what the running state shows. It supports recovery and keeping the Mezzo Companion alive — nothing operational, and it is not meant to be the user's focus during a meeting. It does not mirror the Companion's internal states: Ready, Calibrating and Monitoring all read "Mezzo is running."
+See "Dock" under Product Mental Model for what the running state shows. It supports recovery and keeping the Mezzo Companion alive — nothing operational, and it is not meant to be the user's focus during a meeting. It mirrors only one thing about the Companion: whether monitoring is active.
 
 The Mezzo Companion is a Document Picture-in-Picture window and already stays above other application windows on its own — Mezzo never offers a "bring to front" / "show" / "focus" control for it on this page, and never duplicates its Start monitoring or Stop controls here, or any profile/calibration control.
 

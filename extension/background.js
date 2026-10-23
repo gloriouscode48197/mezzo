@@ -43,11 +43,8 @@ const BADGE_TEXT_COLOR = '#DEDE65';
  * clicks, so the window always opens focused, in front. `screen` is the
  * clicked page's available screen area, used to keep the window on screen.
  */
-async function openMezzo({ senderTabId = null, platform = null, screen = null } = {}) {
-  // Launched from a Meet call: Mezzo shows a one-time tip about Meet's own
-  // mini window (see src/home-dock.js). Only used when the window is new.
-  const entry = `${await getBaseUrl()}/index.html`;
-  const url = platform === 'Google Meet' ? `${entry}?from=meet` : entry;
+async function openMezzo({ senderTabId = null, screen = null } = {}) {
+  const url = `${await getBaseUrl()}/index.html`;
   await MezzoWindowManager.openOrFocus({ url, focused: true, senderTabId, screen });
 }
 
@@ -69,7 +66,6 @@ chrome.runtime.onMessage.addListener((message, sender) => {
     // The meeting banner's and the popup's "Open Mezzo" button.
     openMezzo({
       senderTabId: sender?.tab?.id ?? null,
-      platform: message.platform ?? null,
       screen: message.screen ?? null,
     });
     if (sender?.tab?.id) setBadge(sender.tab.id, false);
