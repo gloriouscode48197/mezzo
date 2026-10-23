@@ -85,7 +85,7 @@ body {
 .btn-recalibrate {
   background: none;
   border: none;
-  color: var(--hanko-text);
+  color: var(--color-link);
   font-family: var(--font-body);
   font-weight: var(--weight-regular);
   font-size: 14px;

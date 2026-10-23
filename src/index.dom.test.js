@@ -68,7 +68,8 @@ class FakeIntersectionObserver {
 /**
  * A minimal stand-in for the real Web Audio pipeline src/audio.js's
  * acquire() builds — just enough surface for it to run to completion
- * without throwing: createAnalyser()/createMediaStreamSource() return
+ * without throwing: createAnalyser()/createMediaStreamSource()/
+ * createBiquadFilter() return
  * plain objects accepting whatever properties/calls acquire() makes on
  * them, and close() is a no-op release() can safely call. linkedom has no
  * real AudioContext at all, so without this, ANY acquire() call (including
@@ -81,6 +82,8 @@ class FakeIntersectionObserver {
 class FakeAudioContext {
   createAnalyser() { return { fftSize: 0, smoothingTimeConstant: 0 }; }
   createMediaStreamSource() { return { connect() {} }; }
+  // The speech-band filter (src/audio.js's applyFilterSettings()).
+  createBiquadFilter() { return { type: '', frequency: { value: 0 }, connect() {}, disconnect() {} }; }
   close() {}
 }
 
@@ -284,9 +287,8 @@ describe('Home', () => {
   it('has no leftover editorial content, footer, or design-tool state-switcher chrome', async () => {
     const { document } = await setupPage();
     const pageText = document.body.textContent;
-    // Retired editorial section (2026-08-17 redesign) — replaced by the
-    // mic-request sub-state's own "Designed for shared spaces" benefits.
-    assert.doesNotMatch(pageText, /How it works/);
+    // Retired editorial section (2026-08-17 redesign). "How it works" is
+    // back as mic-request's own steps band (2026-10-22), checked below.
     assert.doesNotMatch(pageText, /Designed to stay out of your way/);
     assert.doesNotMatch(pageText, /What it's good for/);
     assert.doesNotMatch(pageText, /What it doesn't do/);
@@ -416,47 +418,73 @@ describe('Home — microphone permission state', () => {
 // =============================================================================
 
 describe('Home — per-sub-state heading, copy, and focus', () => {
-  it('mic-request has its own accurate heading, and the "Designed for shared spaces" benefits section', async () => {
+  it('mic-request has its own eyebrow, two-part heading, highlighted subhead, and privacy line (PRD §9)', async () => {
     const { document } = await setupPage({ permissionState: 'prompt' });
     const state = document.getElementById('mic-request');
-    assert.strictEqual(state.querySelector('h1').textContent, 'You care about how your voice affects others');
-    assert.match(state.textContent, /Designed for shared spaces/);
-    assert.match(state.textContent, /For calls with headphones/);
-    assert.match(state.textContent, /A quiet visual cue/);
-    assert.match(state.textContent, /Your words stay private/);
+    const text = (sel) => state.querySelector(sel).textContent.replace(/\s+/g, ' ').trim();
+    assert.strictEqual(text('.home-eyebrow'), 'For headphone calls in shared spaces');
+    assert.strictEqual(text('h1'), 'Focus on the meeting while Mezzo minds the volume.');
+    assert.strictEqual(text('.home-hero-heading-lead'), 'Focus on the meeting');
+    assert.strictEqual(text('.home-hero-heading-rest'), 'while Mezzo minds the volume.');
+    assert.strictEqual(text('.home-hero-subhead'), "Set a range you're comfortable with. A soft glow nudges you when your voice drifts outside it, before it carries.");
+    assert.strictEqual(text('.home-highlight'), 'soft glow');
+    assert.strictEqual(text('.home-hero-privacy'), 'Mezzo only measures volume. Nothing you say is recorded.');
   });
 
-  it('the static visualization is the supplied PNG (assets/home-vizx2.png) — a plain, inert <img>, never a <canvas> or an inline SVG, never a MezzoWaveVisualizer instance, never animated, never touching the microphone', async () => {
+  it('Enable microphone is the only button on the prompt page, in the hero; the old Get started link is gone', async () => {
     const { document } = await setupPage({ permissionState: 'prompt' });
-    const viz = document.querySelector('.hero-static-viz');
-    assert.notStrictEqual(viz, null);
-    assert.strictEqual(viz.querySelector('canvas'), null, 'a real MezzoWaveVisualizer always renders a <canvas> — this must be a plain, inert <img> instead');
-    assert.strictEqual(viz.querySelector('svg'), null, 'the earlier hand-authored contour SVG is retired — the product-owner-supplied PNG replaces it outright');
-    assert.strictEqual(viz.getAttribute('aria-hidden'), 'true');
-
-    const img = viz.querySelector('img');
-    assert.notStrictEqual(img, null);
-    assert.match(img.getAttribute('src'), /assets\/home-vizx2\.png$/);
-    assert.strictEqual(img.getAttribute('alt'), '', 'decorative only — the heading already carries the meaning');
-    assert.strictEqual(img.getAttribute('width'), '220');
-    assert.strictEqual(img.getAttribute('height'), '220');
-    assert.strictEqual(img.hasAttribute('tabindex'), false, 'a plain <img> is never a tab stop on its own — no tabindex should be added');
+    const state = document.getElementById('mic-request');
+    const buttons = [...state.querySelectorAll('button, a.btn-primary, .btn-primary, .btn-outline')];
+    assert.deepStrictEqual(buttons.map((b) => b.id), ['btn-enable-microphone']);
+    assert.ok(state.querySelector('.home-hero').contains(document.getElementById('btn-enable-microphone')));
+    assert.strictEqual(document.querySelector('.home-get-started'), null);
+    assert.strictEqual(document.getElementById('get-started'), null);
   });
 
-  it('the benefits section does not appear in mic-granted or mic-denied — it is scoped to mic-request only', async () => {
+  it('How it works: an intro and three numbered steps, with three ring chips under step 03', async () => {
+    const { document } = await setupPage({ permissionState: 'prompt' });
+    const how = document.getElementById('how-it-works');
+    assert.ok(document.getElementById('mic-request').contains(how));
+    assert.strictEqual(how.querySelector('h2').textContent, 'How it works');
+    assert.match(how.textContent, /It takes about a minute\. Everything happens in your browser\./);
+    const steps = [...how.querySelectorAll('.home-step')];
+    assert.deepStrictEqual(steps.map((li) => li.querySelector('.home-step-number').textContent), ['01', '02', '03']);
+    assert.deepStrictEqual(steps.map((li) => li.querySelector('h3').textContent), ['Allow your mic', 'Calibrate in the Companion', 'Glance at the ring']);
+    assert.match(steps[0].textContent, /Choose "Allow on every visit" to skip this step next time\./);
+    const chips = [...steps[2].querySelectorAll('.home-chip')];
+    assert.deepStrictEqual(
+      chips.map((c) => [c.dataset.state, c.querySelector('.home-chip-label').textContent, c.querySelector('.home-chip-text').textContent]),
+      [['within', 'Within range', 'Keep going'], ['approaching', 'Approaching', 'Getting close'], ['over', 'Outside range', 'Ease back']],
+    );
+    for (const c of chips) assert.strictEqual(c.querySelector('.home-chip-ring').getAttribute('aria-hidden'), 'true');
+  });
+
+  it('the retired benefits section, ring tile, and Get started band are gone', async () => {
+    const { document } = await setupPage({ permissionState: 'prompt' });
+    for (const sel of ['.home-benefits', '.home-benefit-heading', '.home-ring-tile', '.home-ring', '.home-ring-caption', '.home-start', '.hero-static-viz']) {
+      assert.strictEqual(document.querySelector(sel), null, `${sel} should be gone`);
+    }
+    assert.doesNotMatch(document.body.textContent, /Designed for shared spaces|Calibrated to you/);
+  });
+
+  it('How it works does not appear in mic-granted or mic-denied — it is scoped to mic-request only', async () => {
     const { document } = await setupPage({ permissionState: 'granted' });
-    assert.doesNotMatch(document.getElementById('mic-granted').textContent, /Designed for shared spaces/);
+    assert.doesNotMatch(document.getElementById('mic-granted').textContent, /How it works|Glance at the ring/);
 
     const { document: deniedDoc } = await setupPage({ permissionState: 'denied' });
-    assert.doesNotMatch(deniedDoc.getElementById('mic-denied').textContent, /Designed for shared spaces/);
+    assert.doesNotMatch(deniedDoc.getElementById('mic-denied').textContent, /How it works|Glance at the ring/);
   });
 
-  it('mic-granted has its own accurate heading and copy, distinguishing permission being enabled from the microphone actually being used', async () => {
+  it('mic-granted keeps its heading and Open Mezzo Companion, with the merged line and short privacy line', async () => {
     const { document } = await setupPage({ permissionState: 'granted' });
     const state = document.getElementById('mic-granted');
     assert.strictEqual(state.querySelector('h1').textContent, "You're ready to use Mezzo");
-    assert.match(state.textContent, /Microphone access is enabled\./);
-    assert.match(state.textContent, /Mezzo only uses your microphone while calibrating or monitoring\./);
+    const lines = [...state.querySelectorAll('p')].map((p) => p.textContent);
+    assert.deepStrictEqual(lines, [
+      'Microphone access is on. Open the Companion to pick a speaking profile and start monitoring.',
+      'Mezzo only measures volume. Nothing you say is recorded.',
+    ]);
+    assert.strictEqual(state.querySelector('button').id, 'btn-open-companion');
   });
 
   it('mic-denied has its own accurate heading, generic (not browser-specific) recovery copy, and a caption — never a Try again/Reload button', async () => {
@@ -530,7 +558,9 @@ describe('Opening the Mezzo Companion', () => {
     document.getElementById('btn-open-companion').click();
     await tick(2);
     assert.strictEqual(visibleStateId(document), 'state-dock');
-    assert.strictEqual(document.getElementById('dock-status-text').textContent, 'Monitoring is not active');
+    // The running state: cream, "Mezzo is running", announced once.
+    assert.strictEqual(document.body.dataset.surface, 'cream');
+    assert.strictEqual(document.getElementById('running-live').textContent, 'Mezzo is running.');
     assert.strictEqual(window.location.href, locationBefore, 'opening the Companion must never navigate this page anywhere');
   });
 
@@ -542,7 +572,9 @@ describe('Opening the Mezzo Companion', () => {
     document.getElementById('btn-open-companion').click();
     await tick(2);
     assert.strictEqual(visibleStateId(document), 'state-dock');
-    assert.strictEqual(document.getElementById('dock-status-text').textContent, 'Monitoring is not active');
+    // The running state: cream, "Mezzo is running", announced once.
+    assert.strictEqual(document.body.dataset.surface, 'cream');
+    assert.strictEqual(document.getElementById('running-live').textContent, 'Mezzo is running.');
   });
 
   it('the Dock shows no profile name, calibration progress, or monitoring/profile controls', async () => {
@@ -588,7 +620,9 @@ describe('Close Companion', () => {
     document.getElementById('btn-open-companion').click();
     await tick(2);
     assert.strictEqual(visibleStateId(document), 'state-dock');
-    assert.strictEqual(document.getElementById('dock-status-text').textContent, 'Monitoring is not active');
+    // The running state: cream, "Mezzo is running", announced once.
+    assert.strictEqual(document.body.dataset.surface, 'cream');
+    assert.strictEqual(document.getElementById('running-live').textContent, 'Mezzo is running.');
     assert.strictEqual(JSON.parse(localStorage.getItem('mezzoProfiles')).length, 1, 'reopening must never duplicate or lose the saved profile');
   });
 });

@@ -51,26 +51,6 @@ import { createMezzoSession } from './mezzo-session.js';
 const FADE_OUT_MS = 300;
 const FADE_IN_MS = 350;
 
-// 2026-08-17 redesign — collapses to the one externally meaningful
-// distinction: is monitoring actually active right now, or not. Every
-// COMPANION_READY, COMPANION_CALIBRATING, and COMPANION_NEEDS_ATTENTION
-// state (Welcome, Ready, C1, Calibrating, every full-screen decision state,
-// and the mid-session recovery screens — see src/session-state.js's own
-// header comment for the full collapsing this already did from the
-// Companion's side) all read as "not active" here; only MONITORING_ACTIVE
-// reads as "active." This is a page-side display simplification only — the
-// Companion still tracks every one of those states precisely for its own
-// purposes; this mapping just no longer surfaces that detail here.
-function dockStatusCopy(session) {
-  const notActive = { text: 'Monitoring is not active', active: false };
-  return {
-    [session.SESSION_STATES.COMPANION_READY]: notActive,
-    [session.SESSION_STATES.COMPANION_CALIBRATING]: notActive,
-    [session.SESSION_STATES.COMPANION_NEEDS_ATTENTION]: notActive,
-    [session.SESSION_STATES.MONITORING_ACTIVE]: { text: 'Monitoring is active', active: true },
-  };
-}
-
 /**
  * @param {object} elements
  * @param {HTMLElement} elements.stateHome
@@ -85,7 +65,7 @@ function dockStatusCopy(session) {
  * @param {HTMLElement} [elements.btnEnableMicrophone] - mic-request's one action
  * @param {HTMLElement} [elements.btnOpenCompanion] - mic-granted's one action; launches the Companion
  * @param {HTMLElement} [elements.btnCloseCompanion]
- * @param {HTMLElement} [elements.dockStatusText]
+ * @param {HTMLElement} [elements.runningLiveEl] - the running state's polite live region
  * @param {string} elements.baseUrl - passed straight through to createMezzoSession().
  * @returns {{ session: object, isPipSupported: () => boolean }}
  */
@@ -100,7 +80,7 @@ export function initHomeDock({
   btnEnableMicrophone,
   btnOpenCompanion,
   btnCloseCompanion,
-  dockStatusText,
+  runningLiveEl,
   baseUrl,
 }) {
   const allStates = { home: stateHome, unsupported: stateUnsupported, dock: stateDock };
@@ -128,6 +108,8 @@ export function initHomeDock({
     // key a page-level treatment off which state is showing, e.g. the
     // footer background, without this module owning any styling itself.
     document.body.dataset.pageState = name;
+    // The running state (the Dock) is the website's one cream surface.
+    document.body.dataset.surface = name === 'dock' ? 'cream' : 'dark';
 
     // Nothing shown yet (initial load) — render directly, no fade.
     if (!visibleEl) {
@@ -312,7 +294,6 @@ export function initHomeDock({
 
   const session = createMezzoSession({ baseUrl, onSessionStateChange: handleSessionStateChange });
   const pipSupported = session.isPipSupported();
-  const DOCK_STATUS_COPY = dockStatusCopy(session);
 
   session.init();
 
@@ -340,31 +321,29 @@ export function initHomeDock({
     session.endSession();
   }
 
-  function renderDockStatus(state) {
-    const copy = DOCK_STATUS_COPY[state];
-    if (!copy || !dockStatusText) return;
-    dockStatusText.textContent = copy.text;
-    // Color alone never carries the meaning (see landing.css's own comment
-    // on .dock-status-text-active) — the wording itself already says
-    // "active" or "not active"; this class only supplies the accent color.
-    dockStatusText.classList.toggle('dock-status-text-active', copy.active);
-  }
-
   /**
    * The single router for every session-state change, including ones this
    * page didn't itself initiate (e.g. the Companion's own native ✕). Home ↔
    * Dock is driven entirely off session state, never a direct call from a
-   * click handler — COMPANION_CLOSED always means Home, everything else
-   * always means Dock with its status mapped per DOCK_STATUS_COPY above.
+   * click handler — COMPANION_CLOSED always means Home (back to the granted
+   * page once the permission check confirms it), everything else means the
+   * running state (internally the Dock). The page doesn't track what the
+   * Companion is doing inside: "Companion open" is all it says.
    */
+  let running = false;
   function handleSessionStateChange(state) {
     if (state === session.SESSION_STATES.COMPANION_CLOSED) {
+      running = false;
+      if (runningLiveEl) runningLiveEl.textContent = '';
       transitionToState('home');
       if (pipSupported) refreshMicState();
       return;
     }
     transitionToState('dock');
-    renderDockStatus(state);
+    if (!running) {
+      running = true;
+      if (runningLiveEl) runningLiveEl.textContent = 'Mezzo is running.';
+    }
   }
 
   btnEnableMicrophone?.addEventListener('click', handleEnableMicrophoneClick);

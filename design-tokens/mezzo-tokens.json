@@ -1,314 +1,162 @@
 {
   "$schema": "https://design-tokens.org",
-  "$description": "Mezzo Design Tokens — exported from typography stylesheets (dark, light, mid-dark surfaces)",
-
+  "$description": "Mezzo Design Tokens — Lantern visual system (docs/prd/range-ring-and-lantern-refresh.md §4). Mirrors design-tokens/mezzo-tokens.css, which is the source of truth.",
   "color": {
-    "ink": {
-      "base": { "$value": "#3C3B3F", "$type": "color", "$description": "Primary near-black neutral — headings, interactive labels, primary UI text/surfaces. Replaces the old #111111/#1A1A1A/#2A2A2A pure-black-leaning values." },
-      "soft": { "$value": "#4E4C51", "$type": "color", "$description": "Lighter tint of Ink, same hue — body copy only, to preserve hierarchy against headings/labels. 7.1:1 on #F0EBE2" }
-    },
-
-    "surface": {
-      "dark":       { "$value": "{color.ink.base}", "$type": "color" },
-      "light":      { "$value": "#F0EBE2", "$type": "color" },
-      "mid":        { "$value": "#3A3A3A", "$type": "color" },
-      "nav-dark":   { "$value": "rgba(60, 59, 63, 0.88)", "$type": "color", "$description": "Scrolled nav on dark" },
-      "nav-light":  { "$value": "rgba(240, 235, 226, 0.9)", "$type": "color", "$description": "Scrolled nav on light" },
-      "nav-mid":    { "$value": "rgba(58, 58, 58, 0.9)", "$type": "color", "$description": "Scrolled nav on mid" },
-      "card-dark":  { "$value": "rgba(240, 235, 226, 0.04)", "$type": "color" },
-      "card-light": { "$value": "rgba(60, 59, 63, 0.03)", "$type": "color" },
-      "card-mid":   { "$value": "#444444", "$type": "color" }
-    },
-
-    "text": {
-      "dark": {
-        "primary":  { "$value": "#F0EBE2", "$type": "color", "$description": "Headings, hero. 9.4:1 on Ink" },
-        "default":  { "$value": "#E8E3DA", "$type": "color", "$description": "Step headings, nav. 8.7:1 on Ink" },
-        "body":     { "$value": "#B8A99A", "$type": "color", "$description": "Body copy, descriptions. 4.9:1 on Ink" },
-        "subdued":  { "$value": "#B2ADA8", "$type": "color", "$description": "Notes, microcopy. 5.0:1 on Ink — lightened from #8A827A to restore contrast after the surface lightened from #111111 to Ink" },
-        "ghost":    { "$value": "#5A5550", "$type": "color", "$description": "Step numbers, decorative. 1.5:1 on Ink" }
+    "role": {
+      "$description": "Semantic color roles, one job each. Translucent uses mix a role with transparent via color-mix(). Chartreuse is the website's brand accent; inside the Companion it only ever means the over-range band.",
+      "bg": {
+        "$value": "#2D2E31",
+        "$type": "color",
+        "$description": "Page and Companion screen background"
       },
-      "light": {
-        "primary":  { "$value": "{color.ink.base}", "$type": "color", "$description": "Headings, hero. 9.4:1 on #F0EBE2" },
-        "default":  { "$value": "{color.ink.base}", "$type": "color", "$description": "Form labels, dropdown text. 9.4:1 on #F0EBE2" },
-        "body":     { "$value": "{color.ink.soft}", "$type": "color", "$description": "Body copy (Ink Soft). 7.1:1 on #F0EBE2" },
-        "subdued":  { "$value": "#8A827A", "$type": "color", "$description": "Notes, microcopy. 3.2:1 on #F0EBE2" },
-        "ghost":    { "$value": "#C8C0B5", "$type": "color", "$description": "Step numbers, decorative. 1.5:1 on #F0EBE2" }
+      "bg-slate": {
+        "$value": "#38393C",
+        "$type": "color",
+        "$description": "Raised slate: decision states, hero tile, Get started band"
       },
-      "mid": {
-        "primary":  { "$value": "#F0EBE2", "$type": "color", "$description": "Headings, hero. 8.5:1 on #3A3A3A" },
-        "default":  { "$value": "#E8E3DA", "$type": "color", "$description": "Step headings. 7.8:1 on #3A3A3A" },
-        "body":     { "$value": "#C8BEB2", "$type": "color", "$description": "Body copy. 5.2:1 on #3A3A3A" },
-        "subdued":  { "$value": "#A89E94", "$type": "color", "$description": "Notes, microcopy. 3.5:1 on #3A3A3A" },
-        "ghost":    { "$value": "#6B6560", "$type": "color", "$description": "Step numbers, decorative. 1.7:1 on #3A3A3A" }
+      "bg-decision": {
+        "$value": "{color.role.bg-slate}",
+        "$type": "color",
+        "$description": "Decision-state background"
+      },
+      "bg-menu": {
+        "$value": "#3C3D40",
+        "$type": "color",
+        "$description": "Menu panel (Ready's profile selector)"
+      },
+      "accent": {
+        "$value": "#DEDE65",
+        "$type": "color",
+        "$description": "Chartreuse"
+      },
+      "text": {
+        "$value": "#F3EBDE",
+        "$type": "color",
+        "$description": "Cream: headings, main text"
+      },
+      "link": {
+        "$value": "#CEE2C4",
+        "$type": "color",
+        "$description": "Sage: text links, focus rings, bullets"
+      },
+      "text-muted": {
+        "$value": "#B0AB9E",
+        "$type": "color",
+        "$description": "Body, captions, labels"
+      },
+      "voice": {
+        "$value": "#8E897B",
+        "$type": "color",
+        "$description": "Range Ring voice circle"
+      },
+      "text-soft": {
+        "$value": "{color.role.text}",
+        "$type": "color",
+        "$description": "Companion body text, controls"
+      },
+      "label": {
+        "$value": "{color.role.text-muted}",
+        "$type": "color",
+        "$description": "Small uppercase labels"
+      },
+      "link-quiet": {
+        "$value": "{color.role.link}",
+        "$type": "color",
+        "$description": "Low-emphasis text actions"
+      },
+      "notice": {
+        "$value": "{color.role.link}",
+        "$type": "color",
+        "$description": "Calibration status, name-collision notice; never chartreuse"
+      },
+      "on-accent": {
+        "$value": "#2D2E31",
+        "$type": "color",
+        "$description": "Charcoal text on chartreuse or cream fills"
+      },
+      "bg-menu-hover": {
+        "$value": "#46474A",
+        "$type": "color",
+        "$description": "Selector trigger hover"
+      },
+      "bg-raised": {
+        "$value": "{color.role.bg-decision}",
+        "$type": "color",
+        "$description": "Result card, toast, tooltip"
+      },
+      "overlay": {
+        "$value": "#FFFFFF",
+        "$type": "color",
+        "$description": "Translucent fills and hairlines on dark"
+      },
+      "shadow": {
+        "$value": "#000000",
+        "$type": "color",
+        "$description": "Shadows and scrims"
       }
     },
-
-    "hanko": {
-      "fill":         { "$value": "#C4593A", "$type": "color", "$description": "CTA button fill. Same on all surfaces" },
-      "hover":        { "$value": "#AE4D31", "$type": "color", "$description": "CTA hover fill" },
-      "text-dark":    { "$value": "#C4593A", "$type": "color", "$description": "Tags, outline CTAs on dark. Was already sub-AA on #111111 (3.4:1); reads lower still on Ink since the accent color itself is intentionally unchanged — surface lightened, not the orange" },
-      "text-light":   { "$value": "#C4593A", "$type": "color", "$description": "Tags, outline CTAs on light. 3.2:1 on #F0EBE2" },
-      "text-mid":     { "$value": "#D4694A", "$type": "color", "$description": "Tags, outline CTAs on mid. Lighter variant for 3.3:1 on #3A3A3A" },
-      "on-fill":      { "$value": "#F0EBE2", "$type": "color", "$description": "Text on hanko button. Same on all surfaces" },
-      "glow-dark":    { "$value": "rgba(196, 89, 58, 0.12)", "$type": "color" },
-      "glow-light":   { "$value": "rgba(196, 89, 58, 0.10)", "$type": "color" },
-      "glow-mid":     { "$value": "rgba(212, 105, 74, 0.12)", "$type": "color" }
-    },
-
-    "border": {
-      "dark":       { "$value": "rgba(240, 235, 226, 0.08)", "$type": "color" },
-      "light":      { "$value": "rgba(138, 130, 122, 0.18)", "$type": "color", "$description": "Stone-based translucent border/divider" },
-      "mid":        { "$value": "rgba(240, 235, 226, 0.10)", "$type": "color" },
-      "outline-dark":  { "$value": "rgba(196, 89, 58, 0.4)", "$type": "color", "$description": "Outline CTA border" },
-      "outline-light": { "$value": "rgba(196, 89, 58, 0.4)", "$type": "color" },
-      "outline-mid":   { "$value": "rgba(212, 105, 74, 0.4)", "$type": "color" }
+    "button": {
+      "primary-bg": {
+        "$value": "{color.role.accent}",
+        "$type": "color",
+        "$description": "Website primary; the Companion overrides this to {color.role.text}"
+      },
+      "primary-text": {
+        "$value": "{color.role.on-accent}",
+        "$type": "color"
+      },
+      "secondary-border": {
+        "$value": "color-mix(in srgb, #F3EBDE 30%, transparent)",
+        "$type": "color",
+        "$description": "1px cream outline at 30%"
+      }
     }
   },
-
   "font": {
     "family": {
-      "display": { "$value": "'Noto Serif JP', serif", "$type": "fontFamily" },
-      "body":    { "$value": "'Sora', sans-serif", "$type": "fontFamily" }
+      "display": {
+        "$value": "'Geist', system-ui, sans-serif",
+        "$type": "fontFamily"
+      },
+      "body": {
+        "$value": "'Geist', system-ui, sans-serif",
+        "$type": "fontFamily"
+      },
+      "mono": {
+        "$value": "'Geist Mono', ui-monospace, monospace",
+        "$type": "fontFamily",
+        "$description": "Small uppercase labels only"
+      }
     },
     "weight": {
-      "light":   { "$value": 300, "$type": "fontWeight" },
-      "regular": { "$value": 400, "$type": "fontWeight" },
-      "medium":  { "$value": 500, "$type": "fontWeight" }
+      "light": {
+        "$value": 300,
+        "$type": "fontWeight"
+      },
+      "regular": {
+        "$value": 400,
+        "$type": "fontWeight"
+      },
+      "medium": {
+        "$value": 500,
+        "$type": "fontWeight"
+      },
+      "semibold": {
+        "$value": 600,
+        "$type": "fontWeight"
+      }
+    },
+    "tracking": {
+      "heading": {
+        "$value": "-0.04em",
+        "$type": "dimension"
+      },
+      "label": {
+        "$value": "0.12em",
+        "$type": "dimension"
+      }
     }
   },
-
-  "typography": {
-    "hero-heading": {
-      "$type": "typography",
-      "$value": {
-        "fontFamily": "{font.family.display}",
-        "fontWeight": "{font.weight.light}",
-        "fontSize": { "desktop": "61px", "mobile": "38px" },
-        "lineHeight": "115%",
-        "letterSpacing": "-0.2px"
-      },
-      "$description": "Main hero headline"
-    },
-    "section-heading": {
-      "$type": "typography",
-      "$value": {
-        "fontFamily": "{font.family.display}",
-        "fontWeight": "{font.weight.light}",
-        "fontSize": { "desktop": "42px", "mobile": "29px" },
-        "lineHeight": "115%",
-        "letterSpacing": "-0.2px"
-      },
-      "$description": "Section titles: How it works, Good for, etc."
-    },
-    "step-heading": {
-      "$type": "typography",
-      "$value": {
-        "fontFamily": "{font.family.display}",
-        "fontWeight": "{font.weight.regular}",
-        "fontSize": "18px",
-        "lineHeight": "130%",
-        "letterSpacing": "0"
-      },
-      "$description": "Step titles: Calibrate, Talk, Notice"
-    },
-    "step-number": {
-      "$type": "typography",
-      "$value": {
-        "fontFamily": "{font.family.display}",
-        "fontWeight": "{font.weight.light}",
-        "fontSize": "48px",
-        "lineHeight": "100%",
-        "letterSpacing": "0"
-      },
-      "$description": "Decorative step numbers. Ghost color only."
-    },
-    "statement": {
-      "$type": "typography",
-      "$value": {
-        "fontFamily": "{font.family.display}",
-        "fontWeight": "{font.weight.regular}",
-        "fontSize": "17px",
-        "lineHeight": "150%",
-        "letterSpacing": "0"
-      },
-      "$description": "Short declarative statements"
-    },
-    "sub-hero": {
-      "$type": "typography",
-      "$value": {
-        "fontFamily": "{font.family.display}",
-        "fontWeight": "{font.weight.light}",
-        "fontSize": "17px",
-        "lineHeight": "170%",
-        "letterSpacing": "0"
-      },
-      "$description": "Clarifying text below hero"
-    },
-    "nav-wordmark": {
-      "$type": "typography",
-      "$value": {
-        "fontFamily": "{font.family.display}",
-        "fontWeight": "{font.weight.regular}",
-        "fontSize": "19px",
-        "lineHeight": "100%",
-        "letterSpacing": "0"
-      }
-    },
-    "hero-body": {
-      "$type": "typography",
-      "$value": {
-        "fontFamily": "{font.family.body}",
-        "fontWeight": "{font.weight.light}",
-        "fontSize": "16px",
-        "lineHeight": "180%",
-        "letterSpacing": "0"
-      },
-      "$description": "Body text in hero section"
-    },
-    "body": {
-      "$type": "typography",
-      "$value": {
-        "fontFamily": "{font.family.body}",
-        "fontWeight": "{font.weight.light}",
-        "fontSize": "14px",
-        "lineHeight": "170%",
-        "letterSpacing": "0"
-      },
-      "$description": "Default body copy"
-    },
-    "situation": {
-      "$type": "typography",
-      "$value": {
-        "fontFamily": "{font.family.body}",
-        "fontWeight": "{font.weight.light}",
-        "fontSize": "15px",
-        "lineHeight": "150%",
-        "letterSpacing": "0"
-      },
-      "$description": "Use-case list items"
-    },
-    "note": {
-      "$type": "typography",
-      "$value": {
-        "fontFamily": "{font.family.body}",
-        "fontWeight": "{font.weight.light}",
-        "fontSize": "14px",
-        "lineHeight": "170%",
-        "letterSpacing": "0"
-      },
-      "$description": "Secondary info, footnotes"
-    },
-    "microcopy": {
-      "$type": "typography",
-      "$value": {
-        "fontFamily": "{font.family.body}",
-        "fontWeight": "{font.weight.light}",
-        "fontSize": "12px",
-        "lineHeight": "150%",
-        "letterSpacing": "0"
-      },
-      "$description": "Privacy lines, stop-anytime notes"
-    },
-    "cta-primary": {
-      "$type": "typography",
-      "$value": {
-        "fontFamily": "{font.family.body}",
-        "fontWeight": "{font.weight.regular}",
-        "fontSize": "13px",
-        "lineHeight": "100%",
-        "letterSpacing": "0.3px"
-      }
-    },
-    "cta-outline": {
-      "$type": "typography",
-      "$value": {
-        "fontFamily": "{font.family.body}",
-        "fontWeight": "{font.weight.regular}",
-        "fontSize": "12px",
-        "lineHeight": "100%",
-        "letterSpacing": "0.8px",
-        "textTransform": "uppercase"
-      }
-    },
-    "tag": {
-      "$type": "typography",
-      "$value": {
-        "fontFamily": "{font.family.body}",
-        "fontWeight": "{font.weight.regular}",
-        "fontSize": "11px",
-        "lineHeight": "100%",
-        "letterSpacing": "2.2px",
-        "textTransform": "uppercase"
-      }
-    },
-    "pip-pill": {
-      "$type": "typography",
-      "$value": {
-        "fontFamily": "{font.family.body}",
-        "fontWeight": "{font.weight.regular}",
-        "fontSize": "11px",
-        "lineHeight": "100%",
-        "letterSpacing": "0.8px",
-        "textTransform": "uppercase"
-      }
-    },
-    "state-label": {
-      "$type": "typography",
-      "$value": {
-        "fontFamily": "{font.family.body}",
-        "fontWeight": "{font.weight.light}",
-        "fontSize": "8px",
-        "lineHeight": "100%",
-        "letterSpacing": "1.3px",
-        "textTransform": "uppercase"
-      },
-      "$description": "Ink state labels: silence, in range, elevated, sustained"
-    },
-    "footer-brand": {
-      "$type": "typography",
-      "$value": {
-        "fontFamily": "{font.family.body}",
-        "fontWeight": "{font.weight.light}",
-        "fontSize": "11px",
-        "lineHeight": "100%",
-        "letterSpacing": "1.3px"
-      }
-    },
-    "footer-link": {
-      "$type": "typography",
-      "$value": {
-        "fontFamily": "{font.family.body}",
-        "fontWeight": "{font.weight.light}",
-        "fontSize": "12px",
-        "lineHeight": "100%",
-        "letterSpacing": "0"
-      }
-    },
-    "monitoring-heading-within": {
-      "$type": "typography",
-      "$value": {
-        "fontFamily": "{font.family.display}",
-        "fontWeight": "{font.weight.light}",
-        "fontSize": "24px",
-        "lineHeight": "115%",
-        "letterSpacing": "-0.2px"
-      },
-      "$description": "Within Range heading — smaller, quieter"
-    },
-    "monitoring-heading-outside": {
-      "$type": "typography",
-      "$value": {
-        "fontFamily": "{font.family.display}",
-        "fontWeight": "{font.weight.light}",
-        "fontSize": "41px",
-        "lineHeight": "115%",
-        "letterSpacing": "-0.2px"
-      },
-      "$description": "Outside Range heading — larger, louder"
-    }
-  },
-
   "spacing": {
     "nav-padding": {
       "$value": "24px 32px",
@@ -345,80 +193,61 @@
       "$type": "spacing"
     }
   },
-
   "radius": {
-    "cta":     { "$value": "100px", "$type": "borderRadius", "$description": "Full pill radius for all buttons" },
-    "pill":    { "$value": "100px", "$type": "borderRadius", "$description": "PiP pill, beta tag" },
-    "pip-btn": { "$value": "6px", "$type": "borderRadius", "$description": "Nav icon button (square variant)" },
-    "card":    { "$value": "10px", "$type": "borderRadius", "$description": "Content cards" }
+    "control": {
+      "$value": "3px",
+      "$type": "borderRadius",
+      "$description": "Buttons and inputs; no pills"
+    },
+    "cta": {
+      "$value": "{radius.control}",
+      "$type": "borderRadius"
+    },
+    "pill": {
+      "$value": "{radius.control}",
+      "$type": "borderRadius"
+    },
+    "icon-btn": {
+      "$value": "{radius.control}",
+      "$type": "borderRadius"
+    },
+    "card": {
+      "$value": "10px",
+      "$type": "borderRadius"
+    }
   },
-
   "shadow": {
-    "cta-hover-dark": {
-      "$value": "0 4px 20px rgba(196, 89, 58, 0.12)",
-      "$type": "boxShadow"
-    },
-    "cta-hover-light": {
-      "$value": "0 4px 20px rgba(196, 89, 58, 0.10)",
-      "$type": "boxShadow"
-    },
     "pip-window": {
       "$value": "0 4px 24px rgba(0, 0, 0, 0.25)",
       "$type": "boxShadow"
     }
   },
-
-  "component": {
-    "cta-primary": {
-      "padding":       { "$value": "13px 28px", "$type": "spacing" },
-      "borderRadius":  { "$value": "{radius.cta}", "$type": "borderRadius" },
-      "background":    { "$value": "{color.hanko.fill}", "$type": "color" },
-      "color":         { "$value": "{color.hanko.on-fill}", "$type": "color" },
-      "hover-bg":      { "$value": "{color.hanko.hover}", "$type": "color" },
-      "hover-transform": { "$value": "translateY(-1px)", "$type": "string" }
-    },
-    "cta-outline": {
-      "padding":      { "$value": "6px 16px", "$type": "spacing" },
-      "borderRadius": { "$value": "{radius.cta}", "$type": "borderRadius" },
-      "borderWidth":  { "$value": "1px", "$type": "dimension" }
-    },
-    "pip-pill": {
-      "padding":      { "$value": "6px 14px", "$type": "spacing" },
-      "borderRadius": { "$value": "{radius.pill}", "$type": "borderRadius" },
-      "borderWidth":  { "$value": "1px", "$type": "dimension" }
-    },
-    "stop-button": {
-      "padding":      { "$value": "14px 48px", "$type": "spacing" },
-      "borderRadius": { "$value": "{radius.cta}", "$type": "borderRadius" },
-      "fontSize":     { "$value": "15px", "$type": "dimension" }
-    },
-    "feedback-circle": {
-      "container":  { "$value": "280px", "$type": "dimension", "$description": "Stage size" },
-      "silence":    { "$value": "40-50px", "$type": "dimension", "$description": "Ghost ring, barely visible" },
-      "within":     { "$value": "80-100px", "$type": "dimension", "$description": "Solid, calm" },
-      "elevated":   { "$value": "140-170px", "$type": "dimension", "$description": "Noticeable push" },
-      "sustained":  { "$value": "220-260px", "$type": "dimension", "$description": "Near-filling, impossible to miss" }
-    }
-  },
-
   "animation": {
-    "hover-transition":  { "$value": "all 0.3s ease", "$type": "transition" },
-    "nav-transition":    { "$value": "background 0.4s, box-shadow 0.4s", "$type": "transition" },
-    "reveal-duration":   { "$value": "0.7s", "$type": "duration" },
-    "reveal-easing":     { "$value": "ease", "$type": "cubicBezier" },
-    "reveal-offset":     { "$value": "16px", "$type": "dimension", "$description": "translateY distance for scroll reveal" },
+    "hover-transition": {
+      "$value": "all 0.2s ease",
+      "$type": "transition"
+    },
+    "nav-transition": {
+      "$value": "background 0.4s, box-shadow 0.4s",
+      "$type": "transition"
+    },
+    "reveal-duration": {
+      "$value": "0.7s",
+      "$type": "duration"
+    },
+    "reveal-easing": {
+      "$value": "ease",
+      "$type": "cubicBezier"
+    },
+    "reveal-offset": {
+      "$value": "16px",
+      "$type": "dimension",
+      "$description": "translateY distance for scroll reveal"
+    },
     "pulse-dot": {
       "$value": "2s ease-in-out infinite",
       "$type": "transition",
       "$description": "Hanko dot pulse for PiP active state"
-    }
-  },
-
-  "texture": {
-    "grain": {
-      "opacity-dark":   { "$value": "0.018", "$type": "number" },
-      "opacity-light":  { "$value": "0.022", "$type": "number" },
-      "size":           { "$value": "256px", "$type": "dimension" }
     }
   }
 }

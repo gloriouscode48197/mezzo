@@ -284,6 +284,16 @@ export function createCalibrationController({
   // without the controller needing a second, redundant mic acquisition.
   const levelListeners = new Set();
 
+  // The room's noise level (absolute dB), measured by the caller during the
+  // 3-2-1 before this attempt's capture (see setRoomNoiseDb()), saved with
+  // the result so monitoring can rest the circle below it. null when not
+  // measured. Cleared with every reset().
+  let roomNoiseDb = null;
+
+  function setRoomNoiseDb(db) {
+    roomNoiseDb = Number.isFinite(db) ? db : null;
+  }
+
   function subscribeToLevel(fn) {
     levelListeners.add(fn);
     return () => levelListeners.delete(fn);
@@ -499,9 +509,11 @@ export function createCalibrationController({
     setState({ preparing: false });
 
     const samples = [];
-    audio.onLevelChange = ({ rms }) => {
+    audio.onLevelChange = ({ rms, rawRms }) => {
       samples.push(rms);
-      levelListeners.forEach((fn) => fn(rms));
+      // Listeners also get the unsmoothed level, for visuals only (see
+      // level-meter.js); the samples above stay the smoothed values.
+      levelListeners.forEach((fn) => fn(rms, rawRms));
     };
     audio.startMonitoring();
     // capturing flips true only once monitoring has actually started
@@ -546,7 +558,9 @@ export function createCalibrationController({
     const { baselineRMS, spreadDb } = engine.getCalibrationValues();
     setState({
       status: STATUSES.CALIBRATED,
-      result: { speakingDb: MezzoEngine.rmsToDb(baselineRMS), spreadDb, calibratedTs: now() },
+      // peakDb: the capture's peak level (engine.getPeakOffsetDb(), dB above
+      // speakingDb), which sets the end of range; roomNoiseDb: see above.
+      result: { speakingDb: MezzoEngine.rmsToDb(baselineRMS), spreadDb, calibratedTs: now(), peakDb: engine.getPeakOffsetDb(), roomNoiseDb },
       capturing: false,
     });
   }
@@ -573,6 +587,7 @@ export function createCalibrationController({
    */
   function reset() {
     generation++;
+    roomNoiseDb = null;
     if (acquireTimeoutHandle !== null) {
       clearTimeoutFn(acquireTimeoutHandle);
       acquireTimeoutHandle = null;
@@ -657,12 +672,14 @@ export function createCalibrationController({
    */
   function commitStartMonitoring() {
     assertCalibratedInMode(MODES.SESSION);
-    const { speakingDb, spreadDb, calibratedTs } = state.result;
+    const { speakingDb, spreadDb, calibratedTs, peakDb, roomNoiseDb: roomDb } = state.result;
     const temporaryProfile = {
       name: 'Current speaking range',
       speakingDb,
       spreadDb,
       calibratedTs,
+      peakDb,
+      roomNoiseDb: roomDb,
       savedProfileId: null,
       temporary: true,
     };
@@ -680,6 +697,8 @@ export function createCalibrationController({
       speakingDb: result.speakingDb,
       spreadDb: result.spreadDb,
       calibratedTs: result.calibratedTs,
+      peakDb: result.peakDb,
+      roomNoiseDb: result.roomNoiseDb,
     });
 
     if (!updated) {
@@ -730,12 +749,14 @@ export function createCalibrationController({
    */
   function commitKeepAsUnsaved() {
     assertCalibratedInMode(MODES.RECALIBRATE);
-    const { speakingDb, spreadDb, calibratedTs } = state.result;
+    const { speakingDb, spreadDb, calibratedTs, peakDb, roomNoiseDb: roomDb } = state.result;
     const temporaryProfile = {
       name: 'Current speaking range',
       speakingDb,
       spreadDb,
       calibratedTs,
+      peakDb,
+      roomNoiseDb: roomDb,
       savedProfileId: null,
       temporary: true,
     };
@@ -747,6 +768,7 @@ export function createCalibrationController({
     getState,
     subscribe,
     subscribeToLevel,
+    setRoomNoiseDb,
     getTargetSnapshot,
     startSessionCalibration,
     startRecalibration,

@@ -6,9 +6,9 @@
   <title>Mezzo</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;400&family=Sora:wght@300;400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="design-tokens/mezzo-tokens.css?v=10">
-  <link rel="stylesheet" href="landing.css?v=14">
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="design-tokens/mezzo-tokens.css?v=13">
+  <link rel="stylesheet" href="landing.css?v=18">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" sizes="16x16" href="icons/icon-16.svg">
   <link rel="icon" type="image/svg+xml" sizes="32x32" href="icons/icon-32.svg">
@@ -25,10 +25,10 @@
     })
   </script>
 </head>
-<body data-surface="light">
+<body data-surface="dark">
 
   <nav class="nav" id="main-nav">
-    <a href="index.html" class="type-nav-wordmark">Mezzo</a>
+    <a href="index.html" class="type-nav-wordmark">mezzo</a>
     <div class="nav-links">
       <span class="nav-link nav-link-active" aria-current="page">Home</span>
       <a href="privacy.html" class="nav-link nav-link-quiet">Privacy</a>
@@ -72,96 +72,129 @@
          moment it opens (see CLAUDE.md's "Companion entry behavior"). ── -->
     <main id="state-home">
 
-      <!-- ── Hero — single centered column at every width (2026-08-17
-           redesign, replacing the old two-column text-left/preview-right
-           treatment that used to apply unconditionally to all three
-           sub-states — see landing.css's own comment on .hero-inner). ── -->
-      <section class="hero reveal" data-surface="light">
-        <div class="hero-inner">
-
-          <div id="mic-request" class="hero-mic-state hidden">
-            <h1 class="type-hero-heading">You care about how your voice affects others</h1>
-
-            <!-- Product-owner-supplied static preview of the Mezzo
-                 visualization (2026-08-17 pass — replaces the hand-authored
-                 layered-contour SVG this same redesign shipped initially;
-                 see CLAUDE.md's Engineering Notes for that SVG's own,
-                 now-superseded history and rationale). assets/home-vizx2.png
-                 is a 440×440 source PNG displayed at 220×220 CSS pixels —
-                 the width/height attributes below declare that intrinsic
-                 display size (preventing layout shift while it loads);
-                 the 2x source resolution is what lets high-density displays
-                 and browser zoom render it crisply without a separate
-                 srcset, since only one supplied asset variant exists.
-                 alt="" (this is decorative only, the heading above already
-                 carries the meaning) plus the wrapping aria-hidden — a
-                 plain <img> is never a tab stop and gets no implicit role
-                 beyond "image," so neither needs suppressing here. No
-                 canvas, script, or microphone/audio/timer/zone/session-state
-                 wiring of any kind — a static file request, nothing else. -->
-            <div class="hero-static-viz" aria-hidden="true">
-              <img src="assets/home-vizx2.png" alt="" width="220" height="220">
+      <!-- ── mic-request: permission not yet granted (or "Allow this time").
+           The marketing page (PRD §9): a hero holding "Enable microphone",
+           the only button on the page and the only control that ever
+           triggers the browser's permission prompt, then How it works. ── -->
+      <div id="mic-request" class="hero-mic-state hidden">
+        <section class="hero home-hero reveal">
+          <div class="home-hero-inner">
+            <div class="home-hero-text">
+              <p class="home-eyebrow">For headphone calls in shared spaces</p>
+              <h1 class="type-hero-heading home-hero-heading">
+                <span class="home-hero-heading-lead">Focus on the meeting</span>
+                <span class="home-hero-heading-rest">while Mezzo minds the volume.</span>
+              </h1>
+              <p class="type-hero-body home-hero-subhead">Set a range you're comfortable with. A <span class="home-highlight">soft glow</span> nudges you when your voice drifts outside it, before it carries.</p>
+              <button id="btn-enable-microphone" type="button" class="btn-primary">Enable microphone</button>
+              <p class="home-hero-privacy">Mezzo only measures volume. Nothing you say is recorded.</p>
             </div>
+            <!-- assets/hero-coworking.svg, inlined. Its faded lines use solid
+                 premixed colors and some shapes fill with #2D2E31 to hide
+                 lines behind them, so the hero background must stay
+                 --color-bg (#2D2E31). -->
+            <div class="home-hero-illustration">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="24 112 472 256" role="img" aria-label="Line drawing of people spread out at a shared table in a co-working space. One person wears a headset and talks in a meeting, and their voice stays inside a circle that marks their range." fill="none" stroke="#DEDE65" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+<circle cx="260" cy="210" r="86" fill="#2D2E31" stroke="#747446"/>
+<circle cx="260" cy="210" r="60" fill="#DEDE65" fill-opacity="0.08" stroke="none"/>
+<path d="M50 300 C50 248 64 236 90 236 C116 236 130 248 130 300" fill="#2D2E31" stroke="#747446"/>
+<circle cx="90" cy="214" r="17" fill="#2D2E31" stroke="#747446"/>
+<path d="M390 300 C390 248 404 236 430 236 C456 236 470 248 470 300" fill="#2D2E31" stroke="#747446"/>
+<circle cx="430" cy="214" r="17" fill="#2D2E31" stroke="#747446"/>
+<path d="M68 299 L72 268 L108 268 L112 299 Z" fill="#2D2E31" stroke="#747446"/>
+<path d="M408 299 L412 268 L448 268 L452 299 Z" fill="#2D2E31" stroke="#747446"/>
+<path d="M220 300 C220 238 234 226 260 226 C286 226 300 238 300 300" fill="#2D2E31" stroke="#DEDE65"/>
+<circle cx="260" cy="204" r="17" fill="#2D2E31" stroke="#DEDE65"/>
+<path d="M239 206 A21 21 0 0 1 281 206"/>
+<rect x="235" y="202" width="7" height="13" rx="3" fill="#2D2E31"/><rect x="278" y="202" width="7" height="13" rx="3" fill="#2D2E31"/>
+<path d="M282 213C283 219 276 216 264 213.5" stroke-width="2"/>
+<rect x="253" y="210.5" width="11" height="6" rx="3" fill="#DEDE65" stroke="none"/>
+<path d="M204 156H232A4 4 0 0 1 236 160V174A4 4 0 0 1 232 178H230L236 186L222 178H204A4 4 0 0 1 200 174V160A4 4 0 0 1 204 156Z" fill="#2D2E31"/>
+<path d="M209 165V169M213.5 162V172M218 160V174M222.5 162V172M227 165V169"/>
+<path d="M0 300H520M8 306H512M52 306V362M468 306V362" stroke="#747446"/>
+<path d="M236 299 L240 274 L280 274 L284 299 Z" fill="#2D2E31"/>
 
-            <p class="type-hero-body hero-body">When you’re wearing headphones or talking in a shared space, it can be hard to notice when your voice gets louder.</p>
-            <p class="type-hero-body hero-body">Mezzo gives you a private visual cue if you get louder than you mean to, so you can make a small adjustment and keep participating naturally.</p>
-            <button id="btn-enable-microphone" type="button" class="btn-primary">Enable microphone</button>
-            <p class="type-microcopy microcopy-cta">Mezzo uses microphone access to measure volume only. Nothing you say is recorded, transcribed, stored, or sent anywhere.</p>
-
-            <!-- Designed for shared spaces (2026-08-17 redesign) — replaces
-                 the old always-visible "How it works" / "Designed to stay
-                 out of your way" / "What it's good for" / "What it doesn't
-                 do" editorial section below the hero, which is retired
-                 outright (see docs/product-experience.md). Scoped to this
-                 sub-state specifically, not the whole Home page — the
-                 mic-granted/mic-denied sub-states show no equivalent
-                 section, matching the approved design. -->
-            <div class="hero-benefits">
-              <h2 class="type-section-heading hero-benefits-heading">Designed for shared spaces.</h2>
-              <div class="hero-benefits-grid">
-                <div class="hero-benefit">
-                  <svg class="hero-benefit-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 21s-7-5.5-7-11a7 7 0 1114 0c0 5.5-7 11-7 11z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="10" r="2.4" stroke="currentColor" stroke-width="1.3"/></svg>
-                  <h3 class="hero-benefit-heading">For calls with headphones</h3>
-                  <p class="type-body">Use Mezzo during calls with headphones when other people are nearby.</p>
-                </div>
-                <div class="hero-benefit">
-                  <svg class="hero-benefit-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.6" stroke="currentColor" stroke-width="1.3"/></svg>
-                  <h3 class="hero-benefit-heading">A quiet visual cue</h3>
-                  <p class="type-body">Mezzo lets you know if you get louder than you mean to, without interrupting the conversation.</p>
-                </div>
-                <div class="hero-benefit">
-                  <svg class="hero-benefit-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.3"/><path d="M8 10V7a4 4 0 118 0v3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
-                  <h3 class="hero-benefit-heading">Your words stay private</h3>
-                  <p class="type-body">Mezzo measures volume on your device. It never records or transcribes what you say.</p>
-                </div>
-              </div>
+</svg>
             </div>
           </div>
+        </section>
 
-          <div id="mic-granted" class="hero-mic-state hidden">
-            <h1 class="type-hero-heading">You're ready to use Mezzo</h1>
-            <p class="type-hero-body hero-body">Microphone access is enabled.</p>
-            <p class="type-hero-body hero-body">Open the Companion to choose or create a speaking profile and start monitoring.</p>
+        <section id="how-it-works" class="home-how" aria-labelledby="how-it-works-heading">
+          <div class="home-how-inner">
+            <div class="home-how-intro">
+              <h2 id="how-it-works-heading" class="type-section-heading home-how-heading">How it works</h2>
+              <p class="type-hero-body home-how-lede">It takes about a minute. Everything happens in your browser.</p>
+            </div>
+            <ol class="home-steps">
+              <li class="home-step">
+                <span class="home-step-number" aria-hidden="true">01</span>
+                <div class="home-step-body">
+                  <h3 class="type-step-heading">Allow your mic</h3>
+                  <p class="type-body">Choose "Allow on every visit" to skip this step next time.</p>
+                </div>
+              </li>
+              <li class="home-step">
+                <span class="home-step-number" aria-hidden="true">02</span>
+                <div class="home-step-body">
+                  <h3 class="type-step-heading">Calibrate in the Companion</h3>
+                  <p class="type-body">Talk normally for a few seconds in the floating window. Mezzo sets a range that fits your voice, your mic, and your room.</p>
+                </div>
+              </li>
+              <li class="home-step">
+                <span class="home-step-number" aria-hidden="true">03</span>
+                <div class="home-step-body">
+                  <h3 class="type-step-heading">Glance at the ring</h3>
+                  <p class="type-body">It stays quiet while you talk.</p>
+                  <ul class="home-chips">
+                    <li class="home-chip" data-state="within">
+                      <span class="home-chip-ring" aria-hidden="true"></span>
+                      <span class="home-chip-label">Within range</span>
+                      <span class="home-chip-text">Keep going</span>
+                    </li>
+                    <li class="home-chip" data-state="approaching">
+                      <span class="home-chip-ring" aria-hidden="true"></span>
+                      <span class="home-chip-label">Approaching</span>
+                      <span class="home-chip-text">Getting close</span>
+                    </li>
+                    <li class="home-chip" data-state="over">
+                      <span class="home-chip-ring" aria-hidden="true"></span>
+                      <span class="home-chip-label">Outside range</span>
+                      <span class="home-chip-text">Ease back</span>
+                    </li>
+                  </ul>
+                </div>
+              </li>
+            </ol>
+          </div>
+        </section>
+      </div>
+
+      <!-- ── mic-granted: permission confirmed via the same acquire/release
+           path "Enable microphone" uses, never trusted from
+           navigator.permissions.query() alone (see requestMicrophoneAccess()
+           in src/mezzo-session.js). "Open Mezzo Companion" is a second,
+           separate click, so requestWindow() always gets its own fresh user
+           gesture. ── -->
+      <div id="mic-granted" class="hero-mic-state hidden">
+        <section class="hero home-status reveal">
+          <div class="hero-inner">
+            <h1 class="type-hero-heading home-status-heading">You're ready to use Mezzo</h1>
+            <p class="type-hero-body hero-body">Microphone access is on. Open the Companion to pick a speaking profile and start monitoring.</p>
             <button id="btn-open-companion" type="button" class="btn-primary">Open Mezzo Companion</button>
-            <p class="type-microcopy microcopy-cta">Mezzo only uses your microphone while calibrating or monitoring. Nothing you say is recorded, transcribed, stored, or sent anywhere.</p>
+            <p class="type-microcopy microcopy-cta">Mezzo only measures volume. Nothing you say is recorded.</p>
           </div>
+        </section>
+      </div>
 
-          <!-- Recovery happens entirely through the browser's own site
-               controls (2026-08-17 redesign, replacing the old in-page "Try
-               again" button — see src/home-dock.js's own comment on why
-               handleMicRetryClick() was retired): a getUserMedia() call
-               always re-checks the current permission state live, and this
-               screen's own copy tells the user to reload after fixing it,
-               so there is no in-app recovery action left to provide, and
-               none is added — Chrome/Edge's own address-bar Reload control
-               (visible once the user changes the site permission) owns that
-               step instead. Because this sub-state has no primary action,
-               showMicState() focuses the heading itself here (tabIndex=-1,
-               the same programmatic-focus-only convention already used for
-               Companion result headings in src/mezzo-session.js) rather than
-               a button. -->
-          <div id="mic-denied" class="hero-mic-state hidden">
-            <h1 id="mic-denied-heading" class="type-section-heading" tabindex="-1">Your browser has blocked microphone access</h1>
+      <!-- ── mic-denied: Mezzo cannot continue. Recovery happens entirely
+           through the browser's own site controls plus a reload; there is no
+           in-page recovery action, and the Companion never opens from here.
+           With no primary action, showMicState() focuses the heading itself
+           (tabIndex=-1). ── -->
+      <div id="mic-denied" class="hero-mic-state hidden">
+        <section class="hero home-status reveal">
+          <div class="hero-inner">
+            <h1 id="mic-denied-heading" class="type-section-heading home-status-heading" tabindex="-1">Your browser has blocked microphone access</h1>
             <p class="type-hero-body hero-body">Use the site controls in your <strong>browser's address bar</strong> to allow microphone access, then reload this page.</p>
             <figure class="hero-address-bar-figure">
               <div class="hero-address-bar-row" aria-hidden="true">
@@ -175,19 +208,16 @@
                     <line x1="11.4" y1="12" x2="3" y2="12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
                     <line x1="15" y1="12" x2="14.6" y2="12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
                   </svg>
-                  <!-- Rendered live by landing.js from window.location.host — never
-                       a hard-coded production hostname; see landing.js's own
-                       comment. Correct automatically in production, every
-                       Vercel preview deployment, and local dev alike. -->
+                  <!-- Rendered live by landing.js from window.location.host,
+                       never a hard-coded production hostname. -->
                   <span id="hero-address-bar-host" class="hero-address-bar-host"></span>
                 </div>
               </div>
               <figcaption class="hero-address-bar-caption">Look for the site controls icon in your address bar.</figcaption>
             </figure>
           </div>
-
-        </div>
-      </section>
+        </section>
+      </div>
 
     </main>
 
@@ -195,44 +225,35 @@
          no Document Picture-in-Picture support. The Companion is the
          product now, so there is no in-page fallback experience to offer
          here instead (see CLAUDE.md's Non-Negotiable Decisions). ── -->
-    <main id="state-unsupported" class="state-view page-content hidden" data-surface="light">
+    <main id="state-unsupported" class="state-view page-content hidden">
       <div class="state-col">
         <h1 class="type-section-heading state-heading">Mezzo Companion needs a different browser</h1>
         <p class="type-hero-body state-body">The Mezzo Companion relies on Picture-in-Picture support that isn't available in this browser. Try the latest version of Chrome or Edge on desktop.</p>
       </div>
     </main>
 
-    <!-- ── Dock — the minimal, read-only status surface shown for as long as
-         the Companion stays open. The 2026-08-17 redesign intentionally
-         drops the old illustrative Companion-window preview entirely (see
-         docs/product-experience.md's own updated "Companion Preview"
-         section) and collapses the status readout to the one externally
-         meaningful distinction — is monitoring actually active right now,
-         or not — rather than surfacing every one of the Companion's own
-         internal session states (Welcome/Ready/Calibrating/decision
-         screens/Needs-attention all read as "not active" here; see
-         src/home-dock.js's dockStatusCopy()). Plain text, not the old
-         dot-and-pill: the status text itself changes color for the active
-         case (see landing.css's own .dock-status-text-active), but its
-         wording alone ("Monitoring is active" vs. "Monitoring is not
-         active") is what carries the meaning, never color by itself. Never
-         shows profile names, calibration progress, or any monitoring/
-         profile control — those all live inside the Companion itself.
-         Close Companion is this page's one lifecycle exception — a recovery
-         action for when the Companion's native ✕ isn't reachable, calling
-         the exact same session.endSession() the native control already
-         triggers (see src/home-dock.js). ── -->
-    <main id="state-dock" class="state-view page-content hidden" data-surface="light">
-      <div class="state-col">
-        <p id="dock-status-text" class="dock-status-text">Monitoring is not active</p>
-        <h1 class="type-section-heading state-heading">Your Companion is open</h1>
-        <p class="type-body dock-body-copy">Keep this page open while using Mezzo.<br>Closing it will also close the Mezzo Companion.</p>
-        <button id="btn-close-companion" type="button" class="btn-outline btn-close-companion">Close Companion</button>
+    <!-- ── Running (internally the Dock): shown for as long as the Companion
+         is open, on the website's one cream surface (2026-10-22). A small
+         "Companion open" label, the heading, a line of body, the privacy
+         line, and Close Companion as a quiet text link: the recovery action
+         for a Companion window buried behind others, calling the same
+         session.endSession() the native ✕ triggers (src/home-dock.js). The
+         live region announces "Mezzo is running." once on arrival. Never
+         shows profile names, calibration progress, or monitoring controls;
+         those live inside the Companion. ── -->
+    <main id="state-dock" class="state-view page-content state-running hidden">
+      <div class="state-col running-col">
+        <p class="running-label"><span class="running-dot" aria-hidden="true"></span>Companion open</p>
+        <h1 class="type-section-heading state-heading">Mezzo is running</h1>
+        <p class="type-body running-body">Your Companion is open in its own window. Switch to your meeting whenever you're ready.</p>
+        <p class="type-microcopy running-privacy">Mezzo only measures volume. Nothing you say is recorded.</p>
+        <button id="btn-close-companion" type="button" class="running-close">Close Companion</button>
+        <p id="running-live" class="running-live" role="status" aria-live="polite"></p>
       </div>
     </main>
 
   </div>
 
-  <script src="landing.js?v=3" type="module"></script>
+  <script src="landing.js?v=4" type="module"></script>
 </body>
 </html>

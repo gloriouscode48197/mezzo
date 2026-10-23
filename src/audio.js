@@ -20,6 +20,26 @@ const EMA_ALPHA = 0.2;
 const SAMPLE_INTERVAL_MS = 50;
 const FFT_SIZE = 2048;
 
+/**
+ * Input settings. The app uses these defaults (the speech-band filter on,
+ * no browser noise suppression, no automatic gain); the tuning page
+ * (design/prototypes/ring-tuner.html) passes its own live copy.
+ *
+ * speechFilter: an optional band-pass (high-pass then low-pass biquads)
+ *   between the microphone and the analyser, so both the zone input and the
+ *   visuals measure the speech band rather than fan rumble or hiss.
+ * noiseSuppression: getUserMedia's noiseSuppression constraint, read at
+ *   acquire() time. autoGainControl always stays off: it would undo the
+ *   loudness Mezzo is measuring.
+ */
+export const DEFAULT_AUDIO_SETTINGS = Object.freeze({
+  // On (2026-10-22): measuring only the speech band keeps fan rumble and hiss
+  // from moving the circle or the zones. 120 Hz to 3400 Hz, the telephone
+  // speech band, tuned in design/prototypes/ring-tuner.html.
+  speechFilter: Object.freeze({ enabled: true, highPassHz: 120, lowPassHz: 3400 }),
+  noiseSuppression: false,
+});
+
 // TEMPORARY — background-tab throttling investigation, see
 // docs/monitoring-runtime-investigation.md. Delete this import and its one
 // call site (in processAudioFrame) once the investigation concludes.
@@ -30,7 +50,15 @@ import { markSample } from './_timing-debug.js';
 // =============================================================================
 
 class AudioProcessor {
-  constructor() {
+  /**
+   * @param {{ settings?: typeof DEFAULT_AUDIO_SETTINGS }} [options] - the app
+   *   passes nothing
+   */
+  constructor({ settings = DEFAULT_AUDIO_SETTINGS } = {}) {
+    this.settings = settings;
+    this.highPassNode = null;
+    this.lowPassNode = null;
+
     // Web Audio API objects - all null when mic is released
     this.audioContext = null;
     this.analyser = null;
@@ -83,7 +111,7 @@ class AudioProcessor {
       this.mediaStream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: false,
-          noiseSuppression: false,
+          noiseSuppression: !!this.settings.noiseSuppression,
           autoGainControl: false,
         },
       });
@@ -96,9 +124,10 @@ class AudioProcessor {
       this.analyser.fftSize = FFT_SIZE;
       this.analyser.smoothingTimeConstant = 0;
 
-      // Connect microphone to analyser
+      // Connect microphone to analyser (through the speech-band filter
+      // when it's enabled — see applyFilterSettings())
       this.sourceNode = this.audioContext.createMediaStreamSource(this.mediaStream);
-      this.sourceNode.connect(this.analyser);
+      this.applyFilterSettings();
 
       // Create sample buffer
       this.timeDomainData = new Float32Array(this.analyser.fftSize);
@@ -112,6 +141,34 @@ class AudioProcessor {
       this.release();
       throw error;
     }
+  }
+
+  /**
+   * (Re)wires source -> [high-pass -> low-pass] -> analyser from the current
+   * settings. Called on acquire(), and again by the tuner whenever the
+   * filter settings change, without reacquiring the microphone.
+   */
+  applyFilterSettings() {
+    if (!this.audioContext || !this.sourceNode || !this.analyser) return;
+    const { enabled, highPassHz, lowPassHz } = this.settings.speechFilter;
+    this.sourceNode.disconnect?.();
+    this.highPassNode?.disconnect();
+    this.lowPassNode?.disconnect();
+    if (!enabled) {
+      this.sourceNode.connect(this.analyser);
+      return;
+    }
+    if (!this.highPassNode) {
+      this.highPassNode = this.audioContext.createBiquadFilter();
+      this.highPassNode.type = 'highpass';
+      this.lowPassNode = this.audioContext.createBiquadFilter();
+      this.lowPassNode.type = 'lowpass';
+    }
+    this.highPassNode.frequency.value = highPassHz;
+    this.lowPassNode.frequency.value = lowPassHz;
+    this.sourceNode.connect(this.highPassNode);
+    this.highPassNode.connect(this.lowPassNode);
+    this.lowPassNode.connect(this.analyser);
   }
 
   /**
@@ -139,6 +196,11 @@ class AudioProcessor {
       }
       this.sourceNode = null;
     }
+    for (const node of [this.highPassNode, this.lowPassNode]) {
+      try { node?.disconnect(); } catch (e) { /* ignore */ }
+    }
+    this.highPassNode = null;
+    this.lowPassNode = null;
 
     // CRITICAL: Stop all tracks - this turns off the browser mic indicator
     if (this.mediaStream) {

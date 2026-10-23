@@ -11,23 +11,38 @@
 
 // Zone thresholds, expressed as offsets from the calibrated baseline in
 // multiples of that same calibration's own measured spread (spreadDb — see
-// calibrate() below), not fixed dB or ratio constants. This scales each
-// profile's zone widths to how variable that person's voice actually was
-// during calibration, instead of one-size-fits-all multipliers: a person who
-// calibrates with a very steady voice gets tighter zones, a person with more
-// natural dynamic range gets wider ones. Zone 0 (Listening) sits below
-// ZONE_SILENCE_SPREAD_MULT; each successive zone runs up to its multiplier;
-// zone 3 (Outside of Range) is open-ended above ZONE_ACCEPTABLE_SPREAD_MULT
-// — there's no volume tier beyond it. "Sustained/consistent outside" is a
-// duration flag owned by src/mezzo-session.js, not a louder-volume zone.
+// calibrate() below), not fixed dB or ratio constants.
 //
-// These four multipliers are a reasoned starting point, not yet validated
-// against real listening tests — the same "first-pass tunable default"
-// status the old fixed Everyday Conversation baseline had, before it was
-// retired in favor of per-profile calibration. Expect to retune by ear.
-export const ZONE_SILENCE_SPREAD_MULT = -2.0;   // baseline + this × spread -> zone 0/1 boundary
-export const ZONE_TARGET_SPREAD_MULT = 1.0;     // baseline + this × spread -> zone 1/2 boundary
-export const ZONE_ACCEPTABLE_SPREAD_MULT = 2.5; // baseline + this × spread -> zone 2/3 boundary
+// Tuned with a real voice in design/prototypes/ring-tuner.html (2026-10-22;
+// docs/prd/range-ring-and-lantern-refresh.md §5 has the reasons). The end of
+// range now normally comes from the calibration's own peaks (see
+// DEFAULT_ZONE_SETTINGS.endFrom), so speaking at the calibrated level never
+// reaches it; these spread multipliers remain the fallback for profiles
+// saved before peaks were recorded.
+//
+// Zone 0 (Listening) sits below ZONE_SILENCE_SPREAD_MULT × spread; zone 3
+// (Outside of Range) is open-ended above the end of range; zone 2
+// (Approaching) is the last APPROACHING_WIDTH_DB before it. There's no
+// volume tier beyond zone 3. "Sustained/consistent outside" is a duration
+// flag owned by src/mezzo-session.js, not a louder-volume zone.
+export const ZONE_SILENCE_SPREAD_MULT = -4.0;   // baseline + this × spread -> zone 0/1 boundary (wide: pauses between words aren't "Listening")
+export const ZONE_TARGET_SPREAD_MULT = 1.0;     // the older Within/Approaching rule, used only when approachingWidthDb is null
+export const ZONE_ACCEPTABLE_SPREAD_MULT = 2.0; // fallback end of range: baseline + this × spread
+
+// Approaching is the last stretch before the end of range, a fixed width:
+// at 1 × spread, ordinary speech regularly showed the sage edge.
+export const APPROACHING_WIDTH_DB = 2;
+
+// The fallback (spread-based) end of range never sits more than this far
+// above the calibrated baseline.
+export const END_OF_RANGE_MAX_DB = 7;
+
+// The end of range from calibration peaks: the capture's 95th-percentile
+// level plus a small margin, so the speaker's own normal peaks stay inside;
+// limited only by a looser safety cap.
+export const PEAK_PERCENTILE = 95;
+export const PEAK_MARGIN_DB = 1.5;
+export const PEAKS_SAFETY_CAP_DB = 12;
 
 // Floor applied to a calibration's measured spread before it's used to
 // derive zone boundaries (see calibrate() and _computeZone() below) — never
@@ -55,26 +70,51 @@ export const INITIAL_GRACE_MS_MIN = 5000;
 export const INITIAL_GRACE_MS_MAX = 8000;
 
 // Confirmation window before a rise into zone 3 (Outside of Range) actually
-// commits. Investigated live: an ordinary ~150ms vocal attack crosses the
-// entire zone-2 band and reaches zone 3 in ~150ms, which is fast enough that
-// a brief, non-sustained spike could commit — and then reverse — before a
-// user could perceive it, and faster than the visualizer's own display
-// energy can visually catch up, so the ring was still visibly escalating
-// after the label had already dropped back down. 300ms was tried first and
-// measured against a real ~500ms vocal-emphasis event; it still let that
-// ordinary emphasis commit zone 3. Compared 300/500/700ms head to head:
-// 500ms is the smallest value that keeps that same ~500ms emphasis from
-// ever committing, and 700ms didn't filter anything more in that same
-// comparison, just added delay before genuinely sustained loud speech gets
-// its full-severity confirmation. This gate only delays the *commit* to
-// zone 3 — de-escalation and every other zone transition are untouched.
-// See processFrame() below.
-export const OUTSIDE_ENTRY_DWELL_MS = 500;
+// commits, counting only time actually over the line (2026-10-22). It was
+// 500ms when zones read the momentary level, to keep a single emphasized
+// syllable from committing; zones now read the 60th percentile of the last
+// 600ms of voiced audio (ZONE_WINDOW_MS), which already ignores a syllable,
+// so the dwell only has to bridge the last moments and can be short.
+export const OUTSIDE_ENTRY_DWELL_MS = 150;
+// Dips under the line shorter than this don't reset the dwell, and leaving
+// Outside needs this long under the line, so the band doesn't flicker
+// between words.
+export const DWELL_GRACE_MS = 200;
+// Approaching and Outside are judged on the ZONE_PERCENTILE level of the
+// voiced frames in the last ZONE_WINDOW_MS (raw per-frame level, not
+// audio.js's smoothed one); Listening on the momentary level.
+export const ZONE_WINDOW_MS = 600;
+export const ZONE_PERCENTILE = 60;
 
 // Assumed real interval between processFrame() calls. Must match the
 // caller's actual sampling cadence (audio.js's SAMPLE_INTERVAL_MS = 50) for
 // INITIAL_GRACE_MS_* to mean what its name says.
 export const FRAME_MS = 50;
+
+/**
+ * The room's noise level from raw RMS readings taken while the person is
+ * getting ready to speak (the calibration's 3-2-1): their median, in dB, so
+ * a word or two said early doesn't count as room noise. null when there's
+ * nothing usable.
+ *
+ * @param {number[]} rmsSamples
+ * @returns {number | null}
+ */
+export function measureRoomNoiseDb(rmsSamples) {
+  const usable = (rmsSamples || []).filter((x) => Number.isFinite(x) && x > 0).sort((a, b) => a - b);
+  if (!usable.length) return null;
+  return 20 * Math.log10(usable[Math.floor(usable.length / 2)]);
+}
+
+/** Speech less than this far above the room makes it a noisy room: the
+ *  circle's room margin drops, and the result screen suggests moving
+ *  closer to the mic. */
+export const NOISY_ROOM_GAP_DB = 12;
+
+/** @returns {boolean} whether this calibration was made in a noisy room */
+export function isNoisyRoom(speakingDb, roomNoiseDb) {
+  return Number.isFinite(speakingDb) && Number.isFinite(roomNoiseDb) && speakingDb - roomNoiseDb < NOISY_ROOM_GAP_DB;
+}
 
 // =============================================================================
 // Engine Class
@@ -85,8 +125,80 @@ export const FRAME_MS = 50;
 // browser/UI dependencies, per the file header above.
 const EPSILON = 1e-10;
 
+/**
+ * The zone rules above, as one settings object, so a tuning tool
+ * (design/prototypes/ring-tuner.html) can drive this same engine with other
+ * values. The app always uses these defaults.
+ *
+ * approachingWidthDb: when set, Approaching is that many dB before the end
+ * of range; null keeps the default rule (targetSpreadMult × spread, held
+ * at or below the end of range).
+ *
+ * dwellGraceMs: dips under the end of range shorter than this don't reset
+ * the Outside dwell (only time actually over counts toward it), and once
+ * Outside is committed the level must stay under for this long before it
+ * leaves. 0 (the app's default) means any dip resets the count and the
+ * first frame under leaves.
+ *
+ * endFrom: where the end of range comes from. 'spread' (the app's default)
+ * is endSpreadMult × spread; 'peaks' is the calibration's peakPercentile
+ * level plus peakMarginDb, so speaking at the calibrated level can't reach
+ * it. 'spread' is limited by endCapDb; 'peaks' only by peaksSafetyCapDb, a
+ * looser safety limit, so the cap doesn't pull the end of range back below
+ * the person's own peaks. 'peaks' needs this calibration's own samples
+ * (calibrate()); a loaded profile without them falls back to 'spread'.
+ *
+ * zoneWindowMs: Approaching and Outside are judged on the mean level over
+ * this window (in linear RMS, then dB) instead of the momentary level, so
+ * single loud syllables don't count. 0 (the app's default) is momentary.
+ * Listening is still judged on the momentary level.
+ *
+ * voicedOnly: the window averages only frames the caller marks as voiced
+ * (processFrame()'s `voiced` argument: the tuner passes the circle's own
+ * gate), so the silence before someone starts talking doesn't dilute the
+ * average and delay a loud start. With no voiced frames in the window, the
+ * momentary level is used.
+ *
+ * zoneMethod: how the window's frames become one level, always in linear
+ * RMS before dB. 'mean' (the app's default) reacts to every frame in
+ * proportion, so one loud syllable can lift it and a loud start takes a
+ * while to pull it up. 'median' ignores anything that covers less than half
+ * the window and follows a sustained change once it covers half. 'percentile'
+ * uses zonePercentile (60 = it follows once 40% of the window is louder).
+ *
+ * zoneInputRaw: a note for callers, not read here. The app feeds
+ * processFrame() audio.js's EMA-smoothed level (about a 224ms time
+ * constant), which adds roughly 50-150ms on top of the window before a loud
+ * step registers; true means the caller passes the raw per-frame level
+ * instead.
+ */
+export const DEFAULT_ZONE_SETTINGS = Object.freeze({
+  silenceSpreadMult: ZONE_SILENCE_SPREAD_MULT,
+  targetSpreadMult: ZONE_TARGET_SPREAD_MULT,
+  approachingWidthDb: APPROACHING_WIDTH_DB,
+  endSpreadMult: ZONE_ACCEPTABLE_SPREAD_MULT,
+  endCapDb: END_OF_RANGE_MAX_DB,
+  minSpreadDb: MIN_SPREAD_DB,
+  outsideDwellMs: OUTSIDE_ENTRY_DWELL_MS,
+  dwellGraceMs: DWELL_GRACE_MS,
+  endFrom: 'peaks',
+  peakPercentile: PEAK_PERCENTILE,
+  peakMarginDb: PEAK_MARGIN_DB,
+  peaksSafetyCapDb: PEAKS_SAFETY_CAP_DB,
+  zoneWindowMs: ZONE_WINDOW_MS,
+  voicedOnly: true,
+  zoneMethod: 'percentile',
+  zonePercentile: ZONE_PERCENTILE,
+  zoneInputRaw: true,
+});
+
 export class MezzoEngine {
-  constructor() {
+  /**
+   * @param {{ zoneSettings?: Partial<typeof DEFAULT_ZONE_SETTINGS> }} [options] -
+   *   the app passes nothing; the tuner passes a live settings object
+   */
+  constructor({ zoneSettings } = {}) {
+    this.zoneSettings = zoneSettings ?? DEFAULT_ZONE_SETTINGS;
     // Calibration values
     this.baselineRMS = null;
     this.spreadDb = null; // dB standard deviation of the trimmed calibration samples — see calibrate()
@@ -106,7 +218,25 @@ export class MezzoEngine {
     // Monotonic timestamp (matches whatever clock processFrame()'s nowMs
     // argument uses) marking when the signal first qualified for zone 3 and
     // hasn't yet been confirmed; null whenever there's no pending escalation.
+    // The rest of the dwell state (time actually spent over the line, and
+    // any dip in progress, entering or leaving) is reset with it — see
+    // _resetDwell() and zoneSettings.dwellGraceMs.
+    this._resetDwell();
+    this.calibrationSamples = null; // this calibration's own RMS samples, for 'peaks'
+    this.levelWindow = [];          // recent { t, rms, voiced, ms } frames, for zoneWindowMs
+    this.shortTermRms = 0;
+    this.shortTermVoicedMs = 0;     // how much voiced audio the current average covers
+    this.crossedEndAt = null;       // when the momentary level last rose past the end of range
+    this.lastOutsideLagMs = null;   // from that crossing to Outside committing, last time it did
+  }
+
+  /** Clears every piece of Outside-range dwell state. */
+  _resetDwell() {
     this.pendingOutsideSince = null;
+    this.overMs = 0;          // time actually over the end of range while entering
+    this.lastFrameMs = null;  // the previous frame's timestamp, while entering
+    this.dipSince = null;     // a dip under the line while entering
+    this.exitDipSince = null; // a dip under the line while committed Outside
   }
 
   // ===========================================================================
@@ -216,7 +346,42 @@ export class MezzoEngine {
     // Set calibration values
     this.baselineRMS = mean;
     this.spreadDb = spreadDb;
+    this.calibrationSamples = [...rmsSamples];
     this.calibrationComplete = true;
+  }
+
+  /**
+   * The calibration's level at zoneSettings.peakPercentile, in dB relative
+   * to the baseline — how loud this person's normal speech got at its
+   * peaks. null when this calibration has no samples (a loaded profile).
+   *
+   * @returns {number | null}
+   */
+  getPeakOffsetDb() {
+    const samples = this.calibrationSamples;
+    if (!samples?.length) return Number.isFinite(this.storedPeakOffsetDb) ? this.storedPeakOffsetDb : null;
+    if (!this.baselineRMS) return null;
+    const sorted = [...samples].sort((a, b) => a - b);
+    const p = Math.min(100, Math.max(0, this.zoneSettings.peakPercentile)) / 100;
+    const peak = sorted[Math.min(sorted.length - 1, Math.floor(p * (sorted.length - 1) + 0.5))];
+    return MezzoEngine.rmsToDb(peak) - MezzoEngine.rmsToDb(this.baselineRMS);
+  }
+
+  /** Whether a cap, not the rule itself, is setting the end of range right
+   *  now ('spread' cap or 'peaks' safety cap), for the tuner's readout.
+   *  @returns {null | 'cap' | 'safety-cap'} */
+  getEndCapLimiting() {
+    const z = this.zoneSettings;
+    const spread = Math.max(this.spreadDb || 0, z.minSpreadDb);
+    const peakDb = z.endFrom === 'peaks' ? this.getPeakOffsetDb() : null;
+    if (peakDb === null) return z.endSpreadMult * spread > z.endCapDb ? 'cap' : null;
+    return peakDb + z.peakMarginDb > z.peaksSafetyCapDb ? 'safety-cap' : null;
+  }
+
+  /** The level Approaching and Outside are judged on, in dB vs baseline
+   *  (the momentary level when zoneWindowMs is 0). */
+  getShortTermOffsetDb() {
+    return this.getLevelOffsetDb(this.shortTermRms);
   }
 
   // ===========================================================================
@@ -239,7 +404,9 @@ export class MezzoEngine {
 
     // Reset zone state
     this.currentZone = 0;
-    this.pendingOutsideSince = null;
+    this._resetDwell();
+    this.levelWindow = [];
+    this.shortTermRms = 0;
 
     // Set monitoring state
     this.monitoringActive = true;
@@ -263,7 +430,9 @@ export class MezzoEngine {
     this.currentZone = 0;
     this.gracePeriodActive = false;
     this.graceRemainingMs = 0;
-    this.pendingOutsideSince = null;
+    this._resetDwell();
+    this.levelWindow = [];
+    this.shortTermRms = 0;
 
     // Set monitoring state
     this.monitoringActive = false;
@@ -286,7 +455,7 @@ export class MezzoEngine {
    * @param {number} rmsValue - Current RMS value from audio processor
    * @param {number} [nowMs] - Monotonic timestamp for this frame
    */
-  processFrame(rmsValue, nowMs = performance.now()) {
+  processFrame(rmsValue, nowMs = performance.now(), voiced = true) {
     if (!this.monitoringActive) {
       return;
     }
@@ -296,11 +465,53 @@ export class MezzoEngine {
       if (this.graceRemainingMs <= 0) {
         this.gracePeriodActive = false;
       }
-      this.pendingOutsideSince = null; // no pending escalation carries into/through grace
+      this._resetDwell(); // no pending escalation carries into/through grace
       return; // No zone updates during grace period
     }
 
-    this.currentZone = this._resolveZone(this._computeZone(rmsValue), nowMs);
+    this.shortTermRms = this._shortTermRms(rmsValue, nowMs, voiced);
+    const wasOutside = this.currentZone === 3;
+    this._trackEndCrossing(rmsValue, nowMs);
+    this.currentZone = this._resolveZone(this._computeZone(rmsValue, this.shortTermRms), nowMs);
+    if (this.currentZone === 3 && !wasOutside && this.crossedEndAt !== null) {
+      this.lastOutsideLagMs = nowMs - this.crossedEndAt;
+      this.crossedEndAt = null;
+    }
+  }
+
+  /** Notes when the momentary level rises past the end of range (for the
+   *  lag readout); forgets it once the level is back to Within range. */
+  _trackEndCrossing(rmsValue, nowMs) {
+    if (this.currentZone === 3) return;
+    const { targetDb, endDb } = this.getRangeBoundsDb();
+    const db = this.getLevelOffsetDb(rmsValue);
+    if (db > endDb && this.crossedEndAt === null) this.crossedEndAt = nowMs;
+    else if (db <= targetDb) this.crossedEndAt = null;
+  }
+
+  /** Mean RMS over the last zoneWindowMs (just this frame when it's 0);
+   *  with voicedOnly, over the voiced frames in it only. */
+  _shortTermRms(rmsValue, nowMs, voiced) {
+    const windowMs = this.zoneSettings.zoneWindowMs || 0;
+    if (windowMs <= 0) {
+      this.levelWindow = [];
+      this.shortTermVoicedMs = 0;
+      return rmsValue;
+    }
+    const prev = this.levelWindow.at(-1);
+    const ms = prev ? Math.min(nowMs - prev.t, 100) : FRAME_MS;
+    this.levelWindow.push({ t: nowMs, rms: rmsValue, voiced, ms });
+    while (this.levelWindow.length && this.levelWindow[0].t <= nowMs - windowMs) this.levelWindow.shift();
+    const counted = this.zoneSettings.voicedOnly ? this.levelWindow.filter((f) => f.voiced) : this.levelWindow;
+    this.shortTermVoicedMs = this.levelWindow.filter((f) => f.voiced).reduce((sum, f) => sum + f.ms, 0);
+    if (!counted.length) return rmsValue;
+    const method = this.zoneSettings.zoneMethod;
+    if (method === 'median' || method === 'percentile') {
+      const sorted = counted.map((f) => f.rms).sort((a, b) => a - b);
+      const p = method === 'median' ? 0.5 : Math.min(100, Math.max(0, this.zoneSettings.zonePercentile)) / 100;
+      return sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))];
+    }
+    return counted.reduce((sum, f) => sum + f.rms, 0) / counted.length;
   }
 
   /**
@@ -319,26 +530,67 @@ export class MezzoEngine {
    * @private
    */
   _resolveZone(rawZone, nowMs) {
-    if (rawZone < 3) {
-      this.pendingOutsideSince = null;
+    const grace = this.zoneSettings.dwellGraceMs || 0;
+
+    // Committed Outside: leaving needs the level back under the line for
+    // the grace time, so the band doesn't flicker off between words. With
+    // no grace (the app's default), it leaves on the first frame under.
+    if (this.currentZone === 3) {
+      if (rawZone === 3) {
+        this.exitDipSince = null;
+        return 3;
+      }
+      if (this.exitDipSince === null) this.exitDipSince = nowMs;
+      if (nowMs - this.exitDipSince < grace) return 3;
+      this._resetDwell();
       return rawZone;
     }
 
-    // Already confirmed and still qualifying — stays 3, no re-confirmation.
-    if (this.currentZone === 3) {
-      return 3;
+    if (rawZone < 3) {
+      if (this.pendingOutsideSince === null) return rawZone;
+      // A dip while entering: shorter than the grace, the count is held
+      // (not reset); otherwise it starts over. With no grace (the app's
+      // default), any dip resets it.
+      if (this.dipSince === null) this.dipSince = nowMs;
+      if (nowMs - this.dipSince >= grace) this._resetDwell();
+      else this.lastFrameMs = nowMs; // time under the line never counts
+      return rawZone;
     }
 
+    // Over the line, not yet committed: only time actually over counts.
     if (this.pendingOutsideSince === null) {
       this.pendingOutsideSince = nowMs;
+      this.overMs = 0;
+    } else if (this.lastFrameMs !== null) {
+      this.overMs += nowMs - this.lastFrameMs;
     }
+    this.lastFrameMs = nowMs;
+    this.dipSince = null;
 
-    if (nowMs - this.pendingOutsideSince >= OUTSIDE_ENTRY_DWELL_MS) {
-      this.pendingOutsideSince = null;
+    if (this.overMs >= this.zoneSettings.outsideDwellMs) {
+      this._resetDwell();
       return 3;
     }
 
     return 2; // held at Approaching End of Range while confirmation pends
+  }
+
+  /**
+   * The Outside-range dwell's progress, for the tuner's readout:
+   * 'entering' counts time over the line toward outsideDwellMs; 'leaving'
+   * counts time back under toward dwellGraceMs. null when neither is
+   * counting.
+   *
+   * @returns {{ phase: 'entering' | 'leaving', ms: number, of: number } | null}
+   */
+  getDwellProgress(nowMs = performance.now()) {
+    if (this.currentZone === 3 && this.exitDipSince !== null) {
+      return { phase: 'leaving', ms: nowMs - this.exitDipSince, of: this.zoneSettings.dwellGraceMs || 0 };
+    }
+    if (this.pendingOutsideSince !== null) {
+      return { phase: 'entering', ms: this.overMs, of: this.zoneSettings.outsideDwellMs };
+    }
+    return null;
   }
 
   // ===========================================================================
@@ -387,6 +639,43 @@ export class MezzoEngine {
   }
 
   /**
+   * The zone boundaries this calibration classifies against, as dB offsets
+   * from the calibrated baseline — the exact values _computeZone() uses
+   * (same spread floor, same multipliers). Read-only, for presentation: the
+   * Range Ring (src/range-ring.js) maps the level against these instead of
+   * re-deriving its own, so it can never disagree with classification.
+   *
+   * @returns {{ silenceDb: number, targetDb: number, endDb: number }}
+   *   silenceDb: Listening/Within boundary; targetDb: Within/Approaching;
+   *   endDb: the end of range (Approaching/Outside)
+   */
+  getRangeBoundsDb() {
+    const z = this.zoneSettings;
+    const spread = Math.max(this.spreadDb || 0, z.minSpreadDb);
+    const peakDb = z.endFrom === 'peaks' ? this.getPeakOffsetDb() : null;
+    const endDb = peakDb === null
+      ? Math.min(z.endSpreadMult * spread, z.endCapDb)
+      : Math.min(peakDb + z.peakMarginDb, z.peaksSafetyCapDb);
+    const targetDb = z.approachingWidthDb == null
+      ? Math.min(z.targetSpreadMult * spread, endDb)
+      : endDb - z.approachingWidthDb;
+    return { silenceDb: z.silenceSpreadMult * spread, targetDb, endDb };
+  }
+
+  /**
+   * A level relative to the calibrated baseline, in dB — the same diffDb
+   * _computeZone() compares against getRangeBoundsDb(). Returns -Infinity
+   * for silence or before calibration.
+   *
+   * @param {number} rmsValue
+   * @returns {number}
+   */
+  getLevelOffsetDb(rmsValue) {
+    if (!this.baselineRMS || this.baselineRMS <= 0 || !rmsValue || rmsValue <= 0) return -Infinity;
+    return MezzoEngine.rmsToDb(rmsValue) - MezzoEngine.rmsToDb(this.baselineRMS);
+  }
+
+  /**
    * Load an already-computed calibration directly — for starting a
    * monitoring session from a saved profile's stored speakingDb/spreadDb,
    * as opposed to calibrate(), which validates a fresh batch of raw
@@ -400,11 +689,16 @@ export class MezzoEngine {
    * @param {{ baselineRMS: number, spreadDb?: number }} values
    * @throws {Error} If baselineRMS isn't a usable positive number
    */
-  loadCalibration({ baselineRMS, spreadDb }) {
+  loadCalibration({ baselineRMS, spreadDb, peakOffsetDb }) {
     if (typeof baselineRMS !== 'number' || !Number.isFinite(baselineRMS) || baselineRMS <= 0) {
       throw new Error('loadCalibration requires a positive, finite baselineRMS');
     }
     this.baselineRMS = baselineRMS;
+    // A loaded profile carries no samples, only its saved peak (dB vs its
+    // baseline, recorded at calibration). Profiles saved before peaks were
+    // recorded have none, and fall back to the spread rule.
+    this.calibrationSamples = null;
+    this.storedPeakOffsetDb = Number.isFinite(peakOffsetDb) ? peakOffsetDb : null;
     // Older profiles saved before spreadDb existed carry none — falls back
     // to 0, which _computeZone()'s own MIN_SPREAD_DB floor already handles
     // exactly like a freshly-measured, perfectly uniform calibration would.
@@ -426,17 +720,20 @@ export class MezzoEngine {
    * @returns {number}
    * @private
    */
-  _computeZone(rmsValue) {
+  _computeZone(rmsValue, shortTermRms = rmsValue) {
     if (!this.baselineRMS || this.baselineRMS <= 0 || !rmsValue || rmsValue <= 0) {
       return 0;
     }
 
-    const spread = Math.max(this.spreadDb || 0, MIN_SPREAD_DB);
+    const { silenceDb, targetDb, endDb } = this.getRangeBoundsDb();
     const diffDb = MezzoEngine.rmsToDb(rmsValue) - MezzoEngine.rmsToDb(this.baselineRMS);
+    // Approaching and Outside are judged on the short-term level (the same
+    // as the momentary one unless zoneWindowMs is set).
+    const termDb = MezzoEngine.rmsToDb(shortTermRms) - MezzoEngine.rmsToDb(this.baselineRMS);
 
-    if (diffDb < ZONE_SILENCE_SPREAD_MULT * spread) return 0;
-    if (diffDb <= ZONE_TARGET_SPREAD_MULT * spread) return 1;
-    if (diffDb <= ZONE_ACCEPTABLE_SPREAD_MULT * spread) return 2;
+    if (diffDb < silenceDb) return 0;
+    if (termDb <= targetDb) return 1;
+    if (termDb <= endDb) return 2;
     return 3;
   }
 

@@ -2,11 +2,16 @@
  * Mezzo — Privacy Page Styles
  * Base layout (.page) inherited from calibration.css. Navigation is shared,
  * canonical CSS — see design-tokens/mezzo-tokens.css. Page background
- * matches the nav's Paper tone — no visible seam between chrome and content.
+ * matches the nav's — no visible seam between chrome and content.
  */
 
 .page {
-  background: var(--paper);
+  background: var(--color-bg);
+}
+
+::selection {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
 }
 
 .privacy-content {
@@ -29,10 +34,10 @@
 /* ── Section headings ── */
 .type-privacy-h2 {
   font-family: var(--font-display);
-  font-weight: var(--weight-light);
+  font-weight: var(--weight-medium);
   font-size: 24px;
   line-height: 125%;
-  letter-spacing: -0.2px;
+  letter-spacing: var(--tracking-heading);
   color: var(--text-primary);
   margin-bottom: var(--space-heading-to-content);
 }

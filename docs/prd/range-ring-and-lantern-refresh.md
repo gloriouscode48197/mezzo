@@ -121,10 +121,12 @@ The existing 320px max-width cap on full-width Companion buttons stays.
 
 ## 5. Proposal 1: The Range Ring
 
+Revised 2026-10-22 with values tuned against a real voice in the ring tuner (`design/prototypes/ring-tuner.html`; a frozen public copy lives at `/playground/`). Each value below gives its reason.
+
 ### 5.1 Anatomy
 
 - **Range edge**: a circle marking the end of the user's range. Always visible.
-- **Voice circle**: a filled circle that grows with the user's smoothed level.
+- **Voice circle**: a filled circle that follows the user's momentary level.
 - **Over-range band**: a flat chartreuse ring outside the edge, with a tight glow on its outer edge. Only present when over range.
 
 No center dot. No other decoration.
@@ -133,10 +135,13 @@ No center dot. No other decoration.
 
 | Zone | Voice circle | Range edge | Band |
 |---|---|---|---|
-| 0 Listening | Tiny, `--color-voice` at 40% | 1.5px cream at 60%, very faint fill | None |
-| 1 Within range | Grows with level, 40% opacity | Same | None |
-| 2 Approaching end of range | Solid `--color-voice`, nearly fills the edge | 3px solid sage | None |
+| 0 Listening | Rests at 20% of the edge, `--color-voice` at 45% | 1.5px `--color-voice` at 45%, very faint fill | None |
+| 1 Within range | 45% of the edge at the calibrated level, 55% at the top of Within range; 45% opacity | Same | None |
+| 2 Approaching end of range | Grows to 80% at the end of range, opacity rising to solid | 3px solid sage | None |
 | 3 Outside range | Fills the edge | Hidden under the band | Flat chartreuse, grows with how far over |
+
+- **Rest edge color:** the edge at rest is `--color-voice` at an opacity (`voice.edgeOpacity`, default 0.45) that can never be higher than the voice circle at rest (`voice.opacityRest`, 0.45). The two values are tied in code, so the edge can never outshine the circle; edge and circle read as one quiet object. The earlier cream edge was the brightest thing on screen at rest.
+- **Sizes:** at the calibrated level, the circle sits at 45%, comfortably inside the edge. Before tuning it nearly filled the ring at normal speech and showed the sage edge.
 
 Attention rises in three steps, each using brightness and size, which work in peripheral vision and don't depend on hue:
 
@@ -144,31 +149,53 @@ Attention rises in three steps, each using brightness and size, which work in pe
 2. Approaching, the circle brightens and the edge thickens.
 3. Over range, the brightest color in the product appears.
 
-### 5.3 Continuous, not stepped
+### 5.3 Where the range comes from
 
-The table describes the look at each zone, but motion should be continuous:
+- **End of range = the calibration's 95th-percentile level + 1.5 dB**, saved with the profile as `peakDb` (dB above the speaking level). Rule: speaking at your calibrated level must never trigger Outside range. Average + spread let normal speech peaks cross the line.
+- **Safety cap 12 dB.** In peaks mode the end of range never sits higher than this above the speaking level. The old +6/7 dB cap would pull it back below the person's own peaks.
+- **Approaching = the last 2 dB before the end of range.** At 1 × spread, ordinary speech regularly showed the sage edge.
+- **Listening below −4 × spread.** Wide, so pauses between words don't count as Listening.
+- **Fallback** for profiles saved before peaks were recorded: end of range = min(2 × spread, 7 dB). These profiles still work, and Ready suggests recalibrating them.
 
-- Voice circle size and opacity follow the smoothed level, not the zone.
-- The band's thickness follows how far past the end of range the level is, up to a maximum. Reference values from the design: 11px just over, 20px over, 29px well over, 38px far over, at a 170px edge.
-- Growth and shrinking are eased; nothing snaps or flashes.
+### 5.4 What the zones read, and timing
 
-### 5.4 Timing
+- **Zones are judged on a short-term level:** the 60th percentile of the voiced frames in the last 600 ms. A single emphasized syllable covers too little of the window to move it. A sustained change moves it once it covers about 40% of the window, so the zone follows in about 200–250 ms. A mean was tried: one loud syllable could lift it, and a loud start took long to pull it up.
+- **Voiced frames only:** frames where the circle's own gate is closed (silence or room noise) are left out, so the silence before someone starts talking doesn't dilute the window and delay a loud start.
+- **Raw level for zones:** zones read the raw per-frame level, not `audio.js`'s EMA, which would add 50–150 ms. The EMA is still used for calibration samples.
+- **Outside dwell 150 ms, grace 200 ms.** The window already ignores single syllables, so the dwell only bridges the last moments. Only time actually over the line counts toward it. Dips shorter than the grace don't reset the count, and leaving Outside needs 200 ms back under the line, so the band doesn't flicker off between words.
+- **No flicker at the edge:** the band grows from a thin ring and shrinks back before fading (grow 150 ms, shrink 150 ms, fade 100 ms).
+- Sustained drift (`SUSTAINED_DRIFT_MS`) still only feeds analytics.
 
-- The band appears only when the engine commits zone 3 (after `OUTSIDE_ENTRY_DWELL_MS`, currently 500ms). The visual must not show the band on a raw, uncommitted spike.
-- Nothing may flicker at the edge. If the level hovers around the end of range, the band fades rather than toggling.
-- Existing sustained-drift behavior (`SUSTAINED_DRIFT_MS`) is reviewed during implementation; it may become band intensity rather than a separate effect.
+### 5.5 Motion
 
-### 5.5 Sizes
+- **The circle follows the momentary level:** the raw per-frame level, lightly smoothed (100 ms), then eased in linear RMS (rise 150 ms, fall 400 ms) before conversion to dB. Easing in RMS makes a rise read quickly and a fall settle gently.
+- **Settle to rest, 1000 ms:** when a gate closes, the circle eases to its rest size over a second, instead of the 400 ms fall used between words. A gate only changes the circle's target, never its displayed size, so nothing snaps.
+- **Band:** full thickness (18% of the edge) at 2 dB over the end of range.
 
-- **Expanded (382×480):** edge about 236px. The ring is centered; the existing responsive tiers still apply.
-- **Compact (220×220):** edge about 140px; band and glow scaled down so they don't touch the window edge at maximum.
-- Above 382×480 the ring stops growing, as today.
+### 5.6 Silence and noise
 
-### 5.6 Implementation boundary
+- **Speech-band filter, on:** a 120 Hz high-pass then a 3400 Hz low-pass (the telephone speech band) before the level is measured, for both the circle and the zones. This keeps fan rumble and hiss from moving either. Browser noise suppression stays off, and automatic gain stays off.
+- **Silence floor −25 dB:** below 25 dB under the speaking level, the circle rests, with 1.5 dB hysteresis.
+- **Room noise:** measured during the calibration's 3-2-1 as the median raw level, and saved with the profile as `roomNoiseDb`. In monitoring, the circle rests unless the level is 4 dB above it.
+- **Noisy rooms:** where speech sits less than 12 dB above the room, the margin drops to 2 dB so a soft voice still moves the circle. The result screen then says: "Your room is a bit noisy for how softly you speak. Try moving a little closer to your mic."
 
-- A new renderer replaces `MezzoWaveVisualizer` (`src/wave-visualizer.js`).
-- It reads the engine's committed zone and the smoothed level. It never classifies zones itself.
-- Rendering can be canvas or CSS; the ring experiment uses canvas. Choose whichever keeps 60fps with no layout work per frame.
+### 5.7 Sizes and the default window
+
+- **Monitoring opens in Compact (220×220)**, the peripheral default. The window is freely resizable, and the ring edge stays at 60% of the short side at any size.
+- **Profile name:** it always shows. In Compact it's above the ring in Geist Mono 11px uppercase, muted, and it steps aside while the over-range band shows (the band and glow reach the top of a 220px window).
+- **Controls:** Stop bottom left, Expand top right; in Compact they're revealed on hover or focus.
+  - In windows under about 300px on the short side, Stop is icon-only, 32px.
+  - In larger windows it's a "Stop" pill at least 44px tall.
+  - Its accessible name is always "Stop monitoring".
+- **What Stop does:** it ends the session, releases the microphone, and returns to Ready with the current profile still selected.
+- **No pause:** an earlier Pause/Resume was removed. Stop and Start monitoring cover it, and one control keeps the peripheral window quiet.
+- Band and glow are scaled so they never touch the window edge.
+
+### 5.8 Implementation boundary
+
+- `src/range-ring.js` replaces `MezzoWaveVisualizer`. It reads the engine's committed zone and boundaries; it never classifies zones itself.
+- DOM and CSS custom properties; no layout work per frame.
+- Every tuned value lives in a settings object (`DEFAULT_RING_SETTINGS`, `DEFAULT_ZONE_SETTINGS`, `DEFAULT_AUDIO_SETTINGS`, `DEFAULT_CALIBRATION_RING_SETTINGS`), which the tuner drives live.
 
 ---
 
@@ -196,28 +223,86 @@ Decision states stay full-screen, per CLAUDE.md. The one-off card on the new-pro
 
 ## 8. Proposal 4: Calibrating
 
-Replace the flat orange meter:
+Revised 2026-10-22. The user must see live feedback that their voice is being captured, so this replaces the countdown-number version.
 
-- A 6px sage progress ring with rounded ends, on a faint track, about 130px across. It fills over the six-second capture.
-- A large countdown number (about 40px) in the center. No gray fill.
-- Copy below: "Talk normally for a few seconds." (new copy, to be confirmed)
-- Open question: add a small, faint voice circle inside the ring so users can see the microphone responding (§13).
+Top to bottom, at the shared 380×364 pre-monitoring size (revised again 2026-10-22: a segmented level meter replaces the progress ring and voice circle):
+
+- **Heading:** "Keep speaking at the level you want to maintain". Geist 500, 20px, cream, centered, `text-wrap: balance`. When recalibrating a saved profile, the existing "Recalibrating {name}" mono label stays above it.
+- **Level meter**, centered about 52px below the heading:
+  - Six segments, 34×14px, 6px gaps, 2px corners. Lit segments are sage (#CEE2C4); unlit ones are cream at 12%.
+  - The lit count follows the live, filtered microphone level, eased like the Range Ring (150ms rise, 400ms fall), on the old meter's -55 to -30 dB scale, so normal speech lights about 3–4 segments.
+  - It reacts during the 3-2-1 as a mic check, then during the capture.
+  - `role="meter"`, `aria-label` "Your voice level", `aria-valuenow` 0–6.
+  - Why a meter: it says "your voice is being picked up" without suggesting a target size or a range that doesn't exist yet. The ring and circle looked like Monitoring before there was anything to monitor.
+- **Status**, 18px below the meter: "Preparing microphone…", then "Start speaking in 3/2/1", then "Listening… Ns" counting down. Sage, 15px, weight 500, `aria-hidden`. This is the only time cue.
+- **Hint**, 6px below: "Get ready to talk normally." during the 3-2-1, then "Talk normally. The bars move with your voice." 13px, muted (#B0AB9E).
+- **Cancel**, a sage text link pinned to the bottom. Behavior unchanged.
+- **Room noise** is measured from the 3-2-1's readings (§5.6) and saved with the profile.
+
+The horizontal meter bar, "Background sounds may move the meter too.", the progress ring and the calibrating voice circle are all removed.
+
+**Accessibility.** The existing live region is kept, with its two one-time announcements ("Get ready. Calibration starts in 3 seconds." and "Listening for 6 seconds."). Nothing is announced every second.
+
+**Reduced motion.** The segments still follow the level, without easing: the meter is the feedback.
+
+**Sizes.** Calibrating always runs at the 380×364 pre-monitoring size; it can't be reached in Compact.
 
 ---
 
 ## 9. Proposal 5: Home
 
-- Dark theme, Lantern type and buttons. Nav is the lowercase "mezzo" wordmark only (no icon), plus Home and Privacy.
-- Eyebrow: "Voice awareness for calls".
-- Headline: "Be heard without filling the room."
-- Subhead: "Mezzo gently nudges you when your voice travels outside your intended range." with "outside your intended range" in chartreuse text.
-- A chartreuse "Get started" button in the hero that jumps to the Get started section.
-- Hero layout: text on the left; on the right, a single Over range ring in a slate tile, with a faint dot grid that fades in toward the tile's corners. Caption: "When your voice travels past your range, a soft chartreuse glow appears. That's the nudge."
-- Benefits, on the plain page background with sage dot bullets: "For calls with headphones", "Calibrated to you", "Your words stay private".
-- Get started: a full-bleed slate band with three numbered steps, the chartreuse "Enable microphone" button, and one privacy line.
-- Text selection uses chartreuse with dark text.
-- The mic sub-states (granted, denied) and the Dock adopt the same type, colors, and buttons. Their copy is unchanged.
-- Mobile: scale the headline down and keep the hero tile from dominating the first screen.
+Revised 2026-10-22: this replaces the earlier Home spec (the "Be heard without filling the room." hero, the slate ring tile, the benefits list, and the Get started band with its scroll button).
+
+**How the page picks its state.** On load, Home reads `navigator.permissions.query({ name: "microphone" })` and shows one of three states. Without the permissions API it falls back to "prompt". A "granted" result still runs the real acquire/release probe before the granted state shows (unchanged).
+
+| Permission | State shown |
+|---|---|
+| `prompt` (first visit, or "Allow this time") | The marketing page below |
+| `granted` | "You're ready to use Mezzo" |
+| `denied` | "Your browser has blocked microphone access" |
+
+**Header (all states).** Unchanged: the lowercase "mezzo" wordmark, Home and Privacy, the thin divider, and the chartreuse underline on the active link. Text selection uses chartreuse with dark text.
+
+### Prompt state
+
+**Hero** (on `--color-bg`, #2D2E31):
+- Two columns, both vertically centered: text on the left, the illustration on the right (at most about 620px wide). On mobile they stack, with the illustration below the button.
+- Eyebrow: "For headphone calls in shared spaces", in Geist Mono uppercase, muted (#B0AB9E).
+- H1, one sentence in two parts: "Focus on the meeting" in cream on its own line, then "while Mezzo minds the volume." in muted with `text-wrap: balance`. 48px on desktop, about 38px at 390px.
+- Subhead, muted: "Set a range you're comfortable with. A soft glow nudges you when your voice drifts outside it, before it carries." "soft glow" is chartreuse and never breaks across lines.
+- The real "Enable microphone" button: chartreuse with charcoal text and 3px corners. It is the only button on the page.
+- Under it, 13px muted: "Mezzo only measures volume. Nothing you say is recorded."
+- Illustration: `assets/hero-coworking.svg`, inlined, keeping its `role="img"` and `aria-label`, colors unchanged. Its faded lines use solid premixed colors so crossings don't brighten, and some shapes fill with #2D2E31 to hide lines behind them, so the hero background must stay #2D2E31.
+
+**How it works** (a full-bleed slate #38393C band, `id="how-it-works"`):
+- Left: h2 "How it works" and "It takes about a minute. Everything happens in your browser."
+- Right: a vertical ordered list with chartreuse Geist Mono numbers and thin dividers.
+  1. **Allow your mic.** "Choose "Allow on every visit" to skip this step next time."
+  2. **Calibrate in the Companion.** "Talk normally for a few seconds in the floating window. Mezzo sets a range that fits your voice, your mic, and your room."
+  3. **Glance at the ring.** "It stays quiet while you talk."
+- Under step 03, a row of three chips that wraps on mobile. Each chip has a 36px still Range Ring (aria-hidden), a Geist Mono label, and two words.
+
+  | Chip | Label color | Ring | Text |
+  |---|---|---|---|
+  | Within range | muted | faint voice circle, thin cream edge | Keep going |
+  | Approaching | sage | #8E897B voice circle, 2px sage edge | Getting close |
+  | Outside range | chartreuse | #8E897B voice circle, chartreuse band with a small glow | Ease back |
+
+The benefits section and the large ring tiles are removed. Their points now live in the eyebrow, step 02, and the privacy line.
+
+### Granted state
+
+Layout, heading, and the "Open Mezzo Companion" button unchanged. Copy:
+- "Microphone access is on. Open the Companion to pick a speaking profile and start monitoring."
+- Privacy line: "Mezzo only measures volume. Nothing you say is recorded."
+
+### Denied state
+
+Unchanged. The address-bar chip shows the page's real host (`window.location.host`), never a hard-coded one.
+
+### Dock and unsupported browser
+
+Same type, colors, and buttons; copy unchanged.
 
 ---
 
@@ -227,6 +312,10 @@ Replace the flat orange meter:
 - **Focus:** a 2px sage focus ring (`:focus-visible`) on every interactive element, website and Companion.
 - **Line breaks:** `text-wrap: balance` on headings and `text-wrap: pretty` on body text, captions, and list items, so lines break evenly with no single-word last lines.
 - **Still images** of the ring (marketing, case study) show the voice circle at a mid-conversation size, so a small centered dot never reads as a record button.
+- **Sound:** the speech-band filter (120–3400 Hz) is on wherever Mezzo measures a level: calibration, monitoring, and the Home permission probe. Noise suppression and automatic gain are off everywhere.
+- **Profiles saved before 2026-10-22** were measured without the filter and have no `peakDb`/`roomNoiseDb`. They're kept and still work, using the spread-based fallback. Ready shows "Recalibrate to use the improved sound filter." under them, and Recalibrate updates them in place.
+- **Playground:** a frozen public copy of the tuner at `/playground/`, with its own module copies, outside the nav. The tuner and playground preview Monitoring only (no Calibrating preview).
+- **Welcome:** no "Welcome" heading. The "mezzo" wordmark is the screen's h1, at the top: 30px, Geist 600, letter-spacing -0.045em, cream, lowercase. Body: "A gentle nudge when you're talking louder than you'd like. First, a quick voice calibration." The button and privacy line are unchanged. While Welcome shows, the window's accessible name (its document title) is "Mezzo, welcome."
 
 ---
 
@@ -280,7 +369,7 @@ This makes the refresh reviewable as small, safe steps and leaves one place to c
 2. **Band maximum.** At what dB over the end of range should the band reach full thickness? The ring experiment used about +4 dB.
 3. **Live-region debounce.** Confirm about 1 second and "into/out of Outside range only" with a screen-reader user if possible.
 4. **Sustained drift.** Keep `SUSTAINED_DRIFT_MS` as a separate effect, or fold it into band intensity?
-5. **Calibrating.** Confirm "Talk normally for a few seconds," and decide whether to show a small voice circle inside the progress ring.
+5. **Calibrating.** Resolved 2026-10-22: a six-segment level meter that follows the voice, with "Talk normally. The bars move with your voice." (§8). It replaced a progress ring with a voice circle inside.
 6. **Website chartreuse buttons.** Confirmed in design; revisit if it ever causes confusion with the in-product nudge.
 
 ---

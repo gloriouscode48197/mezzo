@@ -694,7 +694,7 @@ test.describe('Ready-screen spacing and separator (2026-08-15 pass)', () => {
     // margin) — see .pip-ready-start-btn's own comment for the exact math.
     await page.addInitScript(() => {
       localStorage.setItem('mezzoProfiles', JSON.stringify([
-        { id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 100 },
+        { id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 100, peakDb: 2 }, // current format: no recalibrate note
       ]));
     });
     const pipPage = await openCompanion(page, context);

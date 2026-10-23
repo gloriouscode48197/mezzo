@@ -134,10 +134,10 @@ export function deleteSavedProfile(id) {
  * is responsible for keeping whatever temporary calibration this came from
  * intact so the user can still use or retry it.
  *
- * @param {{ name: string, speakingDb: number, spreadDb: number, calibratedTs: number }} profile
+ * @param {{ name: string, speakingDb: number, spreadDb: number, calibratedTs: number, peakDb?: number, roomNoiseDb?: number }} profile
  * @returns {object|null} the full new saved profile (with its generated id), or null if at the limit
  */
-export function addSavedProfile({ name, speakingDb, spreadDb, calibratedTs }) {
+export function addSavedProfile({ name, speakingDb, spreadDb, calibratedTs, peakDb, roomNoiseDb }) {
   if (typeof speakingDb !== 'number' || typeof spreadDb !== 'number') {
     console.error('[Profiles] Refusing to add a profile without numeric speakingDb/spreadDb');
     return null;
@@ -148,9 +148,30 @@ export function addSavedProfile({ name, speakingDb, spreadDb, calibratedTs }) {
     return null;
   }
 
-  const newProfile = { id: crypto.randomUUID(), name, speakingDb, spreadDb, calibratedTs };
+  const newProfile = { id: crypto.randomUUID(), name, speakingDb, spreadDb, calibratedTs, ...measuredFields({ peakDb, roomNoiseDb }) };
   saveSavedProfiles([...profiles, newProfile]);
   return newProfile;
+}
+
+/** Only finite measurements are stored. */
+function measuredFields({ peakDb, roomNoiseDb }) {
+  const out = {};
+  if (Number.isFinite(peakDb)) out.peakDb = peakDb;
+  if (Number.isFinite(roomNoiseDb)) out.roomNoiseDb = roomNoiseDb;
+  return out;
+}
+
+/**
+ * Whether a profile predates the 2026-10-22 sound changes: it was measured
+ * without the speech-band filter and carries no calibration peak (peakDb),
+ * so monitoring falls back to the older spread-based end of range. Such
+ * profiles still work; Ready suggests recalibrating them. Never deleted.
+ *
+ * @param {object | null} profile
+ * @returns {boolean}
+ */
+export function needsRecalibration(profile) {
+  return !!profile && typeof profile.speakingDb === 'number' && !Number.isFinite(profile.peakDb);
 }
 
 /**
@@ -167,7 +188,7 @@ export function addSavedProfile({ name, speakingDb, spreadDb, calibratedTs }) {
  * temporary calibration into a saved one, correctly.
  *
  * @param {object} temporaryProfile - must carry `temporary: true`; only its
- *   speakingDb/spreadDb/calibratedTs are persisted — never savedProfileId,
+ *   speakingDb/spreadDb/calibratedTs/peakDb/roomNoiseDb are persisted — never savedProfileId,
  *   never the temporary flag itself, never any other field it happens to carry.
  * @param {string} name - the name to save it under.
  * @param {{ addSavedProfile?: typeof addSavedProfile }} [deps] - injectable
@@ -184,11 +205,11 @@ export function promoteTemporaryProfile(temporaryProfile, name, { addSavedProfil
     throw new Error('promoteTemporaryProfile requires a non-empty name');
   }
 
-  const { speakingDb, spreadDb, calibratedTs } = temporaryProfile;
+  const { speakingDb, spreadDb, calibratedTs, peakDb, roomNoiseDb } = temporaryProfile;
   // addSavedProfile() only ever creates — it never overwrites an existing
   // profile — so "never overwrite" is satisfied by construction, not by an
   // extra check here.
-  const saved = addSavedProfileFn({ name: name.trim(), speakingDb, spreadDb, calibratedTs });
+  const saved = addSavedProfileFn({ name: name.trim(), speakingDb, spreadDb, calibratedTs, peakDb, roomNoiseDb });
 
   if (!saved) {
     // Fails cleanly: the temporary profile passed in is untouched by this
@@ -202,9 +223,9 @@ export function promoteTemporaryProfile(temporaryProfile, name, { addSavedProfil
 
 /**
  * Update an existing saved profile's calibration in place — the only way a
- * recalibration should ever reach storage. Touches speakingDb, spreadDb, and
- * calibratedTs alone (whichever of those three are actually present in
- * `calibrationFields`); id, name, every other field, and the profile's
+ * recalibration should ever reach storage. Touches speakingDb, spreadDb,
+ * calibratedTs, peakDb, and roomNoiseDb alone (whichever are actually present
+ * in `calibrationFields`); id, name, every other field, and the profile's
  * position in the saved array are all preserved untouched. Recalibrating
  * "Kitchen" updates "Kitchen" — never a duplicate, never implicitly renamed.
  *
@@ -212,7 +233,7 @@ export function promoteTemporaryProfile(temporaryProfile, name, { addSavedProfil
  * in place, it never grows the library.
  *
  * @param {string} id
- * @param {{ speakingDb?: number, spreadDb?: number, calibratedTs?: number }} calibrationFields
+ * @param {{ speakingDb?: number, spreadDb?: number, calibratedTs?: number, peakDb?: number, roomNoiseDb?: number }} calibrationFields
  * @returns {object|null} the updated profile, or null if no profile with that id exists
  */
 export function updateSavedProfile(id, calibrationFields) {
@@ -222,11 +243,18 @@ export function updateSavedProfile(id, calibrationFields) {
     return null;
   }
 
-  const { speakingDb, spreadDb, calibratedTs } = calibrationFields;
+  const { speakingDb, spreadDb, calibratedTs, peakDb, roomNoiseDb } = calibrationFields;
   const updated = { ...profiles[index] };
   if (speakingDb !== undefined) updated.speakingDb = speakingDb;
   if (spreadDb !== undefined) updated.spreadDb = spreadDb;
   if (calibratedTs !== undefined) updated.calibratedTs = calibratedTs;
+  // A recalibration measures both again: a missing room-noise reading
+  // replaces the old one rather than keeping a stale room.
+  if (peakDb !== undefined || roomNoiseDb !== undefined) {
+    delete updated.peakDb;
+    delete updated.roomNoiseDb;
+    Object.assign(updated, measuredFields({ peakDb, roomNoiseDb }));
+  }
 
   const next = [...profiles];
   next[index] = updated; // in-place replace — array position (and every other profile) untouched
@@ -342,9 +370,9 @@ export function commitSavePromptName(temporaryProfile, name, deps = {}) {
   }
 
   if (resolution.kind === SAVE_PROMPT_ACTIONS.UPDATE) {
-    const { speakingDb, spreadDb, calibratedTs } = temporaryProfile;
+    const { speakingDb, spreadDb, calibratedTs, peakDb, roomNoiseDb } = temporaryProfile;
     const updateFn = deps.updateSavedProfile ?? updateSavedProfile;
-    const updated = updateFn(resolution.profile.id, { speakingDb, spreadDb, calibratedTs });
+    const updated = updateFn(resolution.profile.id, { speakingDb, spreadDb, calibratedTs, peakDb, roomNoiseDb });
     if (!updated) {
       // Only reachable if the matched profile was deleted in the instant
       // between resolution and this write — deps.savedProfiles (if the

@@ -113,8 +113,10 @@
  */
 
 import { AudioProcessor } from './audio.js?v=2';
-import { MezzoEngine } from './engine.js?v=5';
-import { MezzoWaveVisualizer } from './wave-visualizer.js';
+import { MezzoEngine, DEFAULT_ZONE_SETTINGS, measureRoomNoiseDb, isNoisyRoom } from './engine.js?v=5';
+import { MezzoRangeRing, RING_EDGE_FRACTION } from './range-ring.js';
+import { MezzoLevelMeter } from './level-meter.js';
+import { createZoneAnnouncer, ZONE_LABELS } from './zone-announcer.js';
 import { createCalibrationController } from './calibration-controller.js';
 import { createCalibrationLock } from './calibration-lock.js';
 import { trackMonitoringStarted, trackMonitoringSession, trackCalibrationCompleted } from './analytics.js';
@@ -135,6 +137,7 @@ import {
   MAX_SAVED_PROFILES,
   getHasStartedMonitoring,
   setHasStartedMonitoring,
+  needsRecalibration,
 } from './profiles.js';
 
 // Calibration failure codes (src/calibration-controller.js) mapped to calm,
@@ -283,7 +286,6 @@ export function isTemporaryProfile(profile) {
 // below — module-level so they're not rebuilt on every Companion open.
 // aria-hidden in every use site; the button/control's own text or
 // aria-label is always the real accessible name.
-const MIC_ICON_SVG = '<svg class="pip-intro-btn-icon" viewBox="0 0 12 12" fill="none" aria-hidden="true"><rect x="4" y="1" width="4" height="6" rx="2" stroke="currentColor" stroke-width="1.2"/><path d="M2.5 6.5a3.5 3.5 0 0 0 7 0M6 10v1.2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>';
 const CHEVRON_ICON_SVG = '<span class="pip-ready-selector-chevron" aria-hidden="true"><svg viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
 const TRASH_ICON_SVG = '<svg width="13" height="14" viewBox="0 0 13 14" fill="none" aria-hidden="true"><path d="M1 3.5h11M4.5 3.5V2h4v1.5M5.5 6.5v4M7.5 6.5v4M2 3.5l.8 8.5h7.4l.8-8.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 // A clean pencil/edit glyph — visual shorthand for "modify this speaking
@@ -292,11 +294,9 @@ const TRASH_ICON_SVG = '<svg width="13" height="14" viewBox="0 0 13 14" fill="no
 // (1.3), decorative only (aria-hidden — the button's own aria-label, set
 // per row in buildSelectorRow(), is the real accessible name).
 const PENCIL_ICON_SVG = '<svg width="13" height="14" viewBox="0 0 13 14" fill="none" aria-hidden="true"><path d="M9.3 1.8l2 2-6.7 6.7-2.8.6.6-2.8 6.9-6.5z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M8.1 3l2 2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-const CLOSE_ICON_SVG = '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>';
-// Schematic, not photorealistic — enough to point at "the icon in your
-// browser's address bar" without claiming to be a literal screenshot of
-// any specific browser.
-const C0_ILLUSTRATION_SVG = '<svg viewBox="0 0 200 60" fill="none" aria-hidden="true"><rect x="1" y="1" width="198" height="34" rx="8" stroke="rgba(172,158,136,0.4)" stroke-width="1.5"/><circle cx="20" cy="18" r="6" stroke="rgba(210,155,75,0.9)" stroke-width="1.5"/><path d="M17 15l6 6M23 15l-6 6" stroke="rgba(210,155,75,0.9)" stroke-width="1.5" stroke-linecap="round"/><rect x="34" y="13" width="140" height="10" rx="5" fill="rgba(172,158,136,0.15)"/><path d="M60 50l-14 -14M46 50l14 -14" stroke="rgba(210,155,75,0.7)" stroke-width="1.5" stroke-linecap="round"/></svg>';
+// Microphone blocked (PRD §9a): a solid circle with a slash. The body copy
+// says where to restore access; the icon only marks the state.
+const C0_BLOCKED_ICON_SVG = '<svg width="44" height="44" viewBox="0 0 44 44" fill="none" aria-hidden="true"><circle cx="22" cy="22" r="20" style="fill: var(--color-text-muted)"/><path d="M10.5 10.5l23 23" style="stroke: var(--color-bg-decision)" stroke-width="3.5" stroke-linecap="round"/></svg>';
 
 // Mirrors calibration-controller.js's own DEFAULT_CAPTURE_DURATION_MS
 // (6000ms), which isn't exported — kept in sync here for the countdown
@@ -304,6 +304,15 @@ const C0_ILLUSTRATION_SVG = '<svg viewBox="0 0 200 60" fill="none" aria-hidden="
 // truth for when capture ends; this constant only decides what the
 // countdown text counts down from.
 const CALIBRATION_COUNTDOWN_SECONDS = 6;
+const CALIBRATING_HINT_PREPARING = 'Get ready to talk normally.';
+// Result screens, when speech sat less than NOISY_ROOM_GAP_DB above the room.
+const NOISY_ROOM_TIP = 'Your room is a bit noisy for how softly you speak. Try moving a little closer to your mic.';
+// Ready, under a profile saved before the speech-band filter and peaks.
+const RECALIBRATE_NOTE = 'Recalibrate to use the improved sound filter.';
+const CALIBRATING_HINT_LISTENING = 'Talk normally. The bars move with your voice.';
+// How often the 3-2-1 mic check reads the level — audio.js's own sampling
+// interval during capture, so the circle moves the same way before and after.
+const MIC_CHECK_INTERVAL_MS = 50;
 
 // Mirrors calibration-controller.js's own DEFAULT_PREPARATION_MS (3000ms) —
 // same relationship as CALIBRATION_COUNTDOWN_SECONDS above: the controller's
@@ -470,49 +479,6 @@ const LAYOUT_MODES = Object.freeze({ EXPANDED: 'expanded', COMPACT: 'compact' })
 const OUTSIDE_ZONE = 3; // "Outside Range" — there's no higher volume tier
 const SUSTAINED_DRIFT_MS = 1000; // continuous time outside range before drift escalates
 
-// Calibrating screen's live meter dB-to-0..1 mapping. (Predates the
-// PiP-first model: a page-level calibration ring on the old dual-surface
-// try-it.js once used the same ENERGY_DB_MIN/MAX naming — that page-level
-// screen is long retired, calibration is Companion-only now.)
-//
-// -55..-30 (2026-08-12 revision, presentational only): the original -50..-10
-// window read as a progress bar users felt they had to fill, and real-
-// microphone diagnostics (see the calibration-meter investigation this
-// revision closes out) confirmed why — without getUserMedia's autoGainControl
-// (deliberately off; see audio.js), ordinary natural speech without AGC
-// commonly measured p50 around -41 to -45dB and p90 around -37 to -44dB,
-// which the old window's bottom quarter compressed into "barely any visible
-// movement, regardless of how the person was actually speaking." -55 aligns
-// the floor with engine.js's own MIN_USABLE_BASELINE_DB (a quiet-but-valid
-// calibration no longer reads as near-zero activity); -30 narrows the span
-// to the range real speech actually occupies. This constant is read only by
-// handleCalibrationLevelSample() below to drive the meter's own continuous
-// visual fill — see CLAUDE.md's Engineering Notes for confirmation that
-// changing it has no effect on captured samples, the computed speaking
-// profile, monitoring thresholds, or mic constraints, all of which are
-// computed independently in calibration-controller.js/engine.js from the
-// same raw samples, never from this mapping.
-const CALIBRATION_METER_DB_MIN = -55;
-const CALIBRATION_METER_DB_MAX = -30;
-
-// A raw dB value (already computed from rms the same way
-// handleCalibrationLevelSample() does) -> a clamped 0..1 fill ratio for the
-// continuous calibration meter bar (2026-08-12 revision — replaces the
-// earlier 5-segment presentation; see CLAUDE.md's Engineering Notes for why:
-// discrete segments meant a real, audible change in speaking level often
-// produced no visible change at all until it crossed a whole segment
-// boundary, which read as unresponsive). Exported so this one piece of real
-// math gets direct unit coverage without needing a live DOM or a
-// fake-audio-device fixture — see src/mezzo-session.test.js — and so there
-// is exactly one implementation of the mapping (handleCalibrationLevelSample()
-// itself just calls this and sets the fill element's width directly), not a
-// test-only reimplementation that could silently drift from production
-// behavior.
-export function dbToMeterFillRatio(db) {
-  if (!Number.isFinite(db)) return 0;
-  return Math.min(1, Math.max(0, (db - CALIBRATION_METER_DB_MIN) / (CALIBRATION_METER_DB_MAX - CALIBRATION_METER_DB_MIN)));
-}
-
 // Sentence case (2026-08-18 redesign, was Title Case: "Quiet" / "Within
 // Range" / "Approaching End of Range" / "Outside Range") — an approved
 // wording change from the accepted Monitoring design, not incidental
@@ -520,11 +486,9 @@ export function dbToMeterFillRatio(db) {
 // approved four labels; the zone-classification logic these map from is
 // completely unchanged.
 function zoneLabel(zone) {
-  if (zone === 0) return 'Listening';
-  if (zone === 1) return 'Within range';
-  if (zone === 2) return 'Approaching end of range';
-  return 'Outside range'; // zone === OUTSIDE_ZONE
+  return ZONE_LABELS[zone] ?? ZONE_LABELS[OUTSIDE_ZONE];
 }
+
 
 // The Monitoring screen's read-only profile line — as of the 2026-08-18
 // redesign, just the profile name itself, e.g. "Coffee Shop", set small
@@ -652,8 +616,8 @@ export function createMezzoSession({
     if (state.capturing && !calibrationCountdownStarted) {
       calibrationCountdownStarted = true;
       stopPreparationCountdown();
-      if (calibratingMeterRowEl) calibratingMeterRowEl.classList.remove('hidden');
-      if (calibratingMeterHintEl) calibratingMeterHintEl.classList.remove('hidden');
+      finishMicCheck();
+      if (calibratingHintEl) calibratingHintEl.textContent = CALIBRATING_HINT_LISTENING;
       if (calibratingAnnounceEl) calibratingAnnounceEl.textContent = 'Listening for 6 seconds.';
       startCalibratingCountdown();
     }
@@ -720,6 +684,7 @@ export function createMezzoSession({
   let readySelectorTriggerEl = null;
   let readySelectorTriggerNameEl = null;
   let readySelectorPanelEl = null;
+  let readyScrimEl = null;
   let readyContextualActionsEl = null;
   let readyStartBtn = null;
   let readyDisclaimerEl = null;
@@ -745,6 +710,8 @@ export function createMezzoSession({
   // redoing for the current Temporary profile — both are session mode; see
   // handleCalibrationCompleted() below). Static copy throughout.
   let resultScreenEl = null;
+  let resultTipEl = null; // NOISY_ROOM_TIP on the new-profile result
+  let m1TipEl = null;     // and on the recalibration result
   let resultHeadingEl = null;
   let resultSaveBtn = null;
   let resultKeepBtn = null;
@@ -821,7 +788,12 @@ export function createMezzoSession({
 
   // Monitoring-screen DOM refs
   let monitoringScreenEl = null;
-  let pipStatusHeadingEl = null;
+  // Visually hidden live region (PRD §6): the four status labels are
+  // screen-reader-only now, announced through zoneAnnouncer.
+  let pipZoneLiveEl = null;
+  const zoneAnnouncer = createZoneAnnouncer({
+    announce: (text) => { if (pipZoneLiveEl) pipZoneLiveEl.textContent = text; },
+  });
   let monitoringProfileNameEl = null;
   let pipCircleWrapperEl = null;
 
@@ -830,9 +802,10 @@ export function createMezzoSession({
   let calibratingSubheadingEl = null; // mode-aware "Recalibrating {name}" line — session mode leaves it empty
   let calibratingStatusEl = null; // aria-hidden visible text: blank, then (if shown) "Preparing microphone…", then "Start speaking in {n}", then a live "Listening… {n}s" countdown
   let calibratingAnnounceEl = null; // visually-hidden aria-live region — exactly two one-time announcements, see its own construction comment above
-  let calibratingMeterRowEl = null;
-  let calibratingMeterFillEl = null; // the single continuous-fill element, width set via handleCalibrationLevelSample()
-  let calibratingMeterHintEl = null; // "Background sounds may move the meter too." — shares calibratingMeterRowEl's own hidden/visible lifecycle exactly
+  let levelMeter = null; // MezzoLevelMeter: six segments following the live level (3-2-1 mic check, then capture)
+  let calibratingHintEl = null; // "Get ready to talk normally." during the countdown, then CALIBRATING_HINT_LISTENING
+  let micCheckTimer = null; // reads the mic level during the 3-2-1 so the circle can react before capture — see startMicCheck()
+  let micCheckSamples = []; // those readings, which become the room-noise level (finishMicCheck())
   let calibratingCountdownTimer = null;
   // Guards the countdown's false→true "start exactly once per attempt"
   // requirement — reset in prepareCalibratingScreen() at the top of every
@@ -890,7 +863,7 @@ export function createMezzoSession({
   // flag is enough: only one decision screen is ever visible at a time.
   let decisionCommitInFlight = false;
 
-  let unsubscribeCalibrationLevel = null; // Calibrating screen's live-meter subscription — torn down whenever that screen isn't active
+  let unsubscribeCalibrationLevel = null; // Calibrating screen's live-level subscription — torn down whenever that screen isn't active
 
   let currentZone = 0;
   let isSustained = false;
@@ -904,22 +877,22 @@ export function createMezzoSession({
     isSustained = false;
   }
 
+  /** No visible text changes during monitoring (PRD §6): zone changes only
+   *  reach the debounced screen-reader announcer. */
   function updateHeading(zone) {
-    const text = zoneLabel(zone);
-    if (pipStatusHeadingEl && sessionState.get() === SESSION_STATES.MONITORING_ACTIVE) {
-      pipStatusHeadingEl.textContent = text;
-      // Presentational only — drives the status label's per-zone color (see
-      // the .pip-status-heading[data-zone] CSS). Doesn't change what zone is
-      // computed or when the label updates, both still decided above.
-      pipStatusHeadingEl.dataset.zone = String(zone);
-    }
+    if (sessionState.get() === SESSION_STATES.MONITORING_ACTIVE) zoneAnnouncer.update(zone);
+    if (monitoringScreenEl) monitoringScreenEl.dataset.zone = String(zone);
   }
 
-  function onAudioFrame({ rms }) {
+  function onAudioFrame({ rms, rawRms }) {
     // Explicit real timestamp, not engine.js's own performance.now() default —
     // keeps the caller in control of the clock the Outside-of-Range entry
     // dwell (see OUTSIDE_ENTRY_DWELL_MS in engine.js) measures against.
-    engine.processFrame(rms, performance.now());
+    // Zones read the raw per-frame level (zoneInputRaw: audio.js's EMA would
+    // add 50-150ms on top of the zone window), and only frames the circle's
+    // own gate counts as voice go into that window (voicedOnly).
+    const zoneInput = DEFAULT_ZONE_SETTINGS.zoneInputRaw && Number.isFinite(rawRms) ? rawRms : rms;
+    engine.processFrame(zoneInput, performance.now(), activeCircle ? activeCircle.gateOpen : true);
     markClassification(); // TEMPORARY — see docs/monitoring-runtime-investigation.md
 
     const zone = engine.getZone();
@@ -942,8 +915,14 @@ export function createMezzoSession({
       }
     }
 
+    // The Range Ring reads the committed zone and the engine's own
+    // boundaries; it never classifies. It follows the raw, per-sample level
+    // (eased in its own loop — see range-ring.js's followLevel()), while
+    // the engine above classifies from audio.js's EMA-smoothed level.
+    // isSustained (SUSTAINED_DRIFT_MS) is no longer a visual input — it
+    // still feeds sessionAlertTriggered above.
     if (activeCircle) {
-      activeCircle.update(currentZone, isSustained);
+      activeCircle.update({ zone: currentZone, rawRms: rawRms ?? rms, bounds: engine.getRangeBoundsDb() });
       markPipUpdate(pipWindow); // TEMPORARY — see docs/monitoring-runtime-investigation.md
     }
 
@@ -976,12 +955,17 @@ export function createMezzoSession({
     // uniform-fill array would silently discard its real spreadDb (a
     // uniform array always measures spread as ~0) — see engine.js's own
     // loadCalibration() doc comment.
-    engine.loadCalibration({ baselineRMS, spreadDb: profile.spreadDb });
+    // peakOffsetDb: the calibration's peak, which sets the end of range.
+    // Profiles saved before peaks were recorded have none and fall back to
+    // the spread rule (see needsRecalibration()).
+    engine.loadCalibration({ baselineRMS, spreadDb: profile.spreadDb, peakOffsetDb: profile.peakDb });
     engine.startMonitoring();
 
     currentZone = 0;
     clearSustained();
-    updateHeading(0);
+    zoneAnnouncer.reset();
+    if (pipZoneLiveEl) pipZoneLiveEl.textContent = '';
+    if (monitoringScreenEl) monitoringScreenEl.dataset.zone = '0';
 
     try {
       await audio.acquire();
@@ -1160,6 +1144,7 @@ export function createMezzoSession({
     layoutMode = mode;
     if (pipDocument?.body) pipDocument.body.setAttribute('data-layout', mode);
     resizeCompanionTo(mode === LAYOUT_MODES.COMPACT ? MEZZO_COMPANION_COMPACT_SIZE : MEZZO_COMPANION_EXPANDED_SIZE);
+    pipCircle?.relayout(); // the ring's preferred edge depends on the mode
   }
 
   function enterExpandedLayout() {
@@ -1323,7 +1308,7 @@ export function createMezzoSession({
 
     const fontLink = pipDoc.createElement('link');
     fontLink.rel = 'stylesheet';
-    fontLink.href = 'https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;400&family=Sora:wght@300;400;500&display=swap';
+    fontLink.href = 'https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap';
     pipDoc.head.appendChild(fontLink);
 
     const link = pipDoc.createElement('link');
@@ -1338,6 +1323,11 @@ export function createMezzoSession({
 
     const style = pipDoc.createElement('style');
     style.textContent = `
+      /* Lantern (PRD §4.5): Companion primary buttons are cream, not the
+         website's chartreuse. Inside the Companion, chartreuse only ever
+         means the over-range band. */
+      :root { --color-btn-primary-bg: var(--color-text); }
+
       .hidden { display: none !important; }
 
       body {
@@ -1362,8 +1352,8 @@ export function createMezzoSession({
          Square, borderless edges (2026-10-20): the card fills the whole
          window, so a rounded corner and 1px border only drew a faint
          outline with background showing through at each corner. No outer
-         shadow either, since nothing outside the window could show it;
-         the inset glow stays. */
+         shadow either, since nothing outside the window could show it.
+         Lantern (PRD §7): screens are flat; the inset glow is gone too. */
       .pip-screen {
         width: 100%;
         height: 100%;
@@ -1373,8 +1363,7 @@ export function createMezzoSession({
         align-items: center;
         position: relative;
         overflow: hidden;
-        box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.16);
-        background: #3c3b3f;
+        background: var(--color-bg); /* flat screen layer (PRD §7) */
       }
       /* Shared cap for every full-width, single-column pill action in the
          Companion — every full-screen decision state's primary/secondary
@@ -1425,11 +1414,11 @@ export function createMezzoSession({
       h1.pip-h1,
       p.pip-h1 {
         font-family: var(--font-display);
-        font-weight: var(--weight-light);
+        font-weight: var(--weight-semibold);
         font-size: 24px;
         line-height: 1.15;
-        letter-spacing: -0.2px;
-        color: #F0EBE2;
+        letter-spacing: var(--tracking-heading);
+        color: var(--color-text);
         text-align: center;
         margin: 0;
       }
@@ -1442,11 +1431,21 @@ export function createMezzoSession({
       .pip-intro-heading {
         margin: 0;
       }
+      /* Text-only lowercase wordmark on Welcome (PRD §9a). */
+      .pip-wordmark {
+        margin: 0 0 4px;
+        font-family: var(--font-display);
+        font-weight: var(--weight-semibold);
+        font-size: 20px;
+        line-height: 1;
+        letter-spacing: var(--tracking-heading);
+        color: var(--color-text);
+      }
       .pip-intro-body {
         font-family: var(--font-body);
         font-size: 12px;
         line-height: 1.5;
-        color: rgba(222, 210, 194, 0.80);
+        color: color-mix(in srgb, var(--color-text-soft) 80%, transparent);
         margin: 0;
         max-width: 250px;
       }
@@ -1454,14 +1453,10 @@ export function createMezzoSession({
         font-family: var(--font-body);
         font-size: 10.5px;
         line-height: 1.4;
-        color: rgba(172, 158, 136, 0.70);
+        color: var(--color-text-muted);
         margin: 2px 0 4px;
         max-width: 240px;
       }
-      /* Mic glyph inside the Welcome/01 primary action — decorative only
-         (the button's own text is the full accessible name), aria-hidden
-         in the DOM below. */
-      .pip-intro-btn-icon { width: 13px; height: 13px; flex-shrink: 0; }
 
       /* ── Welcome/01, C1, C0 — all reached before any usable speaking
          profile exists, all share Ready's fixed size (see
@@ -1492,6 +1487,23 @@ export function createMezzoSession({
       .pip-screen-c1 .pip-intro-primary-btn {
         margin-top: 14px;
       }
+      /* Welcome: the wordmark (its heading) and the body read as one group,
+         16px apart, centered in the space above the privacy line and the
+         button, which sit at the bottom. */
+      .pip-screen-welcome .pip-welcome-wordmark { margin-top: auto; }
+      .pip-screen-welcome .pip-intro-body { margin-top: 4px; } /* + the screen's 12px gap = 16px */
+      .pip-screen-welcome .pip-intro-disclaimer { margin-top: auto; }
+      h1.pip-welcome-wordmark {
+        margin: 0;
+        font-family: var(--font-display);
+        font-weight: var(--weight-semibold);
+        font-size: 30px;
+        line-height: 1;
+        letter-spacing: -0.045em;
+        text-transform: lowercase;
+        text-align: center;
+        color: var(--color-text);
+      }
 
       /* Primary action shares the pill treatment .pip-ready-start-btn
          below defines — reused verbatim as .pip-intro-primary-btn so
@@ -1503,15 +1515,14 @@ export function createMezzoSession({
         justify-content: center;
         gap: 8px;
         width: 100%;
-        background: var(--hanko-fill);
+        background: var(--color-btn-primary-bg);
         border: none;
-        border-radius: 50px;
+        border-radius: var(--radius-control);
         padding: 12px;
         font-family: var(--font-body);
-        font-size: 13px;
+        font-size: 14px;
         font-weight: var(--weight-medium);
-        color: rgba(255, 255, 255, 0.92);
-        letter-spacing: 0.04em;
+        color: var(--color-btn-primary-text);
         cursor: pointer;
         transition: opacity 0.15s ease;
         box-sizing: border-box;
@@ -1526,7 +1537,7 @@ export function createMezzoSession({
          claiming to be a literal screenshot of any specific browser. */
       .pip-c0-illustration {
         width: 100%;
-        max-width: 220px;
+        max-width: 44px;
         margin: 4px 0;
       }
 
@@ -1568,12 +1579,12 @@ export function createMezzoSession({
          at the screen's own base 10px gap, since that pairing should stay
          tight. */
       .pip-ready-profile-label {
-        font-family: var(--font-body);
+        font-family: var(--font-mono);
         font-size: 10px;
-        font-weight: var(--weight-medium);
-        letter-spacing: 0.10em;
+        font-weight: var(--weight-regular);
+        letter-spacing: var(--tracking-label);
         text-transform: uppercase;
-        color: #9A9289;
+        color: var(--color-label);
         text-align: center;
         min-height: 12px;
         flex-shrink: 0;
@@ -1615,14 +1626,14 @@ export function createMezzoSession({
         width: 100%;
         min-height: 44px;
         box-sizing: border-box;
-        padding: 13px 32px;
-        border-radius: 100px;
-        background: #333333;
+        padding: 13px 18px;
+        border-radius: var(--radius-control);
+        background: var(--color-bg-menu);
         border: 0;
         font-family: var(--font-body);
-        font-weight: var(--weight-light);
+        font-weight: var(--weight-regular);
         font-size: 17px;
-        color: rgba(222, 210, 194, 0.92);
+        color: color-mix(in srgb, var(--color-text-soft) 92%, transparent);
         cursor: pointer;
         flex-shrink: 0;
         text-align: left;
@@ -1631,7 +1642,33 @@ export function createMezzoSession({
          already used pre-Batch-2 (#222222 -> #2a2a2a), scaled to this
          base. Text contrast on it: 6.65:1, still comfortably clearing
          AA. */
-      .pip-ready-selector-trigger:hover { background: #3B3B3B; }
+      .pip-ready-selector-trigger:hover { background: var(--color-bg-menu-hover); }
+      /* Open state (PRD §7): the trigger stays above the scrim, lifted to
+         the hover surface with a faint sage edge while its panel is open. */
+      .pip-ready-selector-trigger[aria-expanded="true"] {
+        background: var(--color-bg-menu-hover);
+        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-link) 45%, transparent);
+      }
+
+      /* Menu-layer scrim (PRD §7): dims everything behind the open
+         selector; .pip-ready-selector-wrap (z-index 26) sits above it. */
+      .pip-ready-scrim {
+        position: absolute;
+        inset: 0;
+        z-index: 25;
+        background: color-mix(in srgb, var(--color-shadow) 60%, transparent);
+      }
+
+      /* 8px sage dot (PRD §9a): the trigger's bullet before the selected
+         name, and the selected-row marker inside the panel. */
+      .pip-dot {
+        display: inline-block;
+        flex-shrink: 0;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--color-link);
+      }
       .pip-ready-selector-trigger-name {
         flex: 1;
         min-width: 0;
@@ -1684,8 +1721,8 @@ export function createMezzoSession({
         width: 20px;
         height: 20px;
         border-radius: 50%;
-        background: var(--stone);
-        color: #FFFFFF;
+        background: color-mix(in srgb, var(--color-text) 14%, transparent);
+        color: var(--color-text);
         transition: transform 0.15s ease;
       }
       /* Fixed 10x6 (2026-08-20: was 100%/100% of the old 10x10 wrapper,
@@ -1715,6 +1752,7 @@ export function createMezzoSession({
         max-width: 100%;
         margin-inline: auto;
         flex-shrink: 0;
+        z-index: 26;
       }
 
       /* Expanded panel — a native <fieldset> now (Batch 2), not a
@@ -1752,12 +1790,12 @@ export function createMezzoSession({
         flex-direction: column;
         overflow: hidden;
         z-index: 30;
-        background: #333333; /* matches .pip-ready-selector-trigger's own (restored) surface — see that rule's comment */
-        border: 0;
+        background: var(--color-bg-menu); /* matches .pip-ready-selector-trigger's own (restored) surface — see that rule's comment */
+        border: 1px solid var(--border);
         margin: 0;
         min-width: 0;
-        border-radius: 10px;
-        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
+        border-radius: 6px;
+        box-shadow: 0 12px 32px color-mix(in srgb, var(--color-shadow) 50%, transparent);
         box-sizing: border-box;
         padding: 6px 0;
       }
@@ -1801,17 +1839,17 @@ export function createMezzoSession({
         border: 0;
       }
       .pip-ready-selector-group-label {
-        font-family: var(--font-body);
+        font-family: var(--font-mono);
         font-size: 10px;
-        font-weight: var(--weight-medium);
-        letter-spacing: 0.12em;
+        font-weight: var(--weight-regular);
+        letter-spacing: var(--tracking-label);
         text-transform: uppercase;
-        color: rgba(172, 158, 136, 0.60);
+        color: color-mix(in srgb, var(--color-text-muted) 90%, var(--color-text)); /* 5.1:1 on the menu panel, 4.5:1 on a hovered row */
         padding: 8px 14px 4px;
       }
       .pip-ready-selector-divider {
         height: 1px;
-        background: rgba(255, 255, 255, 0.08);
+        background: color-mix(in srgb, var(--color-overlay) 8%, transparent);
         margin: 6px 10px;
         /* Only meaningful for the footer divider — the one direct flex
            child of .pip-ready-selector-panel's own flex column (the other
@@ -1854,18 +1892,18 @@ export function createMezzoSession({
         font-family: var(--font-body);
         font-size: 12.5px;
         font-weight: var(--weight-medium);
-        color: #DC9C89;
+        color: var(--color-link);
         text-align: center;
         cursor: pointer;
         flex-shrink: 0; /* stays a stable footer, never squeezed by the rows region above it — see .pip-ready-selector-rows' own comment */
       }
       .pip-ready-selector-footer-action:hover {
-        background: rgba(255, 255, 255, 0.06);
+        background: color-mix(in srgb, var(--color-overlay) 6%, transparent);
       }
       .pip-ready-selector-footer-action:focus-visible {
-        outline: 2px solid #DC9C89; /* see .pip-ready-selector-footer-action's own color comment */
+        outline: 2px solid var(--color-link); /* see .pip-ready-selector-footer-action's own color comment */
         outline-offset: -2px;
-        background: rgba(255, 255, 255, 0.06);
+        background: color-mix(in srgb, var(--color-overlay) 6%, transparent);
       }
       .pip-ready-selector-row {
         display: flex;
@@ -1875,7 +1913,7 @@ export function createMezzoSession({
         min-height: 40px;
         box-sizing: border-box;
       }
-      .pip-ready-selector-row:hover { background: rgba(255, 255, 255, 0.04); }
+      .pip-ready-selector-row:hover { background: color-mix(in srgb, var(--color-overlay) 4%, transparent); }
       /* Visually hidden, never removed from the accessibility tree or the
          focus order (no display:none/visibility:hidden) — the standard
          "visually-hidden" clip technique, collapsed to 1x1px. This is a
@@ -1910,7 +1948,7 @@ export function createMezzoSession({
         min-width: 0;
         font-family: var(--font-body);
         font-size: 13px;
-        color: rgba(222, 210, 194, 0.92);
+        color: color-mix(in srgb, var(--color-text-soft) 92%, transparent);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -1933,8 +1971,9 @@ export function createMezzoSession({
          needs). */
       .pip-ready-selector-row-check {
         flex-shrink: 0;
-        color: #DC9C89;
         visibility: hidden;
+        width: 8px;
+        height: 8px;
       }
       .pip-ready-selector-row-radio:checked ~ .pip-ready-selector-row-label .pip-ready-selector-row-check {
         visibility: visible;
@@ -1947,14 +1986,14 @@ export function createMezzoSession({
          indicator needs 3:1 against its surroundings and bare hanko-fill
          only reaches 2.91:1 here. */
       .pip-ready-selector-row-radio:focus-visible ~ .pip-ready-selector-row-label {
-        outline: 2px solid #DC9C89;
+        outline: 2px solid var(--color-link);
         outline-offset: 2px;
         border-radius: 4px;
       }
       .pip-ready-selector-row-note {
         font-family: var(--font-body);
         font-size: 10px;
-        color: rgba(172, 158, 136, 0.60);
+        color: color-mix(in srgb, var(--color-text-muted) 90%, var(--color-text)); /* 5.1:1 on the menu panel, 4.5:1 on a hovered row */
         padding: 0 14px 6px;
         margin: -6px 0 0;
       }
@@ -1984,9 +2023,9 @@ export function createMezzoSession({
         height: 26px;
         background: none;
         border: none;
-        border-radius: 6px;
+        border-radius: var(--radius-control);
         padding: 0;
-        color: rgba(172, 158, 136, 0.75);
+        color: color-mix(in srgb, var(--color-text-muted) 75%, transparent);
         cursor: pointer;
         opacity: 0;
         transition: opacity 0.15s ease, color 0.12s ease, background 0.12s ease;
@@ -1997,8 +2036,8 @@ export function createMezzoSession({
       }
       .pip-ready-selector-row-action:hover,
       .pip-ready-selector-row-action:focus-visible {
-        color: rgba(222, 210, 194, 0.92);
-        background: rgba(255, 255, 255, 0.06);
+        color: color-mix(in srgb, var(--color-text-soft) 92%, transparent);
+        background: color-mix(in srgb, var(--color-overlay) 6%, transparent);
       }
 
       /* Contextual actions — reference-matched (Batch 2): sentence-case,
@@ -2048,7 +2087,7 @@ export function createMezzoSession({
       .pip-text-btn {
         font-family: var(--font-body);
         font-size: 12px;
-        color: rgba(184, 169, 154, 0.85);
+        color: color-mix(in srgb, var(--color-link-quiet) 85%, transparent);
         background: none;
         border: none;
         padding: 0;
@@ -2057,10 +2096,11 @@ export function createMezzoSession({
         text-underline-offset: 2px;
       }
       .pip-ready-contextual-link:hover,
-      .pip-text-btn:hover { color: rgba(222, 210, 194, 0.92); }
+      .pip-text-btn:hover { color: color-mix(in srgb, var(--color-text-soft) 92%, transparent); }
+      .pip-text-btn:disabled { opacity: 0.5; cursor: default; }
       .pip-ready-contextual-link:focus-visible,
       .pip-text-btn:focus-visible {
-        outline: 2px solid var(--hanko-fill);
+        outline: 2px solid var(--color-link);
         outline-offset: 2px;
         border-radius: 2px;
       }
@@ -2117,7 +2157,7 @@ export function createMezzoSession({
         font-family: var(--font-body);
         font-size: 11px;
         line-height: 1.4;
-        color: rgba(172, 158, 136, 0.65);
+        color: var(--color-text-muted);
         text-align: center;
         margin: 14px 0 0;
         max-width: 260px;
@@ -2125,109 +2165,62 @@ export function createMezzoSession({
         flex-shrink: 0;
       }
 
-      /* ── Calibrating (C2) — a live, proportional volume bar and a
-         ticking countdown, automatic completion after the configured
-         capture duration, and a single visible Cancel action; no manual
-         "I'm done" control. Shares the Ready/Welcome/C1/C0 fixed size. ── */
+      /* ── Calibrating (C2) (PRD §8) — heading, a six-segment level meter
+         about 52px below it, a sage "Listening… {n}s" countdown, one line
+         of guidance, and Cancel pinned to the bottom. Completes on its own
+         after the capture; no manual "I'm done" control. Shares the
+         Ready/Welcome/C1/C0 fixed size. ── */
       .pip-screen-calibrating {
         justify-content: center;
-        padding: 32px 24px;
+        padding: 20px 24px 56px; /* bottom room for the pinned Cancel */
         box-sizing: border-box;
-        gap: 16px;
       }
       .pip-calibrating-subheading {
-        font-family: var(--font-body);
+        font-family: var(--font-mono);
         font-size: 10px;
-        letter-spacing: 0.10em;
+        letter-spacing: var(--tracking-label);
         text-transform: uppercase;
-        color: rgba(172, 158, 136, 0.70);
+        color: var(--color-text-muted);
         text-align: center;
-        min-height: 12px;
+        margin-bottom: 10px;
       }
-      /* Typography now comes from .pip-h1 (2026-08-14 pass — see p.pip-h1's
-         own comment on the shared rule above); this class only carries the
-         one genuinely layout-specific concern left. */
-      .pip-calibrating-heading {
-        max-width: 250px;
+      .pip-calibrating-subheading:empty { display: none; }
+      p.pip-h1.pip-calibrating-heading {
+        font-weight: var(--weight-medium);
+        font-size: 20px;
+        line-height: 1.25;
+        max-width: 280px;
+        text-wrap: balance;
       }
+      .pip-calibrating-visual { margin-top: 52px; }
       /* "Preparing microphone…" / "Start speaking in {n}" / "Listening…
          {n}s" — aria-hidden (see calibratingAnnounceEl for what assistive
-         tech actually hears); a live countdown, not a static label. See
-         handleAcquisitionConfirmed()/startPreparationCountdown()/
-         startCalibratingCountdown(). One consistent, more prominent
-         treatment across every pre-capture and active-capture state
-         (2026-08-14 pass) — bumped from 11px/regular to 15px/medium-weight
-         (15px reuses the exact size .pip-calibrating-heading/
-         .pip-failed-message used before this same pass moved them up to
-         24px, rather than picking a new, unrelated number), still clearly
-         smaller than the 24px heading above it, and still the same amber
-         already used here (unchanged color — a larger size only improves
-         its own effective contrast, never worsens it). min-height scaled
-         to match so the pre-disclosure blank state still reserves the
-         right amount of layout space. */
+         tech actually hears). min-height holds its space while blank. */
       .pip-calibrating-status {
+        margin-top: 18px;
         font-family: var(--font-body);
         font-size: 15px;
         font-weight: var(--weight-medium);
-        color: rgba(210, 155, 75, 0.90);
+        line-height: 1.25;
+        color: var(--color-link);
         text-align: center;
-        min-height: 19px; /* holds its own layout space even while blank, pre-disclosure */
+        min-height: 19px;
       }
-      /* Continuous fill meter (2026-08-12 revision — restores the
-         continuous presentation the old "Quiet"/"Loud" bar used, minus its
-         judgmental labels; supersedes the intermediate 5-segment
-         presentation, which made a real, audible change in speaking level
-         often produce no visible movement at all until it crossed a whole
-         segment boundary). Hidden until real six-second capture begins (see
-         calibratingMeterRowEl's own construction comment). Row dimensions
-         (100% width, 160px max, 28px height) and the fill color
-         (var(--hanko-fill), the same token the old segments used when lit)
-         are unchanged from the segmented presentation this replaces. */
-      .pip-calibrating-meter-row {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 100%;
-        max-width: 160px;
-        height: 28px;
-      }
-      .pip-calibrating-meter-track {
-        width: 100%;
-        height: 100%;
-        border-radius: 4px;
-        background: rgba(255, 255, 255, 0.08);
-        border: 1px solid rgba(172, 158, 136, 0.35);
-        overflow: hidden;
-      }
-      .pip-calibrating-meter-fill {
-        height: 100%;
-        width: 0%;
-        background: var(--hanko-fill);
-        transition: width 0.08s linear;
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .pip-calibrating-meter-fill { transition: none; }
-      }
-      /* Meter helper text (2026-08-13) — a product decision, not a bug fix:
-         real-microphone diagnostics confirmed the meter's own quiet-state
-         movement is genuine ambient/background sound reaching the mic, not
-         a rendering defect, and calibration's own validation already
-         rejects a capture without enough real speech regardless of what
-         the meter shows. Rather than gating or suppressing that movement,
-         one line of concise secondary copy sets the right expectation.
-         Same muted "secondary helper text" treatment already established
-         for Ready's own privacy disclaimer (.pip-ready-disclaimer) — reused
-         rather than inventing a new visual weight. Shares calibratingMeterRowEl's
-         own hidden/visible lifecycle exactly (see its own toggle sites) so
-         it's visible only whenever the active meter is, never a moment
-         longer or shorter. */
-      .pip-calibrating-meter-hint {
+      .pip-calibrating-hint {
+        margin: 6px 0 0;
         font-family: var(--font-body);
-        font-size: 11px;
+        font-size: 13px;
         line-height: 1.4;
-        color: rgba(172, 158, 136, 0.65);
+        color: var(--color-text-muted);
         text-align: center;
-        max-width: 220px;
+        max-width: 300px;
+      }
+      .pip-calibrating-cancel {
+        position: absolute;
+        left: 50%;
+        bottom: 18px;
+        transform: translateX(-50%);
+        min-height: 24px;
       }
       /* .pip-text-btn's own rule now lives merged with .pip-ready-contextual-link
          above (2026-08-14 visual-language pass) — the old uppercase-chip
@@ -2262,117 +2255,105 @@ export function createMezzoSession({
          "do not use a floating dialog" requirement), so each of the four
          gets its own top-level screen element built from this same
          vocabulary rather than four near-duplicate rule sets. ── */
+      /* ── Decision layer (Lantern, PRD §7). Every decision state (both
+         post-calibration result variants, naming M2/M2a, the five-profile
+         limit M3, delete confirmation 06b) turns the whole window slate,
+         with a 44px header bar naming the decision in Geist Mono (Cancel in
+         its corner where the state has one), the content in the middle,
+         and the actions pinned to the bottom. Still full-screen states,
+         never modals: no dialog semantics, nothing underneath stays
+         visible or interactive. This retires the 2026-08-17 inset
+         modal-card system, including the result screen's one-off card. ── */
       .pip-screen-decision {
-        justify-content: center;
-        padding: 28px 24px;
+        justify-content: flex-start;
+        padding: 0;
         box-sizing: border-box;
-        gap: 14px;
         text-align: center;
+        background: var(--color-bg-decision);
       }
-      /* ── Shared inset modal-card system (2026-08-17 pass, extended
-         2026-08-20 to cover every decision/confirmation screen) — every
-         screen that represents a decision outside the normal Ready
-         experience (both post-calibration result variants, the naming
-         flow M2/M2a, the five-profile-limit notice M3, and saved-profile
-         delete confirmation 06b) presents its content inside one inset
-         modal-style card floating within the Companion's own regular
-         #3c3b3f screen surface, instead of the #222222 modal-surface color
-         filling the entire content area directly (the pre-2026-08-17
-         treatment). Welcome, Create speaking profile (C1), Calibrating,
-         Calibration Failed, Ready, and Monitoring are deliberately NOT
-         part of this system — they stay full-bleed, unchanged.
-         Purely presentational: showOnlyScreen() already hides every other
-         screen outright whenever one of these five is visible (see that
-         function's own doc comment) — there is no previous Ready/
-         calibration screen rendered underneath to leave visible or
-         interactive, and no new dialog semantics are introduced (see
-         .pip-modal-card's own comment below for why aria-modal/role=dialog
-         are deliberately absent).
-         Padding here is the OUTER inset/gutter — approximately 24px per
-         side (2026-08-20: down from 48px), the approved minimum gutter —
-         .pip-modal-card's own max-width:320px below is what actually caps
-         the card's width at the standard 382px Companion width (382 -
-         2×24 = 334px of available room, wider than the 320px cap, so the
-         cap — not this padding — is what binds there; the 24px figure is
-         a true minimum, not a fixed width-determining value). At a
-         narrower manually-resized window, this same fixed 24px gutter
-         combined with .pip-modal-card's own width:100% lets the card
-         itself shrink to fit rather than clipping.
-         justify-content:center and align-items:center (both inherited,
-         unchanged from .pip-screen-decision/.pip-screen) still center the
-         single .pip-modal-card child within whatever room this padding
-         leaves. */
-      .pip-screen-result,
-      .pip-screen-m1,
-      .pip-screen-m2,
-      .pip-screen-m3,
-      .pip-screen-delete {
-        padding: 24px;
-      }
-      /* The inset card itself — reuses .pip-screen's own established
-         corner radius, border, and box-shadow elevation values verbatim
-         (see that rule above) rather than inventing new ones, per "the
-         established modal radius, subtle border, and elevation
-         treatment." #222222 was also the selector trigger/panel's own
-         surface at one point (see that rule's own comment for its
-         history), but as of the 2026-08-20 restoration the selector
-         settled on the distinct, slightly lighter #333333 — the two are
-         deliberately different surfaces now, not a shared literal to keep
-         in sync. The WCAG contrast figures already checked and recorded
-         for text against this card's own #222222 still apply unchanged:
-         heading 13.4:1, body text 6.62:1, Keep/Discard button text against
-         its own fill 6.79:1.
-         max-width:320px (2026-08-20, alongside the outer padding drop to
-         24px above) is the approved card-width cap — width:100% still
-         lets it shrink below that on anything narrower than
-         320px+2×24px=368px of available room, and box-sizing:border-box
-         (below) keeps this screen's own internal padding counted inside
-         that 320px rather than added on top of it. Height is still driven
-         by content, never fixed — no height/min-height/max-height rule
-         exists here or on any screen using this card.
-         Padding (2026-08-20: 48px 32px, up from 28px 24px) is the
-         approved internal spacing — vertical first per the CSS shorthand
-         convention (48px top/bottom, 32px left/right).
-         No role="dialog"/aria-modal here: this card is purely a visual
-         treatment inside a screen showOnlyScreen() already renders
-         exclusively (nothing else is visible underneath to protect
-         against), so introducing dialog semantics would claim a focus-
-         trap/modal contract this code doesn't actually implement.
-         Heading focus, commit handlers, and navigation are all completely
-         unchanged by this — see each screen's own showXScreen()
-         function. */
-      .pip-modal-card {
+      .pip-decision-bar {
+        flex: 0 0 44px;
         width: 100%;
-        max-width: 320px;
+        box-sizing: border-box;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 0 16px;
+        border-bottom: 1px solid var(--border);
+      }
+      .pip-decision-bar-title {
+        margin: 0;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        letter-spacing: var(--tracking-label);
+        text-transform: uppercase;
+        color: var(--color-text-muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .pip-decision-bar-cancel { flex-shrink: 0; }
+      .pip-decision-content {
+        flex: 1 1 auto;
+        min-height: 0;
+        width: 100%;
         box-sizing: border-box;
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 14px;
-        padding: 48px 32px;
-        background: #222222;
-        border-radius: 14px;
-        border: 1px solid rgba(255, 255, 255, 0.05);
-        box-shadow: 0 24px 56px rgba(0, 0, 0, 0.55), inset 0 0 40px rgba(0, 0, 0, 0.16);
+        justify-content: center;
+        gap: 12px;
+        padding: 16px 24px;
+      }
+      /* M2: the form spans content and actions, so it takes the remaining
+         height the way content and actions do on the other screens. */
+      .pip-decision-form {
+        flex: 1 1 auto;
+        min-height: 0;
+        width: 100%;
+        display: flex;
+        flex-direction: column;
       }
       .pip-decision-heading {
         font-family: var(--font-display);
-        font-weight: var(--weight-light);
+        font-weight: var(--weight-semibold);
         font-size: 15px;
         line-height: 1.5;
-        color: rgba(222, 210, 194, 0.85);
+        color: color-mix(in srgb, var(--color-text-soft) 85%, transparent);
         text-align: center;
         margin: 0;
         max-width: 260px;
+        letter-spacing: var(--tracking-heading);
       }
       .pip-decision-body {
         font-family: var(--font-body);
         font-size: 12px;
         line-height: 1.5;
-        color: rgba(222, 210, 194, 0.75);
+        color: color-mix(in srgb, var(--color-text-soft) 75%, transparent);
         text-align: center;
         margin: 0;
         max-width: 250px;
+      }
+      /* The noisy-room tip: sage notice text under the question. */
+      .pip-decision-tip {
+        font-family: var(--font-body);
+        font-size: 12px;
+        line-height: 1.45;
+        color: var(--color-notice);
+        text-align: center;
+        margin: 8px 0 0;
+        max-width: 280px;
+        text-wrap: pretty;
+      }
+      /* Under a profile that predates the sound filter (needsRecalibration()). */
+      .pip-ready-recalibrate-note {
+        font-family: var(--font-body);
+        font-size: 12px;
+        line-height: 1.4;
+        color: var(--color-notice);
+        text-align: center;
+        margin: 0;
       }
       /* M2a's "already exists" warning — calmer than an error tone (a
          name collision is an expected, natural outcome here, not a
@@ -2382,22 +2363,32 @@ export function createMezzoSession({
         font-family: var(--font-body);
         font-size: 11.5px;
         line-height: 1.4;
-        color: rgba(210, 155, 75, 0.90);
+        color: color-mix(in srgb, var(--color-notice) 90%, transparent);
         text-align: center;
         margin: 0;
         max-width: 240px;
       }
       .pip-decision-actions { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 230px; }
+      /* Bottom-pinned actions on decision states; the shared 320px button
+         cap (see .pip-decision-primary-btn above) still applies. */
+      .pip-screen-decision .pip-decision-actions {
+        flex: 0 0 auto;
+        max-width: none;
+        box-sizing: border-box;
+        padding: 0 24px 20px;
+        align-items: center;
+      }
+      .pip-name-input { max-width: 260px; }
       .pip-decision-primary-btn {
         width: 100%;
-        background: var(--hanko-fill);
+        background: var(--color-btn-primary-bg);
         border: none;
-        border-radius: 50px;
+        border-radius: var(--radius-control);
         padding: 12px;
         font-family: var(--font-body);
-        font-size: 12.5px;
+        font-size: 14px;
         font-weight: var(--weight-medium);
-        color: rgba(255, 255, 255, 0.92);
+        color: var(--color-btn-primary-text);
         cursor: pointer;
         overflow-wrap: anywhere;
         line-height: 1.3;
@@ -2406,74 +2397,20 @@ export function createMezzoSession({
       .pip-decision-primary-btn:disabled { opacity: 0.5; cursor: default; }
       .pip-decision-secondary-btn {
         width: 100%;
-        background: rgba(255, 255, 255, 0.06);
-        border: 1px solid rgba(255, 255, 255, 0.10);
-        border-radius: 50px;
-        padding: 10px 14px;
+        background: transparent;
+        border: 1px solid var(--color-btn-secondary-border);
+        border-radius: var(--radius-control);
+        padding: 11px 14px;
         font-family: var(--font-body);
-        font-size: 12.5px;
-        color: rgba(222, 210, 194, 0.85);
+        font-size: 14px;
+        font-weight: var(--weight-medium);
+        color: var(--color-text);
         cursor: pointer;
         overflow-wrap: anywhere;
         line-height: 1.3;
       }
-      .pip-decision-secondary-btn:hover { background: rgba(255, 255, 255, 0.12); }
+      .pip-decision-secondary-btn:hover { background: color-mix(in srgb, var(--color-text) 6%, transparent); border-color: color-mix(in srgb, var(--color-text) 55%, transparent); }
 
-      /* ── Naming flow (M2/M2a) action layout (2026-08-17 pass; shared
-         with Delete confirmation's own .pip-delete-actions, 2026-08-20) —
-         Save now precedes Cancel in DOM/visual/keyboard order (was Cancel,
-         Save) — Delete/Cancel follow the exact same pattern — and the
-         pair lays out side by side when there's room, stacked otherwise.
-         flex-wrap, not a media query: this is a fixed 382px-wide Companion
-         window, not a responsively-resized page, so there is no viewport
-         breakpoint to key off of — the actual question is "do these two
-         buttons fit side by side at their own minimum comfortable width,"
-         which flex-wrap answers directly from the buttons' own measured
-         size. flex:1 1 100px on each button (below) means: side by side,
-         both grow equally to fill the row (equal width, per the spec) off
-         the same 100px basis; if the row is too narrow for both at once,
-         the second one wraps to its own new line — where, alone on that
-         line, flex-grow:1 has nothing to share with, so it fills that
-         line's own full width instead (Save-above-Cancel or
-         Delete-above-Cancel, full-width, matching every other stacked
-         decision button on this screen — no separate stacked-state rule
-         needed). gap stays the same 10px either way. max-width is widened
-         from the shared 230px (still used by every OTHER
-         .pip-decision-actions consumer, unaffected) to 260px here
-         specifically, since two ~100px-minimum buttons plus a 10px gap
-         need slightly more than 230px to ever actually sit side by side
-         at this Companion width — scoped to this shared selector group
-         alone so nothing else's own 230px cap changes. */
-      .pip-m2-actions,
-      .pip-delete-actions {
-        flex-direction: row;
-        flex-wrap: wrap;
-        max-width: 260px;
-      }
-      .pip-m2-actions > button,
-      .pip-delete-actions > button {
-        flex: 1 1 100px;
-        min-width: 100px;
-        width: auto;
-      }
-
-      /* Input-to-actions spacing (2026-08-17 pass) — the heading-to-input
-         relationship stays at the form's own unchanged base 10px gap
-         (m2Form's own inline flex gap, untouched), and the warning stays
-         directly beneath the input it describes via that same unchanged
-         gap — only the space ABOVE the action group is widened, via
-         margin-top on .pip-m2-actions itself (present whether or not the
-         warning is currently visible, since flexbox gap excludes
-         display:none siblings from spacing entirely — a hidden warning
-         never leaves a stray double-gap). 14px on top of the existing
-         10px base reuses the same "add margin-top over an unchanged base
-         gap" pattern used elsewhere in this file (see .pip-decision-body's
-         own margin-top above) rather than a new, isolated arbitrary
-         value — ~24px total between the input (or warning, when shown)
-         and the action group. */
-      .pip-screen-m2 .pip-m2-actions {
-        margin-top: 14px;
-      }
 
       /* ── Result-screen action hierarchy — M1/Result answer one question:
          "what do I want to do with it?" (the body/question introduces the
@@ -2525,8 +2462,8 @@ export function createMezzoSession({
         width: 22px;
         height: 22px;
         border-radius: 50%;
-        border: 2px solid rgba(240, 235, 226, 0.18);
-        border-top-color: var(--hanko-fill);
+        border: 2px solid color-mix(in srgb, var(--color-text) 18%, transparent);
+        border-top-color: var(--color-link);
         animation: pip-creating-spin 0.8s linear infinite;
       }
       @keyframes pip-creating-spin { to { transform: rotate(360deg); } }
@@ -2536,38 +2473,22 @@ export function createMezzoSession({
       .pip-creating-text {
         font-family: var(--font-body);
         font-size: 12.5px;
-        color: rgba(222, 210, 194, 0.85);
+        color: color-mix(in srgb, var(--color-text-soft) 85%, transparent);
         text-align: center;
         margin: 0;
       }
 
-      /* M3 — close icon only, no other action (see the PRD: "no
-         management controls appear inside M3"). Reuses the same icon-
-         button treatment the selector's own row actions use. */
-      .pip-decision-close-btn {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 32px;
-        height: 32px;
-        background: rgba(255, 255, 255, 0.06);
-        border: 1px solid rgba(255, 255, 255, 0.10);
-        border-radius: 50%;
-        color: rgba(222, 210, 194, 0.85);
-        cursor: pointer;
-      }
-      .pip-decision-close-btn:hover { background: rgba(255, 255, 255, 0.12); }
 
       .pip-name-input {
         width: 100%;
         box-sizing: border-box;
         padding: 11px 14px;
-        border-radius: 8px;
-        background: rgba(255, 255, 255, 0.06);
-        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: var(--radius-control);
+        background: color-mix(in srgb, var(--color-overlay) 6%, transparent);
+        border: 1px solid color-mix(in srgb, var(--color-overlay) 14%, transparent);
         font-family: var(--font-body);
         font-size: 13px;
-        color: rgba(222, 210, 194, 0.95);
+        color: color-mix(in srgb, var(--color-text-soft) 95%, transparent);
       }
       .pip-name-input:focus-visible { outline: 2px solid var(--border-outline); outline-offset: 1px; }
 
@@ -2635,14 +2556,14 @@ export function createMezzoSession({
       }
       .pip-toast-card {
         max-width: 100%;
-        background: #222222;
+        background: var(--color-bg-raised);
         border-radius: 10px;
         padding: 9px 18px;
         font-family: var(--font-body);
         font-size: 12px;
-        color: rgba(222, 210, 194, 0.85);
+        color: color-mix(in srgb, var(--color-text-soft) 85%, transparent);
         text-align: center;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+        box-shadow: 0 8px 24px color-mix(in srgb, var(--color-shadow) 45%, transparent);
       }
 
       /* ── Row-action tooltip (2026-08-20) — the compact, dark-surface
@@ -2668,14 +2589,14 @@ export function createMezzoSession({
       .pip-tooltip {
         position: fixed;
         z-index: 50;
-        background: #222222;
-        color: rgba(222, 210, 194, 0.92);
+        background: var(--color-bg-raised);
+        color: color-mix(in srgb, var(--color-text-soft) 92%, transparent);
         font-family: var(--font-body);
         font-size: 11px;
         font-weight: var(--weight-medium);
         padding: 5px 9px;
         border-radius: 6px;
-        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
+        box-shadow: 0 8px 20px color-mix(in srgb, var(--color-shadow) 45%, transparent);
         pointer-events: none;
         white-space: nowrap;
       }
@@ -2721,42 +2642,22 @@ export function createMezzoSession({
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 8px;
         padding: 20px 28px 0;
-        min-height: 76px;
         box-sizing: border-box;
         text-align: center;
       }
-      /* The awareness state (Listening / Within range / Approaching end
-         of range / Outside range) is the most prominent text on the
-         screen — display-serif, matching the visual weight of Ready's/
-         Calibrating's own heading (h1.pip-h1/p.pip-h1), but its own
-         smaller 17px size and live per-zone color rather than that
-         shared rule, since h1.pip-h1's single fixed color can't carry a
-         zone color. Shared by Expanded and Compact — Compact visually
-         hides the surrounding status block but keeps this element
-         announcing; see the [data-layout="compact"] rules below. Color
-         is keyed off data-zone, a purely presentational attribute
-         updateHeading() sets alongside the existing textContent
-         assignment — the zone-classification and label-text logic
-         themselves are untouched. The flat opacity:0.6 the accepted
-         design mock used for this label is deliberately NOT adopted here
-         — it would flatten the zone colors below into one washed-out
-         tone, erasing the color-coding that's protected product behavior
-         well outside this pass's scope; only the font metrics are taken
-         from the mock, the existing per-zone colors are kept exactly. */
-      .pip-status-heading {
-        font-family: var(--font-display);
-        font-weight: 300;
-        font-size: 17px;
-        line-height: 115%;
-        letter-spacing: -0.2px;
-        margin: 0;
+      /* Visually hidden but announced: the zone live region (PRD §6). */
+      .pip-sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        margin: -1px;
+        padding: 0;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
       }
-      .pip-status-heading[data-zone="0"],
-      .pip-status-heading[data-zone="1"] { color: var(--zone-quiet-color); }
-      .pip-status-heading[data-zone="2"] { color: var(--zone-approaching-color); }
-      .pip-status-heading[data-zone="3"] { color: var(--zone-outside-color); }
       /* The profile name alone (no "Profile:" prefix — see
          profileMetaText()), sentence case as stored. Small and
          low-contrast, reusing the same muted warm-cream caption family
@@ -2767,29 +2668,22 @@ export function createMezzoSession({
         font-family: var(--font-body);
         font-weight: var(--weight-light);
         font-size: 12px;
-        color: rgba(172, 158, 136, 0.65);
+        color: var(--color-text-muted);
         letter-spacing: 0.02em;
       }
       /* flex:1 lets this absorb whatever space the header/controls don't
-         use; the max-width/max-height cap plus auto margins are what let
-         a window resized *larger* than the 382×480 Expand target "let the
-         layout breathe" instead of enlarging the circle without bound —
-         the extra room becomes balanced padding on every side (auto
-         margins on a capped flex item absorb leftover main-axis space;
-         margin:0 auto centers it on the cross axis) rather than being
-         dumped below the circle by justify-content alone. Type and chrome
-         never scale with the window at any size — this is the one
-         element that does. */
+         use. The Range Ring inside it is a fixed size per layout mode
+         (236px Expanded, 140px Compact — src/range-ring.js fits it to the
+         window), so a larger window only adds balanced space around it.
+         overflow stays visible: the over-range band and its glow extend
+         past the edge, and the ring itself keeps them inside the window. */
       .pip-circle-wrapper {
         flex: 1;
+        min-height: 0;
         width: 100%;
-        max-width: 300px;
-        max-height: 300px;
-        margin: auto;
         display: flex;
         align-items: center;
         justify-content: center;
-        overflow: hidden;
       }
 
       /* Bottom control row — Stop only. The Compact toggle used to share
@@ -2801,6 +2695,7 @@ export function createMezzoSession({
         display: flex;
         align-items: center;
         justify-content: center;
+        gap: 10px;
         padding: 16px 20px 24px;
         width: 100%;
         box-sizing: border-box;
@@ -2811,44 +2706,59 @@ export function createMezzoSession({
         gap: 7px;
         background: none;
         border: none;
-        border-radius: 6px;
+        border-radius: var(--radius-control);
         padding: 6px 8px;
         margin: -6px -8px;
-        font-family: var(--font-body);
+        font-family: var(--font-mono);
         font-size: 11px;
-        letter-spacing: 0.08em;
+        letter-spacing: var(--tracking-label);
         text-transform: uppercase;
         color: var(--text-subdued);
         cursor: pointer;
         transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, opacity 0.18s ease;
       }
       .pip-control-btn:hover { background: var(--surface-card); color: var(--text-default); }
-      /* Stop — a quiet, low-contrast pill adapting the exact recipe
-         .pip-decision-secondary-btn already uses everywhere else in the
-         Companion (translucent white fill, 1px subtle border, fully
-         rounded, muted warm-cream text) rather than inventing new values
-         — "the established Companion button language" the accepted
-         design asks for. Not full-width like that shared class (this
-         row is centered, content-width, not a modal action stack), and
-         explicitly cancels the shared .pip-control-btn reset's uppercase/
-         letter-spacing above, since "Stop monitoring" reads as normal
-         sentence-case text here, not a small caps label. */
+      /* Stop (2026-10-22): one button, bottom left, at every size and in
+         both layouts. Larger windows show it as a quiet pill labelled
+         "Stop", at least 44px tall; windows under about 300px on the short
+         side (Compact's 220×220 included) show it icon-only at 32px. Its
+         accessible name is always "Stop monitoring". It ends the session,
+         releases the microphone, and returns to Ready with the profile
+         still selected. */
+      .pip-monitoring-controls { padding: 0; }
       .pip-control-btn-stop {
-        background: rgba(255, 255, 255, 0.06);
-        border: 1px solid rgba(255, 255, 255, 0.10);
-        border-radius: 50px;
-        padding: 10px 20px;
+        position: absolute;
+        bottom: 12px;
+        left: 12px;
+        z-index: 2;
+        min-height: 44px;
+        padding: 0 18px;
         margin: 0;
-        font-size: 12.5px;
-        font-weight: var(--weight-regular);
-        letter-spacing: 0.02em;
+        justify-content: center;
+        background: color-mix(in srgb, var(--color-overlay) 6%, transparent);
+        border: 1px solid color-mix(in srgb, var(--color-overlay) 10%, transparent);
+        border-radius: var(--radius-control);
+        font-family: var(--font-body);
+        font-size: 14px;
+        font-weight: var(--weight-medium);
+        letter-spacing: normal;
         text-transform: none;
-        color: rgba(222, 210, 194, 0.85);
+        color: color-mix(in srgb, var(--color-text-soft) 85%, transparent);
       }
       .pip-control-btn-stop:hover {
-        background: rgba(255, 255, 255, 0.12);
-        border-color: rgba(255, 255, 255, 0.22);
-        color: rgba(222, 210, 194, 0.85);
+        background: color-mix(in srgb, var(--color-overlay) 12%, transparent);
+        border-color: color-mix(in srgb, var(--color-overlay) 22%, transparent);
+        color: color-mix(in srgb, var(--color-text-soft) 85%, transparent);
+      }
+      @media (max-width: 299px), (max-height: 299px) {
+        .pip-control-btn-stop {
+          width: 32px;
+          height: 32px;
+          min-height: 0;
+          padding: 0;
+        }
+        .pip-control-btn-stop .pip-control-label { display: none; }
+        .pip-control-btn-stop .pip-control-icon-stop { width: 12px; height: 12px; }
       }
       /* Compact toggle — its own icon-only "window chrome" control,
          permanently anchored top-right regardless of Expanded's current
@@ -2874,13 +2784,13 @@ export function createMezzoSession({
         margin: 0;
         justify-content: center;
         z-index: 2;
-        color: rgba(222, 210, 194, 0.7);
+        color: color-mix(in srgb, var(--color-text-soft) 70%, transparent);
         background: none;
         border: none;
       }
       .pip-control-btn-compact:hover {
-        color: rgba(222, 210, 194, 1);
-        background: rgba(255, 255, 255, 0.08);
+        color: var(--color-text-soft);
+        background: color-mix(in srgb, var(--color-overlay) 8%, transparent);
       }
       .pip-control-icon-stop {
         width: 7px;
@@ -2912,161 +2822,57 @@ export function createMezzoSession({
          below, which are what actually reveal it. */
       .pip-control-btn-expand { display: none; }
 
-      /* ── Progressive responsive degradation (2026-08-18 redesign) —
-         purely presentational CSS reacting to the Expanded window's own
-         real rendered size, never touching layoutMode/[data-layout]
-         itself. Each rule below only ever hides ITS OWN target — nothing
-         re-declares another rule's property — so the tiers compose
-         cleanly: a window small enough to match several of these at once
-         (e.g. a manually-shrunk near-220×220-but-still-Expanded window)
-         just sheds everything each individual rule says to shed. Every
-         condition is a comma-separated (OR) pair of a width AND a height
-         threshold — deliberately OR, not AND — so a window that's tight
-         in EITHER dimension alone (very short-but-wide, or very
-         narrow-but-tall — manual resizing is freeform, non-4:5 aspect
-         ratios included) still sheds content rather than clipping; a
-         genuinely comfortable window needs to clear both thresholds to
-         keep the fuller presentation. Four tiers, top to bottom as the
-         window shrinks (reappearing in exact reverse order as it grows
-         back): 382×480 reference (full: status, profile, circle, Stop
-         pill, Compact toggle) -> 340×425 (profile drops) -> 300×375
-         (Stop pill becomes a bottom-left icon, always visible here, not
-         hover-gated — that treatment is Compact-only, see below) ->
-         260×325 (status drops too, leaving only the circle, the icon
-         Stop, and the top-right Compact toggle). Each threshold is
-         inclusive of its own named reference point (max-width:340px, not
-         339px) — confirmed against real rendered metrics: a window at
-         exactly one of the design's own reference sizes already shows
-         that tier's shed-down presentation, not the tier above it. ── */
-      @media (max-width: 340px), (max-height: 425px) {
-        .pip-profile-info { display: none; }
-      }
-      @media (max-width: 300px), (max-height: 375px) {
-        .pip-monitoring-controls { padding: 0; }
-        .pip-control-btn-stop {
-          position: absolute;
-          bottom: 10px;
-          left: 10px;
-          width: 28px;
-          height: 28px;
-          padding: 0;
-          margin: 0;
-          justify-content: center;
-          /* Same resting chip background/border as the Compact toggle
-             (2026-08-19 polish pass, was background:none/border:none —
-             read as a bare filled square, not a control) — hover keeps
-             using the shared .pip-control-btn-stop:hover rule above
-             unchanged, which already strengthens this exact family. */
-          background: rgba(255, 255, 255, 0.06);
-          border: 1px solid rgba(255, 255, 255, 0.10);
-          z-index: 2;
-        }
-        .pip-control-btn-stop span:not(.pip-control-icon-stop) { display: none; }
-        .pip-control-btn-stop .pip-control-icon-stop { width: 12px; height: 12px; }
-      }
-      @media (max-width: 260px), (max-height: 325px) {
-        .pip-monitoring-header { display: none; }
-      }
+      /* The profile name always shows (2026-10-22), at every window size. */
 
       /* ── Compact layout — explicit state ([data-layout="compact"]), not
-         a media query, and every rule below is unconditional on the
-         window's actual current size: an already-Compact window keeps
-         this exact presentation even if manually resized larger — Compact
-         is a deliberate mode, never re-inferred back toward Expanded's own
-         look just because it grew. Peripheral awareness, but Stop stays
-         reachable: the visualization (centered, dominant) is the ONLY
-         thing visible at rest — no wordmark, no visible status text, no
-         profile metadata, and (2026-08-18 redesign) not even the Stop/
-         Expand controls themselves: both are opacity-only hidden (never
-         display/visibility — a control must never be focusable while
-         invisible) and fade in on hover or keyboard focus, so the resting
-         window is nothing but the visual. Stop keeps the bottom-left
-         corner it already had in the shrunk-Expanded tier above; Expand
-         takes the top-right corner Expanded's own Compact toggle occupied
-         (decision: preserves visual continuity across the mode switch, at
-         the cost of not matching Stop's own corner side — an explicit,
-         accepted trade-off). Stop here is the exact same button/handler
-         as Expanded's Stop, just repositioned — it stops monitoring and
-         returns to Ready, it does not close the Companion. The native
-         window-close control remains a separate, always-available way to
-         close the Companion outright (see handlePipClose). The awareness
-         state stays in the DOM and keeps announcing via aria-live for
-         assistive tech; it's just visually hidden, not removed, since
-         there's no visible text status in Compact. ── */
-      /* Compact drops the inset glow — at this size it read as a dark
-         rim. Square edges, same as every other screen (2026-10-20). */
+         a media query: an already-Compact window keeps this presentation
+         even if manually resized larger. The ring and the profile name
+         above it are what shows at rest; Stop (bottom left) and Expand
+         (top right) rest at 35% and come to full on hover or keyboard
+         focus, opacity only, so both stay real, focusable buttons. The zone live
+         region is outside the header, so nothing here can silence it. ── */
+      /* Compact drops the inset glow — at this size it read as a dark rim. */
       body[data-layout="compact"] .pip-screen-monitoring {
         box-shadow: none;
       }
       body[data-layout="compact"] .pip-monitoring-header {
         display: block;
-      }
-      /* Collapses the block's own padding rather than hiding it outright —
-         .pip-status-heading (inside it) needs display other than none to
-         keep announcing via aria-live; see below. */
-      body[data-layout="compact"] .pip-monitoring-status-block {
-        padding: 0;
-        min-height: 0;
-      }
-      body[data-layout="compact"] .pip-profile-info {
-        display: none;
-      }
-      /* Visually hidden, not display:none — screen readers still need
-         this element's aria-live announcements even though Compact shows
-         no visible status text. */
-      body[data-layout="compact"] .pip-status-heading {
         position: absolute;
-        width: 1px;
-        height: 1px;
+        top: 16px;
+        left: 44px;
+        right: 44px;
+        width: auto;
+        z-index: 1;
+        transition: opacity 0.2s ease;
+      }
+      /* Outside range, the band and its glow reach the top of the Compact
+         window: the name steps aside while the nudge shows. */
+      body[data-layout="compact"] .pip-screen-monitoring[data-zone="3"] .pip-monitoring-header {
+        opacity: 0;
+      }
+      body[data-layout="compact"] .pip-monitoring-status-block { padding: 0; align-items: stretch; }
+      body[data-layout="compact"] .pip-profile-info {
+        display: block;
+        max-width: 100%;
         overflow: hidden;
-        clip: rect(0, 0, 0, 0);
         white-space: nowrap;
+        text-overflow: ellipsis;
+        font-family: var(--font-mono);
+        font-weight: var(--weight-regular);
+        font-size: 11px;
+        letter-spacing: var(--tracking-label);
+        text-transform: uppercase;
+        text-align: center;
+        color: var(--color-text-muted);
       }
-      body[data-layout="compact"] .pip-monitoring-controls {
-        position: static;
-        padding: 0;
-      }
-      /* Compact-toggle hidden — already in Compact, nothing to switch to. */
+      /* Compact toggle hidden — already in Compact, nothing to switch to. */
       body[data-layout="compact"] .pip-control-btn-compact {
         display: none;
       }
-      /* Stop — bottom-left corner overlay, icon-only (its text label is
-         hidden below; aria-label already carries the accessible name, same
-         as Expand). Same stopMonitoring() click handler as Expanded's Stop
-         — this is that exact button repositioned, not a second one — so it
-         returns to Ready, it does not close the Companion. Higher
-         specificity than the plain shrunk-Expanded-tier rule above (this
-         selector adds the [data-layout="compact"] attribute), so it always
-         wins wherever both could apply, and keeps applying even if this
-         particular Compact window is manually resized past 299×374 — the
-         shrunk-Expanded rule above is purely size-gated and wouldn't fire
-         there, but this one isn't. */
+      /* At rest the corner controls are present but quiet (35%); hover or
+         keyboard focus brings them to full. Always focusable and tappable. */
       body[data-layout="compact"] .pip-control-btn-stop {
-        display: flex;
-        position: absolute;
-        bottom: 10px;
-        left: 10px;
-        width: 28px;
-        height: 28px;
-        padding: 0;
-        margin: 0;
-        justify-content: center;
-        border-radius: 6px;
-        z-index: 2;
-        color: rgba(172, 158, 136, 0.82);
-        /* Same resting chip background/border every other corner control
-           now shares (2026-08-19 polish pass, was background:none/
-           border:none — read as a bare filled square, not a control). */
-        background: rgba(255, 255, 255, 0.06);
-        border: 1px solid rgba(255, 255, 255, 0.10);
-        opacity: 0;
-      }
-      body[data-layout="compact"] .pip-control-btn-stop span:not(.pip-control-icon-stop) {
-        display: none;
-      }
-      body[data-layout="compact"] .pip-control-btn-stop .pip-control-icon-stop {
-        width: 12px;
-        height: 12px;
+        opacity: 0.35;
       }
       body[data-layout="compact"] .pip-control-btn-expand {
         display: flex;
@@ -3078,38 +2884,17 @@ export function createMezzoSession({
         padding: 0;
         margin: 0;
         justify-content: center;
-        border-radius: 6px;
+        border-radius: var(--radius-control);
         z-index: 2;
-        color: rgba(172, 158, 136, 0.82);
-        background: rgba(255, 255, 255, 0.06);
-        border: 1px solid rgba(255, 255, 255, 0.10);
-        opacity: 0;
+        color: color-mix(in srgb, var(--color-text-muted) 82%, transparent);
+        background: color-mix(in srgb, var(--color-overlay) 6%, transparent);
+        border: 1px solid color-mix(in srgb, var(--color-overlay) 10%, transparent);
+        opacity: 0.35;
       }
-      /* Hover strengthens the same translucent-white chip family every
-         corner control now rests on (2026-08-19 polish pass — was a flat
-         black rgba(0,0,0,0.36), independent of any resting background;
-         now a lighter/stronger version of the resting chip, matching
-         Stop's own pill hover exactly) — see the correction this comment
-         already carried: icon *color* is still deliberately pinned to
-         Compact's own default (0.82, not Monitoring's 0.85) rather than
-         left to fall through to any other rule, so it visibly does NOT
-         change on hover; only background/border strengthen. Scoped with
-         [data-layout="compact"] so it doesn't affect Monitoring's own
-         hover treatment. */
-      body[data-layout="compact"] .pip-control-btn-stop:hover,
       body[data-layout="compact"] .pip-control-btn-expand:hover {
-        color: rgba(172, 158, 136, 0.82);
-        background: rgba(255, 255, 255, 0.12);
-        border-color: rgba(255, 255, 255, 0.22);
-        border-radius: 6px;
+        background: color-mix(in srgb, var(--color-overlay) 12%, transparent);
+        border-color: color-mix(in srgb, var(--color-overlay) 22%, transparent);
       }
-      /* Hover/keyboard-focus reveal — the only way either control ever
-         becomes visible at rest. opacity only (never display/visibility),
-         so both stay real, always-focusable <button>s the whole time; a
-         control is never focusable while invisible, it's just visually
-         transparent until revealed. :focus-within on the card (not just
-         :focus-visible on each button) means tabbing to EITHER control
-         reveals BOTH, matching :hover's own reveal-both behavior. */
       body[data-layout="compact"] .pip-screen-monitoring:hover .pip-control-btn-stop,
       body[data-layout="compact"] .pip-screen-monitoring:hover .pip-control-btn-expand,
       body[data-layout="compact"] .pip-screen-monitoring:focus-within .pip-control-btn-stop,
@@ -3117,8 +2902,7 @@ export function createMezzoSession({
         opacity: 1;
       }
       /* Touch/no-hover environments have no reliable :hover to reveal
-         these controls at all — force them visible outright there rather
-         than leaving them reachable only by keyboard focus. */
+         these controls at all — show them outright there. */
       @media (hover: none) {
         body[data-layout="compact"] .pip-control-btn-stop,
         body[data-layout="compact"] .pip-control-btn-expand {
@@ -3148,14 +2932,18 @@ export function createMezzoSession({
     const welcomeScreen = pipDoc.createElement('div');
     welcomeScreen.className = 'pip-screen pip-screen-welcome hidden';
 
-    const welcomeHeading = pipDoc.createElement('h1');
-    welcomeHeading.className = 'pip-h1 pip-intro-heading';
-    welcomeHeading.textContent = 'Welcome';
-    welcomeScreen.appendChild(welcomeHeading);
+    // The "mezzo" wordmark is Welcome's heading (2026-10-22, replacing a
+    // separate "Welcome" heading): the screen's one <h1>, at the top. The
+    // window's accessible name reads "Mezzo, welcome." while it shows (see
+    // showOnlyScreen()).
+    const welcomeWordmark = pipDoc.createElement('h1');
+    welcomeWordmark.className = 'pip-wordmark pip-welcome-wordmark';
+    welcomeWordmark.textContent = 'mezzo';
+    welcomeScreen.appendChild(welcomeWordmark);
 
     const welcomeBody = pipDoc.createElement('p');
     welcomeBody.className = 'pip-intro-body';
-    welcomeBody.textContent = "Mezzo listens in the background and gently lets you know if you're talking louder than you'd like. We'll start with a quick voice calibration.";
+    welcomeBody.textContent = "A gentle nudge when you're talking louder than you'd like. First, a quick voice calibration.";
     welcomeScreen.appendChild(welcomeBody);
 
     const welcomeDisclaimer = pipDoc.createElement('p');
@@ -3166,7 +2954,7 @@ export function createMezzoSession({
     const welcomePrimaryBtn = pipDoc.createElement('button');
     welcomePrimaryBtn.type = 'button';
     welcomePrimaryBtn.className = 'pip-intro-primary-btn';
-    welcomePrimaryBtn.innerHTML = `${MIC_ICON_SVG}<span>Create speaking profile</span>`;
+    welcomePrimaryBtn.textContent = 'Create speaking profile';
     welcomePrimaryBtn.addEventListener('click', handleWelcomeCalibrateClick);
     welcomeScreen.appendChild(welcomePrimaryBtn);
 
@@ -3245,9 +3033,8 @@ export function createMezzoSession({
     c0Screen.className = 'pip-screen pip-screen-c0 hidden';
 
     // Text content is set per failure code in showC0Screen() below, not
-    // here — this is only the empty skeleton, built once. Same shared
-    // illustration either way (a generic, schematic mic graphic — accurate
-    // context for both "blocked" and "timed out").
+    // here — this is only the empty skeleton, built once. Same icon either
+    // way (a solid circle with a slash).
     const c0Heading = pipDoc.createElement('h1');
     c0Heading.className = 'pip-h1 pip-intro-heading';
     c0Screen.appendChild(c0Heading);
@@ -3255,7 +3042,7 @@ export function createMezzoSession({
 
     const c0Illustration = pipDoc.createElement('div');
     c0Illustration.className = 'pip-c0-illustration';
-    c0Illustration.innerHTML = C0_ILLUSTRATION_SVG;
+    c0Illustration.innerHTML = C0_BLOCKED_ICON_SVG;
     c0Screen.appendChild(c0Illustration);
 
     const c0Body = pipDoc.createElement('p');
@@ -3311,6 +3098,16 @@ export function createMezzoSession({
     // screen — so the panel always anchors just below the trigger's real
     // rendered position, regardless of how tall the heading/label above it
     // happen to render.
+    // Menu-layer scrim (PRD §7): dims the screen behind the open selector.
+    // Sits under .pip-ready-selector-wrap, so the trigger and its panel stay
+    // undimmed. Clicks on it fall through to handleSelectorOutsideClick(),
+    // which already closes the panel for any click outside it.
+    const selectorScrim = pipDoc.createElement('div');
+    selectorScrim.className = 'pip-ready-scrim hidden';
+    selectorScrim.setAttribute('aria-hidden', 'true');
+    readyScreen.appendChild(selectorScrim);
+    readyScrimEl = selectorScrim;
+
     const selectorWrap = pipDoc.createElement('div');
     selectorWrap.className = 'pip-ready-selector-wrap';
     readyScreen.appendChild(selectorWrap);
@@ -3338,6 +3135,11 @@ export function createMezzoSession({
     // — no separate aria-label to keep in sync. The chevron stays
     // aria-hidden (see CHEVRON_ICON_SVG) so it never contributes text.
     selectorTrigger.setAttribute('aria-labelledby', 'pip-ready-profile-label pip-ready-selector-trigger-name');
+    // Sage dot bullet before the selected name (PRD §9a). Decorative.
+    const selectorTriggerDot = pipDoc.createElement('span');
+    selectorTriggerDot.className = 'pip-dot';
+    selectorTriggerDot.setAttribute('aria-hidden', 'true');
+    selectorTrigger.appendChild(selectorTriggerDot);
     selectorTrigger.appendChild(selectorTriggerName);
     selectorTrigger.insertAdjacentHTML('beforeend', CHEVRON_ICON_SVG);
     selectorTrigger.addEventListener('click', handleSelectorTriggerClick);
@@ -3409,27 +3211,36 @@ export function createMezzoSession({
     calibratingHeading.textContent = 'Keep speaking at the level you want to maintain';
     calibratingScreen.appendChild(calibratingHeading);
 
-    // Visible status text ("Start speaking in 3/2/1", then "Listening…
-    // {n}s") — calibration pacing revision, second pass: this rapidly-
-    // changing element is now aria-hidden. Assistive tech gets exactly two
-    // one-time announcements instead (calibratingAnnounceEl, immediately
-    // below), per the accessibility decision in CLAUDE.md's Engineering
-    // Notes — narrating every visible tick was found to be noisy, not
-    // helpful, for a fast, decorative countdown like this one.
+    // Segmented level meter (PRD §8): six segments that follow the live,
+    // filtered level, so the user can see their voice being picked up,
+    // during the 3-2-1 as a mic check and then during capture. role="meter",
+    // 0–6. "Listening… Ns" below is the only time cue.
+    const calibratingVisual = pipDoc.createElement('div');
+    calibratingVisual.className = 'pip-calibrating-visual';
+    calibratingScreen.appendChild(calibratingVisual);
+    levelMeter = new MezzoLevelMeter(calibratingVisual);
+
+    // Visible status text ("Preparing microphone…", "Start speaking in
+    // 3/2/1", then "Listening… {n}s") — aria-hidden. Assistive tech gets
+    // exactly two one-time announcements instead (calibratingAnnounceEl,
+    // below): narrating every visible tick was found to be noisy, not
+    // helpful, for a fast countdown like this one.
     const calibratingStatus = pipDoc.createElement('div');
     calibratingStatus.className = 'pip-calibrating-status';
     calibratingStatus.setAttribute('aria-hidden', 'true');
     calibratingScreen.appendChild(calibratingStatus);
     calibratingStatusEl = calibratingStatus;
 
+    const calibratingHint = pipDoc.createElement('p');
+    calibratingHint.className = 'pip-calibrating-hint';
+    calibratingHint.textContent = CALIBRATING_HINT_PREPARING;
+    calibratingScreen.appendChild(calibratingHint);
+    calibratingHintEl = calibratingHint;
+
     // Static, visually-hidden live region carrying exactly two one-time
     // announcements ("Get ready. Calibration starts in 3 seconds." /
     // "Listening for 6 seconds.") — kept separate from calibratingStatusEl
-    // above specifically so its rapid visible-text changes never reach
-    // assistive tech, and so this element's own text only ever changes at
-    // the two moments meant to be announced, never in between (a single
-    // shared live region firing on every visible-text change would
-    // otherwise re-announce "Start speaking in 2", "…in 1", etc.).
+    // above so its rapid visible-text changes never reach assistive tech.
     const calibratingAnnounce = pipDoc.createElement('div');
     calibratingAnnounce.className = 'pip-calibrating-announce';
     calibratingAnnounce.setAttribute('aria-live', 'polite');
@@ -3437,46 +3248,9 @@ export function createMezzoSession({
     calibratingScreen.appendChild(calibratingAnnounce);
     calibratingAnnounceEl = calibratingAnnounce;
 
-    // Continuous fill meter (2026-08-12 revision — see dbToMeterFillRatio()'s
-    // own comment above). Hidden until real six-second capture begins: no
-    // meter movement, and no samples, during either preparation stage
-    // (delayed-disclosure wait or the fixed 3-2-1 countdown) — see the
-    // capturing:true edge listener below, which is the only place this
-    // row's hidden class is removed. Entirely decorative (communicates "the
-    // microphone is responding," not a judgment about the current level, and
-    // carries no numeric dB values, tick marks, or target zones), so the
-    // whole row stays aria-hidden even once visible.
-    const meterRow = pipDoc.createElement('div');
-    meterRow.className = 'pip-calibrating-meter-row hidden';
-    meterRow.setAttribute('aria-hidden', 'true');
-    const meterTrack = pipDoc.createElement('div');
-    meterTrack.className = 'pip-calibrating-meter-track';
-    const meterFill = pipDoc.createElement('div');
-    meterFill.className = 'pip-calibrating-meter-fill';
-    meterTrack.appendChild(meterFill);
-    meterRow.appendChild(meterTrack);
-    calibratingScreen.appendChild(meterRow);
-    calibratingMeterRowEl = meterRow;
-    calibratingMeterFillEl = meterFill;
-
-    // Meter helper text (2026-08-13) — see .pip-calibrating-meter-hint's
-    // own CSS comment for the product reasoning. A separate element (not
-    // nested inside meterRow, which has its own fixed 28px height sized
-    // exactly for the bar) sharing meterRow's hidden/visible lifecycle
-    // exactly — toggled at the same two sites (the capturing:true edge
-    // listener above reveals both together; prepareCalibratingScreen()
-    // hides both together on every fresh attempt/retry). Not aria-hidden:
-    // unlike the purely decorative bar, this is real, static informative
-    // text a screen reader should read as ordinary page content.
-    const meterHint = pipDoc.createElement('p');
-    meterHint.className = 'pip-calibrating-meter-hint hidden';
-    meterHint.textContent = 'Background sounds may move the meter too.';
-    calibratingScreen.appendChild(meterHint);
-    calibratingMeterHintEl = meterHint;
-
     const calibratingCancelBtn = pipDoc.createElement('button');
     calibratingCancelBtn.type = 'button';
-    calibratingCancelBtn.className = 'pip-text-btn';
+    calibratingCancelBtn.className = 'pip-text-btn pip-calibrating-cancel';
     calibratingCancelBtn.textContent = 'Cancel';
     calibratingCancelBtn.addEventListener('click', handleCalibratingCancel);
     calibratingScreen.appendChild(calibratingCancelBtn);
@@ -3574,6 +3348,16 @@ export function createMezzoSession({
     //    prior state, and begin again — the extra shortcut wasn't
     //    necessary. DOM order matches visual and keyboard-focus order
     //    exactly. ──
+    // The noisy-room tip (2026-10-22): shown on a result screen when the
+    // calibration's speech sat less than 12 dB above the room noise
+    // measured during its 3-2-1 (engine.js's isNoisyRoom()).
+    const buildNoisyRoomTip = () => {
+      const tip = pipDoc.createElement('p');
+      tip.className = 'pip-decision-tip hidden';
+      tip.textContent = NOISY_ROOM_TIP;
+      return tip;
+    };
+
     const m1Screen = pipDoc.createElement('div');
     // pip-screen-m1 — a dedicated hook class, not just pip-screen-decision:
     // this screen and resultScreen below now render byte-for-byte identical
@@ -3584,12 +3368,30 @@ export function createMezzoSession({
     // is what tests use instead.
     m1Screen.className = 'pip-screen pip-screen-decision pip-screen-m1 hidden';
 
-    // Inset modal card (2026-08-17) — see .pip-modal-card's own CSS
-    // comment. All of this screen's actual content lives inside it; the
-    // outer m1Screen itself now only supplies the larger outer inset via
-    // its own overridden padding.
+    // ── Decision-state header bar (Lantern layers, PRD §7) — shared by
+    //    every decision state below: a 44px bar naming the decision in
+    //    Geist Mono and, where the state has a way out, holding Cancel in
+    //    its corner. The <h1> inside the content stays the screen's real
+    //    heading; this title is a plain label. ──
+    const buildDecisionBar = (title, cancelBtn = null) => {
+      const bar = pipDoc.createElement('div');
+      bar.className = 'pip-decision-bar';
+      const label = pipDoc.createElement('p');
+      label.className = 'pip-decision-bar-title';
+      label.textContent = title;
+      bar.appendChild(label);
+      if (cancelBtn) {
+        cancelBtn.classList.add('pip-decision-bar-cancel');
+        bar.appendChild(cancelBtn);
+      }
+      return bar;
+    };
+
+    // Content block between the header bar and the bottom-pinned actions
+    // (the 2026-08-17 inset modal card is retired — PRD §7).
+    m1Screen.appendChild(buildDecisionBar('Recalibration'));
     const m1Card = pipDoc.createElement('div');
-    m1Card.className = 'pip-modal-card';
+    m1Card.className = 'pip-decision-content';
     m1Screen.appendChild(m1Card);
 
     const m1Heading = pipDoc.createElement('h1');
@@ -3609,6 +3411,8 @@ export function createMezzoSession({
     m1Body.className = 'pip-decision-body';
     m1Body.textContent = 'What would you like to do with it?';
     m1Card.appendChild(m1Body);
+    m1TipEl = buildNoisyRoomTip();
+    m1Card.appendChild(m1TipEl);
 
     const m1Actions = pipDoc.createElement('div');
     m1Actions.className = 'pip-decision-actions';
@@ -3640,7 +3444,7 @@ export function createMezzoSession({
     m1Actions.appendChild(m1Discard);
     m1DiscardBtn = m1Discard;
 
-    m1Card.appendChild(m1Actions);
+    m1Screen.appendChild(m1Actions);
 
     layout.appendChild(m1Screen);
     m1ScreenEl = m1Screen;
@@ -3662,10 +3466,11 @@ export function createMezzoSession({
     const resultScreen = pipDoc.createElement('div');
     resultScreen.className = 'pip-screen pip-screen-decision pip-screen-result hidden';
 
-    // Inset modal card (2026-08-17) — see .pip-modal-card's own CSS
-    // comment (M1's own construction site above has the fuller writeup).
+    // The one-off result card is removed (PRD §2.3, §7): same header bar,
+    // content block, and bottom-pinned actions as every decision state.
+    resultScreen.appendChild(buildDecisionBar('New profile'));
     const resultCard = pipDoc.createElement('div');
-    resultCard.className = 'pip-modal-card';
+    resultCard.className = 'pip-decision-content';
     resultScreen.appendChild(resultCard);
 
     const resultHeading = pipDoc.createElement('h1');
@@ -3687,6 +3492,8 @@ export function createMezzoSession({
     resultBody.className = 'pip-decision-body';
     resultBody.textContent = 'What would you like to do with it?';
     resultCard.appendChild(resultBody);
+    resultTipEl = buildNoisyRoomTip();
+    resultCard.appendChild(resultTipEl);
 
     const resultActions = pipDoc.createElement('div');
     resultActions.className = 'pip-decision-actions';
@@ -3720,7 +3527,7 @@ export function createMezzoSession({
     resultActions.appendChild(resultDiscard);
     resultDiscardBtn = resultDiscard;
 
-    resultCard.appendChild(resultActions);
+    resultScreen.appendChild(resultActions);
 
     layout.appendChild(resultScreen);
     resultScreenEl = resultScreen;
@@ -3738,11 +3545,10 @@ export function createMezzoSession({
     // which still share the plain pip-screen-decision treatment.
     m2Screen.className = 'pip-screen pip-screen-decision pip-screen-m2 hidden';
 
-    // Inset modal card (2026-08-17) — see .pip-modal-card's own CSS
-    // comment (M1's own construction site above has the fuller writeup).
+    // Content block (heading, field, warning); see the header bar and the
+    // form assembly below for where it sits.
     const m2Card = pipDoc.createElement('div');
-    m2Card.className = 'pip-modal-card';
-    m2Screen.appendChild(m2Card);
+    m2Card.className = 'pip-decision-content';
 
     // <h1>, not <p> (2026-08-17) — this is the naming screen's one
     // meaningful heading, so it now gets real heading semantics and the
@@ -3761,7 +3567,7 @@ export function createMezzoSession({
     m2Card.appendChild(m2Heading);
 
     const m2Form = pipDoc.createElement('form');
-    m2Form.style.cssText = 'width:100%;max-width:230px;display:flex;flex-direction:column;gap:10px;';
+    m2Form.className = 'pip-decision-form';
 
     const m2Input = pipDoc.createElement('input');
     m2Input.type = 'text';
@@ -3770,7 +3576,7 @@ export function createMezzoSession({
     m2Input.placeholder = 'e.g. Coffee Shop';
     m2Input.setAttribute('aria-label', 'Profile name');
     m2Input.addEventListener('input', renderM2State);
-    m2Form.appendChild(m2Input);
+    m2Card.appendChild(m2Input);
     m2NameInput = m2Input;
 
     // Live, non-error-toned warning — an existing-name match is an
@@ -3783,15 +3589,11 @@ export function createMezzoSession({
     m2Warning.className = 'pip-decision-warning hidden';
     m2Warning.id = 'm2-name-warning';
     m2Warning.setAttribute('aria-live', 'polite');
-    m2Form.appendChild(m2Warning);
+    m2Card.appendChild(m2Warning);
     m2WarningEl = m2Warning;
 
-    // pip-m2-actions (2026-08-17, new modifier alongside the shared
-    // pip-decision-actions base) — side-by-side when there's room, stacked
-    // otherwise, via flex-wrap rather than a media query (see its own CSS
-    // comment for the mechanism). Save first, Cancel second, in DOM order
-    // — matches the required visual/keyboard order directly, no separate
-    // reordering step needed anywhere else.
+    // Save (or Replace) is the one bottom-pinned action; Cancel lives in
+    // the header bar (PRD §7). pip-m2-actions stays as a hook class.
     const m2Actions = pipDoc.createElement('div');
     m2Actions.className = 'pip-decision-actions pip-m2-actions';
 
@@ -3804,14 +3606,17 @@ export function createMezzoSession({
 
     const m2Cancel = pipDoc.createElement('button');
     m2Cancel.type = 'button';
-    m2Cancel.className = 'pip-decision-secondary-btn';
+    m2Cancel.className = 'pip-text-btn';
     m2Cancel.textContent = 'Cancel';
     m2Cancel.addEventListener('click', handleM2Cancel);
-    m2Actions.appendChild(m2Cancel);
 
+    // The form spans content and actions so Save stays a real submit
+    // button while the actions sit pinned to the bottom.
+    m2Form.appendChild(m2Card);
     m2Form.appendChild(m2Actions);
     m2Form.addEventListener('submit', handleM2Submit);
-    m2Card.appendChild(m2Form);
+    m2Screen.appendChild(buildDecisionBar('Save profile', m2Cancel));
+    m2Screen.appendChild(m2Form);
     layout.appendChild(m2Screen);
     m2ScreenEl = m2Screen;
 
@@ -3825,10 +3630,17 @@ export function createMezzoSession({
     // screen specifically, and a dedicated test hook.
     m3Screen.className = 'pip-screen pip-screen-decision pip-screen-m3 hidden';
 
-    // Inset modal card (2026-08-20 — extends the 2026-08-17 system to
-    // this screen; see .pip-modal-card's own CSS comment).
+    // M3's one way out is Cancel in the header bar (formerly a close icon
+    // inside the card; same handler, same behavior).
+    const m3Close = pipDoc.createElement('button');
+    m3Close.type = 'button';
+    m3Close.className = 'pip-text-btn';
+    m3Close.textContent = 'Cancel';
+    m3Close.addEventListener('click', handleM3Close);
+    m3Screen.appendChild(buildDecisionBar('Profile limit', m3Close));
+
     const m3Card = pipDoc.createElement('div');
-    m3Card.className = 'pip-modal-card';
+    m3Card.className = 'pip-decision-content';
     m3Screen.appendChild(m3Card);
 
     // <h1>, not <p> (2026-08-20) — same reasoning as M2's own heading
@@ -3846,13 +3658,6 @@ export function createMezzoSession({
     m3Card.appendChild(m3Body);
     m3BodyEl = m3Body;
 
-    const m3Close = pipDoc.createElement('button');
-    m3Close.type = 'button';
-    m3Close.className = 'pip-decision-close-btn';
-    m3Close.setAttribute('aria-label', 'Close');
-    m3Close.innerHTML = CLOSE_ICON_SVG;
-    m3Close.addEventListener('click', handleM3Close);
-    m3Card.appendChild(m3Close);
     layout.appendChild(m3Screen);
     m3ScreenEl = m3Screen;
     m3CloseBtn = m3Close;
@@ -3866,10 +3671,16 @@ export function createMezzoSession({
     // above).
     deleteScreen.className = 'pip-screen pip-screen-decision pip-screen-delete hidden';
 
-    // Inset modal card (2026-08-20 — extends the 2026-08-17 system to
-    // this screen; see .pip-modal-card's own CSS comment).
+    const deleteCancel = pipDoc.createElement('button');
+    deleteCancel.type = 'button';
+    deleteCancel.className = 'pip-text-btn';
+    deleteCancel.textContent = 'Cancel';
+    deleteCancel.addEventListener('click', handleDeleteCancel);
+    deleteCancelBtn = deleteCancel;
+    deleteScreen.appendChild(buildDecisionBar('Delete profile', deleteCancel));
+
     const deleteCard = pipDoc.createElement('div');
-    deleteCard.className = 'pip-modal-card';
+    deleteCard.className = 'pip-decision-content';
     deleteScreen.appendChild(deleteCard);
 
     // <h1>, not <p> (2026-08-20) — carries the live "Delete "{name}"?" text
@@ -3900,13 +3711,8 @@ export function createMezzoSession({
     deleteCard.appendChild(deleteError);
     deleteErrorEl = deleteError;
 
-    // pip-delete-actions (2026-08-20, new modifier alongside the shared
-    // pip-decision-actions base — reuses the exact row/stack mechanism
-    // .pip-m2-actions already established, via a shared selector group
-    // rather than a duplicated rule; see that rule's own CSS comment).
-    // Delete first, Cancel second, in DOM order — matches the required
-    // visual/keyboard order directly, no separate reordering step needed
-    // anywhere else (mirrors M2's own Save-before-Cancel order above).
+    // Delete is the one bottom-pinned action; Cancel lives in the header
+    // bar (PRD §7). pip-delete-actions stays as a hook class.
     const deleteActions = pipDoc.createElement('div');
     deleteActions.className = 'pip-decision-actions pip-delete-actions';
 
@@ -3918,15 +3724,7 @@ export function createMezzoSession({
     deleteActions.appendChild(deleteConfirmBtnEl);
     deleteConfirmBtn = deleteConfirmBtnEl;
 
-    const deleteCancel = pipDoc.createElement('button');
-    deleteCancel.type = 'button';
-    deleteCancel.className = 'pip-decision-secondary-btn';
-    deleteCancel.textContent = 'Cancel';
-    deleteCancel.addEventListener('click', handleDeleteCancel);
-    deleteActions.appendChild(deleteCancel);
-    deleteCancelBtn = deleteCancel;
-
-    deleteCard.appendChild(deleteActions);
+    deleteScreen.appendChild(deleteActions);
     layout.appendChild(deleteScreen);
     deleteScreenEl = deleteScreen;
 
@@ -3992,18 +3790,17 @@ export function createMezzoSession({
     const statusBlock = pipDoc.createElement('div');
     statusBlock.className = 'pip-monitoring-status-block';
 
-    // aria-live so assistive tech hears state changes without the
-    // interruption a stronger "assertive" politeness would cause. Shared
-    // by Expanded and Compact — Compact visually hides the surrounding
-    // status block but keeps this element announcing (see the
-    // [data-layout="compact"] CSS).
-    const statusHeading = pipDoc.createElement('span');
-    statusHeading.className = 'pip-status-heading';
-    statusHeading.textContent = zoneLabel(currentZone);
-    statusHeading.dataset.zone = String(currentZone);
-    statusHeading.setAttribute('aria-live', 'polite');
-    statusBlock.appendChild(statusHeading);
-    pipStatusHeadingEl = statusHeading;
+    // The status labels are screen-reader-only (PRD §6): a visually hidden,
+    // polite live region, written only by zoneAnnouncer (into or out of
+    // Outside range, after it has held ~1s). A direct child of the screen,
+    // not the header, so no responsive tier or Compact rule that hides the
+    // header can ever silence it.
+    const zoneLive = pipDoc.createElement('p');
+    zoneLive.className = 'pip-sr-only pip-zone-live';
+    zoneLive.setAttribute('role', 'status');
+    zoneLive.setAttribute('aria-live', 'polite');
+    monitoringScreen.appendChild(zoneLive);
+    pipZoneLiveEl = zoneLive;
 
     const profileInfo = pipDoc.createElement('span');
     profileInfo.className = 'pip-profile-info';
@@ -4036,7 +3833,8 @@ export function createMezzoSession({
     stopIcon.className = 'pip-control-icon-stop';
     stopIcon.setAttribute('aria-hidden', 'true');
     const stopLabel = pipDoc.createElement('span');
-    stopLabel.textContent = 'Stop monitoring';
+    stopLabel.className = 'pip-control-label';
+    stopLabel.textContent = 'Stop';
     pipStopBtn.appendChild(stopIcon);
     pipStopBtn.appendChild(stopLabel);
     pipStopBtn.addEventListener('click', stopMonitoring);
@@ -4105,7 +3903,6 @@ export function createMezzoSession({
     // top-level screen, not just whichever one happened to be visible
     // before Start monitoring was clicked.
     showOnlyScreen(monitoringScreenEl);
-    updateHeading(currentZone);
   }
 
   /**
@@ -4123,14 +3920,22 @@ export function createMezzoSession({
     if (!ok) return false; // stay in Ready mode; nothing else to clean up
 
     if (!pipCircle && pipCircleWrapperEl) {
-      pipCircle = new MezzoWaveVisualizer(pipCircleWrapperEl);
+      pipCircle = new MezzoRangeRing(pipCircleWrapperEl, {
+        // RING_EDGE_FRACTION of the window's short side, at any size: the
+        // window is freely resizable and the ring keeps its proportion.
+        preferredEdgePx: () => RING_EDGE_FRACTION * Math.min(pipWindow?.innerWidth || 0, pipWindow?.innerHeight || 0),
+        levelOffsetDb: (rms) => engine.getLevelOffsetDb(rms),
+        // The room noise measured with this profile's calibration, relative
+        // to its speaking level; the circle rests below it (plus a margin).
+        roomNoiseOffsetDb: () => (Number.isFinite(activeProfile?.roomNoiseDb) ? activeProfile.roomNoiseDb - activeProfile.speakingDb : -Infinity),
+      });
     }
     activeCircle = pipCircle;
 
-    // Starting monitoring always begins Expanded — never auto-switches to
-    // Compact, even if a previous monitoring session earlier in this same
-    // Companion-open lifetime had been left in Compact.
-    enterExpandedLayout();
+    // Starting monitoring always begins Compact (2026-10-22: the small,
+    // peripheral window is the default; Expand is one click away), whatever
+    // the previous session in this Companion-open lifetime was left in.
+    applyLayoutMode(LAYOUT_MODES.COMPACT);
     enterPipMonitoringMode();
     sessionState.set(SESSION_STATES.MONITORING_ACTIVE);
     return true;
@@ -4159,8 +3964,13 @@ export function createMezzoSession({
     ].forEach((el) => {
       if (el) el.classList.toggle('hidden', el !== screenEl);
     });
+    // The window's accessible name follows the screen: Welcome's heading is
+    // only the wordmark, so the window says what it is.
+    if (pipDocument) pipDocument.title = screenEl && screenEl === welcomeScreenEl ? 'Mezzo, welcome.' : 'Mezzo Companion';
     if (screenEl !== calibratingScreenEl) {
       if (unsubscribeCalibrationLevel) { unsubscribeCalibrationLevel(); unsubscribeCalibrationLevel = null; }
+      stopMicCheck();
+      levelMeter?.reset();
       stopCalibratingCountdown();
       stopPreparationCountdown();
       clearPreparingMessageTimers();
@@ -4362,6 +4172,14 @@ export function createMezzoSession({
     if (!activeProfile) return;
     if (isTemporaryProfile(activeProfile)) {
       readyContextualActionsEl.appendChild(buildActionLink('Save profile', handleSaveProfileClick));
+    } else if (needsRecalibration(activeProfile)) {
+      // Saved before the speech-band filter and calibration peaks: it still
+      // works (with the older spread-based end of range); Recalibrate, in
+      // the selector panel, updates it in place.
+      const note = pipDocument.createElement('p');
+      note.className = 'pip-ready-recalibrate-note';
+      note.textContent = RECALIBRATE_NOTE;
+      readyContextualActionsEl.appendChild(note);
     }
   }
 
@@ -4390,15 +4208,18 @@ export function createMezzoSession({
    *  the panel could extend past the Companion's own visible bottom edge
    *  once enough rows existed).
    *
-   *  Centers the panel within the usable Companion viewport — the real
-   *  window height minus a safe margin on each side — rather than
-   *  anchoring it just below the trigger; this is what lets it extend
-   *  upward past the trigger when centering calls for it, and keeps it
-   *  fully inside the Companion at every reachable profile count (up to
-   *  the full 1 Temporary + 5 saved + Create new profile) without ever
+   *  Lantern menu layer, native-select style (PRD §7): the panel opens
+   *  over its trigger, its top edge starting at the trigger's top, and
+   *  shifts up only as far as it must to stay inside the usable Companion
+   *  viewport (the real window height minus a safe margin on each side).
+   *  If it is taller than that, it fills the usable height and its rows
+   *  scroll internally. One behavior for every profile count, up to the
+   *  full 1 Temporary + 5 saved + Create new profile, without ever
    *  resizing the Companion window itself — opening the panel still never
    *  calls resizeCompanionTo()/resizeCompanionToContent(), unchanged (see
-   *  openSelectorPanel()'s own comment on that).
+   *  openSelectorPanel()'s own comment on that). Library order and the
+   *  Unsaved/Saved grouping are unchanged; the selected row is marked by
+   *  its sage dot.
    *
    *  Two inline styles only — `top` and `max-height` — both reset by
    *  closeSelectorPanel() so a later open never inherits a stale value
@@ -4416,19 +4237,26 @@ export function createMezzoSession({
     const usableHeight = Math.max(0, viewportHeight - SELECTOR_PANEL_SAFE_MARGIN_PX * 2);
 
     readySelectorPanelEl.style.maxHeight = '';
-    const naturalHeight = readySelectorPanelEl.scrollHeight;
-    const panelHeight = Math.min(naturalHeight, usableHeight);
-    readySelectorPanelEl.style.maxHeight = `${panelHeight}px`;
+    // scrollHeight excludes the panel's own border, but max-height applies
+    // to its border box (box-sizing: border-box), so add the border back or
+    // the rows lose 2px and scroll.
+    const borderY = readySelectorPanelEl.offsetHeight - readySelectorPanelEl.clientHeight;
+    const naturalHeight = readySelectorPanelEl.scrollHeight + borderY;
 
     const wrapTop = wrap.getBoundingClientRect().top;
-    const desiredViewportTop = usableTop + (usableHeight - panelHeight) / 2;
-    readySelectorPanelEl.style.top = `${desiredViewportTop - wrapTop}px`;
+    const triggerTop = (readySelectorTriggerEl || wrap).getBoundingClientRect().top;
+    const panelHeight = Math.min(naturalHeight, usableHeight);
+    const usableBottom = usableTop + usableHeight;
+    const viewportTop = Math.max(usableTop, Math.min(triggerTop, usableBottom - panelHeight));
+    readySelectorPanelEl.style.maxHeight = `${panelHeight}px`;
+    readySelectorPanelEl.style.top = `${viewportTop - wrapTop}px`;
   }
 
   function openSelectorPanel() {
     if (!readySelectorPanelEl || !readySelectorTriggerEl || !pipDocument) return;
     renderSelectorPanel();
     readySelectorPanelEl.classList.remove('hidden');
+    readyScrimEl?.classList.remove('hidden');
     positionSelectorPanel();
     readySelectorTriggerEl.setAttribute('aria-expanded', 'true');
     selectorExpanded = true;
@@ -4471,6 +4299,7 @@ export function createMezzoSession({
   function closeSelectorPanel() {
     selectorExpanded = false;
     readySelectorPanelEl?.classList.add('hidden');
+    readyScrimEl?.classList.add('hidden');
     // Positioning (2026-08-20): clears the inline top/max-height
     // positionSelectorPanel() set on open — the collapsed selector reverts
     // to its plain, non-positioned CSS presentation rather than carrying a
@@ -4674,7 +4503,6 @@ export function createMezzoSession({
     rowName.className = 'pip-ready-selector-row-name';
     rowName.textContent = label;
     rowName.title = label;
-    rowLabel.appendChild(rowName);
 
     // Decorative only — aria-hidden, since the radio itself already
     // announces its own checked state to assistive tech; this glyph would
@@ -4683,8 +4511,11 @@ export function createMezzoSession({
     const rowCheck = pipDocument.createElement('span');
     rowCheck.className = 'pip-ready-selector-row-check';
     rowCheck.setAttribute('aria-hidden', 'true');
-    rowCheck.textContent = '✓';
+    rowCheck.classList.add('pip-dot'); // 8px sage dot (PRD §9a)
+    // Before the name, like the trigger's own dot (PRD §9a). Hidden (not
+    // removed) on unselected rows, so every name keeps the same indent.
     rowLabel.appendChild(rowCheck);
+    rowLabel.appendChild(rowName);
 
     row.appendChild(rowLabel);
 
@@ -5153,9 +4984,9 @@ export function createMezzoSession({
     if (calibratingSubheadingEl) {
       calibratingSubheadingEl.textContent = mode === 'recalibrate' && targetName ? `Recalibrating ${targetName}` : '';
     }
-    resetCalibrationMeter();
-    if (calibratingMeterRowEl) calibratingMeterRowEl.classList.add('hidden'); // revealed only on the capturing:true edge below
-    if (calibratingMeterHintEl) calibratingMeterHintEl.classList.add('hidden'); // shares the meter row's own hidden/visible lifecycle exactly
+    stopMicCheck();
+    levelMeter?.reset(); // nothing lit until the 3-2-1 mic check starts
+    if (calibratingHintEl) calibratingHintEl.textContent = CALIBRATING_HINT_PREPARING;
     stopCalibratingCountdown(); // defensive — see startCalibratingCountdown()'s own trigger below; this guarantees a clean slate even on a retry
     stopPreparationCountdown();
     clearPreparingMessageTimers();
@@ -5249,6 +5080,38 @@ export function createMezzoSession({
     if (calibratingAnnounceEl) calibratingAnnounceEl.textContent = `Get ready. Calibration starts in ${PREPARATION_COUNTDOWN_SECONDS} seconds.`;
     calibrationController.beginCountdown();
     startPreparationCountdown();
+    startMicCheck();
+  }
+
+  /** The 3-2-1 mic check: the controller collects no samples and doesn't
+   *  start audio.js's monitoring until capture begins, so this reads the
+   *  already-acquired microphone's raw level directly (audio.calculateRms(),
+   *  a plain read of the analyser that touches neither audio.js's smoothing
+   *  nor the controller's samples) and feeds only the level meter. Stopped
+   *  on the capturing:true edge, and whenever Calibrating is left. */
+  function startMicCheck() {
+    stopMicCheck();
+    micCheckSamples = [];
+    levelMeter?.start();
+    micCheckTimer = setInterval(() => {
+      if (!audio.isMicrophoneActive) return;
+      const rms = audio.calculateRms();
+      micCheckSamples.push(rms); // also the room-noise reading (see finishMicCheck())
+      levelMeter?.setLevel(rms);
+    }, MIC_CHECK_INTERVAL_MS);
+  }
+
+  /** Capture is starting: the 3-2-1's readings become the room-noise level,
+   *  saved with this calibration (monitoring rests the circle below it). */
+  function finishMicCheck() {
+    stopMicCheck();
+    const roomNoiseDb = measureRoomNoiseDb(micCheckSamples);
+    micCheckSamples = [];
+    calibrationController.setRoomNoiseDb(roomNoiseDb);
+  }
+
+  function stopMicCheck() {
+    if (micCheckTimer) { clearInterval(micCheckTimer); micCheckTimer = null; }
   }
 
   /** Visible-only (aria-hidden) "Start speaking in 3/2/1" — decorative
@@ -5306,28 +5169,11 @@ export function createMezzoSession({
     if (calibratingCountdownTimer) { clearInterval(calibratingCountdownTimer); calibratingCountdownTimer = null; }
   }
 
-  /** Empties the meter fill and hides the row — the pre-capture resting
-   *  state, restored by prepareCalibratingScreen() on every fresh
-   *  attempt/retry. Kept as its own function (rather than inlined) since
-   *  it's also what a defensive full reset needs, independent of whether
-   *  the row happens to already be hidden. */
-  function resetCalibrationMeter() {
-    if (!calibratingMeterFillEl) return;
-    calibratingMeterFillEl.style.width = '0%';
-  }
-
-  /** Drives the continuous-fill meter — see dbToMeterFillRatio()'s own
-   *  comment above for the mapping. subscribeToLevel() delivers samples
-   *  throughout the whole calibration attempt, including the preparation
-   *  stages — this function itself, not the subscription, is what enforces
-   *  "no meter movement before capture begins," by simply declining to
-   *  touch the (hidden) fill until calibratingMeterRowEl no longer carries
-   *  the 'hidden' class. */
-  function handleCalibrationLevelSample(rms) {
-    if (!calibratingMeterFillEl || !calibratingMeterRowEl || calibratingMeterRowEl.classList.contains('hidden')) return;
-    const db = 20 * Math.log10(rms + 1e-10);
-    const ratio = dbToMeterFillRatio(db);
-    calibratingMeterFillEl.style.width = `${ratio * 100}%`;
+  /** Feeds the level meter during capture with the raw, per-sample level
+   *  (the controller's samples stay the EMA-smoothed values). Before
+   *  capture, startMicCheck() feeds it instead. */
+  function handleCalibrationLevelSample(rms, rawRms) {
+    levelMeter?.setLevel(rawRms ?? rms);
   }
 
   function handleCalibratingCancel() {
@@ -5556,6 +5402,7 @@ export function createMezzoSession({
     if (pipDocument?.body) pipDocument.body.setAttribute('data-layout', LAYOUT_MODES.EXPANDED);
     resizeCompanionToContent(MEZZO_COMPANION_READY_SIZE);
     activeCircle = null;
+    resultTipEl?.classList.toggle('hidden', !isNoisyRoom(unsavedProfile?.speakingDb, unsavedProfile?.roomNoiseDb));
     showOnlyScreen(resultScreenEl);
     sessionState.set(SESSION_STATES.COMPANION_READY);
     requestAnimationFrame(() => resultHeadingEl?.focus());
@@ -5658,6 +5505,8 @@ export function createMezzoSession({
     if (pipDocument?.body) pipDocument.body.setAttribute('data-layout', LAYOUT_MODES.EXPANDED);
     resizeCompanionToContent(MEZZO_COMPANION_READY_SIZE);
     activeCircle = null;
+    const result = calibrationController.getState().result;
+    m1TipEl?.classList.toggle('hidden', !isNoisyRoom(result?.speakingDb, result?.roomNoiseDb));
     showOnlyScreen(m1ScreenEl);
     sessionState.set(SESSION_STATES.COMPANION_READY);
     // Focus moves to the heading, not m1ReplaceBtn — see showResultScreen()'s
@@ -6075,6 +5924,7 @@ export function createMezzoSession({
       pipCircle.destroy();
       pipCircle = null;
     }
+    zoneAnnouncer.reset();
     pipWindow = null;
     pipDocument = null;
     welcomeScreenEl = null;
@@ -6089,6 +5939,7 @@ export function createMezzoSession({
     readySelectorTriggerEl = null;
     readySelectorTriggerNameEl = null;
     readySelectorPanelEl = null;
+    readyScrimEl = null;
     readyContextualActionsEl = null;
     readyStartBtn = null;
     readyDisclaimerEl = null;
@@ -6099,6 +5950,8 @@ export function createMezzoSession({
     m1KeepBtn = null;
     m1DiscardBtn = null;
     resultScreenEl = null;
+    resultTipEl = null;
+    m1TipEl = null;
     resultHeadingEl = null;
     resultSaveBtn = null;
     resultKeepBtn = null;
@@ -6131,16 +5984,17 @@ export function createMezzoSession({
     tooltipTargetEl = null;
     pendingDeleteProfileId = null;
     monitoringScreenEl = null;
-    pipStatusHeadingEl = null;
+    pipZoneLiveEl = null;
     monitoringProfileNameEl = null;
     pipCircleWrapperEl = null;
     calibratingScreenEl = null;
     calibratingSubheadingEl = null;
     calibratingStatusEl = null;
     calibratingAnnounceEl = null;
-    calibratingMeterRowEl = null;
-    calibratingMeterFillEl = null;
-    calibratingMeterHintEl = null;
+    stopMicCheck();
+    levelMeter?.destroy();
+    levelMeter = null;
+    calibratingHintEl = null;
     stopCalibratingCountdown();
     stopPreparationCountdown();
     clearPreparingMessageTimers();

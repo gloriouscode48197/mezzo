@@ -41,40 +41,36 @@ async function blockMicrophone(context) {
 }
 
 test.describe('Main page: permission not yet granted', () => {
-  test('shows the approved heading, static visualization, benefits section, and primary action — and never requests the microphone merely by rendering', async ({ page }) => {
+  test('shows the hero and How it works, with Enable microphone as the only button, and never requests the microphone merely by rendering', async ({ page }) => {
     await page.goto('/index.html');
     const state = page.locator('#mic-request');
     await expect(state).toBeVisible();
-    await expect(state.locator('h1')).toHaveText('You care about how your voice affects others');
+    await expect(state.locator('.home-eyebrow')).toHaveText('For headphone calls in shared spaces');
+    await expect(state.locator('.home-hero-heading-lead')).toHaveText('Focus on the meeting');
+    await expect(state.locator('.home-hero-heading-rest')).toHaveText('while Mezzo minds the volume.');
+    await expect(state.locator('.home-highlight')).toHaveText('soft glow');
+    await expect(state.locator('.home-hero-privacy')).toHaveText('Mezzo only measures volume. Nothing you say is recorded.');
 
-    // The static visualization is the product-owner-supplied PNG
-    // (assets/home-vizx2.png), never a live MezzoWaveVisualizer instance
-    // and never the earlier hand-authored inline SVG — confirmed
-    // structurally (no <canvas>, which a real instance always renders; no
-    // <svg>, which the retired version used) rather than by trying to
-    // detect "no animation" directly.
-    const viz = state.locator('.hero-static-viz');
-    await expect(viz).toBeVisible();
-    await expect(viz.locator('canvas')).toHaveCount(0);
-    await expect(viz.locator('svg')).toHaveCount(0);
-    const vizImg = viz.locator('img');
-    await expect(vizImg).toHaveCount(1);
-    await expect(vizImg).toHaveAttribute('src', /assets\/home-vizx2\.png$/);
-    await expect(vizImg).toHaveAttribute('alt', '');
-    await expect(vizImg).not.toHaveAttribute('tabindex', /.*/);
-    // Decorative-only: no accessible name at all, and never reachable by
-    // keyboard — matches alt="" plus the wrapping aria-hidden.
-    const vizAccName = await vizImg.evaluate((el) => el.getAttribute('alt'));
-    expect(vizAccName).toBe('');
+    // The illustration is inlined, labeled, and sits on the #2D2E31 its
+    // fills and premixed line colors assume.
+    const art = state.locator('.home-hero-illustration svg');
+    await expect(art).toHaveAttribute('role', 'img');
+    expect(await art.getAttribute('aria-label')).toBeTruthy();
+    const heroBg = await state.locator('.home-hero').evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(heroBg).toBe('rgb(45, 46, 49)');
 
-    await expect(state.getByText('Designed for shared spaces.')).toBeVisible();
-    await expect(state.getByText('For calls with headphones')).toBeVisible();
-    await expect(state.getByText('A quiet visual cue')).toBeVisible();
-    await expect(state.getByText('Your words stay private')).toBeVisible();
-
+    // One button on the whole page.
+    await expect(page.locator('button:visible')).toHaveCount(1);
     const enableBtn = page.locator('#btn-enable-microphone');
     await expect(enableBtn).toBeVisible();
     await expect(enableBtn).toHaveText('Enable microphone');
+    await expect(page.locator('.home-get-started')).toHaveCount(0);
+
+    const how = page.locator('#how-it-works');
+    await expect(how).toBeVisible();
+    await expect(how.locator('.home-step')).toHaveCount(3);
+    await expect(how.locator('.home-chip')).toHaveCount(3);
+    await expect(page.locator('.home-benefits, .home-ring-tile')).toHaveCount(0);
 
     // Rendering this state alone must never itself acquire the microphone —
     // still showing the not-yet-granted state after load (not silently
@@ -83,34 +79,50 @@ test.describe('Main page: permission not yet granted', () => {
     await expect(page.locator('#mic-denied')).toBeHidden();
   });
 
-  test('the supplied PNG loads successfully and renders at exactly 220x220 CSS pixels at the desktop reference width, with no horizontal overflow at the narrow reference width', async ({ page }) => {
-    await page.setViewportSize({ width: 1018, height: 900 });
-    const [response] = await Promise.all([
-      page.waitForResponse((res) => res.url().endsWith('assets/home-vizx2.png')),
-      page.goto('/index.html'),
-    ]);
-    expect(response.ok()).toBe(true);
+  test('desktop: two columns, vertically centered; phone: illustration below the button, no sideways scroll', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 860 });
+    await page.goto('/index.html');
+    const text = page.locator('.home-hero-text');
+    const art = page.locator('.home-hero-illustration');
+    let t = await text.boundingBox();
+    let a = await art.boundingBox();
+    expect(a.x).toBeGreaterThan(t.x + t.width - 1);
+    expect(a.width).toBeLessThanOrEqual(620);
+    expect(Math.abs((t.y + t.height / 2) - (a.y + a.height / 2))).toBeLessThan(2);
+    const h1Size = await page.locator('.home-hero-heading').evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+    expect(h1Size).toBe(48);
 
-    const vizImg = page.locator('.hero-static-viz img');
-    await expect(vizImg).toBeVisible();
-    const box = await vizImg.boundingBox();
-    expect(box.width).toBeCloseTo(220, 0);
-    expect(box.height).toBeCloseTo(220, 0);
+    for (const width of [390, 320]) {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto('/index.html');
+      await expect(page.locator('#mic-request')).toBeVisible();
+      const { scrollWidth, clientWidth } = await page.evaluate(() => ({
+        scrollWidth: document.documentElement.scrollWidth,
+        clientWidth: document.documentElement.clientWidth,
+      }));
+      expect(scrollWidth, `no horizontal scroll at ${width}px`).toBeLessThanOrEqual(clientWidth);
+      const btn = await page.locator('#btn-enable-microphone').boundingBox();
+      a = await art.boundingBox();
+      expect(a.y).toBeGreaterThan(btn.y + btn.height);
+    }
 
-    // Narrow reference width — the image must never render larger than
-    // 220x220 there either (width:min(100%,220px) on the wrapper), and
-    // must never push the page into horizontal scroll.
-    await page.setViewportSize({ width: 375, height: 900 });
-    await page.reload();
-    await expect(vizImg).toBeVisible();
-    const narrowBox = await vizImg.boundingBox();
-    expect(narrowBox.width).toBeLessThanOrEqual(220);
-    expect(narrowBox.height).toBeLessThanOrEqual(220);
-    const { scrollWidth, clientWidth } = await page.evaluate(() => ({
-      scrollWidth: document.documentElement.scrollWidth,
-      clientWidth: document.documentElement.clientWidth,
-    }));
-    expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
+    // "Focus on the meeting" stays on one line on phones down to 360px.
+    for (const width of [390, 360]) {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto('/index.html');
+      await page.evaluate(() => document.fonts.ready);
+      const leadLines = await page.locator('.home-hero-heading-lead').evaluate((el) => {
+        const r = document.createRange(); r.selectNodeContents(el);
+        return new Set([...r.getClientRects()].map((rect) => Math.round(rect.top))).size;
+      });
+      expect(leadLines, `lead on one line at ${width}px`).toBe(1);
+    }
+
+    // Headings render Geist at 500, not a heavier weight or a fallback face.
+    const h = await page.locator('.home-hero-heading').evaluate((el) => ({ weight: getComputedStyle(el).fontWeight, family: getComputedStyle(el).fontFamily }));
+    expect(h.weight).toBe('500');
+    expect(h.family.startsWith('Geist') || h.family.startsWith('"Geist"')).toBe(true);
+    expect(await page.evaluate(() => document.fonts.check('500 48px Geist'))).toBe(true);
   });
 
   test('does not automatically focus Enable microphone on the very first page load (2026-08-17 manual-review fix)', async ({ page }) => {
@@ -208,9 +220,8 @@ test.describe('Main page: permission granted, Companion closed', () => {
     const state = page.locator('#mic-granted');
     await expect(state).toBeVisible({ timeout: 10000 });
     await expect(state.locator('h1')).toHaveText("You're ready to use Mezzo");
-    await expect(state).toContainText('Microphone access is enabled.');
-    await expect(state).toContainText('Open the Companion to choose or create a speaking profile and start monitoring.');
-    await expect(state).toContainText('Mezzo only uses your microphone while calibrating or monitoring. Nothing you say is recorded, transcribed, stored, or sent anywhere.');
+    await expect(state).toContainText('Microphone access is on. Open the Companion to pick a speaking profile and start monitoring.');
+    await expect(state).toContainText('Mezzo only measures volume. Nothing you say is recorded.');
 
     const openBtn = page.locator('#btn-open-companion');
     await expect(openBtn).toBeVisible();
@@ -218,64 +229,80 @@ test.describe('Main page: permission granted, Companion closed', () => {
   });
 });
 
-test.describe('Main page: Companion open', () => {
-  test('shows "Monitoring is not active" on Ready, through Calibrating, and stays truthful for every non-monitoring session state', async ({ page, context }) => {
+test.describe('Main page: running (Companion open)', () => {
+  test('switches to the cream running page while the Companion is open, and back to the dark granted page when it closes', async ({ page, context }) => {
     await page.addInitScript((profiles) => {
       localStorage.setItem('mezzoProfiles', JSON.stringify(profiles));
     }, SAVED_PROFILE);
     const pipPage = await openCompanion(page, context);
     await expect(pipPage.locator('.pip-screen-ready')).toBeVisible({ timeout: 10000 });
 
-    const dockHeading = page.locator('#state-dock h1');
-    await expect(dockHeading).toHaveText('Your Companion is open');
-    const status = page.locator('#dock-status-text');
-    await expect(status).toHaveText('Monitoring is not active');
-    // 2026-08-17 manual-review fix: font-weight:400 (was 500) — calmer,
-    // less visually competitive with the heading below it.
-    await expect(status).toHaveCSS('font-weight', '400');
+    const running = page.locator('#state-dock');
+    await expect(running).toBeVisible();
+    await expect(running.locator('.running-label')).toHaveText('Companion open');
+    await expect(running.locator('.running-label')).toHaveCSS('font-size', '11px');
+    await expect(running.locator('.running-label')).toHaveCSS('text-transform', 'uppercase');
+    await expect(running.locator('h1')).toHaveText('Mezzo is running');
+    await expect(running.locator('.running-body')).toHaveText("Your Companion is open in its own window. Switch to your meeting whenever you're ready.");
+    await expect(running.locator('.running-privacy')).toHaveText('Mezzo only measures volume. Nothing you say is recorded.');
+    await expect(page.locator('#running-live')).toHaveText('Mezzo is running.');
 
-    // Drive a real recalibration into its active Calibrating window — a
-    // reachable-in-Playwright, real (COMPANION_CALIBRATING) session state
-    // src/index.dom.test.js's linkedom harness cannot exercise — and
-    // confirm the Dock still reads "not active" there too, not some
-    // internal-state-specific label the 2026-08-17 redesign deliberately
-    // no longer surfaces.
+    // Cream, as a token set: page and header background, charcoal text and
+    // wordmark, muted #5F5B52, charcoal divider and active-nav underline.
+    await expect(page.locator('body')).toHaveAttribute('data-surface', 'cream');
+    const css = (sel, prop) => page.locator(sel).first().evaluate((el, p) => getComputedStyle(el)[p], prop);
+    expect(await css('body', 'backgroundColor')).toBe('rgb(243, 235, 222)');
+    expect(await css('#main-nav', 'backgroundColor')).toMatch(/243, 235, 222|0\.95\d* 0\.92\d* 0\.87\d*/);
+    expect(await css('.type-nav-wordmark', 'color')).toBe('rgb(45, 46, 49)');
+    expect(await css('#state-dock h1', 'color')).toBe('rgb(45, 46, 49)');
+    expect(await css('.running-body', 'color')).toBe('rgb(95, 91, 82)');
+    expect(await css('.nav-link-active', 'borderBottomColor')).toBe('rgb(45, 46, 49)');
+
+    // Close Companion: the quiet charcoal link, 13px, underlined, ~16px
+    // below the privacy line, with the charcoal focus ring.
+    const close = running.locator('#btn-close-companion');
+    await expect(close).toHaveText('Close Companion');
+    expect(await css('#btn-close-companion', 'fontSize')).toBe('13px');
+    expect(await css('#btn-close-companion', 'color')).toBe('rgb(45, 46, 49)');
+    expect(await css('#btn-close-companion', 'textDecorationLine')).toBe('underline');
+    const [privacyBox, closeBox] = await Promise.all([running.locator('.running-privacy').boundingBox(), close.boundingBox()]);
+    expect(Math.abs(closeBox.y - (privacyBox.y + privacyBox.height) - 16)).toBeLessThanOrEqual(4);
+    await close.focus();
+    await page.keyboard.press('Shift+Tab'); await page.keyboard.press('Tab'); // keyboard focus, for :focus-visible
+    expect(await css('#btn-close-companion', 'outlineColor')).toBe('rgb(45, 46, 49)');
+
+    // The Companion itself stays charcoal.
+    expect(await pipPage.locator('body').evaluate((el) => getComputedStyle(el).backgroundColor)).not.toBe('rgb(243, 235, 222)');
+
+    // Closing the Companion returns to the granted page, dark again.
+    await close.click();
+    await expect(page.locator('#mic-granted')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('body')).toHaveAttribute('data-surface', 'dark');
+    expect(await css('body', 'backgroundColor')).toBe('rgb(45, 46, 49)');
+  });
+
+  test('stays "Companion open" whatever the Companion is doing (Ready, Calibrating, Monitoring): the page does not track it', async ({ page, context }) => {
+    await page.addInitScript((profiles) => {
+      localStorage.setItem('mezzoProfiles', JSON.stringify(profiles));
+    }, SAVED_PROFILE);
+    const pipPage = await openCompanion(page, context);
+    await expect(pipPage.locator('.pip-screen-ready')).toBeVisible({ timeout: 10000 });
+    const label = page.locator('#state-dock .running-label');
+    await expect(label).toHaveText('Companion open');
     await recalibrateFromSelector(pipPage, 'Kitchen');
     await expect(pipPage.locator('.pip-screen-calibrating')).toBeVisible({ timeout: 10000 });
-    await expect(status).toHaveText('Monitoring is not active');
-    await expect(status).not.toHaveText(/Calibrating/);
+    await expect(label).toHaveText('Companion open');
+    await expect(page.locator('#state-dock h1')).toHaveText('Mezzo is running');
   });
 
-  test('shows "Monitoring is active" once monitoring actually starts, with the approved heading and Close Companion still working', async ({ page, context }) => {
-    await page.addInitScript((profiles) => {
-      localStorage.setItem('mezzoProfiles', JSON.stringify(profiles));
-    }, SAVED_PROFILE);
-    const pipPage = await openCompanion(page, context);
-    await expect(pipPage.locator('.pip-screen-ready')).toBeVisible({ timeout: 10000 });
-    await pipPage.locator('.pip-ready-start-btn').click();
-    await expect(pipPage.locator('.pip-screen-monitoring')).toBeVisible({ timeout: 5000 });
-
-    const status = page.locator('#dock-status-text');
-    await expect(status).toHaveText('Monitoring is active');
-    await expect(page.locator('#state-dock h1')).toHaveText('Your Companion is open');
-    // Same weight as the "not active" variant (see the sibling test above)
-    // — only color distinguishes the two, never weight.
-    await expect(status).toHaveCSS('font-weight', '400');
-
-    // Close Companion still has its exact prior effect — the redesign is
-    // presentation-only, this control's own behavior is unchanged.
-    await page.locator('#btn-close-companion').click();
-    await expect(page.locator('#state-home')).toBeVisible({ timeout: 5000 });
-  });
-
-  test('no illustrative Companion-window preview remains on the Dock', async ({ page, context }) => {
+  test('no illustrative Companion-window preview or status dot remains', async ({ page, context }) => {
     await page.addInitScript((profiles) => {
       localStorage.setItem('mezzoProfiles', JSON.stringify(profiles));
     }, SAVED_PROFILE);
     const pipPage = await openCompanion(page, context);
     await expect(pipPage.locator('.pip-screen-ready')).toBeVisible({ timeout: 10000 });
     await expect(page.locator('.anchor-preview-figure')).toHaveCount(0);
-    await expect(page.locator('#dock-status-dot')).toHaveCount(0);
+    await expect(page.locator('#dock-status-dot, #dock-status-text')).toHaveCount(0);
   });
 });
 
@@ -283,7 +310,6 @@ test.describe('Main page: retired content and design-tool chrome are absent', ()
   test('no old editorial section, no footer, and no design-tool state-switcher controls anywhere on the page', async ({ page }) => {
     await page.goto('/index.html');
     const bodyText = await page.locator('body').innerText();
-    expect(bodyText).not.toMatch(/How it works/);
     expect(bodyText).not.toMatch(/Designed to stay out of your way/);
     expect(bodyText).not.toMatch(/What it's good for/);
     expect(bodyText).not.toMatch(/What it doesn't do/);
@@ -296,5 +322,29 @@ test.describe('Main page: retired content and design-tool chrome are absent', ()
       await expect(page.getByRole('button', { name: label })).toHaveCount(0);
     }
     await expect(page.locator('.site-footer')).toHaveCount(0);
+  });
+});
+
+test.describe('Main page: How it works layout (2026-10-22)', () => {
+  test('desktop: one centered column — centered heading and intro, a centered 640px steps list with left-aligned steps; mobile unchanged', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto('/index.html');
+    const how = page.locator('#how-it-works');
+    const css = (sel, prop) => page.locator(sel).first().evaluate((el, p) => getComputedStyle(el)[p], prop);
+    expect(await css('#how-it-works', 'paddingTop')).toBe('88px');
+    expect(await css('#how-it-works', 'paddingBottom')).toBe('96px');
+    expect(await css('.home-how-intro', 'textAlign')).toBe('center');
+    const lede = await how.locator('.home-how-lede').boundingBox();
+    expect(lede.width).toBeLessThanOrEqual(520);
+    expect(Math.abs(lede.x + lede.width / 2 - 640)).toBeLessThan(2);
+    const list = await how.locator('.home-steps').boundingBox();
+    expect(list.width).toBeCloseTo(640, 0);
+    expect(Math.abs(list.x + list.width / 2 - 640)).toBeLessThan(2);
+    const intro = await how.locator('.home-how-intro').boundingBox();
+    expect(Math.round(list.y - (intro.y + intro.height))).toBe(40);
+    expect(await css('.home-step', 'textAlign')).not.toBe('center');
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(await css('.home-how-intro', 'textAlign')).not.toBe('center');
   });
 });

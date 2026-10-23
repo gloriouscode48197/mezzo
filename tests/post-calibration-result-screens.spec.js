@@ -42,6 +42,7 @@ import { test, expect } from '@playwright/test';
 import { openCompanion } from './support/open-companion.js';
 import { recalibrateFromSelector } from './support/recalibrate-from-selector.js';
 import { createNewProfileFromSelector } from './support/create-new-profile-from-selector.js';
+import { normalizeColor } from './support/normalize-color.js';
 
 /** Waits out the full pre-capture window (delayed disclosure + fixed 3-2-1
  *  countdown, see the calibration pacing revision) plus the ~6s capture
@@ -945,7 +946,7 @@ test.describe('Accessibility, H1 consistency, and sizing — both result variant
     expect(m1Style).toEqual(reference);
   });
 
-  test('both result variants and the naming flow now present their content inside an inset modal-style card using the Companion\'s own darker modal-surface color, with the regular outer Companion surface still visibly present around it; everything fits within the established Companion size without horizontal overflow (2026-08-17 inset-modal-card pass)', async ({ page, context }) => {
+  test('both result variants and the naming flow use the decision layer: the whole window turns slate, distinct from Ready and from the menu panel, with no inset card; everything fits within the established Companion size without overflow (Lantern, PRD §7)', async ({ page, context }) => {
     test.setTimeout(45000); // two full real captures in one test (Variant 2's own flow, then Variant 1's)
     await page.addInitScript(() => {
       localStorage.setItem('mezzoProfiles', JSON.stringify([
@@ -964,40 +965,16 @@ test.describe('Accessibility, H1 consistency, and sizing — both result variant
     const readyBg = await readyScreen.evaluate((el) => getComputedStyle(el).backgroundColor);
     const bodyBg = await pipPage.evaluate(() => getComputedStyle(document.body).backgroundColor);
     expect(bodyBg).toBe(readyBg);
+    const DECISION_BG = 'rgb(56, 57, 60)'; // --color-bg-decision (slate)
+    expect(readyBg).not.toBe(DECISION_BG);
 
-    // The modal-surface reference value — confirmed directly off a real
-    // modal card rather than hardcoded, so this test can't silently drift
-    // from whatever .pip-modal-card actually renders. No longer derived
-    // from the selector panel (2026-08-20): the panel uses its own,
-    // visibly lighter #333333 surface (restored after a manual-review
-    // contrast pass found the brief #57524A lightening this replaced
-    // caused multiple AA failures — see that rule's own CSS comment) so it
-    // reads as an interactive control rather than a third thing sharing
-    // the modal system's own color — the panel and the modal-card system
-    // are intentionally different surfaces now, not an equivalence this
-    // test should assume.
-    await recalibrateFromSelector(pipPage, 'Kitchen');
-    await waitForCapture(pipPage);
-    const firstM1 = pipPage.locator('.pip-screen-m1');
-    await expect(firstM1).toBeVisible({ timeout: 15000 });
-    const modalSurfaceBg = await firstM1.locator('.pip-modal-card').evaluate((el) => getComputedStyle(el).backgroundColor);
-    await firstM1.locator('.pip-decision-discard-btn').click();
-    await expect(readyScreen).toBeVisible({ timeout: 3000 });
-    expect(modalSurfaceBg).not.toBe(readyBg); // genuinely a different, darker value — not a no-op
-
-    // The selector's own surface is a third, distinct value — lighter than
-    // the modal-card system, still darker than the regular screen.
+    // The menu (selector panel) is a third, distinct layer.
     await readyScreen.locator('.pip-ready-selector-trigger').click();
     const selectorSurfaceBg = await pipPage.locator('.pip-ready-selector-panel').evaluate((el) => getComputedStyle(el).backgroundColor);
     await pipPage.keyboard.press('Escape');
     expect(selectorSurfaceBg).not.toBe(readyBg);
-    expect(selectorSurfaceBg).not.toBe(modalSurfaceBg);
+    expect(selectorSurfaceBg).not.toBe(DECISION_BG);
 
-    // No clipping, no unnecessary scrolling in either dimension — checked
-    // at the real 382x512 size specifically, since the revised hierarchy
-    // (Redo + a three-button decision block, one more control than before)
-    // is the thing most likely to have pushed content past the fixed
-    // height if it were going to.
     const checkContainment = async (screen) => {
       const box = await screen.boundingBox();
       const { scrollWidth, scrollHeight, clientWidth, clientHeight } = await screen.evaluate((el) => ({
@@ -1008,32 +985,20 @@ test.describe('Accessibility, H1 consistency, and sizing — both result variant
       expect(scrollHeight).toBeLessThanOrEqual(clientHeight + 1);
     };
 
-    // Confirms both halves of the inset-modal-card requirement at once for
-    // a given screen: (1) the OUTER screen itself reverted to the regular
-    // Companion surface (readyBg), so it reads as visible surface framing
-    // the card, not as the modal-surface color itself; (2) the INNER
-    // .pip-modal-card carries the actual modal-surface color instead.
-    const checkInsetModalCard = async (screen) => {
-      expect(await screen.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe(readyBg);
-      const card = screen.locator('.pip-modal-card');
-      await expect(card).toBeVisible();
-      expect(await card.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe(modalSurfaceBg);
-      // The card sits strictly inside the outer screen's own bounds on
-      // every side — the outer surface is genuinely visible around it,
-      // not merely a same-size layer underneath.
-      const [screenBox, cardBox] = await Promise.all([screen.boundingBox(), card.boundingBox()]);
-      expect(cardBox.x).toBeGreaterThan(screenBox.x);
-      expect(cardBox.y).toBeGreaterThan(screenBox.y);
-      expect(cardBox.x + cardBox.width).toBeLessThan(screenBox.x + screenBox.width);
-      expect(cardBox.y + cardBox.height).toBeLessThan(screenBox.y + screenBox.height);
+    // The whole screen is the decision surface: no card inside it, and a
+    // header bar at the very top naming the decision.
+    const checkDecisionLayer = async (screen, title) => {
+      expect(await screen.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe(DECISION_BG);
+      await expect(screen.locator('.pip-modal-card')).toHaveCount(0);
+      await expect(screen.locator('.pip-decision-bar-title')).toHaveText(title);
     };
 
-    // Variant 2 (M1) — inset modal card, modal-surface color on the card only.
+    // Variant 2 (M1).
     await recalibrateFromSelector(pipPage, 'Kitchen');
     await waitForCapture(pipPage);
     const m1Screen = pipPage.locator('.pip-screen-m1');
     await expect(m1Screen).toBeVisible({ timeout: 15000 });
-    await checkInsetModalCard(m1Screen);
+    await checkDecisionLayer(m1Screen, 'Recalibration');
     await checkContainment(m1Screen);
     await m1Screen.locator('.pip-decision-discard-btn').click();
 
@@ -1044,20 +1009,18 @@ test.describe('Accessibility, H1 consistency, and sizing — both result variant
     await waitForCapture(pipPage);
     const resultScreen = pipPage.locator('.pip-screen-result');
     await expect(resultScreen).toBeVisible({ timeout: 15000 });
-    await checkInsetModalCard(resultScreen);
+    await checkDecisionLayer(resultScreen, 'New profile');
     await checkContainment(resultScreen);
 
-    // The naming flow (M2), reached from the result screen — now shares
-    // the exact same inset-modal-card treatment (2026-08-17), no longer
-    // the plain regular-surface full-bleed screen it used to be.
+    // The naming flow (M2), reached from the result screen.
     await resultScreen.locator('.pip-decision-primary-btn', { hasText: 'Save speaking profile' }).click();
     const m2Screen = pipPage.locator('.pip-screen-decision').filter({ hasText: 'Name this profile' });
     await expect(m2Screen).toBeVisible();
-    await checkInsetModalCard(m2Screen);
+    await checkDecisionLayer(m2Screen, 'Save profile');
     await checkContainment(m2Screen);
   });
 
-  test('the darker modal-surface color is a presentational change only — no dialog/modal semantics, no overlay positioning, no new border, same full-screen layout as every other Companion state', async ({ page, context }) => {
+  test('the slate decision surface is a presentational change only — no dialog/modal semantics, no overlay positioning, no new border, same full-screen layout as every other Companion state', async ({ page, context }) => {
     const pipPage = await openCompanion(page, context);
     await pipPage.locator('button:has-text("Create speaking profile")').click();
     await pipPage.locator('button:has-text("I\'m ready")').click();
@@ -1084,10 +1047,11 @@ test.describe('Accessibility, H1 consistency, and sizing — both result variant
     // .pip-screen rule every other screen (including Ready) uses — the
     // exact values that rule declares, confirming only background was
     // restated for these two screens, nothing else. Square and borderless
-    // since 2026-10-20 (the card fills the window), inset glow kept.
+    // since 2026-10-20 (the card fills the window); flat, no inset glow,
+    // since the Lantern layers (PRD §7).
     expect(style.borderWidth).toBe('0px');
     expect(style.borderRadius).toBe('0px');
-    expect(style.boxShadow).not.toBe('none');
+    expect(style.boxShadow).toBe('none');
   });
 
   test('Keep temporarily and Discard share the exact same secondary treatment; Discard has no icon, is not destructive-red, remains enabled and keyboard-focusable, and is separated from Keep by spacing alone, never a divider', async ({ page, context }) => {
@@ -1139,7 +1103,8 @@ test.describe('Accessibility, H1 consistency, and sizing — both result variant
       primaryBtn.evaluate((el) => getComputedStyle(el).backgroundColor),
     ]);
     expect(discardStyle).toEqual(keepStyle);
-    expect(discardStyle.backgroundColor).not.toBe('rgba(0, 0, 0, 0)'); // a real, filled-looking surface, not a ghost/ ransparent button
+    // Lantern secondary (PRD §4.5): no fill, a 1px cream outline at 30%.
+    expect(normalizeColor(discardStyle.borderColor)).toBe('rgba(243, 235, 222, 0.3)');
     expect(discardStyle.backgroundColor).not.toBe(primaryBg); // still visually distinct from the primary decision above it
 
     // No icon.
@@ -1308,8 +1273,8 @@ test.describe('Shared toast restyle (2026-08-20 pass, supersedes 2026-08-15)', (
     // The approved dark #222222/light-text pairing, matching the
     // modal-card system — existing values, no new color family
     // introduced beyond the accent border below.
-    expect(toastSurface.backgroundColor).toBe('rgb(34, 34, 34)'); // #222222
-    expect(toastSurface.color).toBe('rgba(222, 210, 194, 0.85)');
+    expect(toastSurface.backgroundColor).toBe('rgb(56, 57, 60)'); // slate, --color-bg-raised
+    expect(normalizeColor(toastSurface.color)).toBe('rgba(243, 235, 222, 0.85)');
 
     // No border at all (2026-08-20 manual-review correction — an
     // orange-tinted accent border briefly existed here and read as an
@@ -1346,8 +1311,8 @@ test.describe('Shared toast restyle (2026-08-20 pass, supersedes 2026-08-15)', (
     await expect(pipPage.locator('.pip-toast')).toHaveClass(/pip-toast-visible/);
     await expect(pipPage.locator('.pip-toast-card')).toHaveText('Speaking profile saved');
     const toastSurface = await readToastSurface(pipPage);
-    expect(toastSurface.backgroundColor).toBe('rgb(34, 34, 34)');
-    expect(toastSurface.color).toBe('rgba(222, 210, 194, 0.85)');
+    expect(toastSurface.backgroundColor).toBe('rgb(56, 57, 60)');
+    expect(normalizeColor(toastSurface.color)).toBe('rgba(243, 235, 222, 0.85)');
     expect(toastSurface.borderWidth).toBe('0px');
     expect(parseFloat(toastSurface.borderRadius)).toBeLessThan(20);
   });

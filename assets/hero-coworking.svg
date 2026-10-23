@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="24 112 472 256" role="img" aria-label="Line drawing of people spread out at a shared table in a co-working space. One person wears a headset and talks in a meeting, and their voice stays inside a circle that marks their range." fill="none" stroke="#DEDE65" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+<circle cx="260" cy="210" r="86" fill="#2D2E31" stroke="#747446"/>
+<circle cx="260" cy="210" r="60" fill="#DEDE65" fill-opacity="0.08" stroke="none"/>
+<path d="M50 300 C50 248 64 236 90 236 C116 236 130 248 130 300" fill="#2D2E31" stroke="#747446"/>
+<circle cx="90" cy="214" r="17" fill="#2D2E31" stroke="#747446"/>
+<path d="M390 300 C390 248 404 236 430 236 C456 236 470 248 470 300" fill="#2D2E31" stroke="#747446"/>
+<circle cx="430" cy="214" r="17" fill="#2D2E31" stroke="#747446"/>
+<path d="M68 299 L72 268 L108 268 L112 299 Z" fill="#2D2E31" stroke="#747446"/>
+<path d="M408 299 L412 268 L448 268 L452 299 Z" fill="#2D2E31" stroke="#747446"/>
+<path d="M220 300 C220 238 234 226 260 226 C286 226 300 238 300 300" fill="#2D2E31" stroke="#DEDE65"/>
+<circle cx="260" cy="204" r="17" fill="#2D2E31" stroke="#DEDE65"/>
+<path d="M239 206 A21 21 0 0 1 281 206"/>
+<rect x="235" y="202" width="7" height="13" rx="3" fill="#2D2E31"/><rect x="278" y="202" width="7" height="13" rx="3" fill="#2D2E31"/>
+<path d="M282 213C283 219 276 216 264 213.5" stroke-width="2"/>
+<rect x="253" y="210.5" width="11" height="6" rx="3" fill="#DEDE65" stroke="none"/>
+<path d="M204 156H232A4 4 0 0 1 236 160V174A4 4 0 0 1 232 178H230L236 186L222 178H204A4 4 0 0 1 200 174V160A4 4 0 0 1 204 156Z" fill="#2D2E31"/>
+<path d="M209 165V169M213.5 162V172M218 160V174M222.5 162V172M227 165V169"/>
+<path d="M0 300H520M8 306H512M52 306V362M468 306V362" stroke="#747446"/>
+<path d="M236 299 L240 274 L280 274 L284 299 Z" fill="#2D2E31"/>
+
+</svg>
