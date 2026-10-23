@@ -1,13 +1,13 @@
 /**
- * The extension opens Mezzo in a 560×720 Chrome window
- * (extension/lib/window-manager.js), which leaves about 560×630 for the
- * page under the tab strip and address bar. Every Home state must stack
- * cleanly at that size: one column, nothing wider than the window.
+ * The extension opens Mezzo in an 800×720 Chrome window
+ * (extension/lib/window-manager.js), which leaves about 800×630 for the
+ * page under the tab strip and address bar. Every Home state must lay out
+ * cleanly at that size: nothing overlapping, nothing wider than the window.
  */
 import { test, expect } from '@playwright/test';
 import { openCompanion } from './support/open-companion.js';
 
-const VIEWPORT = { width: 560, height: 630 };
+const VIEWPORT = { width: 800, height: 630 };
 const SHOTS = process.env.MEZZO_LAYOUT_SHOTS; // optional folder for screenshots
 
 async function expectNoSidewaysScroll(page) {
@@ -19,18 +19,22 @@ async function shot(page, name) {
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: true });
 }
 
-test.describe('Home at the extension window size (560 wide)', () => {
+test.describe('Home at the extension window size (800 wide)', () => {
   test.use({ viewport: VIEWPORT });
 
-  test('prompt: the hero stacks, with the illustration below the button', async ({ page }) => {
+  test('prompt: the hero text and illustration don\'t overlap, and the button is above the fold', async ({ page }) => {
     await page.goto('/index.html');
     const hero = page.locator('#mic-request');
     await expect(hero).toBeVisible();
     await page.evaluate(() => document.querySelectorAll('.reveal').forEach((el) => el.classList.add('visible', 'revealed', 'in-view')));
     const button = await page.locator('#btn-enable-microphone').boundingBox();
     const art = await page.locator('.home-hero-illustration').boundingBox();
-    expect(art.y).toBeGreaterThan(button.y + button.height);
+    const text = await page.locator('.home-hero-text').boundingBox();
+    const beside = art.x >= text.x + text.width;
+    const below = art.y >= button.y + button.height;
+    expect(beside || below).toBe(true);
     expect(art.x + art.width).toBeLessThanOrEqual(VIEWPORT.width);
+    expect(button.y + button.height).toBeLessThanOrEqual(VIEWPORT.height);
     await expectNoSidewaysScroll(page);
     await shot(page, '1-prompt');
   });

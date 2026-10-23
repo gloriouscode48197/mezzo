@@ -397,7 +397,7 @@ Do not imply that monitoring begins directly from the meeting prompt.
 
 The user should always begin monitoring intentionally.
 
-Today, "Open Mezzo" opens (or focuses) Mezzo in its own Chrome window — a normal window with an address bar, about 560×720, lined up with the meeting window's right edge — on Home; the user still clicks Open Mezzo Companion there, since Chrome only opens a Companion from a click inside the Mezzo page. It's a separate window rather than a tab next to the meeting, since switching tabs can trigger Meet's mini window; and it keeps the address bar, since its site controls are how someone fixes a blocked microphone. From a Google Meet call, the running page shows the one-time Meet tip (see "Dock").
+Today, "Open Mezzo" opens Mezzo in its own Chrome window, in front and focused (or brings the existing one forward) — a normal window with an address bar, about 800×720, lined up with the meeting window's right edge and kept fully on screen — on Home; the user still clicks Open Mezzo Companion there, since Chrome only opens a Companion from a click inside the Mezzo page. It's a separate window rather than a tab next to the meeting, since switching tabs can trigger Meet's mini window; and it keeps the address bar, since its site controls are how someone fixes a blocked microphone. From a Google Meet call, the running page shows the one-time Meet tip (see "Dock").
 
 ## Extension Popup
 

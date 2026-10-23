@@ -14,6 +14,13 @@
 import { MezzoWindowManager } from '../lib/window-manager.js';
 import * as mezzoUrl from '../lib/mezzo-url.js';
 
+/** The screen the popup is on (available area), so Mezzo opens fully on it. */
+function availableScreen(doc) {
+  const s = doc.defaultView?.screen;
+  if (!s || !Number.isFinite(s.availWidth)) return null;
+  return { left: s.availLeft ?? 0, top: s.availTop ?? 0, width: s.availWidth, height: s.availHeight };
+}
+
 /** Renders the popup for whether Mezzo's window exists. */
 export function renderPopup(doc, running) {
   doc.querySelector('.popup').dataset.state = running ? 'running' : 'not-running';
@@ -28,14 +35,14 @@ export async function initPopup(doc = document, { windows = MezzoWindowManager, 
 
   doc.getElementById('btn-open-mezzo').addEventListener('click', () => {
     // An explicit click on the toolbar popup: bring Mezzo to the front.
-    chromeApi.runtime.sendMessage({ type: 'OPEN_MEZZO', focused: true });
+    chromeApi.runtime.sendMessage({ type: 'OPEN_MEZZO', focused: true, screen: availableScreen(doc) });
     closePopup();
   });
 
   doc.getElementById('btn-show-mezzo').addEventListener('click', async () => {
     const win = await windows.getExistingWindow();
     if (win) await windows.focusWindow(win);
-    else chromeApi.runtime.sendMessage({ type: 'OPEN_MEZZO', focused: true }); // closed in the meantime
+    else chromeApi.runtime.sendMessage({ type: 'OPEN_MEZZO', focused: true, screen: availableScreen(doc) }); // closed in the meantime
     closePopup();
   });
 

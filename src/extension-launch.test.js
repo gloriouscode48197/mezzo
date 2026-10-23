@@ -7,6 +7,7 @@
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { placeWindow } from '../extension/lib/positioning.js';
 import { LIVE_BASE_URL, normalizeBaseUrl, isUnpacked, getBaseUrl, setBaseUrlOverride, clearBaseUrlOverride } from '../extension/lib/mezzo-url.js';
 
 function fakeChrome({ unpacked = true } = {}) {
@@ -28,7 +29,13 @@ function fakeChrome({ unpacked = true } = {}) {
         remove: async () => {},
       },
     },
-    windows: { create: async (o) => { created.push(o); return { id: 7 }; }, get: async () => { throw new Error('none'); } },
+    focused: [],
+    windows: {
+      create: async (o) => { created.push(o); return { id: 7 }; },
+      get: async () => { throw new Error('none'); },
+      getLastFocused: async () => { throw new Error('none'); },
+      update: async (id, o) => { created.focusedUpdates = [...(created.focusedUpdates ?? []), { id, ...o }]; },
+    },
   };
 }
 
@@ -64,13 +71,60 @@ describe('extension: Mezzo address', () => {
 describe('extension: Mezzo window', () => {
   beforeEach(() => { globalThis.chrome = fakeChrome(); });
 
-  it('opens a normal window (with an address bar), 560×720, not a bare popup', async () => {
+  it('opens a normal window (with an address bar), 800×720, focused, not a bare popup', async () => {
     const { MezzoWindowManager } = await import('../extension/lib/window-manager.js');
     await MezzoWindowManager.openOrFocus({ url: 'https://mezzo-one.vercel.app/index.html', focused: true });
     const [opts] = globalThis.chrome.created;
     assert.equal(opts.type, 'normal');
-    assert.equal(opts.width, 560);
+    assert.equal(opts.width, 800);
     assert.equal(opts.height, 720);
+    assert.equal(opts.focused, true);
+  });
+});
+
+describe('extension: Mezzo window, existing', () => {
+  it('an existing window is brought to the front and restored, never re-created', async () => {
+    const chrome = fakeChrome();
+    chrome.storage.session.get = async () => ({ mezzoCompanionWindowId: 9 });
+    chrome.windows.get = async (id) => ({ id, state: 'minimized' });
+    globalThis.chrome = chrome;
+    const { MezzoWindowManager } = await import('../extension/lib/window-manager.js');
+    await MezzoWindowManager.openOrFocus({ url: 'https://mezzo-one.vercel.app/index.html' });
+    assert.equal(chrome.created.length, 0);
+    assert.deepEqual(chrome.created.focusedUpdates, [{ id: 9, focused: true, state: 'normal' }]);
+  });
+});
+
+describe('extension: window placement', () => {
+  const size = { width: 800, height: 720 };
+  const screen = { left: 0, top: 25, width: 1512, height: 920 };
+
+  it('lines up with the meeting window\'s right edge', () => {
+    assert.deepEqual(placeWindow(size, { left: 0, top: 25, width: 1512 }, screen), { width: 800, height: 720, left: 688, top: 49 });
+  });
+
+  it('stays fully on screen when the meeting window runs past it', () => {
+    const p = placeWindow(size, { left: 900, top: 600, width: 1400 }, screen);
+    assert.equal(p.left + p.width, 1512);
+    assert.equal(p.top + p.height, 945);
+  });
+
+  it('shrinks to fit a screen smaller than the window', () => {
+    assert.deepEqual(placeWindow(size, { left: 0, top: 0, width: 700 }, { left: 0, top: 0, width: 700, height: 600 }), { width: 700, height: 600, left: 0, top: 0 });
+  });
+
+  it('a second display to the left (negative coordinates) still clamps to that display', () => {
+    const p = placeWindow(size, { left: -1900, top: 0, width: 1900 }, { left: -1920, top: 0, width: 1920, height: 1080 });
+    assert.equal(p.left, -1920 + 1920 - 800 - 24);
+    assert.ok(p.left >= -1920 && p.left + p.width <= 0);
+  });
+
+  it('without a meeting window, the right side of the screen', () => {
+    assert.deepEqual(placeWindow(size, null, screen), { width: 800, height: 720, left: 688, top: 49 });
+  });
+
+  it('with neither, the browser picks the position', () => {
+    assert.deepEqual(placeWindow(size, null, null), { width: 800, height: 720 });
   });
 });
 
@@ -82,6 +136,11 @@ describe('extension: meeting banner', () => {
     for (const c of ['#2D2E31', '#DEDE65', '#CEE2C4', '#F3EBDE']) assert.ok(src.includes(c), c);
     assert.match(src, /border-radius: 3px/);
     for (const old of ['Georgia', '#C4593A', '#F0EBE2', '#AE4D31', '100px']) assert.ok(!src.includes(old), old);
+  });
+
+  it('"Open Mezzo" asks for a focused window and sends the screen it was clicked on', () => {
+    assert.match(src, /type: 'OPEN_MEZZO', focused: true, platform: platform\.name, screen: availableScreen\(\)/);
+    assert.doesNotMatch(src, /focused: false/);
   });
 
   it('says "Meeting detected", "Open Mezzo" and "Not now"', () => {

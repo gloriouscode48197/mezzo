@@ -11,12 +11,12 @@ import { computeCompanionBounds } from './positioning.js';
 const WINDOW_ID_KEY = 'mezzoCompanionWindowId';
 // A normal Chrome window, not a bare popup: it keeps the address bar, whose
 // site controls are how someone fixes a blocked microphone (Home's denied
-// state points there). Narrow, since once the Companion is open this
-// window mostly shows the running page, and a big one covers the call;
-// Home stacks to one column at this width. Still its own window, so Mezzo
-// never becomes a tab beside the meeting (switching tabs can trigger Meet's
-// automatic mini window, which closes the Companion).
-const COMPANION_WIDTH = 560;
+// state points there). 800 wide: enough for Home without covering the
+// whole call (positioning.js keeps it on screen, shrinking it on a small
+// one). Still its own window, so Mezzo never becomes a tab beside the
+// meeting (switching tabs can trigger Meet's automatic mini window, which
+// closes the Companion).
+const COMPANION_WIDTH = 800;
 const COMPANION_HEIGHT = 720;
 
 async function getStoredWindowId() {
@@ -51,8 +51,8 @@ async function focusWindow(win) {
   });
 }
 
-async function createWindow(url, focused, senderTabId) {
-  const bounds = await computeCompanionBounds(senderTabId, COMPANION_WIDTH, COMPANION_HEIGHT);
+async function createWindow(url, focused, senderTabId, screen) {
+  const bounds = await computeCompanionBounds(senderTabId, COMPANION_WIDTH, COMPANION_HEIGHT, screen);
   const win = await chrome.windows.create({
     url,
     type: 'normal',
@@ -71,15 +71,17 @@ export const MezzoWindowManager = {
    * Open a new companion window, or focus/restore the existing one.
    * If a window already exists, its content is never navigated — only
    * focused — so an active monitoring/PiP session is never disturbed.
-   * `url`/`senderTabId` only matter for first creation.
+   * `url`/`senderTabId`/`screen` only matter for first creation. Every
+   * launch comes from a click, so the window opens (or comes) to the front:
+   * opened behind the browser, a click looked like it did nothing.
    */
-  async openOrFocus({ url, focused = true, senderTabId = null }) {
+  async openOrFocus({ url, focused = true, senderTabId = null, screen = null }) {
     const existing = await getValidExistingWindow();
     if (existing) {
       await focusWindow(existing);
       return existing;
     }
-    return createWindow(url, focused, senderTabId);
+    return createWindow(url, focused, senderTabId, screen);
   },
 
   /** The Mezzo window, if it's open (the popup's "running" state). */

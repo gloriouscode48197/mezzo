@@ -187,7 +187,8 @@
       // between "start with last profile" and "let me pick a profile"
       // (both land in the same place); background.js clears the badge too.
       // platform: lets Mezzo show its one-time Meet tip (see background.js).
-      sendMessageSafely({ type: 'OPEN_MEZZO', focused: false, platform: platform.name });
+      // screen: lets the window open fully on this screen (lib/positioning.js).
+      sendMessageSafely({ type: 'OPEN_MEZZO', focused: true, platform: platform.name, screen: availableScreen() });
       removeBanner();
     });
     const dismiss = () => {
@@ -215,6 +216,11 @@
       document.fonts.add(face);
       face.load().catch(() => {});
     } catch { /* system font */ }
+  }
+
+  function availableScreen() {
+    const s = window.screen;
+    return { left: s.availLeft ?? 0, top: s.availTop ?? 0, width: s.availWidth, height: s.availHeight };
   }
 
   function removeBanner() {

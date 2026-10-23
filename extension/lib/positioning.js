@@ -1,42 +1,58 @@
 /**
- * computeCompanionBounds — sizes and positions the Mezzo companion window
- * so it sits beside a meeting window rather than covering its center.
+ * Where the Mezzo window opens: lined up with the right edge of the window
+ * the click came from (the meeting window, or the browser window behind the
+ * toolbar popup), and always fully on screen.
  *
- * Deliberately does not use chrome.system.display (would require an extra
- * "system.display" permission just for cosmetic positioning). Instead it
- * reads the sender tab's own window bounds — already available via the
- * unprivileged chrome.windows.get — and pins the companion to that
- * window's right edge. This is a reasonable approximation, not true
- * per-monitor awareness: on unusual multi-monitor layouts the companion
- * may land less precisely than chrome.system.display would allow.
+ * Deliberately no chrome.system.display (an extra permission just for
+ * placement). The page that was clicked (the meeting tab, or the toolbar
+ * popup) reads its own `screen.avail*` and sends it along; the anchor
+ * window's bounds come from the unprivileged chrome.windows API. Without a
+ * screen, the window still lines up with the anchor, unclamped; without an
+ * anchor either, the browser picks the position.
  */
 
 const EDGE_MARGIN = 24;
 
-export async function computeCompanionBounds(senderTabId, width, height) {
-  if (typeof senderTabId !== 'number') {
-    // No meeting window to avoid (e.g. launched from the toolbar icon or
-    // popup) — let the OS/browser pick a default position.
-    return { width, height };
-  }
+/**
+ * Pure placement math.
+ * @param {{ width: number, height: number }} size - the preferred size
+ * @param {{ left: number, top: number, width: number } | null} anchor
+ * @param {{ left: number, top: number, width: number, height: number } | null} screen - available area
+ * @returns {{ width: number, height: number, left?: number, top?: number }}
+ */
+export function placeWindow(size, anchor, screen) {
+  const valid = (o, keys) => !!o && keys.every((k) => Number.isFinite(o[k]));
+  const hasScreen = valid(screen, ['left', 'top', 'width', 'height']);
+  const width = Math.round(hasScreen ? Math.min(size.width, screen.width) : size.width);
+  const height = Math.round(hasScreen ? Math.min(size.height, screen.height) : size.height);
+  const hasAnchor = valid(anchor, ['left', 'top', 'width']);
+  if (!hasAnchor && !hasScreen) return { width, height };
 
+  // Lined up with the anchor's right edge, or the screen's without one.
+  const box = hasAnchor ? anchor : screen;
+  let left = box.left + box.width - width - EDGE_MARGIN;
+  left = Math.max(box.left, left); // never left of the anchor window itself
+  let top = box.top + EDGE_MARGIN;
+  if (hasScreen) {
+    left = Math.min(Math.max(left, screen.left), screen.left + screen.width - width);
+    top = Math.min(Math.max(top, screen.top), screen.top + screen.height - height);
+  }
+  return { width, height, left: Math.round(left), top: Math.round(top) };
+}
+
+/** The anchor window for a launch: the sender tab's window, else the last focused browser window. */
+async function anchorWindow(senderTabId) {
   try {
-    const tab = await chrome.tabs.get(senderTabId);
-    const win = await chrome.windows.get(tab.windowId);
-    if (
-      typeof win.left !== 'number' ||
-      typeof win.top !== 'number' ||
-      typeof win.width !== 'number'
-    ) {
-      return { width, height };
+    if (typeof senderTabId === 'number') {
+      const tab = await chrome.tabs.get(senderTabId);
+      return await chrome.windows.get(tab.windowId);
     }
-
-    let left = Math.round(win.left + win.width - width - EDGE_MARGIN);
-    left = Math.max(win.left, left); // never sit left of the meeting window itself
-    const top = Math.round(win.top + EDGE_MARGIN);
-
-    return { width, height, left, top };
+    return await chrome.windows.getLastFocused({ windowTypes: ['normal'] });
   } catch {
-    return { width, height };
+    return null;
   }
+}
+
+export async function computeCompanionBounds(senderTabId, width, height, screen = null) {
+  return placeWindow({ width, height }, await anchorWindow(senderTabId), screen);
 }

@@ -39,17 +39,16 @@ const BADGE_TEXT_COLOR = '#DEDE65';
  * Open Mezzo, or refocus/restore the existing window. It always lands on
  * Home (or the Dock, if a session from an earlier launch is still running)
  * — monitoring never auto-starts, so there's no launch-mode distinction to
- * make here. `focused: false` is
- * best-effort (Chrome/OS do not guarantee unfocused window creation) —
- * used for meeting-prompt launches so the meeting stays undisturbed
- * whenever possible.
+ * make here. Both launches (the toolbar popup, the meeting banner) are
+ * clicks, so the window always opens focused, in front. `screen` is the
+ * clicked page's available screen area, used to keep the window on screen.
  */
-async function openMezzo({ focused = true, senderTabId = null, platform = null } = {}) {
+async function openMezzo({ senderTabId = null, platform = null, screen = null } = {}) {
   // Launched from a Meet call: Mezzo shows a one-time tip about Meet's own
   // mini window (see src/home-dock.js). Only used when the window is new.
   const entry = `${await getBaseUrl()}/index.html`;
   const url = platform === 'Google Meet' ? `${entry}?from=meet` : entry;
-  await MezzoWindowManager.openOrFocus({ url, focused, senderTabId });
+  await MezzoWindowManager.openOrFocus({ url, focused: true, senderTabId, screen });
 }
 
 function setBadge(tabId, active) {
@@ -67,11 +66,11 @@ chrome.runtime.onMessage.addListener((message, sender) => {
   if (message?.type === 'MEETING_ACTIVE') {
     setBadge(sender?.tab?.id, message.active);
   } else if (message?.type === 'OPEN_MEZZO') {
-    // Used by the meeting banner's and the popup's "Open Companion" button.
+    // The meeting banner's and the popup's "Open Mezzo" button.
     openMezzo({
-      focused: message.focused,
       senderTabId: sender?.tab?.id ?? null,
       platform: message.platform ?? null,
+      screen: message.screen ?? null,
     });
     if (sender?.tab?.id) setBadge(sender.tab.id, false);
   }

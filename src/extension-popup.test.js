@@ -49,7 +49,9 @@ describe('extension popup', () => {
     const { document, calls, init } = setup();
     await init();
     document.getElementById('btn-open-mezzo').click();
-    assert.deepEqual(calls.messages, [{ type: 'OPEN_MEZZO', focused: true }]);
+    assert.equal(calls.messages.length, 1);
+    assert.equal(calls.messages[0].type, 'OPEN_MEZZO');
+    assert.equal(calls.messages[0].focused, true);
     assert.equal(calls.closed, 1);
   });
 
