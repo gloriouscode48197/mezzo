@@ -34,9 +34,17 @@ test.describe('First-time copy and calibration-entry routing', () => {
       const cs = getComputedStyle(el);
       return [cs.fontSize, cs.fontWeight, cs.letterSpacing, cs.color, cs.textTransform, cs.fontFamily.split(',')[0]];
     })).toEqual(['30px', '600', '-1.35px', 'rgb(243, 235, 222)', 'lowercase', 'Geist']);
-    const [markBox, bodyBox] = await Promise.all([wordmark.boundingBox(), welcomeScreen.locator('.pip-intro-body').boundingBox()]);
-    expect(markBox.y).toBeLessThan(bodyBox.y);
-    expect(markBox.y).toBeLessThan(40);
+    // Wordmark and body read as one group, about 16px apart; the privacy
+    // line and the button sit at the bottom.
+    const [markBox, bodyBox, privacyBox, buttonBox] = await Promise.all([
+      wordmark.boundingBox(),
+      welcomeScreen.locator('.pip-intro-body').boundingBox(),
+      welcomeScreen.locator('.pip-intro-disclaimer').boundingBox(),
+      welcomeScreen.locator('.pip-intro-primary-btn').boundingBox(),
+    ]);
+    expect(Math.abs(bodyBox.y - (markBox.y + markBox.height) - 16)).toBeLessThanOrEqual(1);
+    expect(privacyBox.y - (bodyBox.y + bodyBox.height)).toBeGreaterThan(30);
+    expect(pipPage.viewportSize().height - (buttonBox.y + buttonBox.height)).toBeLessThan(40);
     await expect(welcomeScreen).not.toContainText('Welcome');
     await expect(welcomeScreen.locator('.pip-intro-body')).toHaveText(
       "A gentle nudge when you're talking louder than you'd like. First, a quick voice calibration."

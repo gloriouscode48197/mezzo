@@ -378,7 +378,7 @@ test.describe('Monitoring presentation: Stop and the profile name at every size 
 });
 
 test.describe('Monitoring presentation: explicit Compact', () => {
-  test('220×220 at rest: the Range Ring with the profile name above it; Stop and Expand not yet revealed', async ({ page, context }) => {
+  test('220×220 at rest: the Range Ring with the profile name above it; Stop and Expand quiet at 35%', async ({ page, context }) => {
     const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 220, height: 220 } });
     await enterCompact(pipPage, monitoringScreen);
 
@@ -395,8 +395,13 @@ test.describe('Monitoring presentation: explicit Compact', () => {
     await expect(monitoringScreen.locator('.mezzo-ring')).toBeVisible();
     const stop = monitoringScreen.locator('.pip-control-btn-stop');
     const expandBtn = monitoringScreen.locator('.pip-control-btn-expand');
-    await expect(stop).toHaveCSS('opacity', '0');
-    await expect(expandBtn).toHaveCSS('opacity', '0');
+    // Present but quiet at rest (35%): always reachable by keyboard and touch.
+    await expect(stop).toHaveCSS('opacity', '0.35');
+    await expect(expandBtn).toHaveCSS('opacity', '0.35');
+    for (const btn of [stop, expandBtn]) {
+      expect(await btn.evaluate((el) => getComputedStyle(el).pointerEvents)).not.toBe('none');
+      expect(await btn.evaluate((el) => el.tabIndex)).toBe(0);
+    }
     // Never focusable-while-invisible check is separate (below) — this only
     // confirms the resting, unrevealed visual state.
     await assertNoOverflow(pipPage);

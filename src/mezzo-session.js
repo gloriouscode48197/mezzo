@@ -1487,12 +1487,13 @@ export function createMezzoSession({
       .pip-screen-c1 .pip-intro-primary-btn {
         margin-top: 14px;
       }
-      /* Welcome's heading is the wordmark itself, pinned to the top. */
+      /* Welcome: the wordmark (its heading) and the body read as one group,
+         16px apart, centered in the space above the privacy line and the
+         button, which sit at the bottom. */
+      .pip-screen-welcome .pip-welcome-wordmark { margin-top: auto; }
+      .pip-screen-welcome .pip-intro-body { margin-top: 4px; } /* + the screen's 12px gap = 16px */
+      .pip-screen-welcome .pip-intro-disclaimer { margin-top: auto; }
       h1.pip-welcome-wordmark {
-        position: absolute;
-        top: 28px;
-        left: 0;
-        right: 0;
         margin: 0;
         font-family: var(--font-display);
         font-weight: var(--weight-semibold);
@@ -2827,8 +2828,8 @@ export function createMezzoSession({
          a media query: an already-Compact window keeps this presentation
          even if manually resized larger. The ring and the profile name
          above it are what shows at rest; Stop (bottom left) and Expand
-         (top right) fade in on hover or keyboard focus, opacity only, so
-         both stay real, focusable buttons the whole time. The zone live
+         (top right) rest at 35% and come to full on hover or keyboard
+         focus, opacity only, so both stay real, focusable buttons. The zone live
          region is outside the header, so nothing here can silence it. ── */
       /* Compact drops the inset glow — at this size it read as a dark rim. */
       body[data-layout="compact"] .pip-screen-monitoring {
@@ -2868,8 +2869,10 @@ export function createMezzoSession({
       body[data-layout="compact"] .pip-control-btn-compact {
         display: none;
       }
+      /* At rest the corner controls are present but quiet (35%); hover or
+         keyboard focus brings them to full. Always focusable and tappable. */
       body[data-layout="compact"] .pip-control-btn-stop {
-        opacity: 0;
+        opacity: 0.35;
       }
       body[data-layout="compact"] .pip-control-btn-expand {
         display: flex;
@@ -2886,7 +2889,7 @@ export function createMezzoSession({
         color: color-mix(in srgb, var(--color-text-muted) 82%, transparent);
         background: color-mix(in srgb, var(--color-overlay) 6%, transparent);
         border: 1px solid color-mix(in srgb, var(--color-overlay) 10%, transparent);
-        opacity: 0;
+        opacity: 0.35;
       }
       body[data-layout="compact"] .pip-control-btn-expand:hover {
         background: color-mix(in srgb, var(--color-overlay) 12%, transparent);
