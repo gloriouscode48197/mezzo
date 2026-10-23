@@ -7,9 +7,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="design-tokens/mezzo-tokens.css">
+  <link rel="stylesheet" href="design-tokens/mezzo-tokens.css?v=14">
   <link rel="stylesheet" href="calibration.css">
-  <link rel="stylesheet" href="privacy.css">
+  <link rel="stylesheet" href="privacy.css?v=2">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" sizes="16x16" href="icons/icon-16.svg?v=2">
   <link rel="icon" type="image/svg+xml" sizes="32x32" href="icons/icon-32.svg?v=2">
@@ -37,6 +37,15 @@
   </nav>
 
   <div class="page page-fade" data-surface="dark" style="opacity: 0">
+    <div class="privacy-layout">
+    <!-- Built from this page's H2s and H3s (src/page-outline.js). A sticky
+         column on wide screens; a collapsible list above the text on narrow
+         ones. -->
+    <nav class="privacy-outline" aria-label="On this page">
+      <details class="outline-details">
+        <summary class="outline-summary">On this page</summary>
+      </details>
+    </nav>
     <main class="privacy-content">
       <h1 class="type-section-heading privacy-title reveal">Privacy & Data Use</h1>
 
@@ -45,7 +54,7 @@
       </div>
 
       <div class="privacy-section reveal">
-        <h2 class="type-privacy-h2">Audio handling</h2>
+        <h2 class="type-privacy-h2" id="audio-handling">Audio handling</h2>
         <ul class="type-body privacy-list">
           <li>Mezzo listens only to audio volume levels, not speech content</li>
           <li>Audio is processed locally in your browser</li>
@@ -56,7 +65,7 @@
       </div>
 
       <div class="privacy-section reveal">
-        <h2 class="type-privacy-h2">Speaking Profiles</h2>
+        <h2 class="type-privacy-h2" id="speaking-profiles">Speaking Profiles</h2>
         <p class="type-body">Speaking profiles are stored only in your browser.</p>
         <ul class="type-body privacy-list">
           <li>Mezzo saves only the profile name and a derived calibration value, so you can reuse it later without recalibrating</li>
@@ -67,7 +76,7 @@
       </div>
 
       <div class="privacy-section reveal">
-        <h2 class="type-privacy-h2">Anonymous usage data</h2>
+        <h2 class="type-privacy-h2" id="anonymous-usage-data">Anonymous usage data</h2>
         <p class="type-body">Mezzo collects minimal, anonymous usage data to understand how the product is being used and to improve its effectiveness.</p>
         <p class="type-body">On your first visit, Mezzo generates a random, anonymous identifier and stores it locally in your browser. This identifier is not tied to your identity and is not shared across websites or devices.</p>
         <p class="type-body">We use this identifier only to answer high-level questions such as:</p>
@@ -80,7 +89,7 @@
       </div>
 
       <div class="privacy-section reveal">
-        <h2 class="type-privacy-h2">What Mezzo does not do</h2>
+        <h2 class="type-privacy-h2" id="what-mezzo-does-not-do">What Mezzo does not do</h2>
         <ul class="type-body privacy-list">
           <li>No recording or storage of audio</li>
           <li>No transcription or keyword detection</li>
@@ -90,7 +99,7 @@
       </div>
 
       <div class="privacy-section reveal">
-        <h2 class="type-privacy-h2">Your control</h2>
+        <h2 class="type-privacy-h2" id="your-control">Your control</h2>
         <p class="type-body">Because Mezzo runs entirely in the browser:</p>
         <ul class="type-body privacy-list">
           <li>Closing the tab stops monitoring</li>
@@ -101,18 +110,20 @@
         <!-- <p class="type-body">If you have questions about privacy or data use, you can contact us at: <span class="type-body" style="opacity: 0.5">[email address]</span></p> -->
       </div>
     </main>
+    </div>
 
   </div>
 
-  <footer class="site-footer" data-surface="dark">
-    <span class="type-footer-brand">© Mezzo</span>
-    <a href="privacy.html" class="type-footer-link">Privacy</a>
-  </footer>
-
   <script type="module">
     import { pageEnter } from './src/page-transition.js';
+    import { initPageOutline } from './src/page-outline.js';
 
     pageEnter();
+    initPageOutline({
+      content: document.querySelector('.privacy-content'),
+      nav: document.querySelector('.privacy-outline'),
+      details: document.querySelector('.outline-details'),
+    });
 
     const revealEls = document.querySelectorAll('.reveal');
     const observer = new IntersectionObserver(

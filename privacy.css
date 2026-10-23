@@ -14,15 +14,6 @@
   color: var(--color-on-accent);
 }
 
-.privacy-content {
-  flex: 1;
-  padding: var(--space-section) 32px;
-  max-width: 720px;
-  margin-left: auto;
-  margin-right: auto;
-  width: 100%;
-}
-
 .privacy-title { margin-bottom: var(--space-section); }
 
 .privacy-section { margin-bottom: var(--space-section); }
@@ -73,11 +64,116 @@
   transform: translateY(0);
 }
 
-/* ── Responsive ── */
-@media (min-width: 900px) {
-  .privacy-content {
-    max-width: calc((100vw - 240px) / 2 + 240px);
-    padding-left: 120px;
-    padding-right: 120px;
+/* ── Layout: the outline beside the policy (wide), or above it (narrow).
+   Lines up with the nav's 1120px container and 24px gutters. ── */
+.privacy-layout {
+  width: 100%;
+  max-width: calc(1120px + 48px); /* 1120 of content, like the nav */
+  margin: 0 auto;
+  padding: 0 24px;
+  box-sizing: border-box;
+}
+
+.privacy-content {
+  padding: var(--space-section) 0;
+  max-width: 680px;
+  margin: 0;
+}
+
+/* Jumping to a section leaves room for the sticky 76px header. */
+.privacy-content h2,
+.privacy-content h3 { scroll-margin-top: 104px; }
+
+@media (prefers-reduced-motion: no-preference) {
+  html { scroll-behavior: smooth; }
+}
+
+/* ── The outline ── */
+.privacy-outline {
+  font-family: var(--font-body);
+  font-size: 14px;
+}
+.outline-summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+.outline-summary::-webkit-details-marker { display: none; }
+.outline-summary::after {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform 0.15s ease;
+}
+.outline-details[open] > .outline-summary::after { transform: translateY(2px) rotate(-135deg); }
+.outline-summary:hover { color: var(--color-text); }
+
+.outline-list,
+.outline-sublist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.outline-sublist { padding-left: 14px; }
+.outline-link {
+  display: block;
+  padding: 6px 0 6px 14px;
+  margin-left: -1px;
+  border-left: 2px solid transparent;
+  color: var(--color-text-muted);
+  text-decoration: none;
+  line-height: 1.4;
+  transition: color 0.12s ease;
+}
+.outline-link:hover { color: var(--color-text); }
+.outline-link[aria-current="location"] {
+  color: var(--color-link);
+  border-left-color: var(--color-link);
+}
+.outline-link:focus-visible,
+.outline-summary:focus-visible {
+  outline: 2px solid var(--color-link);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Narrow: a collapsible list above the policy. */
+@media (max-width: 899px) {
+  .privacy-outline {
+    margin-top: 32px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
   }
+  .outline-list { padding: 0 14px 10px 0; border-left: 1px solid var(--border); margin-left: 14px; }
+  .privacy-content { padding-top: 40px; }
+}
+
+/* Wide: a sticky left column. */
+@media (min-width: 900px) {
+  .privacy-layout {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 680px);
+    column-gap: 80px;
+    align-items: start;
+  }
+  .privacy-outline {
+    position: sticky;
+    top: 104px;
+    margin-top: calc(var(--space-section) + 6px);
+    max-height: calc(100vh - 128px);
+    overflow-y: auto;
+  }
+  .outline-summary { display: none; }
+  .outline-list { border-left: 1px solid var(--border); }
 }

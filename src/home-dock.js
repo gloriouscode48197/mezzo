@@ -113,9 +113,8 @@ export function initHomeDock({
     const nextEl = allStates[name];
     if (!nextEl) return;
 
-    // Presentational only — lets CSS (see landing.css's .site-footer rules)
-    // key a page-level treatment off which state is showing, e.g. the
-    // footer background, without this module owning any styling itself.
+    // Presentational only — lets CSS key a page-level treatment off which
+    // state is showing, without this module owning any styling itself.
     document.body.dataset.pageState = name;
     // The running state (the Dock) is the website's one cream surface.
     document.body.dataset.surface = name === 'dock' ? 'cream' : 'dark';

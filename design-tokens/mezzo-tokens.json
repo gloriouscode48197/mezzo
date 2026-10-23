@@ -187,10 +187,6 @@
       "$value": "16px",
       "$type": "spacing",
       "$description": "CTA to privacy/microcopy line"
-    },
-    "footer-padding": {
-      "$value": "20px 32px",
-      "$type": "spacing"
     }
   },
   "radius": {

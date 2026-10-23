@@ -120,7 +120,6 @@
   --space-heading-to-content: 40px;
   --space-circle-to-button: 48px;
   --space-button-to-micro: 16px;
-  --space-footer: 20px 32px;
 
   /* Shadows */
   --shadow-pip-window: 0 4px 24px color-mix(in srgb, var(--color-shadow) 25%, transparent);
@@ -268,29 +267,6 @@ p, li, figcaption, label { text-wrap: pretty; }
   border-bottom: 2px solid var(--color-nav-active);
 }
 
-/* ═══════════════════════════════════════════
-   Global Footer
-   One canonical footer, shared by every page — do not redefine .site-footer
-   in a page-specific stylesheet. Content is always "© Mezzo" + "Privacy".
-   ═══════════════════════════════════════════ */
-
-.site-footer {
-  background: var(--surface);
-  border-top: 1px solid var(--border);
-  padding: var(--space-footer);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-@media (min-width: 700px) {
-  .site-footer { padding-left: 48px; padding-right: 48px; }
-}
-
-@media (min-width: 1100px) {
-  .site-footer { padding-left: 120px; padding-right: 120px; }
-}
-
 .type-monitoring-within {
   font-family: var(--font-display);
   font-weight: var(--weight-medium);
@@ -390,23 +366,6 @@ p, li, figcaption, label { text-wrap: pretty; }
 .type-pip-pill { font-size: 11px; color: var(--text-subdued); }
 .type-state-label { font-size: 10px; color: var(--text-ghost); }
 
-.type-footer-brand {
-  font-family: var(--font-body);
-  font-weight: var(--weight-regular);
-  font-size: 12px;
-  color: var(--color-text-muted);
-}
-
-.type-footer-link {
-  font-family: var(--font-body);
-  font-weight: var(--weight-regular);
-  font-size: 12px;
-  color: var(--color-text-muted);
-  text-decoration: none;
-  transition: var(--transition-hover);
-}
-
-.type-footer-link:hover { color: var(--color-link); }
 
 
 /* ═══════════════════════════════════════════
