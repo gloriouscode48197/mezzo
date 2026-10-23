@@ -3,7 +3,7 @@
  * five-profile limit (M3), delete confirmation (06b), and discard flows
  * defined by docs/prd/ready-screen-speaking-profiles-mvp.md. See
  * tests/monitoring-transition.spec.js for the session-calibration and
- * saved-profile-recalibration -> Monitoring paths (M1's Replace action);
+ * saved-profile-recalibration -> Monitoring paths (M1's Update action);
  * this file covers the remaining decision states and the selector itself.
  */
 
@@ -16,7 +16,7 @@ import { createNewProfileFromSelector } from './support/create-new-profile-from-
 /** Waits out the full pre-capture window (see the calibration pacing
  *  revision, second pass) — up to a 500ms delayed-disclosure wait, a
  *  further 500ms minimum-display window (only if "Preparing microphone…"
- *  actually rendered), and the fixed 3s "Start speaking in 3/2/1" countdown
+ *  actually rendered), and the fixed 3s 3-2-1 countdown
  *  (DEFAULT_PREPARATION_MS) — plus the ~6s capture window itself. 11200ms
  *  preserves the same ~1200ms slack the original 7200ms figure already
  *  carried beyond the 6s capture window itself, now also covering the
@@ -95,7 +95,7 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
     await expect(pipPage.locator('.pip-toast-card')).toHaveText('Speaking profile saved');
   });
 
-  test('Save profile with a name matching an existing profile shows M2a and Replace overwrites it in place', async ({ page, context }) => {
+  test('Save profile with a name matching an existing profile shows M2a and Update overwrites it in place', async ({ page, context }) => {
     await page.addInitScript(() => {
       localStorage.setItem('mezzoProfiles', JSON.stringify([
         { id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 200 },
@@ -116,14 +116,14 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
     await m2Screen.locator('input[type="text"]').fill('Kitchen');
     await expect(m2Screen.locator('.pip-decision-warning')).toHaveText('A profile named "Kitchen" already exists.');
     const submitBtn = m2Screen.locator('button[type="submit"]');
-    await expect(submitBtn).toHaveText('Replace');
+    await expect(submitBtn).toHaveText('Update');
     await submitBtn.click();
 
     await expect(readyScreen).toBeVisible({ timeout: 3000 });
     await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Kitchen');
-    await expect(pipPage.locator('.pip-toast-card')).toHaveText('Profile "Kitchen" replaced');
+    await expect(pipPage.locator('.pip-toast-card')).toHaveText('Profile "Kitchen" updated');
 
-    // Still exactly one saved profile — Replace updates in place, never adds a duplicate.
+    // Still exactly one saved profile — Update updates in place, never adds a duplicate.
     await readyScreen.locator('.pip-ready-selector-trigger').click();
     await expect(pipPage.locator('.pip-ready-selector-panel .pip-ready-selector-row')).toHaveCount(1);
   });
@@ -998,7 +998,7 @@ test.describe('Naming flow (M2/M2a) polish — decision layer, heading typograph
 });
 
 test.describe('Migration: profiles saved before the speech-band filter (2026-10-22)', () => {
-  test('a profile without a calibration peak shows "Recalibrate to use the improved sound filter." on Ready; a current one does not; nothing is deleted', async ({ page, context }) => {
+  test('a profile without a calibration peak explains why to recalibrate on Ready, with an inline Recalibrate link; a current one does not; nothing is deleted', async ({ page, context }) => {
     const profiles = [
       { id: 'old', name: 'Old office', speakingDb: -30, spreadDb: 4, calibratedTs: 1 },
       { id: 'new', name: 'New office', speakingDb: -30, spreadDb: 4, calibratedTs: 2, peakDb: 2.4, roomNoiseDb: -49 },
@@ -1010,7 +1010,13 @@ test.describe('Migration: profiles saved before the speech-band filter (2026-10-
     const pipPage = await openCompanion(page, context);
     const readyScreen = pipPage.locator('.pip-screen-ready');
     await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Old office');
-    await expect(readyScreen.locator('.pip-ready-recalibrate-note')).toHaveText('Recalibrate to use the improved sound filter.');
+    const note = readyScreen.locator('.pip-ready-recalibrate-note');
+    await expect(note).toHaveText("This profile was made before Mezzo's improved sound filter. Recalibrate for more accurate nudges.");
+    const link = note.locator('.pip-inline-link');
+    await expect(link).toHaveText('Recalibrate');
+    await expect(link).toHaveAccessibleName('Recalibrate Old office');
+    await expect(link).toHaveCSS('color', 'rgb(206, 226, 196)'); // sage
+    await expect(note).toHaveCSS('color', 'rgb(176, 171, 158)'); // muted
 
     await readyScreen.locator('.pip-ready-selector-trigger').click();
     await pipPage.locator('.pip-ready-selector-row', { hasText: 'New office' }).locator('.pip-ready-selector-row-label').click();
@@ -1019,5 +1025,18 @@ test.describe('Migration: profiles saved before the speech-band filter (2026-10-
 
     const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('mezzoProfiles')));
     expect(stored.map((p) => p.id)).toEqual(['old', 'new']);
+  });
+
+  test('the note\'s Recalibrate link starts recalibrating that profile', async ({ page, context }) => {
+    await page.addInitScript(() => {
+      const p = [{ id: 'old', name: 'Old office', speakingDb: -30, spreadDb: 4, calibratedTs: 1 }];
+      localStorage.setItem('mezzoProfiles', JSON.stringify(p));
+    });
+    const pipPage = await openCompanion(page, context);
+    const readyScreen = pipPage.locator('.pip-screen-ready');
+    await readyScreen.locator('.pip-ready-recalibrate-note .pip-inline-link').click();
+    const calibrating = pipPage.locator('.pip-screen-calibrating');
+    await expect(calibrating).toBeVisible();
+    await expect(calibrating.locator('.pip-calibrating-subheading')).toHaveText('Recalibrating Old office');
   });
 });

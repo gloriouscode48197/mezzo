@@ -353,7 +353,7 @@ test.describe('Companion: selector row Recalibrate icon (2026-08-17)', () => {
     await expect(m1Screen).toBeVisible({ timeout: 15000 });
     // The primary button names the exact profile that was targeted — Home
     // Office, not Kitchen.
-    await expect(m1Screen.locator('.pip-decision-primary-btn')).toHaveText('Replace "Home Office"');
+    await expect(m1Screen.locator('.pip-decision-primary-btn')).toHaveText('Update "Home Office"');
 
     // Discard (never selects/deletes anything) returns to Ready with the
     // ORIGINAL selection (Kitchen) untouched — confirming the icon click
@@ -368,7 +368,7 @@ test.describe('Companion: selector row Recalibrate icon (2026-08-17)', () => {
     expect(profiles.find((p) => p.name === 'Home Office').speakingDb).toBe(-28); // unchanged
   });
 
-  test('a saved profile remains completely unchanged until Replace is explicitly chosen — recalibrating from its own row does not touch it prematurely', async ({ page, context }) => {
+  test('a saved profile remains completely unchanged until Update is explicitly chosen — recalibrating from its own row does not touch it prematurely', async ({ page, context }) => {
     await page.addInitScript(() => {
       localStorage.setItem('mezzoProfiles', JSON.stringify([
         { id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 200 },
@@ -388,7 +388,7 @@ test.describe('Companion: selector row Recalibrate icon (2026-08-17)', () => {
     let profiles = await page.evaluate(() => JSON.parse(localStorage.getItem('mezzoProfiles') || '[]'));
     expect(profiles).toEqual([{ id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 200 }]);
 
-    // Only Replace actually commits the change.
+    // Only Update actually commits the change.
     await m1Screen.locator('.pip-decision-primary-btn').click();
     await expect(readyScreen).toBeVisible({ timeout: 3000 });
     profiles = await page.evaluate(() => JSON.parse(localStorage.getItem('mezzoProfiles') || '[]'));

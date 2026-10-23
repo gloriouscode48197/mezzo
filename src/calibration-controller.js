@@ -53,8 +53,7 @@ const DEFAULT_CAPTURE_DURATION_MS = 6000;
 // leaving a genuinely stuck attempt visible for long.
 const DEFAULT_ACQUIRE_TIMEOUT_MS = 5000;
 
-// Duration of the fixed, real preparation countdown ("Start speaking in
-// 3/2/1" — see the Companion's own startPreparationCountdown()) — see the
+// Duration of the fixed, real preparation countdown (the 3-2-1 — see the Companion's own startPreparationCountdown()) — see the
 // `preparing` state field and runCapture() below. This is NOT started the
 // instant audio.acquire() succeeds anymore (that produced a real,
 // documented UX problem: a warm, already-granted getUserMedia() can

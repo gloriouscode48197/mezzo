@@ -492,6 +492,7 @@ test.describe('Calibration-stall reliability correction (acquisition timeout)', 
 
     const calibratingScreen = pipPage.locator('.pip-screen-calibrating');
     const status = calibratingScreen.locator('.pip-calibrating-status');
+    const count = calibratingScreen.locator('.pip-calibrating-count');
     await expect(calibratingScreen).toBeVisible();
 
     // Acquisition is delayed 2000ms — past the 500ms delayed-disclosure
@@ -503,11 +504,11 @@ test.describe('Calibration-stall reliability correction (acquisition timeout)', 
     // dependent waits rather than asserting tight windows.
     await expect(status).toHaveText('Preparing microphone…', { timeout: 6000 });
 
-    // Once acquisition succeeds, the fixed "Start speaking in 3/2/1"
+    // Once acquisition succeeds, the fixed 3-2-1
     // countdown begins — never skipped, however fast or slow acquire() was.
-    await expect(status).toHaveText('Start speaking in 3', { timeout: 6000 });
-    await expect(status).toHaveText('Start speaking in 2', { timeout: 3000 });
-    await expect(status).toHaveText('Start speaking in 1', { timeout: 3000 });
+    await expect(count).toHaveText('3', { timeout: 6000 });
+    await expect(count).toHaveText('2', { timeout: 3000 });
+    await expect(count).toHaveText('1', { timeout: 3000 });
 
     // The countdown begins at 6 only once the full fixed window elapses too
     // — never skipping straight past a number, never counting acquisition,
@@ -533,20 +534,21 @@ test.describe('Calibration-stall reliability correction (acquisition timeout)', 
 
     const calibratingScreen = pipPage.locator('.pip-screen-calibrating');
     const status = calibratingScreen.locator('.pip-calibrating-status');
+    const count = calibratingScreen.locator('.pip-calibrating-count');
     await expect(calibratingScreen).toBeVisible();
 
-    // 1. "Start speaking in 3" — real (fake-device) acquisition here is
+    // 1. "3" — real (fake-device) acquisition here is
     // fast, well under the 500ms delayed-disclosure threshold, so
     // "Preparing microphone…" is never rendered at all.
-    await expect(status).toHaveText('Start speaking in 3', { timeout: 2000 });
+    await expect(count).toHaveText('3', { timeout: 2000 });
     await expect(status).not.toHaveText('Preparing microphone…');
 
     const countdownObservedAt = Date.now();
 
-    // 2. Still "Start speaking in 3" partway through — proves this is a
+    // 2. Still "3" partway through — proves this is a
     // held state, not an instantaneous flash-through.
     await pipPage.waitForTimeout(400);
-    await expect(status).toHaveText('Start speaking in 3');
+    await expect(count).toHaveText('3');
 
     // 3. Each remaining number holds for a real second too. Generous
     // per-tick timeouts — this shared Document PiP realm is susceptible to
@@ -554,8 +556,8 @@ test.describe('Calibration-stall reliability correction (acquisition timeout)', 
     // monitoring-runtime-investigation notes), so this suite follows its
     // own established precedent of generous timeouts for real-timing-
     // dependent waits rather than asserting tight windows.
-    await expect(status).toHaveText('Start speaking in 2', { timeout: 3000 });
-    await expect(status).toHaveText('Start speaking in 1', { timeout: 3000 });
+    await expect(count).toHaveText('2', { timeout: 3000 });
+    await expect(count).toHaveText('1', { timeout: 3000 });
 
     // 4. "Listening… 6s" only once the fixed
     // countdown has genuinely elapsed. Measures real wall-clock time, not
@@ -567,7 +569,7 @@ test.describe('Calibration-stall reliability correction (acquisition timeout)', 
     expect(elapsedMs).toBeGreaterThanOrEqual(2700);
   });
 
-  test('Calibrating matches PRD §8: heading, a six-segment level meter about 52px below it, sage countdown, one hint line, Cancel pinned to the bottom', async ({ page, context }) => {
+  test('Calibrating matches PRD §8: heading; the 3-2-1 number with "Stay quiet for a moment…" (meter hidden); then a six-segment meter about 52px below the heading, "Listening… Ns", the meeting-volume hint; Cancel pinned to the bottom', async ({ page, context }) => {
     const pipPage = await openCompanion(page, context);
     await pipPage.locator('button:has-text("Create speaking profile")').click();
     await pipPage.locator('button:has-text("I\'m ready")').click();
@@ -594,18 +596,25 @@ test.describe('Calibration-stall reliability correction (acquisition timeout)', 
     for (const b of boxes) expect([b.w, b.h]).toEqual([34, 14]);
     for (let k = 1; k < boxes.length; k++) expect(Math.round(boxes[k].x - (boxes[k - 1].x + boxes[k - 1].w))).toBe(6);
     expect(await segments.first().evaluate((el) => getComputedStyle(el).borderRadius)).toBe('2px');
+
+    const status = screen.locator('.pip-calibrating-status');
+
+    const count = screen.locator('.pip-calibrating-count');
+    const hint = screen.locator('.pip-calibrating-hint');
+    await expect(count).toHaveText(/^[1-3]$/, { timeout: 4000 });
+    await expect(hint).toHaveText('Stay quiet for a moment…');
+    // The 3-2-1 shows only the number: the meter keeps its place, hidden.
+    await expect(meter).toBeHidden();
+    await expect(status).toHaveText('');
+    await expect(status).toHaveText('Listening… 6s', { timeout: 8000 });
+    expect(await style(status, ['fontSize', 'fontWeight', 'color'])).toEqual({ fontSize: '15px', fontWeight: '500', color: 'rgb(206, 226, 196)' });
+    await expect(hint).toHaveText('Use the volume you want for your meetings.');
+    await expect(meter).toBeVisible();
+    await expect(count).toBeHidden();
     const meterBox = await meter.boundingBox();
     const headingBox = await heading.boundingBox();
     expect(Math.abs(meterBox.y - (headingBox.y + headingBox.height) - 52)).toBeLessThanOrEqual(2);
     expect(Math.abs(meterBox.x + meterBox.width / 2 - (pipPage.viewportSize().width / 2))).toBeLessThan(2);
-
-    const status = screen.locator('.pip-calibrating-status');
-    const hint = screen.locator('.pip-calibrating-hint');
-    await expect(status).toHaveText(/Start speaking in/, { timeout: 4000 });
-    await expect(hint).toHaveText('Get ready to talk normally.');
-    await expect(status).toHaveText('Listening… 6s', { timeout: 8000 });
-    expect(await style(status, ['fontSize', 'fontWeight', 'color'])).toEqual({ fontSize: '15px', fontWeight: '500', color: 'rgb(206, 226, 196)' });
-    await expect(hint).toHaveText('Talk normally. The bars move with your voice.');
     expect(await style(hint, ['fontSize', 'color'])).toEqual({ fontSize: '13px', color: 'rgb(176, 171, 158)' });
 
     // The old bar and its hint are gone.
@@ -622,7 +631,7 @@ test.describe('Calibration-stall reliability correction (acquisition timeout)', 
     expect(fits).toEqual([true, true]);
   });
 
-  test('the meter lights sage segments with the live level, as a mic check during the 3-2-1 and then during capture: low, normal, loud', async ({ page, context }) => {
+  test('the meter is hidden during the 3-2-1, then lights sage segments with the live level during capture: low, normal, loud', async ({ page, context }) => {
     const pipPage = await openCompanion(page, context);
     await installLevelDriver(page, { speakingDb: 0 }); // levels below are absolute dB
     await pipPage.locator('button:has-text("Create speaking profile")').click();
@@ -631,10 +640,12 @@ test.describe('Calibration-stall reliability correction (acquisition timeout)', 
     const meter = screen.locator('.mezzo-level-meter');
     const lit = async () => Number(await meter.getAttribute('aria-valuenow'));
 
-    // During the 3-2-1: a mic check.
+    // During the 3-2-1 (room noise is measured): the meter stays hidden and unlit.
     await setLevelDb(page, -38);
-    await expect(screen.locator('.pip-calibrating-status')).toHaveText(/Start speaking in/, { timeout: 4000 });
-    await expect.poll(lit, { timeout: 2000 }).toBeGreaterThanOrEqual(3);
+    await expect(screen.locator('.pip-calibrating-count')).toHaveText(/^[1-3]$/, { timeout: 4000 });
+    await expect(meter).toBeHidden();
+    await pipPage.waitForTimeout(400);
+    expect(await lit()).toBe(0);
 
     await expect(screen.locator('.pip-calibrating-status')).toHaveText('Listening… 6s', { timeout: 6000 });
     await setLevelDb(page, -80);
@@ -806,12 +817,13 @@ test.describe('Calibration-stall reliability correction (acquisition timeout)', 
     // directly, never showing the Calibrating screen at all).
     const calibratingScreen = pipPage.locator('.pip-screen-calibrating');
     const status = calibratingScreen.locator('.pip-calibrating-status');
+    const count = calibratingScreen.locator('.pip-calibrating-count');
     await expect(calibratingScreen).toBeVisible();
     // The retry's own acquisition is fast (realGetUserMedia, unmocked) —
     // "Preparing microphone…" never renders; the countdown is the first
     // visible change. Generous timeout for the full countdown-to-capture
     // transition — see the fast-acquisition test above for why.
-    await expect(status).toHaveText('Start speaking in 3', { timeout: 2000 });
+    await expect(count).toHaveText('3', { timeout: 2000 });
     await expect(status).toHaveText('Listening… 6s', { timeout: 6000 });
 
     // And completes normally: lands on the Slice 2 result screen ("Your new
@@ -927,20 +939,28 @@ test.describe('Companion-wide visual-language consistency (2026-08-14 pass)', ()
     await pipPage.locator('button:has-text("I\'m ready")').click();
 
     const status = pipPage.locator('.pip-calibrating-status');
-    await expect(status).toHaveText('Start speaking in 3', { timeout: 2000 });
+
+    const count = pipPage.locator('.pip-calibrating-count');
+    await expect(count).toHaveText('3', { timeout: 2000 });
+    // The 3-2-1 number: 36px, weight 500, cream, in the meter's place.
+    const numberStyle = await count.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { fontSize: s.fontSize, fontWeight: s.fontWeight, color: s.color };
+    });
+    expect(numberStyle).toEqual({ fontSize: '36px', fontWeight: '500', color: 'rgb(243, 235, 222)' });
     const countdownStyle = await status.evaluate((el) => {
       const s = getComputedStyle(el);
       return { fontSize: s.fontSize, fontWeight: s.fontWeight, color: s.color };
     });
-    // PRD §8: 15px, weight 500, solid sage — smaller than the 20px heading,
-    // never chartreuse or the retired amber.
+    // The status line (empty during the 3-2-1, then "Listening… Ns"): PRD
+    // §8: 15px, weight 500, solid sage — never chartreuse or the retired amber.
     expect(countdownStyle.fontSize).toBe('15px');
     expect(countdownStyle.fontWeight).toBe('500');
     expect(normalizeColor(countdownStyle.color)).toBe('rgb(206, 226, 196)');
 
     const countdownObservedAt = Date.now();
-    await expect(status).toHaveText('Start speaking in 2', { timeout: 3000 });
-    await expect(status).toHaveText('Start speaking in 1', { timeout: 3000 });
+    await expect(count).toHaveText('2', { timeout: 3000 });
+    await expect(count).toHaveText('1', { timeout: 3000 });
     await expect(status).toHaveText('Listening… 6s', { timeout: 5000 });
     // Timing itself is unchanged by this styling pass.
     expect(Date.now() - countdownObservedAt).toBeGreaterThanOrEqual(2700);

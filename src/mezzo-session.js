@@ -231,7 +231,7 @@ export function saveProfileNameCopy(resolution) {
     case SAVE_PROMPT_ACTIONS.UPDATE:
       return {
         warningText: `A profile named "${resolution.profile.name}" already exists.`,
-        buttonLabel: 'Replace',
+        buttonLabel: 'Update',
         disabled: false,
       };
     case SAVE_PROMPT_ACTIONS.BLOCKED:
@@ -270,7 +270,7 @@ export function saveProfileNameCopy(resolution) {
  * without any separate aria-label needed.
  */
 export function replaceButtonLabel(targetName) {
-  return targetName ? `Replace "${targetName}"` : 'Replace this profile';
+  return targetName ? `Update "${targetName}"` : 'Update this profile';
 }
 
 // The one and only signal for "this profile is a runtime-only calibration
@@ -304,12 +304,16 @@ const C0_BLOCKED_ICON_SVG = '<svg width="44" height="44" viewBox="0 0 44 44" fil
 // truth for when capture ends; this constant only decides what the
 // countdown text counts down from.
 const CALIBRATION_COUNTDOWN_SECONDS = 6;
-const CALIBRATING_HINT_PREPARING = 'Get ready to talk normally.';
+// The 3-2-1 measures the room's own noise (see finishMicCheck()), so it
+// asks for quiet, and shows only the number; the meter appears when
+// listening starts.
+const CALIBRATING_HINT_PREPARING = 'Stay quiet for a moment…';
 // Result screens, when speech sat less than NOISY_ROOM_GAP_DB above the room.
 const NOISY_ROOM_TIP = 'Your room is a bit noisy for how softly you speak. Try moving a little closer to your mic.';
 // Ready, under a profile saved before the speech-band filter and peaks.
-const RECALIBRATE_NOTE = 'Recalibrate to use the improved sound filter.';
-const CALIBRATING_HINT_LISTENING = 'Talk normally. The bars move with your voice.';
+// "Recalibrate" in it is an inline link (see renderContextualActions()).
+const RECALIBRATE_NOTE = ['This profile was made before Mezzo\'s improved sound filter. ', 'Recalibrate', ' for more accurate nudges.'];
+const CALIBRATING_HINT_LISTENING = 'Use the volume you want for your meetings.';
 // How often the 3-2-1 mic check reads the level — audio.js's own sampling
 // interval during capture, so the circle moves the same way before and after.
 const MIC_CHECK_INTERVAL_MS = 50;
@@ -317,7 +321,7 @@ const MIC_CHECK_INTERVAL_MS = 50;
 // Mirrors calibration-controller.js's own DEFAULT_PREPARATION_MS (3000ms) —
 // same relationship as CALIBRATION_COUNTDOWN_SECONDS above: the controller's
 // own fixed-window timer is the real source of truth for when capture may
-// begin, this constant only decides what the "Start speaking in {n}" text
+// begin, this constant only decides what the the 3-2-1 number text
 // counts down from. See startPreparationCountdown() below.
 const PREPARATION_COUNTDOWN_SECONDS = 3;
 
@@ -588,7 +592,7 @@ export function createMezzoSession({
   });
 
   // The state.preparing false→true edge (delayed-disclosure decision for
-  // "Preparing microphone…", then the "Start speaking in 3/2/1" countdown)
+  // "Preparing microphone…", then the the 3-2-1 countdown)
   // is handled by a dedicated listener defined alongside
   // prepareCalibratingScreen() below, since its logic depends on local
   // preparation-timer state declared there — see handleAcquisitionConfirmed().
@@ -617,6 +621,8 @@ export function createMezzoSession({
       calibrationCountdownStarted = true;
       stopPreparationCountdown();
       finishMicCheck();
+      setCalibratingPhase('listening');
+      levelMeter?.start();
       if (calibratingHintEl) calibratingHintEl.textContent = CALIBRATING_HINT_LISTENING;
       if (calibratingAnnounceEl) calibratingAnnounceEl.textContent = 'Listening for 6 seconds.';
       startCalibratingCountdown();
@@ -810,10 +816,11 @@ export function createMezzoSession({
   // Calibrating-screen (C2) DOM refs
   let calibratingScreenEl = null;
   let calibratingSubheadingEl = null; // mode-aware "Recalibrating {name}" line — session mode leaves it empty
-  let calibratingStatusEl = null; // aria-hidden visible text: blank, then (if shown) "Preparing microphone…", then "Start speaking in {n}", then a live "Listening… {n}s" countdown
+  let calibratingStatusEl = null; // aria-hidden visible text: blank, then (if shown) "Preparing microphone…", blank during the 3-2-1 (calibratingCountEl shows the number), then a live "Listening… {n}s" countdown
   let calibratingAnnounceEl = null; // visually-hidden aria-live region — exactly two one-time announcements, see its own construction comment above
   let levelMeter = null; // MezzoLevelMeter: six segments following the live level (3-2-1 mic check, then capture)
-  let calibratingHintEl = null; // "Get ready to talk normally." during the countdown, then CALIBRATING_HINT_LISTENING
+  let calibratingHintEl = null; // CALIBRATING_HINT_PREPARING during the countdown, then CALIBRATING_HINT_LISTENING
+  let calibratingCountEl = null; // the 3-2-1 number, in the meter's place until listening starts
   let micCheckTimer = null; // reads the mic level during the 3-2-1 so the circle can react before capture — see startMicCheck()
   let micCheckSamples = []; // those readings, which become the room-noise level (finishMicCheck())
   let calibratingCountdownTimer = null;
@@ -840,7 +847,7 @@ export function createMezzoSession({
   let preparingMessageMinDisplayTimer = null; // once the message is shown, guarantees it stays up for PREPARING_MESSAGE_MIN_DISPLAY_MS before beginCountdown() fires
   let preparingMessageShown = false; // true once "Preparing microphone…" has actually been rendered this attempt — decides whether the min-display wait applies at all
   let preparingMessageShownAt = 0; // Date.now() at the moment the message actually rendered — 0 (unused) whenever preparingMessageShown is false
-  let preparationCountdownTimer = null; // drives the visible/announced "Start speaking in 3/2/1" ticks, started only once beginCountdown() is actually called
+  let preparationCountdownTimer = null; // drives the visible/announced the 3-2-1 ticks, started only once beginCountdown() is actually called
   // Guards state.preparing's false→true edge to run at most once per
   // attempt — reset in prepareCalibratingScreen(), same pattern/reasoning
   // as calibrationCountdownStarted below for the capturing:true edge. See
@@ -2140,8 +2147,26 @@ export function createMezzoSession({
         max-width: 280px;
         text-wrap: balance;
       }
-      .pip-calibrating-visual { margin-top: 52px; }
-      /* "Preparing microphone…" / "Start speaking in {n}" / "Listening…
+      .pip-calibrating-visual {
+        position: relative;
+        margin-top: 52px;
+      }
+      /* The 3-2-1: the number stands where the meter will be. */
+      .pip-calibrating-count {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        font-family: var(--font-body);
+        font-size: 36px;
+        font-weight: var(--weight-medium);
+        line-height: 1;
+        font-variant-numeric: tabular-nums;
+        color: var(--color-text);
+      }
+      .pip-screen-calibrating:not([data-phase="listening"]) .mezzo-level-meter { visibility: hidden; }
+      .pip-screen-calibrating[data-phase="listening"] .pip-calibrating-count { display: none; }
+      /* "Preparing microphone…" / the 3-2-1 number / "Listening…
          {n}s" — aria-hidden (see calibratingAnnounceEl for what assistive
          tech actually hears). min-height holds its space while blank. */
       .pip-calibrating-status {
@@ -2298,10 +2323,28 @@ export function createMezzoSession({
       .pip-ready-recalibrate-note {
         font-family: var(--font-body);
         font-size: 12px;
-        line-height: 1.4;
-        color: var(--color-notice);
+        line-height: 1.45;
+        color: var(--color-text-muted);
         text-align: center;
+        text-wrap: pretty;
+        max-width: 300px;
         margin: 0;
+      }
+      .pip-inline-link {
+        padding: 0;
+        border: none;
+        background: none;
+        font: inherit;
+        color: var(--color-link);
+        text-decoration: underline;
+        text-underline-offset: 2px;
+        cursor: pointer;
+      }
+      .pip-inline-link:hover { color: var(--color-text); }
+      .pip-inline-link:focus-visible {
+        outline: 2px solid var(--color-link);
+        outline-offset: 2px;
+        border-radius: 2px;
       }
       /* M2a's "already exists" warning — calmer than an error tone (a
          name collision is an expected, natural outcome here, not a
@@ -3136,16 +3179,22 @@ export function createMezzoSession({
     calibratingScreen.appendChild(calibratingHeading);
 
     // Segmented level meter (PRD §8): six segments that follow the live,
-    // filtered level, so the user can see their voice being picked up,
-    // during the 3-2-1 as a mic check and then during capture. role="meter",
-    // 0–6. "Listening… Ns" below is the only time cue.
+    // filtered level, so the user can see their voice being picked up
+    // during capture. role="meter", 0–6. Hidden (keeping its space) during
+    // the 3-2-1, when the countdown number stands in its place and the room
+    // is asked to be quiet; see setCalibratingPhase().
     const calibratingVisual = pipDoc.createElement('div');
     calibratingVisual.className = 'pip-calibrating-visual';
     calibratingScreen.appendChild(calibratingVisual);
     levelMeter = new MezzoLevelMeter(calibratingVisual);
+    const calibratingCount = pipDoc.createElement('div');
+    calibratingCount.className = 'pip-calibrating-count';
+    calibratingCount.setAttribute('aria-hidden', 'true'); // the one-time announcement covers it
+    calibratingVisual.appendChild(calibratingCount);
+    calibratingCountEl = calibratingCount;
 
-    // Visible status text ("Preparing microphone…", "Start speaking in
-    // 3/2/1", then "Listening… {n}s") — aria-hidden. Assistive tech gets
+    // Visible status text ("Preparing microphone…", blank during the 3-2-1,
+    // then "Listening… {n}s") — aria-hidden. Assistive tech gets
     // exactly two one-time announcements instead (calibratingAnnounceEl,
     // below): narrating every visible tick was found to be noisy, not
     // helpful, for a fast countdown like this one.
@@ -3162,7 +3211,7 @@ export function createMezzoSession({
     calibratingHintEl = calibratingHint;
 
     // Static, visually-hidden live region carrying exactly two one-time
-    // announcements ("Get ready. Calibration starts in 3 seconds." /
+    // announcements ("Stay quiet for a moment. Calibration starts in 3 seconds." /
     // "Listening for 6 seconds.") — kept separate from calibratingStatusEl
     // above so its rapid visible-text changes never reach assistive tech.
     const calibratingAnnounce = pipDoc.createElement('div');
@@ -3459,7 +3508,7 @@ export function createMezzoSession({
     // ── M2/M2a — naming a new profile (below the five-profile cap; at cap,
     //    handleSaveProfileClick() routes to M3 instead, never opening this
     //    screen — see the PRD). M2a is this exact same screen with a
-    //    warning shown and the submit button's label swapped to "Replace"
+    //    warning shown and the submit button's label swapped to "Update"
     //    (see renderM2State()), not a second screen. ──
     const m2Screen = pipDoc.createElement('div');
     // pip-screen-m2 — a dedicated hook class (2026-08-17, new — this screen
@@ -4133,11 +4182,19 @@ export function createMezzoSession({
       readyContextualActionsEl.appendChild(buildActionLink('Save profile', handleSaveProfileClick));
     } else if (needsRecalibration(activeProfile)) {
       // Saved before the speech-band filter and calibration peaks: it still
-      // works (with the older spread-based end of range); Recalibrate, in
-      // the selector panel, updates it in place.
+      // works (with the older spread-based end of range); the note's own
+      // Recalibrate link (or the selector panel's) updates it in place.
       const note = pipDocument.createElement('p');
       note.className = 'pip-ready-recalibrate-note';
-      note.textContent = RECALIBRATE_NOTE;
+      const [before, linkText, after] = RECALIBRATE_NOTE;
+      const link = pipDocument.createElement('button');
+      link.type = 'button';
+      link.className = 'pip-inline-link';
+      link.textContent = linkText;
+      link.setAttribute('aria-label', `Recalibrate ${activeProfile.name}`);
+      const profile = activeProfile;
+      link.addEventListener('click', () => handleSelectorRowRecalibrateClick(profile));
+      note.append(before, link, after);
       readyContextualActionsEl.appendChild(note);
     }
   }
@@ -4925,7 +4982,7 @@ export function createMezzoSession({
    * deliberately: calibration pacing revision, second pass, no longer shows
    * "Getting microphone ready…" (or anything else) synchronously here. The
    * delayed-disclosure "Preparing microphone…" message (if it appears at
-   * all), "Start speaking in {n}", and "Listening… {n}s" are each driven by
+   * all), the 3-2-1 number, and "Listening… {n}s" are each driven by
    * their own timer/listener below, none of which fire until real progress
    * (acquisition succeeding, then beginCountdown(), then real capture
    * starting) actually happens.
@@ -4944,7 +5001,8 @@ export function createMezzoSession({
       calibratingSubheadingEl.textContent = mode === 'recalibrate' && targetName ? `Recalibrating ${targetName}` : '';
     }
     stopMicCheck();
-    levelMeter?.reset(); // nothing lit until the 3-2-1 mic check starts
+    levelMeter?.reset(); // nothing lit, and hidden, until listening starts
+    setCalibratingPhase('preparing');
     if (calibratingHintEl) calibratingHintEl.textContent = CALIBRATING_HINT_PREPARING;
     stopCalibratingCountdown(); // defensive — see startCalibratingCountdown()'s own trigger below; this guarantees a clean slate even on a retry
     stopPreparationCountdown();
@@ -5031,33 +5089,38 @@ export function createMezzoSession({
 
   /** The one place calibrationController.beginCountdown() is ever called —
    *  signals the controller that its own fixed Stage 2 window may start,
-   *  and starts this module's own visible/announced "Start speaking in
-   *  {n}" countdown in the exact same synchronous step, so the two stay in
+   *  and starts this module's own visible/announced 3-2-1 countdown in the
+   *  exact same synchronous step, so the two stay in
    *  lockstep (both begin, and both last PREPARATION_COUNTDOWN_SECONDS/
    *  DEFAULT_PREPARATION_MS, from this same instant). */
   function beginPreparationCountdown() {
-    if (calibratingAnnounceEl) calibratingAnnounceEl.textContent = `Get ready. Calibration starts in ${PREPARATION_COUNTDOWN_SECONDS} seconds.`;
+    if (calibratingAnnounceEl) calibratingAnnounceEl.textContent = `Stay quiet for a moment. Calibration starts in ${PREPARATION_COUNTDOWN_SECONDS} seconds.`;
     calibrationController.beginCountdown();
     startPreparationCountdown();
     startMicCheck();
   }
 
-  /** The 3-2-1 mic check: the controller collects no samples and doesn't
-   *  start audio.js's monitoring until capture begins, so this reads the
-   *  already-acquired microphone's raw level directly (audio.calculateRms(),
-   *  a plain read of the analyser that touches neither audio.js's smoothing
-   *  nor the controller's samples) and feeds only the level meter. Stopped
-   *  on the capturing:true edge, and whenever Calibrating is left. */
+  /** The 3-2-1 room-noise reading: the controller collects no samples and
+   *  doesn't start audio.js's monitoring until capture begins, so this
+   *  reads the already-acquired microphone's raw level directly
+   *  (audio.calculateRms(), a plain read of the analyser that touches
+   *  neither audio.js's smoothing nor the controller's samples). The meter
+   *  stays hidden meanwhile; the person is asked to stay quiet. Stopped on
+   *  the capturing:true edge, and whenever Calibrating is left. */
   function startMicCheck() {
     stopMicCheck();
     micCheckSamples = [];
-    levelMeter?.start();
     micCheckTimer = setInterval(() => {
       if (!audio.isMicrophoneActive) return;
-      const rms = audio.calculateRms();
-      micCheckSamples.push(rms); // also the room-noise reading (see finishMicCheck())
-      levelMeter?.setLevel(rms);
+      micCheckSamples.push(audio.calculateRms()); // the room-noise reading (see finishMicCheck())
     }, MIC_CHECK_INTERVAL_MS);
+  }
+
+  /** 'preparing' | 'countdown' | 'listening': which of the number or the
+   *  meter shows (CSS keys off data-phase). */
+  function setCalibratingPhase(phase) {
+    if (calibratingScreenEl) calibratingScreenEl.dataset.phase = phase;
+    if (phase !== 'countdown' && calibratingCountEl) calibratingCountEl.textContent = '';
   }
 
   /** Capture is starting: the 3-2-1's readings become the room-noise level,
@@ -5073,24 +5136,26 @@ export function createMezzoSession({
     if (micCheckTimer) { clearInterval(micCheckTimer); micCheckTimer = null; }
   }
 
-  /** Visible-only (aria-hidden) "Start speaking in 3/2/1" — decorative
-   *  pacing text, not an accessibility announcement (see
-   *  beginPreparationCountdown()'s one-time "Get ready…" announcement and
+  /** The visible-only (aria-hidden) 3-2-1 number — decorative pacing, not
+   *  an accessibility announcement (see beginPreparationCountdown()'s
+   *  one-time "Stay quiet for a moment…" announcement and
    *  the capturing:true edge listener's own one-time "Listening for 6
    *  seconds." announcement below, which are the only two things assistive
    *  tech actually hears). Purely presentational: calibration-controller.js's
    *  own Stage 2 timer (preparationMs) is the real source of truth for when
    *  the countdown ends and real capture may begin — this only decides what
-   *  the text reads meanwhile. No samples are collected and the meter stays
-   *  hidden for the countdown's whole duration; both only start on the
-   *  capturing:true edge. */
+   *  the number reads meanwhile. No calibration samples are collected and
+   *  the meter stays hidden for the countdown's whole duration (only the
+   *  room-noise reading runs); both start on the capturing:true edge. */
   function startPreparationCountdown() {
     stopPreparationCountdown();
     let remaining = PREPARATION_COUNTDOWN_SECONDS;
-    if (calibratingStatusEl) calibratingStatusEl.textContent = `Start speaking in ${remaining}`;
+    setCalibratingPhase('countdown');
+    if (calibratingStatusEl) calibratingStatusEl.textContent = '';
+    if (calibratingCountEl) calibratingCountEl.textContent = String(remaining);
     preparationCountdownTimer = setInterval(() => {
       remaining -= 1;
-      if (remaining > 0 && calibratingStatusEl) calibratingStatusEl.textContent = `Start speaking in ${remaining}`;
+      if (remaining > 0 && calibratingCountEl) calibratingCountEl.textContent = String(remaining);
       if (remaining <= 0) stopPreparationCountdown(); // the capturing:true edge listener below takes over the status text from here
     }, 1000);
   }
@@ -5474,13 +5539,13 @@ export function createMezzoSession({
     requestAnimationFrame(() => m1HeadingEl?.focus());
   }
 
-  /** Replace "{name}" — writes the recalibration to the targeted saved
+  /** Update "{name}" — writes the recalibration to the targeted saved
    *  profile, preserving its id/name/library position (the same
    *  updateSavedProfile() Recalibrate's own commit path always used). Falls
    *  back safely to Ready if the target was deleted elsewhere mid-
    *  calibration (commitError). */
   function handleM1Replace() {
-    runDecisionCommit(m1ReplaceBtn, 'Replacing…', () => {
+    runDecisionCommit(m1ReplaceBtn, 'Updating…', () => {
       const updated = calibrationController.commitUpdateProfile();
       if (updated) {
         activeProfile = updated;
@@ -5604,7 +5669,7 @@ export function createMezzoSession({
     if (!name.trim() || !unsavedProfile) return;
 
     const isUpdate = resolveSavePromptAction(name).kind === SAVE_PROMPT_ACTIONS.UPDATE;
-    runDecisionCommit(m2SubmitBtn, isUpdate ? 'Replacing…' : 'Saving…', () => {
+    runDecisionCommit(m2SubmitBtn, isUpdate ? 'Updating…' : 'Saving…', () => {
       const { profile, error } = commitSavePromptName(unsavedProfile, name);
 
       if (!profile) {
@@ -5628,7 +5693,7 @@ export function createMezzoSession({
       // untouched, unrelated to this revision's own explicitly-scoped
       // save-confirmation toast, and still reserved for the later
       // toast-feedback work otherwise.
-      showToast(isUpdate ? `Profile "${profile.name}" replaced` : 'Speaking profile saved');
+      showToast(isUpdate ? `Profile "${profile.name}" updated` : 'Speaking profile saved');
       restoreDecisionFocus();
     });
   }
@@ -5959,6 +6024,7 @@ export function createMezzoSession({
     levelMeter?.destroy();
     levelMeter = null;
     calibratingHintEl = null;
+    calibratingCountEl = null;
     stopCalibratingCountdown();
     stopPreparationCountdown();
     clearPreparingMessageTimers();

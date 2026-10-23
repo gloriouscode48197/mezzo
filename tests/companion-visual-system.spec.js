@@ -634,7 +634,7 @@ test.describe('Companion: row-action tooltips (2026-08-20)', () => {
   test('opening the selector panel never steals focus back from a row action focused immediately afterward (the panel\'s own deferred default-radio focus must not race a caller\'s own focus)', async ({ page, context }) => {
     await page.addInitScript(() => {
       localStorage.setItem('mezzoProfiles', JSON.stringify([
-        { id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 100 },
+        { id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 100, peakDb: 2 },
       ]));
     });
     const pipPage = await openCompanion(page, context);
@@ -987,7 +987,7 @@ test.describe('Companion: row-action tooltips (2026-08-20)', () => {
     await waitForCapture(pipPage);
     const m1Screen = pipPage.locator('.pip-screen-m1');
     await expect(m1Screen).toBeVisible({ timeout: 15000 });
-    await expect(m1Screen.locator('.pip-decision-primary-btn')).toHaveText('Replace "Home Office"');
+    await expect(m1Screen.locator('.pip-decision-primary-btn')).toHaveText('Update "Home Office"');
   });
 
   /** Tooltip CSS/compact treatment, consistent with the dark modal/toast

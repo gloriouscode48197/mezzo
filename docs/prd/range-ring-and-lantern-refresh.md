@@ -224,7 +224,7 @@ Three levels, readable from the background alone:
 |---|---|---|
 | 1. Screen | Welcome, calibration intro, Calibrating, Ready, Monitoring, microphone blocked | Flat `--color-bg` |
 | 2. Menu | Ready's profile selector | `--color-bg-menu` panel with 1px border and shadow, attached to its trigger; the screen behind dims (about 60% black scrim); trigger shows an open state |
-| 3. Decision | New-profile result, Save profile, Replace / Keep as unsaved, five-profile limit, Delete | Whole window turns `--color-bg-decision`; a 44px header bar names the decision in Geist Mono and holds Cancel in the corner; actions pinned to the bottom |
+| 3. Decision | New-profile result, Save profile, Update / Keep temporarily / Discard, five-profile limit, Delete | Whole window turns `--color-bg-decision`; a 44px header bar names the decision in Geist Mono and holds Cancel in the corner; actions pinned to the bottom |
 
 Decision states stay full-screen, per CLAUDE.md. The one-off card on the new-profile result screen is removed.
 
@@ -243,8 +243,11 @@ Top to bottom, at the shared 380×364 pre-monitoring size (revised again 2026-10
   - It reacts during the 3-2-1 as a mic check, then during the capture.
   - `role="meter"`, `aria-label` "Your voice level", `aria-valuenow` 0–6.
   - Why a meter: it says "your voice is being picked up" without suggesting a target size or a range that doesn't exist yet. The ring and circle looked like Monitoring before there was anything to monitor.
-- **Status**, 18px below the meter: "Preparing microphone…", then "Start speaking in 3/2/1", then "Listening… Ns" counting down. Sage, 15px, weight 500, `aria-hidden`. This is the only time cue.
-- **Hint**, 6px below: "Get ready to talk normally." during the 3-2-1, then "Talk normally. The bars move with your voice." 13px, muted (#B0AB9E).
+- **The 3-2-1**: only the countdown number (Geist 500, 36px, cream) in the meter's place, with "Stay quiet for a moment…" below; the meter is hidden while the room's noise is measured.
+- **Status**, 18px below the meter: "Preparing microphone…" (if acquiring is slow), empty during the 3-2-1, then "Listening… Ns" counting down. Sage, 15px, weight 500, `aria-hidden`. This is the only time cue.
+- **Hint**, 6px below: "Stay quiet for a moment…" during the 3-2-1, then "Use the volume you want for your meetings." 13px, muted (#B0AB9E).
+
+*Changed during build: the meter showed during the 3-2-1 as a mic check, and the hints said "talk normally"; the 3-2-1 now asks for quiet (it measures the room), and the hint names the target: the volume you want for meetings.*
 - **Cancel**, a sage text link pinned to the bottom. Behavior unchanged.
 - **Room noise** is measured from the 3-2-1's readings (§5.6) and saved with the profile.
 
@@ -252,7 +255,7 @@ The horizontal meter bar, "Background sounds may move the meter too.", the progr
 
 *Changed during build: a segmented level meter replaced the filling progress ring, which felt rushed.*
 
-**Accessibility.** The existing live region is kept, with its two one-time announcements ("Get ready. Calibration starts in 3 seconds." and "Listening for 6 seconds."). Nothing is announced every second.
+**Accessibility.** The existing live region is kept, with its two one-time announcements ("Stay quiet for a moment. Calibration starts in 3 seconds." and "Listening for 6 seconds."). Nothing is announced every second.
 
 **Reduced motion.** The segments still follow the level, without easing: the meter is the feedback.
 
@@ -289,7 +292,7 @@ Revised 2026-10-22: this replaces the earlier Home spec (the "Be heard without f
 - Left: h2 "How it works" and "It takes about a minute. Everything happens in your browser."
 - Right: a vertical ordered list with chartreuse Geist Mono numbers and thin dividers.
   1. **Allow your mic.** "Choose "Allow on every visit" to skip this step next time."
-  2. **Calibrate in the Companion.** "Talk normally for a few seconds in the floating window. Mezzo sets a range that fits your voice, your mic, and your room."
+  2. **Calibrate in the Companion.** "Speak for a few seconds at the volume you want for your meetings. Mezzo sets a range that fits your voice, your mic, and your room."
   3. **Glance at the ring.** "It stays quiet while you talk."
 - Under step 03, a row of three chips that wraps on mobile. Each chip has a 36px still Range Ring (aria-hidden), a Geist Mono label, and two words.
 
@@ -336,7 +339,7 @@ Same type, colors, and buttons; copy unchanged.
 - **Line breaks:** `text-wrap: balance` on headings and `text-wrap: pretty` on body text, captions, and list items, so lines break evenly with no single-word last lines.
 - **Still images** of the ring (marketing, case study) show the voice circle at a mid-conversation size, so a small centered dot never reads as a record button.
 - **Sound:** the speech-band filter (120–3400 Hz) is on wherever Mezzo measures a level: calibration, monitoring, and the Home permission probe. Noise suppression and automatic gain are off everywhere.
-- **Profiles saved before 2026-10-22** were measured without the filter and have no `peakDb`/`roomNoiseDb`. They're kept and still work, using the spread-based fallback. Ready shows "Recalibrate to use the improved sound filter." under them, and Recalibrate updates them in place.
+- **Profiles saved before 2026-10-22** were measured without the filter and have no `peakDb`/`roomNoiseDb`. They're kept and still work, using the spread-based fallback. Ready shows "This profile was made before Mezzo's improved sound filter. Recalibrate for more accurate nudges." under them, with Recalibrate as an inline link that updates them in place.
 - **Playground:** a frozen public copy of the tuner at `/playground/`, with its own module copies, outside the nav. The tuner and playground preview Monitoring only (no Calibrating preview).
 - **Welcome:** no "Welcome" heading. The "mezzo" wordmark is the screen's h1, at the top: 30px, Geist 600, letter-spacing -0.045em, cream, lowercase. Body: "A gentle nudge when you're talking louder than you'd like. First, a quick voice calibration." The button and privacy line are unchanged. While Welcome shows, the window's accessible name (its document title) is "Mezzo, welcome."
 
@@ -395,7 +398,7 @@ This makes the refresh reviewable as small, safe steps and leaves one place to c
 2. **Band maximum.** At what dB over the end of range should the band reach full thickness? The ring experiment used about +4 dB.
 3. **Live-region debounce.** Confirm about 1 second and "into/out of Outside range only" with a screen-reader user if possible.
 4. **Sustained drift.** Keep `SUSTAINED_DRIFT_MS` as a separate effect, or fold it into band intensity?
-5. **Calibrating.** Resolved 2026-10-22: a six-segment level meter that follows the voice, with "Talk normally. The bars move with your voice." (§8). It replaced a progress ring with a voice circle inside.
+5. **Calibrating.** Resolved 2026-10-22: a six-segment level meter that follows the voice, with "Use the volume you want for your meetings." (§8). It replaced a progress ring with a voice circle inside.
 6. **Website chartreuse buttons.** Confirmed in design; revisit if it ever causes confusion with the in-product nudge.
 
 ---

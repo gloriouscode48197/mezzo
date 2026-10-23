@@ -904,7 +904,7 @@ describe('calibration peak and room noise are saved with a profile', () => {
     assert.ok(!('roomNoiseDb' in updated));
   });
 
-  it('a save-by-matching-name (Replace) carries them too', () => {
+  it('a save-by-matching-name (Update) carries them too', () => {
     addSavedProfile(makeCalibration({ name: 'Kitchen' }));
     const temp = { ...makeCalibration({ peakDb: 2.5, roomNoiseDb: -45 }), temporary: true, savedProfileId: null };
     const { profile } = commitSavePromptName(temp, 'kitchen');

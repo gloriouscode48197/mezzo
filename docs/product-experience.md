@@ -208,7 +208,7 @@ Active calibration — a 3-2-1, then six seconds of listening, with a live six-s
 
 ↓
 
-Ready, with the new profile selected — "Ready for your first conversation" (see "Profile Model → Saving and Replacement")
+Ready, with the new profile selected — "Ready for your first conversation" (see "Profile Model → Saving and Updating")
 
 ↓
 
@@ -276,8 +276,8 @@ C1 ("Create speaking profile" / "Talk for a few seconds so Mezzo can learn the s
 
 Calibrating shows "Keep speaking at the level you want to maintain" (with a "Recalibrating {name}" label above it when recalibrating a saved profile), a six-segment level meter, a status line and a hint, and a Cancel link:
 
-* **3-2-1** — "Start speaking in 3/2/1" / "Get ready to talk normally." The meter already reacts, as a mic check, and the room's own noise level is measured from these readings and saved with the profile.
-* **Listening, six seconds** — "Listening… Ns", counting down / "Talk normally. The bars move with your voice." The meter's lit segments follow the live, filtered microphone level, so the user can see their voice being picked up without being shown a target. It completes automatically; there is no manual "I'm done" action.
+* **3-2-1** — only the countdown number, in the meter's place, and "Stay quiet for a moment…": the room's own noise level is measured from these readings and saved with the profile, so silence helps. The meter stays hidden.
+* **Listening, six seconds** — the meter appears; "Listening… Ns", counting down / "Use the volume you want for your meetings." The meter's lit segments follow the live, filtered microphone level, so the user can see their voice being picked up without being shown a target. It completes automatically; there is no manual "I'm done" action.
 * **Cancel** stops capture, discards the partial samples, and returns to where calibration started.
 
 Two one-time screen-reader announcements mark the start of each phase; nothing is announced every second. With reduced motion, the segments follow the level directly, without easing. Exact sizes and values: `docs/prd/range-ring-and-lantern-refresh.md` §8.
@@ -290,17 +290,17 @@ A brief "Creating your speaking profile…" moment, then a decision screen whose
 
 **A new profile** (Create speaking profile, Create new profile, or Recalibrate on the temporary profile) shows "Your new speaking profile is ready" / "What would you like to do with it?":
 
-* **Save speaking profile** — opens the naming screen (see "Profile Model → Saving and Replacement")
+* **Save speaking profile** — opens the naming screen (see "Profile Model → Saving and Updating")
 * **Keep temporarily** — keeps it as the temporary profile, selected on Ready ("Available until you close the Companion")
 * **Discard** — throws it away and restores the previous selection (or Welcome, if nothing else exists)
 
 **Recalibrate, on a saved profile**, does not touch that profile yet. The same heading and question, with:
 
-* **Replace "{name}"** — overwrites the saved profile's calibration in place, keeping its name and identity, and returns to Ready with it selected
+* **Update "{name}"** — overwrites the saved profile's calibration in place, keeping its name and identity, and returns to Ready with it selected
 * **Keep temporarily** — leaves the saved profile completely untouched, and keeps the new calibration as the temporary profile instead, selected on return
 * **Discard** — leaves everything as it was
 
-Nothing is written to a saved profile merely by entering calibration or by capture completing — only Replace does that, and only for the one profile Recalibrate was started from. There is no path from a session-only calibration to silently replacing a saved profile — only to explicitly doing so, visibly, by name (see "Profile Model → Saving and Replacement").
+Nothing is written to a saved profile merely by entering calibration or by capture completing — only Update does that, and only for the one profile Recalibrate was started from. There is no path from a session-only calibration to silently replacing a saved profile — only to explicitly doing so, visibly, by name (see "Profile Model → Saving and Updating").
 
 ---
 
@@ -313,7 +313,7 @@ When the Companion is in its Ready state, show, always in this order:
 1. Ready heading — see "First-Conversation Copy" below
 2. "Speaking profile" label
 3. A collapsed selector trigger, showing the currently selected profile's name (or "Unsaved profile")
-4. A contextual line for that selection: **Save profile** for the temporary profile; for a saved profile, nothing — or "Recalibrate to use the improved sound filter." when it was saved before calibration peaks were recorded (see "Profile Model")
+4. A contextual line for that selection: **Save profile** for the temporary profile; for a saved profile, nothing — or "This profile was made before Mezzo's improved sound filter. Recalibrate for more accurate nudges." when it was saved before calibration peaks were recorded — **Recalibrate** there is an inline link that recalibrates that profile (see "Profile Model")
 5. Start monitoring
 6. A privacy disclaimer
 
@@ -434,7 +434,7 @@ Stop (inside the Companion)
 
 ↓
 
-Ready — directly, always. If the profile just used was still unsaved, it simply remains selected and available there, still unsaved, exactly as it was before Stop was pressed — nothing forces a save decision before the user can do anything else. See "Profile Model → Saving and Replacement" for how it can be saved, replaced, or discarded once back at Ready.
+Ready — directly, always. If the profile just used was still unsaved, it simply remains selected and available there, still unsaved, exactly as it was before Stop was pressed — nothing forces a save decision before the user can do anything else. See "Profile Model → Saving and Updating" for how it can be saved, replaced, or discarded once back at Ready.
 
 The experience should remain predictable throughout the entire lifecycle.
 
@@ -618,7 +618,7 @@ An **unsaved profile** — called the **Temporary profile** in the interface —
 * does not count toward the five-profile limit
 * disappears when the Companion closes — except that after an involuntary close, the running page's **Reopen Companion** brings it back from memory (see "Recovery → Mezzo Companion Closed"); Done, Close Companion, or leaving the page discards it
 
-Selecting Recalibrate never risks losing a completed calibration: recalibrating a saved profile always asks — Replace the saved profile, Keep temporarily, or Discard (see "Calibration → On Completion") — before anything changes.
+Selecting Recalibrate never risks losing a completed calibration: recalibrating a saved profile always asks — Update the saved profile, Keep temporarily, or Discard (see "Calibration → On Completion") — before anything changes.
 
 A saved profile stores its id, name, speaking level, spread, calibration time, `peakDb` (how far above the speaking level the calibration's own peaks reached) and `roomNoiseDb` (the room's noise during the 3-2-1). A profile saved before peaks were recorded still works, with an older end-of-range rule, and Ready suggests recalibrating it.
 
@@ -632,15 +632,15 @@ Ready's selector shows whichever profile is currently active, and opens a panel 
 
 **Recalibrate** (any row) and **Create new profile** (the panel footer) are always available. Create new profile begins calibration from scratch, through the calibration-introduction step (see "Calibration"); it does not touch the selected saved profile at all. At five saved profiles it shows the five-profile-limit screen instead, without starting calibration.
 
-## Saving and Replacement
+## Saving and Updating
 
 With the temporary profile selected, Ready offers **Save profile** (the result screen's **Save speaking profile** does the same). Below the five-profile limit, this opens a naming screen — "Name this profile" — with Cancel and Save actions; Save stays disabled until a name is entered.
 
 * A name that doesn't match any saved profile's name creates a new saved profile, selects it, and removes the unsaved profile. A toast confirms: `Profile "{Name}" saved`.
-* A name that matches an existing saved profile's name instead — trimmed, case-insensitive; a saved profile's own stored display name and casing are never changed by this comparison — shows a warning (`A profile named "{Name}" already exists.`) and changes the button from Save to Replace. Replacing overwrites that profile's calibration in place, exactly as Recalibrate's own Replace would, removes the unsaved profile, and selects the replaced profile. A toast confirms instead: `Profile "{Name}" replaced`.
+* A name that matches an existing saved profile's name instead — trimmed, case-insensitive; a saved profile's own stored display name and casing are never changed by this comparison — shows a warning (`A profile named "{Name}" already exists.`) and changes the button from Save to Update. Updating overwrites that profile's calibration in place, exactly as Recalibrate's own Update would, removes the unsaved profile, and selects the updated profile. A toast confirms instead: `Profile "{Name}" updated`.
 * **Cancel** returns to Ready, leaving the unsaved profile exactly as it was.
 
-Both Save and Replace show a brief processing state on their own button, and guard against a duplicate submission, before the toast appears. The toast is transient, announces itself politely to assistive tech, and never shifts Ready's layout or takes focus.
+Both Save and Update show a brief processing state on their own button, and guard against a duplicate submission, before the toast appears. The toast is transient, announces itself politely to assistive tech, and never shifts Ready's layout or takes focus.
 
 Recalibrate remains the primary, deliberate way to intentionally update a known profile. The naming screen's own name-matching path is an equivalent, explicit alternative for the moment an unsaved profile turns out to belong to a profile the user already has — not a second, looser way to overwrite something by accident.
 

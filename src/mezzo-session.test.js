@@ -187,10 +187,10 @@ describe('saveProfileNameCopy', () => {
     assert.strictEqual(copy.warningText, '');
   });
 
-  it('update (matching name): enabled, "Replace", and warns that a profile with this name already exists', () => {
+  it('update (matching name): enabled, "Update", and warns that a profile with this name already exists', () => {
     const copy = saveProfileNameCopy({ kind: SAVE_PROMPT_ACTIONS.UPDATE, profile: { id: 'p1', name: 'Kitchen' } });
     assert.strictEqual(copy.disabled, false);
-    assert.strictEqual(copy.buttonLabel, 'Replace');
+    assert.strictEqual(copy.buttonLabel, 'Update');
     assert.strictEqual(copy.warningText, 'A profile named "Kitchen" already exists.');
   });
 
@@ -200,7 +200,7 @@ describe('saveProfileNameCopy', () => {
     // that name verbatim, casing included, rather than the raw input.
     const copy = saveProfileNameCopy({ kind: SAVE_PROMPT_ACTIONS.UPDATE, profile: { id: 'p1', name: 'Coffee Shop' } });
     assert.match(copy.warningText, /"Coffee Shop"/);
-    assert.strictEqual(copy.buttonLabel, 'Replace');
+    assert.strictEqual(copy.buttonLabel, 'Update');
   });
 
   it('blocked (five-profile limit, defensive — M2 is never opened at the cap): disabled, "Save", explains the limit', () => {
@@ -243,13 +243,13 @@ describe('saveProfileNameCopy', () => {
 
 describe('replaceButtonLabel', () => {
   it('names the target profile, in straight double quotes', () => {
-    assert.strictEqual(replaceButtonLabel('Kitchen'), 'Replace "Kitchen"');
+    assert.strictEqual(replaceButtonLabel('Kitchen'), 'Update "Kitchen"');
   });
 
   it('falls back to a neutral label if the target snapshot is somehow missing, without inventing a fake name', () => {
-    assert.strictEqual(replaceButtonLabel(undefined), 'Replace this profile');
-    assert.strictEqual(replaceButtonLabel(null), 'Replace this profile');
-    assert.strictEqual(replaceButtonLabel(''), 'Replace this profile');
+    assert.strictEqual(replaceButtonLabel(undefined), 'Update this profile');
+    assert.strictEqual(replaceButtonLabel(null), 'Update this profile');
+    assert.strictEqual(replaceButtonLabel(''), 'Update this profile');
   });
 
   it('never phrases the decision as saving, choosing, or selecting "a calibration" as if it were the persistent object', () => {

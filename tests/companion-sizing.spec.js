@@ -110,7 +110,7 @@ test.describe('Companion: Ready-screen button width cap', () => {
     expect(scrollWidth).toBeLessThanOrEqual(clientWidth + 1);
   });
 
-  test('M1 (Replace "{name}"/Keep temporarily/Discard) actions never exceed 320px either', async ({ page, context }) => {
+  test('M1 (Update "{name}"/Keep temporarily/Discard) actions never exceed 320px either', async ({ page, context }) => {
     await page.addInitScript(() => {
       localStorage.setItem('mezzoProfiles', JSON.stringify([
         { id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 200 },
@@ -744,7 +744,7 @@ test.describe('Ready-screen spacing and separator (2026-08-15 pass)', () => {
   test('the standalone Recalibrate link, its pipe separator, and the standalone Create new profile link are all absent from the Ready action row (2026-08-17/2026-08-18 — both moved into the selector panel)', async ({ page, context }) => {
     await page.addInitScript(() => {
       localStorage.setItem('mezzoProfiles', JSON.stringify([
-        { id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 100 },
+        { id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 100, peakDb: 2 },
       ]));
     });
     const pipPage = await openCompanion(page, context);

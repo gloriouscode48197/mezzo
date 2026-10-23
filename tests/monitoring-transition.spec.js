@@ -89,7 +89,7 @@ test.describe('Companion: calibration -> Ready -> Monitoring -> Ready', () => {
     await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Temporary profile');
   });
 
-  test('recalibrating a saved profile -> Replace "{name}" -> Start monitoring (from Ready) reaches the live Monitoring screen', async ({ page, context }) => {
+  test('recalibrating a saved profile -> Update "{name}" -> Start monitoring (from Ready) reaches the live Monitoring screen', async ({ page, context }) => {
     await page.addInitScript(() => {
       localStorage.setItem('mezzoProfiles', JSON.stringify([
         { id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 200 },
@@ -110,9 +110,9 @@ test.describe('Companion: calibration -> Ready -> Monitoring -> Ready', () => {
     await expect(m1Screen.locator('.pip-decision-body')).toHaveText('What would you like to do with it?');
     await expect(m1Screen.locator('button', { hasText: 'Start monitoring' })).toHaveCount(0);
 
-    await m1Screen.locator('.pip-decision-primary-btn', { hasText: 'Replace "Kitchen"' }).click();
+    await m1Screen.locator('.pip-decision-primary-btn', { hasText: 'Update "Kitchen"' }).click();
 
-    // Replace only writes the recalibration — it never starts monitoring by
+    // Update only writes the recalibration — it never starts monitoring by
     // itself (see the PRD's M1 state, distinct from the retired Calibrated
     // checkpoint's "Update {name} & Start Monitoring").
     await expect(m1Screen).toBeHidden();
