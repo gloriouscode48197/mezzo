@@ -173,7 +173,6 @@
 <header>
   <button id="btn-calibrate" class="primary">Calibrate (6s)</button>
   <button id="btn-typical">Skip with typical values</button>
-  <button id="btn-room">Measure room (3s)</button>
   <span id="status" class="status">Not calibrated. Calibrate, or skip with typical values.</span>
   <label class="toggle" style="margin-left:auto"><input id="toggle-readout" type="checkbox"> Show numbers</label>
   <div id="readout" class="readout" aria-live="off"></div>
@@ -182,12 +181,8 @@
 <main>
   <section class="stage">
     <div id="monitoring-controls" class="sizes">
-      <button data-size="compact" aria-pressed="false">Compact 220×220</button>
-      <button data-size="small" aria-pressed="true">Smaller default</button>
-      <input id="small-w" type="number" min="160" max="400" aria-label="Smaller default width"> ×
-      <input id="small-h" type="number" min="160" max="520" aria-label="Smaller default height">
+      <button data-size="compact" aria-pressed="true">Compact 220×220</button>
       <button data-size="expanded" aria-pressed="false">Expanded 382×480</button>
-      <span class="frame-label">Profile name <input id="profile-name" value="Home office" style="width:120px"></span>
     </div>
     <div id="frame" class="frame">
       <div id="mon" style="display:contents">
@@ -326,7 +321,6 @@ const GROUPS = [
   ]],
   ['Layout', [
     { path: 'layout.compactPct', label: 'Ring size, Compact', min: 0.3, max: 0.9, step: 0.005, scale: 100, unit: '%', digits: 1, hint: 'Ring edge as % of the window’s short side.' },
-    { path: 'layout.smallPct', label: 'Ring size, smaller default', min: 0.3, max: 0.9, step: 0.005, scale: 100, unit: '%', digits: 1, hint: 'Ring edge as % of the window’s short side.' },
     { path: 'layout.expandedPct', label: 'Ring size, Expanded', min: 0.3, max: 0.9, step: 0.005, scale: 100, unit: '%', digits: 1, hint: 'Ring edge as % of the window’s short side.' },
   ]],
 ];
@@ -436,7 +430,7 @@ const defaultAt = (path) => path.split('.').reduce((o, k) => o?.[k], DEFAULTS);
 function updateChangedDots() {
   for (const [dot, defs] of groupDots) dot.hidden = !defs.some((d) => getPath(d.path) !== defaultAt(d.path));
 }
-function syncControls() { controls.forEach((f) => f()); $('small-w').value = settings.layout.smallWidth; $('small-h').value = settings.layout.smallHeight; updateChangedDots(); }
+function syncControls() { controls.forEach((f) => f()); updateChangedDots(); }
 function changed() {
   syncControls(); // re-applies caps between sliders (see maxFrom)
   save();
@@ -550,13 +544,6 @@ $('btn-calibrate').addEventListener('click', async () => {
   }
 });
 
-$('btn-room').addEventListener('click', async () => {
-  if (!(await ensureMic())) return;
-  $('btn-room').disabled = true;
-  await measureRoom('Stay quiet:');
-  $('btn-room').disabled = false;
-  setStatus(roomNoiseRms > 0 ? `Room noise ${toDb(roomNoiseRms).toFixed(1)} dB.` : 'Room noise not measured (no signal).');
-});
 
 $('btn-typical').addEventListener('click', async () => {
   if (!(await ensureMic())) return;
@@ -572,10 +559,9 @@ function setStatus(text) { $('status').textContent = text; }
 // ── Previews ───────────────────────────────────────────────────────────────
 const SIZES = {
   compact: () => ({ width: 220, height: 220, pct: settings.layout.compactPct, label: 'Compact 220×220' }),
-  small: () => ({ width: settings.layout.smallWidth, height: settings.layout.smallHeight, pct: settings.layout.smallPct, label: `Smaller default ${settings.layout.smallWidth}×${settings.layout.smallHeight}` }),
   expanded: () => ({ width: 382, height: 480, pct: settings.layout.expandedPct, label: 'Expanded 382×480' }),
 };
-let size = 'small';
+let size = 'compact';
 const frame = $('frame');
 
 const ring = new MezzoRangeRing($('mon-ring'), {
@@ -598,11 +584,8 @@ document.querySelectorAll('[data-size]').forEach((b) => b.addEventListener('clic
   document.querySelectorAll('[data-size]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
   applyLayout();
 }));
-for (const [id, key] of [['small-w', 'smallWidth'], ['small-h', 'smallHeight']]) {
-  $(id).addEventListener('change', () => { const v = parseInt($(id).value, 10); if (v > 0) { settings.layout[key] = v; changed(); } });
-}
-$('profile-name').addEventListener('input', () => { $('mon-name').textContent = $('profile-name').value; });
-$('mon-name').textContent = $('profile-name').value;
+// A fixed example name, as a profile name shows in the Companion.
+$('mon-name').textContent = 'Home office';
 
 // ── Readout ────────────────────────────────────────────────────────────────
 const ZONES = ['Listening', 'Within range', 'Approaching end of range', 'Outside range'];

@@ -134,6 +134,18 @@ test.describe('Range Ring playground', () => {
     await expect(page.locator('#c-ring-voice-edgeOpacity')).toHaveAttribute('max', '0.45');
   });
 
+  test('keeps the controls a visitor needs: Compact and Expanded only, a fixed example name, no Measure room', async ({ page }) => {
+    await page.goto('/playground/');
+    await expect(page.locator('[data-size]')).toHaveCount(2);
+    await expect(page.locator('[data-size="compact"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('[data-size="expanded"]')).toBeVisible();
+    await expect(page.locator('input[type="number"], #profile-name')).toHaveCount(0);
+    await expect(page.locator('#mon-name')).toHaveText('Home office');
+    await expect(page.locator('#btn-room')).toHaveCount(0);
+    await expect(page.locator('#btn-typical')).toBeVisible();
+    await expect(page.locator('label:has(#toggle-readout)')).toHaveText('Show numbers');
+  });
+
   test('is not in the main nav', async ({ page }) => {
     await page.goto('/index.html');
     await expect(page.locator('nav a[href*="playground"]')).toHaveCount(0);
