@@ -3,7 +3,7 @@
  * Enables offline support and PWA installation
  */
 
-const CACHE_NAME = 'mezzo-v13';
+const CACHE_NAME = 'mezzo-v14';
 const ASSETS = [
   '/',
   '/index.html',
@@ -50,7 +50,11 @@ self.addEventListener('activate', (event) => {
 });
 
 // Fetch - serve from cache, fall back to network
+// The playground (/playground/) is never cached or served from cache: it's
+// a separate, frozen page whose files share names with the app's (e.g.
+// src/engine.js), so it always comes straight from the network.
 self.addEventListener('fetch', (event) => {
+  if (new URL(event.request.url).pathname.startsWith('/playground')) return;
   event.respondWith(
     caches.match(event.request)
       .then((response) => response || fetch(event.request))
