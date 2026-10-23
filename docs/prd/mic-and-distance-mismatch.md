@@ -2,7 +2,7 @@
 
 ## Product Requirements Document
 
-**Status:** Proposed<br>
+**Status:** Proposed (updated 2026-10-23 with a real example, the owner's note copy, and a build estimate)<br>
 **Implementation status:** Not implemented. Nothing in this document describes shipped behavior. `docs/product-experience.md` must not be updated until it ships.<br>
 **Milestone:** V2 (polish over new features). Scoped to the smallest change that prevents the common failure.<br>
 **Product:** Mezzo<br>
@@ -106,6 +106,27 @@ Conclusions:
 - **The current default can be read without acquiring the mic.** `enumerateDevices()` needs no active capture. Reading the `"default"` entry's label on Ready tells Mezzo which device the next Start monitoring will get, without turning the mic indicator on.
 - **Chrome's per-site mic choice may override the OS default.** Chrome's permission prompt and site settings let the user pick a mic for this site specifically. Unverified: whether an unconstrained `getUserMedia` then returns that chosen mic, and whether `enumerateDevices()`'s `"default"` entry (or first audio input) reflects it. If it doesn't, Ready would compare against the wrong device. Before building, verify which entry matches the track Mezzo actually gets after choosing a non-default mic in that prompt, and compare against that entry (§11 Q3). The picker itself is browser UI: Mezzo can't style, label, or pre-select it, only show the result afterwards.
 
+### 4.2a Re-checked 2026-10-23: can Mezzo read the mic's name?
+
+The owner's questions, answered:
+
+| Question | Answer |
+|---|---|
+| Can the name be read after permission? | **Yes.** The live track's `label` is always set while Mezzo holds the mic. `enumerateDevices()` returns labels whenever microphone permission is granted for the site, without holding the mic. With a one-time grant ("Allow this time"), labels are available while that grant lasts, which covers a normal visit. Before any grant, labels are empty, and Mezzo treats the mic as unknown. |
+| In both the page and the Companion? | **Yes, the same names.** The Companion window has its own `navigator.mediaDevices` and sees the same labels as the page. Only the `deviceId`s differ between the two (§4.2), which is why ids can't be used. Mezzo's microphone is always acquired in the page, never in the Companion. |
+| Stable across sessions? | **The name is.** It comes from the OS and device ("MacBook Pro Microphone", a camera's model name), so it's the same tomorrow and after a restart. `deviceId`s are not: they're hashed per site and rotate when site data is cleared. |
+| Caveats | The default entry carries a `Default - ` prefix (Windows also has `Communications - `), which must be stripped. Two identical devices share a name (they'd compare equal: silent, the safe failure). Bluetooth names can include a person's name ("Alex's AirPods Pro"), which stays in this browser only (§6.5). |
+
+Re-probed 2026-10-23 (Chromium via Playwright 1.62, fake devices, Mezzo's exact constraints): the live track's label, and the labels from `enumerateDevices()` in the page, in a Document Picture-in-Picture window, and in a second page, were identical (`Fake Default Audio Input`, `Fake Audio Input 1`, `Fake Audio Input 2`); the non-default `deviceId`s were different in all three. Real-hardware label formats (prefixes, vendor suffixes) still need the §14 manual check.
+
+**Which "current mic" to compare against (revised).** The safest source is the label of the track Mezzo **actually acquired**, not the `"default"` entry: Chrome lets a site pick a specific microphone (the permission prompt's picker, or site settings), and the `"default"` entry may not reflect that pick (§11 Q3). Mezzo already acquires the mic briefly every time Home loads with permission (the permission probe) and for every calibration and monitoring session, so it can remember the last acquired track's label in memory, without ever acquiring the mic on Ready. Recommended: on Ready, use that remembered label; if a `devicechange` event has fired since, fall back to the `"default"` entry from `enumerateDevices()`; if neither is known, show nothing.
+
+### 4.2b A real example (2026-10-23)
+
+The owner made "Home Office" upstairs using their **camera's microphone**. Later, downstairs, the MacBook's **built-in microphone** was in use, and the same profile no longer fit: the range was set for a different mic's sensitivity, so the feedback felt wrong. The two labels differ (a camera model name vs. "MacBook Pro Microphone"), so Proposal 1 would have shown the note on Ready before Start monitoring.
+
+It also shows a second, related point: a profile is really "this place, with this mic." Showing each saved profile's calibration mic in the selector (§7.2) would let someone pick the profile that matches the mic they're on.
+
 ### 4.3 Hardware events (background only, not designed for)
 
 Mid-session hardware events are out of scope (§2). For the record: `devicechange` fires when inputs are added or removed, but browsers may delay it for hidden documents, and Mezzo's session runs in the opener tab, which is usually hidden. Whether a live `"default"` track follows an OS default change mid-session is unverified. Unplugging the active mic ends the track, and Mezzo has no `ended` listener. None of this is needed for the inattention case, which is settled before Start monitoring.
@@ -141,8 +162,8 @@ No new canonical strings. This PRD reuses **Recalibrate**, **Speaking profile**,
 
 ### 6.1 Behavior
 
-- When a calibration capture completes, Mezzo records the **normalized label** of the track it actually measured as `calibratedMic` on the result. That covers Create speaking profile, Create new profile, and Recalibrate of a saved or unsaved profile. The field carries through to the unsaved profile, and through save, replace, and recalibrate-Replace into the saved profile.
-- On Ready, Mezzo reads the label of the browser's current default input (`"default"` entry of the Companion window's `enumerateDevices()`, normalized) **without acquiring the microphone**.
+- When a calibration capture completes, Mezzo records the **normalized label** of the track it actually measured as `calibratedMic` on the result. That covers Create speaking profile, Create new profile, and Recalibrate of a saved or unsaved profile. The field carries through to the unsaved profile, and through save, update-by-name, and recalibrate-Update into the saved profile.
+- On Ready, Mezzo uses the label of the microphone it most recently acquired in this tab (Home's permission probe, or the last calibration or monitoring session), falling back to the `"default"` entry of `enumerateDevices()` after a `devicechange` (§4.2a). It never acquires the microphone to check.
 - If the selected profile has a known `calibratedMic` **and** the current label is known **and** the two differ, Ready shows the **mic note**. In every other case, including either side unknown, it shows nothing.
 - The note re-evaluates when Ready is shown and when the selection changes. No live device-change listening: the inattention case is settled by checking each time the user arrives at Ready.
 - The note is informational. **Start monitoring stays fully available** and unchanged. Nothing is blocked, confirmed, or defaulted differently.
@@ -155,23 +176,19 @@ No new canonical strings. This PRD reuses **Recalibrate**, **Speaking profile**,
 
 ### 6.3 Placement and layout
 
-- The note sits in Ready's existing contextual-actions slot (`.pip-ready-contextual-actions`), between the selector trigger and **Start monitoring**. That keeps CLAUDE.md's fixed Ready order (heading, label, selector, contextual actions, Start monitoring, disclaimer). For a saved profile this slot is empty today, except for a profile saved before the speech-band filter, which shows "Recalibrate to use the improved sound filter."
-- **If both notes apply, show only the filter note** ("Recalibrate to use the improved sound filter."). One fresh calibration fixes both, since it uses the new filter and the current mic, so a second note would only repeat the same remedy.
+- The note sits in Ready's existing contextual-actions slot (`.pip-ready-contextual-actions`), between the selector trigger and **Start monitoring**. That keeps CLAUDE.md's fixed Ready order (heading, label, selector, contextual actions, Start monitoring, disclaimer). For a saved profile this slot is empty today, except for a profile saved before the speech-band filter, which shows "This profile was made before Mezzo's improved sound filter. Recalibrate for more accurate nudges."
+- **If both notes apply, show only the filter note.** One fresh calibration fixes both, since it uses the new filter and the current mic, so a second note would only repeat the same remedy.
 - The slot must reserve the note's height whenever a profile is selected, so the note appearing or disappearing **never moves Start monitoring** (the original Ready PRD's anchoring rule). Window size stays 380×364.
-- Not a modal, banner, toast, or full-screen decision state. It's quiet inline text in muted Geist (`--color-text-muted`, like the existing "Recalibrate to use the improved sound filter." note in this slot), with the link in sage (`--color-link`), the Companion's text-link color.
+- Not a modal, banner, toast, or full-screen decision state. It's quiet inline text in muted Geist (`--color-text-muted`), with **Recalibrate** as an inline sage link (`.pip-inline-link`), exactly like the filter note already in this slot.
 
 ### 6.4 Copy
 
-Recommended (sentence case, descriptive, no judgment):
+Chosen by the owner (2026-10-23):
 
-> Calibrated with {calibrated mic}. Now using {current mic}.
-> **Recalibrate**
+> Looks like you're using a different microphone than when you made this profile. **Recalibrate** so your range fits it.
 
-- **Recalibrate** is a text link using `.pip-ready-contextual-link` and the canonical string. It runs exactly the existing Recalibrate flow for the selected profile. For a saved profile that ends in the existing Replace / Keep temporarily / Discard decision state, so nothing is lost by tapping it. This adds a second entry point next to the selector panel's per-row Recalibrate icon. That's deliberate: the note is useless if the remedy is hidden inside a closed panel.
-- Long labels truncate with an ellipsis in the visible text. The full sentence goes in the element's accessible text and `title`.
-- Fallback if both names can't fit legibly at 380px (decide in design review):
-  > Your microphone has changed since this profile was calibrated.
-  > **Recalibrate**
+- **Recalibrate** is an inline sage link inside the sentence (the same pattern as the filter note). It runs exactly the existing Recalibrate flow for the selected profile. For a saved profile that ends in the existing Update / Keep temporarily / Discard decision state, so nothing is lost by tapping it. Its accessible name is "Recalibrate {profile name}".
+- The sentence doesn't name either microphone, so it never truncates and never shows a personal device name on screen. Naming the mics is left to §7 (C2's "Using {mic}" line and, optionally, the selector).
 
 Copy must never use: warning, alert, mismatch, wrong, incorrect, error, "for accurate results," "may be inaccurate," or any icon read as a warning (no ⚠, no red). No chartreuse: inside the Companion it is reserved for the over-range band (`docs/prd/range-ring-and-lantern-refresh.md` §4.2).
 
@@ -179,7 +196,7 @@ Copy must never use: warning, alert, mismatch, wrong, incorrect, error, "for acc
 
 - `calibratedMic` is a **device label**, not audio. It's stored **only in this browser's `localStorage`**, inside the saved profile record it describes, and goes wherever that record goes (deleted with the profile, cleared with site data). It's never uploaded, synced, or included in analytics events.
 - Device labels can contain personal names (e.g. "Alex's AirPods Pro"). That's the main privacy cost of this proposal, and the PRD states it plainly instead of minimizing it. It's the same string the browser already exposes to the page, and it never leaves the device.
-- Alternative considered: store a hash of the normalized label instead. That allows comparison without retaining the name, but Ready could only show the fallback copy. Recommended: plain label, because naming the calibration mic is what lets a three-microphone user act on the note. Flagged as an open question (§11).
+- Alternative considered: store a hash of the normalized label instead. Since the chosen note copy (§6.4) names neither mic, a hash is enough for the note itself. The plain label is needed only for the optional selector line (§7.2), which shows each profile's calibration mic. So: if the selector line is wanted, store the plain label; if not, a hash keeps device names out of storage entirely. Flagged as an open question (§11).
 - The current mic's label on Ready is read live and never stored.
 - No change to the privacy disclaimer. CLAUDE.md says not to repeat privacy messaging indiscriminately; the profile-storage description in `docs/product-experience.md` gets one line at ship time.
 
@@ -199,9 +216,16 @@ Copy must never use: warning, alert, mismatch, wrong, incorrect, error, "for acc
 - C2 is the one screen every calibration path shares: Create speaking profile, Create new profile, and Recalibrate (which skips C1).
 - Hidden if the label is unknown. No action attached. Not shown on Monitoring, ever. Monitoring stays free of controls and extra text, per "Keep the product peripheral."
 
-### 7.2 Why not always show the mic on Ready?
+### 7.2 Should Ready always show the current mic's name? (owner's question, 2026-10-23)
 
-Ready is a fixed-size, deliberately sparse checkpoint. Showing the device permanently adds a line nobody needs on most days. Showing it **only when it differs** (Proposal 1) keeps Ready calm and makes the line mean something when it does appear.
+Recommendation: **not as a permanent line under Start monitoring.** Ready is a fixed-size, deliberately sparse checkpoint; a device name there on every visit is a line nobody needs on most days, and it can carry a personal name. The note (Proposal 1) appears exactly when the mic matters.
+
+Two cheaper ways to make the mic visible, in order of preference:
+
+1. **In the selector panel, under each saved profile's name**, in muted mono microcopy: the mic it was calibrated with (e.g. "Home Office" / "Logitech BRIO"). It's out of sight until the panel opens, it helps people pick the profile that matches their current mic (the "this place, with this mic" idea from §4.2b), and it adds nothing to Ready itself. Profiles without a known mic show no second line.
+2. **On Calibrating**, "Using {mic}" (§7.1), so the mic is named at the moment the profile is made.
+
+If the owner still wants it on Ready, the least disruptive spot is a single muted line inside the collapsed selector trigger, under the profile name ("Using MacBook Pro Microphone"), never a new row.
 
 ### 7.3 Tradeoffs
 
@@ -258,7 +282,7 @@ A conservative later candidate, only once real usage data exists: a passive, pos
 ### 10.1 Functional
 
 1. Every completed calibration records `calibratedMic` (normalized label of the measured track, or `null`).
-2. `calibratedMic` carries through: temporary profile, then Save profile (create), Replace via a matching name, and saved-profile Recalibrate then Replace. Keep as unsaved keeps it on the new unsaved profile and leaves the saved profile's value untouched.
+2. `calibratedMic` carries through: temporary profile, then Save profile (create), Update via a matching name, and saved-profile Recalibrate then Update. Keep temporarily keeps it on the new temporary profile and leaves the saved profile's value untouched.
 3. Profiles without the field load, display, monitor, recalibrate, save, and delete exactly as today.
 4. Ready shows the mic note only when §6.2's comparison returns `true` for the selected profile.
 5. The note updates when Ready is shown and on selection change.
@@ -279,10 +303,17 @@ A conservative later candidate, only once real usage data exists: a passive, pos
 
 ### 10.3 Implementation surface (for estimation)
 
-- `src/audio.js`: a read-only getter for the active track's label. No change to acquisition, constraints, or level processing.
+- `src/audio.js`: a read-only getter for the active track's label, and remembering the last acquired label in memory (§4.2a). No change to acquisition, constraints, or level processing.
 - `src/calibration-controller.js`: include `calibratedMic` in the result.
 - `src/profiles.js`: thread the field through the functions in §4.4, and add `normalizeMicLabel()`/`micLabelsDiffer()`.
-- `src/mezzo-session.js`: temporary shape, both commit paths, Ready note render (reading `pipWindow.navigator.mediaDevices.enumerateDevices()`; add any new DOM refs to `handlePipClose()`'s reset list), C2 line, C1 copy.
+- `src/mezzo-session.js`: temporary shape, both commit paths, Ready note render (the remembered label, with the `enumerateDevices()` fallback after `devicechange`; the filter note wins when both apply; add any new DOM refs to `handlePipClose()`'s reset list), C2 line, C1 copy, optionally the selector's per-profile mic line (§7.2).
+
+**Estimate (2026-10-23):** about a day of build and tests once §11 Q3 is answered.
+- Data and helpers (`calibratedMic` through the six write paths in §4.4, `normalizeMicLabel()`/`micLabelsDiffer()`): a few hours, with about 15 unit tests.
+- Ready note, one-note rule, "Using {mic}" on Calibrating, the seating line on C1: a few hours, with about 6 browser tests (fake devices, with `enumerateDevices()` and the remembered label stubbed to simulate a second mic).
+- Optional selector mic line (§7.2): about an hour.
+- Docs: CLAUDE.md's profile shapes, and `docs/product-experience.md` at ship time.
+- **Before building:** one manual check on real hardware (§14, the label-check page): pick a non-default mic in Chrome's prompt and see whether the track and the `"default"` entry agree. It decides only which fallback Ready uses; the recommended remembered-label approach works either way.
 - `CLAUDE.md`: update "Canonical Runtime Profile Shapes" to `{ id, name, speakingDb, spreadDb, calibratedTs, calibratedMic? }` and the temporary shape to match.
 - `docs/product-experience.md`: only at ship time.
 
@@ -290,9 +321,10 @@ A conservative later candidate, only once real usage data exists: a passive, pos
 
 ## 11. Open Questions
 
-1. **Plain label vs. hash** for `calibratedMic` (§6.5). Recommendation: plain label, local only. **On hold:** product owner leaning plain label, pending their confirmation.
-2. **Two-name copy vs. fallback copy** at 380px (§6.4). **On hold:** product owner decides after the Q3 hardware test, using their real mic labels.
-3. **Chrome's per-site mic choice** (§4.1–4.2): after picking a non-default mic in Chrome's permission prompt or site settings, which `enumerateDevices()` entry matches the track Mezzo actually gets? Ready must compare against that one. Blocking for implementation.
+1. **Plain label vs. hash** for `calibratedMic` (§6.5). Now tied to Q6: the selector's mic line needs the plain label; without it, a hash is enough. Owner to decide.
+2. **Two-name copy vs. fallback copy** at 380px (§6.4). **Resolved 2026-10-23:** the owner chose copy that names neither mic (§6.4).
+3. **Chrome's per-site mic choice** (§4.1–4.2): after picking a non-default mic in Chrome's permission prompt or site settings, which `enumerateDevices()` entry matches the track Mezzo actually gets? Less critical since 2026-10-23: Ready now compares against the label of the track Mezzo actually acquired (§4.2a), which is right either way; this only decides the `devicechange` fallback. Check it once on real hardware before building.
+6. **Show the mic on Ready?** (owner's question, 2026-10-23.) Recommendation in §7.2: no permanent Ready line; prefer the selector panel's per-profile mic line. Owner to decide.
 4. **Windows `Communications - ` entry:** confirm Chrome/Edge on Windows pick the `default`, not `communications`, device for an unconstrained `getUserMedia`, so Ready compares against the right entry.
 5. **Unknown on Ready but known at Start monitoring:** if Ready couldn't read labels, should anything happen once the track's label becomes known? Recommendation: no. Monitoring stays untouched.
 
@@ -308,13 +340,14 @@ A conservative later candidate, only once real usage data exists: a passive, pos
 ## 13. Acceptance Criteria
 
 - A profile calibrated on mic A, with mic A still default: no note on Ready.
-- Same profile, default switched to mic B: note shows on Ready with both names (or the fallback copy), and **Start monitoring** sits at exactly the same position as without the note.
+- Same profile, default switched to mic B: note shows on Ready with the §6.4 copy, and **Start monitoring** sits at exactly the same position as without the note.
+- A profile that needs both notes (saved before the filter, and on a different mic): only the filter note shows.
 - Mic chosen in Chrome's permission prompt or site settings (not the OS default): the note compares against the mic Mezzo will actually use.
 - Back on mic A and Ready shown again: no note.
 - Profile saved before this change (no `calibratedMic`): no note, ever, until it's next recalibrated and replaced.
 - Labels unavailable (empty): no note.
-- The note's **Recalibrate**, on a saved profile, reaches the existing Replace / Keep temporarily / Discard decision state. Replace stores the new mic; Keep as unsaved leaves the saved profile's mic untouched.
-- Saving an unsaved profile, and replacing via a matching name, both persist its `calibratedMic`.
+- The note's **Recalibrate**, on a saved profile, reaches the existing Update / Keep temporarily / Discard decision state. Update stores the new mic; Keep temporarily leaves the saved profile's mic untouched.
+- Saving an unsaved profile, and updating via a matching name, both persist its `calibratedMic`.
 - The mic indicator stays off throughout Ready, including while the note is evaluated.
 - C2 shows **Using {mic}** once capture starts.
 - C1 shows the seating sentence and still fits at 380×364.
