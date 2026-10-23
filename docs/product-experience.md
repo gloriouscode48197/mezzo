@@ -54,7 +54,7 @@ From the user's perspective there are only two named product experiences.
 Mezzo is Picture-in-Picture–first: the Mezzo Companion is the one operational surface. Mezzo (the browser page) is not part of that operational workflow — it has exactly two narrow jobs, depending on whether a Companion exists yet:
 
 * **Before a Companion exists:** introduce the product, and — as one narrow, deliberate exception — prepare and request microphone access (see "Learn About Mezzo," below, and CLAUDE.md's Non-Negotiable Decisions, "permission should follow understanding"). Still no profile selection and no calibration; its one operational action beyond the permission gate itself is opening the Mezzo Companion.
-* **While a Companion is open:** stay open to keep the Companion running, show whether monitoring is active or inactive, and offer one recovery action (Close Companion) for when the Companion's own native ✕ isn't reachable.
+* **While a Companion is open:** stay open to keep the Companion running, say so ("Mezzo is running"), and offer one recovery action (Close Companion) for when the Companion's own native ✕ isn't reachable. If the Companion closes without the user asking this page to close it (another picture-in-picture window replaced it, or its own ✕), it offers to reopen it.
 
 Every other responsibility that used to live here — preparing for monitoring, selecting/calibrating/recalibrating a profile, managing the saved-profile library, managing an active session, recovering monitoring — now belongs to the Mezzo Companion alone. Users may still move between these two states of the same page, but they should never feel like they're doing anything there beyond "get me to the Companion" and "I can see it's running."
 
@@ -108,36 +108,43 @@ Marketing purpose:
 
 Onboarding purpose: reduce uncertainty about *what Mezzo is*, then hand off to the Mezzo Companion. It no longer introduces Speaking Profiles or supports calibration — none of that happens here. It does, however, explain microphone access and request it — the one deliberate exception to "everything operational lives in the Companion" (see "Learn About Mezzo," below, and CLAUDE.md's Non-Negotiable Decisions).
 
-This page reflects the browser's *current* microphone-permission state — never first-time-vs-returning visit history, and never a persisted "have I seen this before" flag. Depending on that live state, it shows one of three things: an explanation of why access is needed with an **Enable microphone** action, a brief confirmation once access is granted with a separate **Open Mezzo Companion** action, or a recovery message if access is denied. Granting access and opening the Companion are always two separate, deliberate clicks — never chained into one, so opening the Companion always has its own fresh user gesture (see "Calibration," below, for why this matters). There is no separate "Try Mezzo" step or intermediate launcher screen between the marketing content and the Companion opening — just this permission gate, resolved before the Companion ever exists.
+This page reflects the browser's *current* microphone-permission state — never first-time-vs-returning visit history, and never a persisted "have I seen this before" flag. Depending on that live state (`navigator.permissions.query`, falling back to "prompt"), it shows one of three things:
+
+* **prompt** (first visit, or "Allow this time"): the marketing page. A two-column hero ("For headphone calls in shared spaces" / "Focus on the meeting while Mezzo minds the volume." with the coworking illustration) holding **Enable microphone**, the page's only button, and the privacy line "Mezzo only measures volume. Nothing you say is recorded."; then **How it works**, a centered column of three numbered steps (Allow your mic, Calibrate in the Companion, Glance at the ring) with three still ring chips (Within range, Approaching, Outside range).
+* **granted:** "You're ready to use Mezzo", "Microphone access is on. Open the Companion to pick a speaking profile and start monitoring.", and a separate **Open Mezzo Companion** action.
+* **denied:** "Your browser has blocked microphone access", with the site-controls guidance and the page's real host in an address-bar illustration.
+
+A fourth, **running**, replaces all three while the Companion is open (see "Dock," below). Granting access and opening the Companion are always two separate, deliberate clicks — never chained into one, so opening the Companion always has its own fresh user gesture (see "Calibration," below, for why this matters). There is no separate "Try Mezzo" step or intermediate launcher screen between the marketing content and the Companion opening — just this permission gate, resolved before the Companion ever exists.
 
 The experience should feel:
 
-* warm
-* editorial
+* calm
 * spacious
 * approachable
 
-The product itself should remain the visual hero.
+It uses the Lantern visual system (dark charcoal surface, Geist type, chartreuse primary actions); the running state is the website's one cream surface.
 
 ---
 
 ## Dock
 
-Internal term only (retired name: Anchor page) — see Canonical Terminology in `CLAUDE.md`. It is the same browser page as Marketing/Onboarding, before a Companion exists; once a Companion is open, it becomes a minimal status surface that must stay open to keep the Companion running.
+Internal term only (retired name: Anchor page) — see Canonical Terminology in `CLAUDE.md`. It is the same browser page as Marketing/Onboarding, before a Companion exists; once a Companion is open, it becomes the **running** state: a minimal surface that must stay open to keep the Companion running.
 
-The Dock:
+The running state (cream surface, charcoal text, the website's one light theme):
 
-* keeps the Mezzo Companion running
-* reflects whether monitoring is active or not, via a small plain-text status line
-* explains why the page must remain open
-* offers Close Companion, a recovery action — the one thing the Dock is allowed to do beyond reporting status
-* closes the Companion if it closes itself
+* a small "Companion open" label, "Mezzo is running", and "Your Companion is open in its own window. Switch to your meeting whenever you're ready."
+* the privacy line, "Mezzo only measures volume. Nothing you say is recorded."
+* **Close Companion**, a quiet text link: the recovery action for a Companion buried behind other windows — the one thing this page is allowed to do beyond saying it's running
+* its live region announces "Mezzo is running." once on arrival
+* after a launch from a Google Meet call (the extension adds `?from=meet`), a one-time tip about Meet's own mini window, until dismissed
 
-It is not the primary monitoring interface, and it is not a second operational surface. It has no calibration UI, no profile UI, no Start monitoring, no Stop, no Save — it does not duplicate any Companion control, full stop. It does not run a second visualization or reflect real session data beyond that one status line — see "Dock Experience," below, for exactly what it shows and why.
+It does not track what the Companion is doing inside (Ready, Calibrating, Monitoring all read the same): no status line, no calibration UI, no profile UI, no Start monitoring, no Stop, no Save.
+
+**Reopen Companion.** Chrome allows one picture-in-picture window at a time, and the newest wins: Meet's mini window (opened manually, or automatically on a tab switch or screen share) closes the Companion. When the Companion closes in any way other than this page's Close Companion link — which includes its own native ✕, since the two look the same from inside — the page stays on the cream surface with "The Companion closed", a **Reopen Companion** button and a **Done** link. Reopen opens it again from that click with the same profile (an unsaved one included, still in memory only), and resumes monitoring if it was running. Done returns to the granted page.
 
 The Mezzo Companion, not the Dock, is meant to stay available across an entire meeting-filled day — monitoring starts and stops independently inside it, session by session, without the Companion needing to reopen.
 
-User-facing copy never names this page — it says things like "this page," "keep this page open," or "closing this page will also close the Mezzo Companion."
+User-facing copy never names this page — it says things like "Your Companion is open in its own window."
 
 ---
 
@@ -194,15 +201,15 @@ I'm ready, from C1 — begins capture; the microphone was already granted back o
 
 ↓
 
-Active calibration — six seconds, a live countdown and horizontal listening bar; no manual "I'm done" action (see "Calibration")
+Active calibration — a 3-2-1, then six seconds of listening, with a live six-segment level meter; no manual "I'm done" action (see "Calibration")
 
 ↓
 
-Calibration completes automatically, producing an unsaved profile — it becomes selected immediately, with no separate decision screen in between
+"Your new speaking profile is ready" — Save speaking profile, Keep temporarily, or Discard (see "Calibration → On Completion")
 
 ↓
 
-Ready, with the unsaved profile selected — "Ready for your first conversation." From here: start monitoring immediately without saving, or save it first (see "Profile Model → Saving and Replacement")
+Ready, with the new profile selected — "Ready for your first conversation" (see "Profile Model → Saving and Replacement")
 
 ↓
 
@@ -264,26 +271,35 @@ Reaching capture always starts with a short instructional step (C1) first, excep
 * **Create new profile**, from a saved-profile Ready state — also goes through C1 first: it's creating a brand-new profile from scratch, so the brief instructional step stays useful.
 * **Recalibrate**, on a saved or unsaved profile — skips C1 and begins capture immediately. Recalibrating is a faster, repeat action for someone who has already been through calibration before, so the instructional step isn't needed again.
 
-C1 explains, briefly, what the user should do before capture starts — not why microphone access is needed, which Home already covered before the Companion opened. Its one action, "I'm ready," begins capture; microphone permission is normally already granted by this point, so this resolves silently rather than prompting again. A Back text link returns to wherever C1 was opened from (Welcome, or the same Ready state, with its selection and any existing unsaved profile left untouched) without starting calibration or changing any profile.
+C1 ("Create speaking profile" / "Talk for a few seconds so Mezzo can learn the speaking level you'd like to maintain.") explains, briefly, what the user should do before capture starts — not why microphone access is needed, which Home already covered before the Companion opened. Its one action, "I'm ready," begins capture; microphone permission is normally already granted by this point, so this resolves silently rather than prompting again. A **Cancel** text link returns to wherever C1 was opened from (Welcome, or the same Ready state, with its selection and any existing temporary profile left untouched) without starting calibration or changing any profile.
 
 ### Active Calibration
 
-Calibration lasts six seconds and completes automatically — there is no manual "I'm done" action. It shows a live countdown ("Listening… 6s," ticking down) and a horizontal volume bar that fills continuously and proportionally to detected input — no flanking scale labels (a 2026-08-12 revision deliberately dropped the earlier "Quiet"/"Loud" labels as too judgmental for a bar meant only to confirm active measurement) — enough to communicate active measurement without implying recording or transcription.
+Calibrating shows "Keep speaking at the level you want to maintain" (with a "Recalibrating {name}" label above it when recalibrating a saved profile), a six-segment level meter, a status line and a hint, and a Cancel link:
+
+* **3-2-1** — "Start speaking in 3/2/1" / "Get ready to talk normally." The meter already reacts, as a mic check, and the room's own noise level is measured from these readings and saved with the profile.
+* **Listening, six seconds** — "Listening… Ns", counting down / "Talk normally. The bars move with your voice." The meter's lit segments follow the live, filtered microphone level, so the user can see their voice being picked up without being shown a target. It completes automatically; there is no manual "I'm done" action.
+* **Cancel** stops capture, discards the partial samples, and returns to where calibration started.
+
+Two one-time screen-reader announcements mark the start of each phase; nothing is announced every second. With reduced motion, the segments follow the level directly, without easing. Exact sizes and values: `docs/prd/range-ring-and-lantern-refresh.md` §8.
 
 If microphone access is blocked or denied at this point — access must have been revoked after the Companion already opened, since Home's own permission gate already ensured it was granted before the Companion could open at all — calibration cannot continue: a dedicated recovery screen explains what happened and how to fix it (see "Companion States → Microphone Access Blocked"), with an in-app Try again rather than requiring a manual page reload.
 
 ### On Completion
 
-Which result appears depends on why calibration was run:
+A brief "Creating your speaking profile…" moment, then a decision screen whose actions depend on why calibration was run. If speech sat less than 12 dB above the room's own noise, either screen also says: "Your room is a bit noisy for how softly you speak. Try moving a little closer to your mic."
 
-**Session-mode calibration** (Create speaking profile, or Create new profile from a saved-profile Ready state) produces an unsaved profile immediately — no separate decision screen. It becomes selected, and Ready shows it with its own contextual actions (see "Profile Model").
+**A new profile** (Create speaking profile, Create new profile, or Recalibrate on the temporary profile) shows "Your new speaking profile is ready" / "What would you like to do with it?":
 
-**Recalibrate**, on a saved profile, does not touch that profile yet. It shows a decision screen instead — "Replace existing '{name}' profile?" — offering:
+* **Save speaking profile** — opens the naming screen (see "Profile Model → Saving and Replacement")
+* **Keep temporarily** — keeps it as the temporary profile, selected on Ready ("Available until you close the Companion")
+* **Discard** — throws it away and restores the previous selection (or Welcome, if nothing else exists)
 
-* **Replace** — overwrites the saved profile's calibration in place, keeping its name and identity, and returns to Ready with it selected
-* **Keep as unsaved** — leaves the saved profile completely untouched, and keeps the new calibration as a fresh unsaved profile instead, selected on return
+**Recalibrate, on a saved profile**, does not touch that profile yet. The same heading and question, with:
 
-**Recalibrate**, on the unsaved profile itself, has nothing else at stake to protect: it simply replaces the unsaved profile directly with the new result, selected on return.
+* **Replace "{name}"** — overwrites the saved profile's calibration in place, keeping its name and identity, and returns to Ready with it selected
+* **Keep temporarily** — leaves the saved profile completely untouched, and keeps the new calibration as the temporary profile instead, selected on return
+* **Discard** — leaves everything as it was
 
 Nothing is written to a saved profile merely by entering calibration or by capture completing — only Replace does that, and only for the one profile Recalibrate was started from. There is no path from a session-only calibration to silently replacing a saved profile — only to explicitly doing so, visibly, by name (see "Profile Model → Saving and Replacement").
 
@@ -298,7 +314,7 @@ When the Companion is in its Ready state, show, always in this order:
 1. Ready heading — see "First-Conversation Copy" below
 2. "Speaking profile" label
 3. A collapsed selector trigger, showing the currently selected profile's name (or "Unsaved profile")
-4. Contextual actions for that selection — Recalibrate, plus Save profile or Create new profile depending on what's selected (see "Profile Model")
+4. A contextual line for that selection: **Save profile** for the temporary profile; for a saved profile, nothing — or "Recalibrate to use the improved sound filter." when it was saved before calibration peaks were recorded (see "Profile Model")
 5. Start monitoring
 6. A privacy disclaimer
 
@@ -308,16 +324,15 @@ Selecting Start monitoring should:
 
 * start the monitoring session, with whichever profile is selected, as-is
 * lock profile selection
-* transition the Companion into its Monitoring state
-* transition the Dock into its "Monitoring is active" status
+* transition the Companion into its Monitoring state, in Compact (see "Compact Companion")
 
-Selecting Recalibrate or Create new profile should transition the Companion into calibration (see "Calibration" above) — not directly into Monitoring.
+Selecting Recalibrate or Create new profile (both in the selector panel) should transition the Companion into calibration (see "Calibration" above) — not directly into Monitoring.
 
 Monitoring should never begin automatically on its own, without this explicit action. This lets the user start monitoring sessions, recalibrate a profile, or run a fresh calibration, at any point in the day, entirely inside the Companion — Mezzo (Home/Dock) is never involved in any of these decisions.
 
 ## First-Conversation Copy
 
-The Ready heading reads "Ready for your first conversation." until the user has actually started monitoring for the first time — not merely calibrated, saved, recalibrated, switched profiles, opened and closed a decision state, or closed and reopened Mezzo before ever starting a session. Once monitoring has started for the first time, ever, every later Ready state shows "Ready for your next conversation." instead. This is a one-way, persisted condition: it survives Companion restarts and never reverts back to the first-conversation copy.
+The Ready heading reads "Ready for your first conversation" until the user has actually started monitoring for the first time — not merely calibrated, saved, recalibrated, switched profiles, opened and closed a decision state, or closed and reopened Mezzo before ever starting a session. Once monitoring has started for the first time, ever, every later Ready state shows "Ready for your next conversation" instead. This is a one-way, persisted condition: it survives Companion restarts and never reverts back to the first-conversation copy.
 
 ## Deferred: Post-Session Acknowledgment
 
@@ -335,7 +350,7 @@ Open Mezzo Companion (from Home — the one action; it does not choose a profile
 
 ↓
 
-Mezzo Companion opens, showing Ready — previously used saved profile is selected and visible; an unsaved profile that was never saved does not persist across visits (it doesn't even survive a Companion close within the same visit — see "Profile Model") and is never what's restored here
+Mezzo Companion opens, showing Ready — previously used saved profile is selected and visible; a temporary profile that was never saved does not persist across visits and is never what's restored here (only **Reopen Companion**, after an involuntary close, brings one back — see "Recovery → Mezzo Companion Closed")
 
 ↓
 
@@ -386,7 +401,16 @@ Do not imply that monitoring begins directly from the meeting prompt.
 
 The user should always begin monitoring intentionally.
 
-Whether "Open Mezzo" from this prompt should land on Home first (requiring one more click, Open Mezzo Companion) or open the Companion directly, given the user already expressed clear intent by responding to the prompt, has not been revisited under the PiP-first model and is out of scope for this pass.
+Today, "Open Mezzo" opens (or focuses) Mezzo in its own popup window, on Home; the user still clicks Open Mezzo Companion there, since Chrome only opens a Companion from a click inside the Mezzo page. From a Google Meet call, the running page shows the one-time Meet tip (see "Dock"). The in-Meet "Meeting Detected" banner itself has not been restyled to Lantern yet.
+
+## Extension Popup
+
+The toolbar popup has two states, decided only by whether Mezzo's own window exists:
+
+* **Not running** — the "mezzo" wordmark, "A gentle nudge when you're talking louder than you'd like.", an **Open Mezzo** button, "Opens in its own window. Only measures volume.", and Privacy and Settings links.
+* **Running** — the wordmark with an "Open" label, "Mezzo is open in its own window.", and **Show Mezzo window**, which focuses (and restores) that window.
+
+It never shows profile or monitoring state. The toolbar badge marks a detected meeting in charcoal and chartreuse.
 
 ---
 
@@ -433,26 +457,15 @@ Recovery should feel like a normal part of the experience rather than an error c
 
 # Dock Experience
 
-The Dock (retired name: Anchor Page Experience) supports recovery and keeping the Mezzo Companion alive — nothing operational. Its own "active"/"inactive" status below mirrors, but is distinct from, the Companion's own Ready and Monitoring states — see Companion States.
+See "Dock" under Product Mental Model for what the running state shows. It supports recovery and keeping the Mezzo Companion alive — nothing operational, and it is not meant to be the user's focus during a meeting. It does not mirror the Companion's internal states: Ready, Calibrating and Monitoring all read "Mezzo is running."
 
-During an active meeting, it is not intended to be the user's primary focus.
-
-Its responsibility is to keep the monitoring session understandable and recoverable — nothing more. There is no End Session (or any other) button on this screen beyond Close Companion. A monitoring session ends by closing this page, which closes the Companion too, or by closing the Companion itself using its native window control.
-
-## What It Shows
-
-Once the Companion is open — whether monitoring is active or the Companion is sitting on Welcome, Ready, Calibrating, or any decision state — the Dock shows the same structure, with one thing that changes:
-
-* a small status line: "Monitoring is active" while monitoring, or "Monitoring is not active" for every other Companion state — the only part of this screen that reflects real session state. Deliberately collapsed to this one externally meaningful distinction (2026-08-17 redesign) rather than surfacing every one of the Companion's own internal states (Welcome, Ready, C1, Calibrating, and every decision screen all read as "not active" here) — the wording itself carries the meaning, not color alone
-* a fixed heading: "Your Companion is open" — shown regardless of the status above it
-* guidance to keep the page open and that closing it closes the Companion too: "Keep this page open while using Mezzo." / "Closing it will also close the Mezzo Companion."
-* Close Companion — see "Recovery" below
-
-The Mezzo Companion is a Document Picture-in-Picture window and already stays above other application windows on its own — Mezzo never offers a "bring to front" / "show" / "focus" control for it, and never duplicates its Start monitoring or Stop controls here, or any profile/calibration control. Reporting status and offering Close Companion (a recovery action, not a status or monitoring control — see "Recovery") are the only jobs of this screen while the Companion is open. The Dock no longer shows an illustrative preview of the Companion window (retired 2026-08-17 — the redesigned Dock is text-only) — see CLAUDE.md's Engineering Notes for the history of that decision.
+The Mezzo Companion is a Document Picture-in-Picture window and already stays above other application windows on its own — Mezzo never offers a "bring to front" / "show" / "focus" control for it on this page, and never duplicates its Start monitoring or Stop controls here, or any profile/calibration control.
 
 ## Recovery
 
-Users should never need a second checkpoint on this page before monitoring can begin — Open Mezzo Companion already handles getting them there, and the Companion's own Welcome/Ready screens handle everything after. Once the Companion is open, this screen offers exactly one action: **Close Companion**. It has the exact same effect as the Companion's own native window-close control, whatever the Companion's current state — stops monitoring (or, mid-Calibrating, stops capture and discards whatever partial samples existed), closes the Companion, and returns to Home — and exists only because the floating window's own ✕ may not always be easy to find (e.g. behind other windows). See "Mezzo Companion Closed" under Recovery, below, for what happens to an in-progress calibration or an unsaved profile specifically. It is deliberately not framed as "End Session": it isn't a second way to decide you're done, it's the same close action the native control already performs, made reachable from the page. Beyond that, this screen exists only to report status once the Companion is already open, and to explain how closing things works.
+This screen offers exactly one action while the Companion is open: **Close Companion**. It has the exact same effect as the Companion's own native window-close control, whatever the Companion's current state — stops monitoring (or, mid-Calibrating, stops capture and discards whatever partial samples existed), closes the Companion, and returns to Home — and exists only because the floating window's own ✕ may not always be easy to find (e.g. behind other windows). Because the user asked for it here, it does not offer Reopen afterward. It is deliberately not framed as "End Session."
+
+After any other close, the page offers **Reopen Companion** and **Done** instead (see "Recovery → Mezzo Companion Closed").
 
 ---
 
@@ -466,7 +479,7 @@ A user should understand its current state with a brief peripheral glance rather
 
 The Companion should:
 
-* open at a useful default size, and resize appropriately as it moves between its pre-monitoring screens, Expanded Monitoring, and Compact
+* open at a useful default size, and resize appropriately as it moves between its pre-monitoring screens and Monitoring (Compact by default, Expanded on request)
 * remain legible at each of its fixed sizes
 * prioritize the visualization over controls
 * communicate monitoring status clearly
@@ -474,7 +487,9 @@ The Companion should:
 
 The Companion should feel like a quiet instrument—not a dashboard.
 
-Before monitoring ever begins, the Companion moves through several distinct screens — Welcome, the calibration-introduction step (C1), Calibrating, and Ready, plus two recovery/decision screens (Microphone Access Blocked, and the profile save/replace/delete decisions covered under "Profile Model") — before reaching Monitoring itself, which has two layouts, Expanded and Compact. See below for each.
+Before monitoring ever begins, the Companion moves through several distinct screens — Welcome, the calibration-introduction step (C1), Calibrating, and Ready, plus recovery and decision screens (Microphone Access Blocked, the calibration result, and the profile save/replace/delete decisions covered under "Profile Model") — before reaching Monitoring itself, which has two layouts, Compact and Expanded. See below for each.
+
+It uses the Lantern visual system throughout (`docs/prd/range-ring-and-lantern-refresh.md` §4): one dark theme, Geist type, cream primary buttons, sage text links, and chartreuse reserved for one meaning inside the Companion — the over-range band. Screens come in three layers: a flat screen, the Ready selector's menu panel over a dimmed screen, and decision states, which turn the whole window a lighter grey with a 44px header bar naming the decision and actions pinned to the bottom.
 
 ---
 
@@ -488,7 +503,7 @@ Purpose: the first thing a genuinely new user sees inside the Companion — a de
 
 Target size: shared with every other pre-monitoring screen — see "Companion Sizing."
 
-Reached exactly once: the very first time the Companion opens with zero saved profiles and no unsaved profile from an earlier session (an unsaved profile never survives a Companion close — see "Profile Model"). Explains, briefly, what's about to happen. Its one action, **Create speaking profile**, opens the calibration-introduction screen (C1) — this does not itself request microphone access. There is no secondary dismiss action on Welcome; closing the Companion remains available through the native window control regardless of which screen is showing.
+Reached exactly once: the very first time the Companion opens with zero saved profiles and no temporary profile (see "Profile Model"). Shows the lowercase "mezzo" wordmark as its heading, "A gentle nudge when you're talking louder than you'd like. First, a quick voice calibration.", and "Mezzo doesn't record audio or transcribe speech." at the bottom. The window's own title reads "Mezzo, welcome." here. Its one action, **Create speaking profile**, opens the calibration-introduction screen (C1) — this does not itself request microphone access. There is no secondary dismiss action on Welcome; closing the Companion remains available through the native window control regardless of which screen is showing.
 
 Once a saved profile or an unsaved profile exists, the Companion never shows Welcome again for the rest of that Companion-open lifetime.
 
@@ -498,7 +513,7 @@ Purpose: a short instructional step before capture begins, explaining what the u
 
 Target size: shared with every other pre-monitoring screen.
 
-Reached from Welcome's Create speaking profile, and from Ready's Create new profile — see "Calibration → Calibration Entry" for the full rule (Recalibrate skips this screen). Its one action, **I'm ready**, begins the six-second capture. Microphone permission is normally already granted by this point — Home's own permission gate handled that before the Companion ever opened — so this doesn't prompt again. A **Back** text link returns to wherever C1 was opened from — Welcome, or the same Ready state, with its selection and any existing unsaved profile untouched — without starting calibration or changing any profile.
+Reached from Welcome's Create speaking profile, and from Ready's Create new profile — see "Calibration → Calibration Entry" for the full rule (Recalibrate skips this screen). Its one action, **I'm ready**, begins the 3-2-1 and the six-second capture. Microphone permission is normally already granted by this point — Home's own permission gate handled that before the Companion ever opened — so this doesn't prompt again. A **Cancel** text link returns to wherever C1 was opened from — Welcome, or the same Ready state, with its selection and any existing unsaved profile untouched — without starting calibration or changing any profile.
 
 ## Ready
 
@@ -506,17 +521,17 @@ Purpose: preparation.
 
 Target size: fixed, shared with every other pre-monitoring screen — see "Companion Sizing" for why this no longer depends on saved-profile count.
 
-Reached whenever the Companion opens with a usable profile (saved or unsaved) already available, and always after stopping monitoring. Every session, first included, goes through Welcome or Ready — never straight to Monitoring.
+Reached whenever the Companion opens with a usable profile (saved or temporary) already available, and always after stopping monitoring. Every Companion open goes through Welcome or Ready — never straight to Monitoring — with one exception: **Reopen Companion** after an involuntary close resumes monitoring if it was running (see "Recovery → Mezzo Companion Closed").
 
 Ready's layout is always, in this order: the first/next-conversation heading, a "Speaking profile" label, a collapsed selector trigger, contextual actions for whichever profile is selected, Start monitoring, and a privacy disclaimer — see "Start Monitoring" above for the full behavior, and "Profile Model" for the selector's grouped contents and every contextual action.
 
-The selector expands into an overlay panel, positioned over the card's own bounds, rather than an anchored dropdown — this keeps it fully visible regardless of where the trigger sits in the small window, and lets it scroll internally without ever changing the Companion's own window size (see "Companion Sizing"). The selected profile is marked distinctly from a hovered or keyboard-focused one.
+The selector opens a menu panel attached to its trigger, over a dimmed screen; the panel scrolls internally without ever changing the Companion's own window size (see "Companion Sizing"). Each row carries its own Recalibrate and Delete (or, for the temporary profile, Discard) icon actions, and **Create new profile** sits in the panel's footer. The selected profile is marked distinctly from a hovered or keyboard-focused one.
 
-From Ready, users can review the selected profile, choose another existing one, calibrate a new one, recalibrate the selected one, save or discard an unsaved one, delete a saved one, or start monitoring. There is no in-Companion control to close it — the native Picture-in-Picture window-close control is the only way, from any state.
+From Ready, users can review the selected profile, choose another existing one, calibrate a new one, recalibrate any one, save or discard the temporary one, delete a saved one, or start monitoring. There is no in-Companion control to close it — the native Picture-in-Picture window-close control is the only way, from any state.
 
 The visualization is intentionally hidden. Monitoring is inactive.
 
-Ready always uses the Expanded layout — there is no Compact Ready variant.
+Ready always uses the shared pre-monitoring size — there is no Compact Ready variant.
 
 Ready has no in-page title bar either — the real Document Picture-in-Picture window chrome is the only title bar, the same as every other state.
 
@@ -528,11 +543,11 @@ Purpose: measurement — either a fresh, session-only calibration, or a recalibr
 
 Target size: shared with every other pre-monitoring screen.
 
-Reached from C1's "I'm ready," or directly from Ready's Recalibrate (see "Calibration → Calibration Entry"). Shows a live countdown and a horizontal, proportional volume bar, a brief automatic completion, and then the mode-appropriate result (see "Calibration" above) — a navigation to the next screen, not a modal overlaid on this one. On a microphone-permission failure specifically, shows the dedicated Microphone Access Blocked screen below instead of a generic failure message; every other failure shows a calm, specific message with Try Again/Back, and never fails silently.
+Reached from C1's "I'm ready," or directly from a Recalibrate action (see "Calibration → Calibration Entry"). Shows the 3-2-1 and six-second capture with the live level meter (see "Calibration → Active Calibration"), a brief automatic completion, and then the mode-appropriate result screen — a navigation, not a modal overlaid on this one. On a microphone-permission failure specifically, shows the dedicated Microphone Access Blocked screen below instead of a generic failure message; every other failure shows a calm, specific message with Try Again/Back, and never fails silently.
 
-Calibrating always uses the Expanded layout, same as Ready — it never appears in Compact, since it exists only before Monitoring begins.
+Calibrating always uses the shared pre-monitoring size — it never appears in Compact.
 
-There is no in-Companion control to cancel and back out of an in-progress capture; closing the Companion is the way out, per "Mezzo Companion Closed" under Recovery, below.
+Its Cancel link stops capture and returns to where calibration started; closing the Companion does the same, per "Mezzo Companion Closed" under Recovery, below.
 
 ---
 
@@ -550,21 +565,20 @@ Explains what happened and how to fix it, alongside a schematic illustration poi
 
 Purpose: ambient awareness.
 
-Target size (Expanded): 382×480 (2026-08-18 redesign — was 290×420; 382 now matches every pre-monitoring screen's own width instead of standing alone as narrower). This is `applyLayoutMode()`'s own Expand target, resized to on an explicit Expand action — manual resizing is otherwise freeform, including at aspect ratios other than 382:480, and never snaps or locks to that ratio.
+Monitoring opens in **Compact** (220×220), the peripheral default; **Expand** resizes it to Expanded (382×480). Both are `applyLayoutMode()`'s targets for an explicit action — manual resizing is otherwise freeform, at any aspect ratio, and never snaps back.
 
-The presentation is centered on the same axis Ready's and Calibrating's own heading occupies. Monitoring displays:
+It shows:
 
-* current monitoring state (Listening / Within range / Approaching end of range / Outside range), in the display serif, keeping the same live per-zone color the earlier presentation used
-* selected profile name (read only), set small and low-contrast directly beneath the status, with no "Profile:" label — the position and typography already make clear what it is
-* live visualization
-* a single centered Stop monitoring pill — a quiet, low-contrast pill (the same visual language as every other secondary Companion action), never a large full-width button
-* a Compact toggle — its own icon-only "window chrome" control, permanently anchored in the top-right corner, not part of the Stop control row
+* the **Range Ring** — the live visualization (see "Monitoring States" and "Visualization Principles"); its edge is always 60% of the window's short side
+* the selected profile name (read only), above the ring — in Compact, Geist Mono 11px uppercase; it steps aside while the over-range band shows
+* **Stop**, bottom-left: a 32px icon in windows under about 300px on the short side, a "Stop" pill at least 44px tall above that; its accessible name is always "Stop monitoring"
+* **Compact** (in Expanded) or **Expand** (in Compact), top-right — the same corner, so nothing appears to move across the switch
+
+There is no visible status text: the four zone labels are announced to screen readers only (see "Monitoring States"). There is no Pause — Stop and Start monitoring cover it, and one control keeps the window quiet.
 
 Users cannot change profiles, calibrate, or recalibrate while monitoring — all three require stopping first.
 
-Stopping monitoring returns directly to Ready, always — see "Monitoring Lifecycle."
-
-**Responsive behavior below the 382×480 reference** is purely presentational — it never changes which Companion mode (Expanded vs. Compact) is active, only how much of Expanded's own content fits at the window's current real size. As the window is manually resized smaller, content sheds in this order (and reappears in exact reverse order as it grows back): the profile name drops first; the Stop pill then becomes a small icon-only control anchored bottom-left (always visible at that size, unlike Compact's own hover-gated treatment below); the status text drops last, leaving only the visualization, the bottom-left Stop icon, and the top-right Compact toggle. The visualization itself is the only element that ever changes size in response to resizing — type and controls stay fixed. Resized *larger* than 382×480, the visualization's containing area caps at roughly 300×300 and the extra room becomes balanced padding around it, rather than enlarging the circle or any text/control past its normal size.
+Stopping monitoring ends the session, releases the microphone, and returns directly to Ready with the same profile selected — see "Monitoring Lifecycle."
 
 ---
 
@@ -576,29 +590,20 @@ Welcome, C1, Calibrating, Microphone Access Blocked, Ready, and every profile sa
 
 # Compact Companion
 
-Compact is an intentional product mode, not a responsive fallback for small windows.
+Compact is an intentional product mode, and the default for every monitoring session — not a responsive fallback for small windows.
 
-Target size: 220×220 — a hard floor for this explicit mode; Compact never presents fuller content just because it happens to be manually resized larger than its own target.
+Target size: 220×220.
 
-It exists only while monitoring. Its purpose is peripheral awareness.
+It exists only while monitoring. Its purpose is peripheral awareness: at rest, the ring and the profile name, with Stop and Expand quiet (35% opacity) until the pointer hovers the window or either control receives keyboard focus. Both remain real, focusable buttons the entire time; on touch/no-hover devices they are shown outright.
 
-The Compact Companion removes all interface chrome, keeping only what's essential at a glance. At rest it displays only the visualization — even the Stop and Expand controls stay hidden until the pointer hovers the window or either control receives keyboard focus, at which point both fade in (opacity only, never `display`/`visibility` — both remain real, focusable buttons the entire time, so a keyboard user tabbing through the Companion still reaches them). On touch/no-hover devices, both are shown outright rather than left reachable only by an unreliable hover state.
+It does not display:
 
-Once revealed, it displays:
-
-* the visualization
-* Stop, bottom-left corner, icon-only
-* Expand, top-right corner, icon-only — deliberately the same corner Expanded's own Compact toggle occupies, so nothing appears to move across the mode switch (Stop keeps the opposite, bottom-left corner in both the shrunk-Expanded responsive tier above and here in Compact itself)
-
-It does not display, even when the corner controls are revealed:
-
-* a title bar or wordmark — the real Document Picture-in-Picture window chrome is the only title bar, in both Expanded and Compact
+* a title bar or wordmark — the real Document Picture-in-Picture window chrome is the only title bar
 * monitoring status text
-* profile information
 
-Stop in Compact behaves identically to Stop in Expanded: it stops monitoring and returns the Companion to Ready, without closing it. Closing the native Picture-in-Picture window remains a separate, more final action, available from Compact the same as from every other state: it stops monitoring, releases the microphone, and follows the recovery path described under Mezzo Companion Closed below — the Companion closes, and Mezzo returns to Home.
+Stop in Compact behaves identically to Stop in Expanded. Closing the native Picture-in-Picture window remains a separate action, available from every state — see "Recovery → Mezzo Companion Closed."
 
-Expanding always returns to the Expanded layout without interrupting monitoring, the selected profile, or the current monitoring state.
+Expanding (and compacting again) never interrupts monitoring, the selected profile, or the current zone.
 
 ---
 
@@ -608,30 +613,32 @@ A **speaking profile** is the umbrella term for any voice calibration Mezzo can 
 
 A **saved profile** is a persistent, reusable identity for an environment or situation — "Kitchen," "Home Office," "Coffee Shop" — not a single-use calibration. Its calibration can be refreshed at any time via Recalibrate without changing its identity: same id, same name, same position in the library. Recalibrating "Kitchen" updates "Kitchen" — it never creates "Kitchen 2," never requires renaming, and never requires deleting the profile it replaces. A user may save at most five profiles at a time.
 
-An **unsaved profile** is a just-completed calibration that hasn't been given a name yet. It exists only for the current Companion session, held in memory only — never written to any storage the browser tab keeps around, so it cannot accidentally outlive the Companion window it was created in. (Internally, the runtime object behind it still carries a fixed placeholder value, `Current speaking range`, in its own `name` field — this is implementation detail only, never shown to the user; the interface always calls it "Unsaved profile." Don't conflate the two.) At most one unsaved profile exists at a time: recalibrating it, or calibrating a new one from a saved-profile selection, always replaces whichever one existed before, never adds a second. An unsaved profile:
+An **unsaved profile** — called the **Temporary profile** in the interface — is a just-completed calibration that hasn't been given a name yet. It is held in memory only — never written to any storage the browser tab keeps around. (Internally, the runtime object behind it still carries a fixed placeholder value, `Current speaking range`, in its own `name` field — this is implementation detail only, never shown to the user. Don't conflate the two.) At most one unsaved profile exists at a time: recalibrating it, or calibrating a new one from a saved-profile selection, always replaces whichever one existed before, never adds a second. An unsaved profile:
 
 * can be used for monitoring, without ever being named or saved
 * can be recalibrated, saved, or discarded
 * appears in the same selector as saved profiles, grouped separately — see "Selecting a Profile" below
 * remains available even when a saved profile is selected instead
 * does not count toward the five-profile limit
-* disappears the moment the Companion closes, saved or not
+* disappears when the Companion closes — except that after an involuntary close, the running page's **Reopen Companion** brings it back from memory (see "Recovery → Mezzo Companion Closed"); Done, Close Companion, or leaving the page discards it
 
-Selecting Recalibrate never risks losing a completed calibration: recalibrating a saved profile always asks — Replace the saved profile, or Keep as unsaved instead (see "Calibration" above) — before anything changes, and recalibrating an unsaved profile simply replaces it directly, with nothing else at stake to protect.
+Selecting Recalibrate never risks losing a completed calibration: recalibrating a saved profile always asks — Replace the saved profile, Keep temporarily, or Discard (see "Calibration → On Completion") — before anything changes.
+
+A saved profile stores its id, name, speaking level, spread, calibration time, `peakDb` (how far above the speaking level the calibration's own peaks reached) and `roomNoiseDb` (the room's noise during the 3-2-1). A profile saved before peaks were recorded still works, with an older end-of-range rule, and Ready suggests recalibrating it.
 
 Calibration, recalibration, profile selection, saving, replacing, discarding, and deleting all happen inside the Mezzo Companion now — there is no second, page-level implementation of any of it to keep in sync, and no handoff between two surfaces to reason about.
 
 ## Selecting a Profile
 
-Ready's selector shows whichever profile is currently active, and expands into a panel listing every available one. When both an unsaved and one or more saved profiles exist, the panel groups them — an "Unsaved" section first, with a note that it disappears when Mezzo closes, then a "Saved profiles" section — rather than mixing them into one flat list. Selecting a row updates the current selection and closes the panel; it never starts monitoring, and never deletes or discards anything else. Each saved profile's row includes a delete control; the unsaved profile's row includes a discard control instead.
+Ready's selector shows whichever profile is currently active, and opens a panel listing every available one. When both a temporary and one or more saved profiles exist, the panel groups them — a "Temporary" section first, with the note "Disappears when you close Mezzo", then a "Saved profiles" section. Selecting a row updates the current selection and closes the panel; it never starts monitoring, and never deletes or discards anything else. Every row has a Recalibrate icon action; each saved profile's row also has Delete, and the temporary profile's row has Discard. **Create new profile** is the panel's footer action.
 
 ## Saved-Profile Actions
 
-With a saved profile selected, Ready offers **Recalibrate** always, and **Create new profile** only while fewer than five profiles are saved — hidden entirely at the limit, since starting a new one there would lead nowhere until an existing profile is deleted first. Create new profile begins calibration from scratch, through the calibration-introduction step (see "Calibration"), producing a fresh unsaved profile; it does not touch the selected saved profile at all.
+**Recalibrate** (any row) and **Create new profile** (the panel footer) are always available. Create new profile begins calibration from scratch, through the calibration-introduction step (see "Calibration"); it does not touch the selected saved profile at all. At five saved profiles it shows the five-profile-limit screen instead, without starting calibration.
 
 ## Saving and Replacement
 
-With an unsaved profile selected, Ready also offers **Save profile**. Below the five-profile limit, this opens a naming screen — "Name this profile" — with Cancel and Save actions; Save stays disabled until a name is entered.
+With the temporary profile selected, Ready offers **Save profile** (the result screen's **Save speaking profile** does the same). Below the five-profile limit, this opens a naming screen — "Name this profile" — with Cancel and Save actions; Save stays disabled until a name is entered.
 
 * A name that doesn't match any saved profile's name creates a new saved profile, selects it, and removes the unsaved profile. A toast confirms: `Profile "{Name}" saved`.
 * A name that matches an existing saved profile's name instead — trimmed, case-insensitive; a saved profile's own stored display name and casing are never changed by this comparison — shows a warning (`A profile named "{Name}" already exists.`) and changes the button from Save to Replace. Replacing overwrites that profile's calibration in place, exactly as Recalibrate's own Replace would, removes the unsaved profile, and selects the replaced profile. A toast confirms instead: `Profile "{Name}" replaced`.
@@ -643,7 +650,7 @@ Recalibrate remains the primary, deliberate way to intentionally update a known 
 
 ## Five-Profile Limit
 
-Five saved profiles is the maximum. The limit applies only to saved profiles — an unsaved profile stays fully usable even when five are already saved. Selecting **Save profile** while at the limit doesn't open the naming screen at all; instead it shows a dedicated screen: `5 of 5 profiles saved` / `Delete a saved profile before saving this one.` — a close action only, no delete or replacement control embedded in it. The user has to open the selector, delete a saved profile there, then choose Save profile again.
+Five saved profiles is the maximum. The limit applies only to saved profiles — an unsaved profile stays fully usable even when five are already saved. Selecting **Save profile** (or **Create new profile**) while at the limit doesn't open the naming screen or start calibration; instead it shows a dedicated screen: `5 of 5 profiles saved` / `Delete a saved profile before saving this one.` — a Cancel action only, no delete or replacement control embedded in it. The user has to open the selector, delete a saved profile there, then choose Save profile again.
 
 ## Discarding an Unsaved Profile
 
@@ -659,146 +666,35 @@ Renaming a saved profile does not exist as a feature yet. If it's ever built, it
 
 # Monitoring States
 
-These are the four awareness states shown while the Companion is Monitoring — distinct from the Companion's own Ready/Monitoring states above, which describe what the Companion is doing rather than how loud the user is. Display labels (2026-08-18 redesign — sentence case, see `CLAUDE.md`'s Canonical Terminology): Listening, Within range, Approaching end of range, Outside range. The zone-classification logic, thresholds, and visualization behavior these headings describe are unchanged by that relabeling — only the on-screen wording and casing changed.
+These are the four awareness zones shown while the Companion is Monitoring — distinct from the Companion's own Ready/Monitoring states above, which describe what the Companion is doing rather than how loud the user is. Their labels — Listening, Within range, Approaching end of range, Outside range — are not shown on screen; they are announced to screen readers, debounced so they don't chatter. The Range Ring alone carries them visually.
 
-Monitoring states describe what is happening.
+Monitoring states describe what is happening. They do not evaluate the user, and they do not prescribe behavior.
 
-They do not evaluate the user.
+The ring has three parts: a **range edge** (a circle marking the end of the user's range, always visible), a **voice circle** that follows the momentary level, and an **over-range band**, a flat chartreuse ring outside the edge, present only over range.
 
-They do not prescribe behavior.
+| Zone | What the user sees |
+|---|---|
+| Listening | Not speaking, or below the speaking threshold. The voice circle rests small and faint; the edge is equally quiet. Not a negative state. |
+| Within range | The circle grows with the voice, comfortably inside the edge. Calm and balanced. |
+| Approaching end of range | The circle grows toward the edge and brightens; the edge thickens and turns sage. Gentle awareness, not correction. |
+| Outside range | The circle fills the edge and the chartreuse band appears outside it, growing with how far over. The brightest color in the product. |
 
-## Listening
+Attention rises in three steps of brightness and size, which work in peripheral vision and don't depend on hue. Never blink, flash, pulse aggressively, or simulate alarms. Chartreuse is a nudge, not a warning.
 
-The user is not currently speaking, or speech remains below the active speaking threshold. (Display label retired from "Quiet" as of the 2026-08-18 redesign; the underlying zone is unchanged.)
-
-Visual characteristics:
-
-* calm field
-* subtle continuous motion
-* minimal propagation
-* quiet reassurance that monitoring is active
-
-Listening is not a negative state.
-
----
-
-## Within range
-
-The user's speaking volume is within the preferred range.
-
-Visual characteristics:
-
-* center point
-* one perfect circular contour
-* warm white
-* gentle breathing
-* subtle glow while speaking
-* restrained propagation
-
-This state should feel calm and balanced.
-
----
-
-## Approaching end of range
-
-The user's speaking volume is moving toward the edge of the preferred range.
-
-Visual characteristics:
-
-* second contour appears
-* outer contour becomes slightly organic
-* motion becomes more noticeable
-* remains warm white
-
-Purpose:
-
-Provide gentle awareness before stronger visual emphasis becomes necessary.
-
-Approaching end of range is descriptive, not corrective. It supersedes the older "Approaching Range" label (and, as of the 2026-08-18 redesign, the Title Case "Approaching End of Range" — casing only, same term) — use this exact sentence-case form consistently.
-
----
-
-## Outside range
-
-The user's speaking volume is outside the preferred range.
-
-Visual characteristics:
-
-* third contour appears
-* visualization transitions to Mezzo orange
-* stronger glow
-* increased propagation
-* smooth continuous motion
-
-Never:
-
-* blink
-* flash
-* pulse aggressively
-* simulate alarms
-
-Outside range communicates awareness without judgment.
+Where the range comes from: the end of range sits just above the calibration's own peaks (so speaking at the calibrated level never reads as Outside range), Approaching is the last 2 dB before it, and zones are judged on a short-term level that a single emphasized syllable can't move. Exact rules and tuned values: `docs/prd/range-ring-and-lantern-refresh.md` §5.
 
 ---
 
 # Visualization Principles
 
-The visualization behaves like a natural system.
+The visualization behaves like a natural system. Changes should feel like changes in energy rather than software notifications.
 
-Changes should feel like changes in energy rather than software notifications.
+* **The container stays fixed.** The ring never causes surrounding layout changes; it scales with the window's short side.
+* **Motion communicates state**, never decoration: the circle rises quickly and falls gently, settles to rest over a second when the user stops speaking, and the band grows from a thin ring and shrinks back before fading, so it doesn't flicker at the edge.
+* **Silence and room noise don't move it.** A speech-band filter keeps fan rumble and hiss out of the level, and the circle stays at rest unless the voice is clearly above the room's measured noise.
+* **Color reinforces state; it is not the primary channel.** Grey-taupe for the voice, sage for approaching, chartreuse only over range. With reduced motion, changes are immediate rather than eased.
 
-## Geometry
-
-The visualization grows through accumulation.
-
-Each monitoring state adds information rather than replacing the previous state.
-
-Concretely: rising energy introduces a new outer contour that emerges from the currently active contour's own displayed size — not from nothing, and not from a fixed resting radius — and grows outward smoothly from there. That new outer contour becomes the active, radiating one the moment it starts emerging. Falling energy reverses this the same way: the outer contour recedes and radiating activity transfers back to the next contour inward, rather than the whole visualization jumping between fixed states.
-
-The container remains fixed.
-
-The visualization should never cause surrounding layout changes.
-
----
-
-## Motion
-
-Motion communicates state.
-
-It should never exist purely for decoration.
-
-Motion should feel:
-
-* continuous
-* organic
-* restrained
-* responsive
-
-Avoid abrupt transitions whenever possible.
-
----
-
-## Color
-
-Color reinforces state.
-
-It should not become the primary communication channel.
-
-Warm white communicates normal activity.
-
-Mezzo orange communicates increased awareness.
-
-The transition between them should remain smooth and continuous.
-
----
-
-## Propagation
-
-Propagation should appear to originate naturally from the visualization.
-
-When contours become organic, propagated contours should inherit that same geometry.
-
-Avoid detached, perfectly circular propagation once the active contour has evolved into a more organic form.
+Tuned values live in the ring, zone and audio settings objects (`src/range-ring.js`, `src/engine.js`, `src/audio.js`); the public playground at `/playground/` drives a frozen copy of them live.
 
 ---
 
@@ -818,26 +714,22 @@ Users should always understand:
 
 ## Mezzo Companion Closed
 
-Monitoring can never continue without the Mezzo Companion open. If the Companion closes — only ever via its native window-close control, since there is no in-app Close Companion action — whatever was happening stops immediately, and microphone resources are released, not left running invisibly. What that means depends on the state the Companion was in:
+Monitoring can never continue without the Mezzo Companion open. If the Companion closes, whatever was happening stops immediately and microphone resources are released, not left running invisibly. In-progress calibration is discarded, and a recalibration leaves its target saved profile untouched; a decision screen closes with no partial write, since none of them touch storage until their own affirmative action completes.
 
-* **Monitoring, with a saved profile in use** — monitoring simply stops, exactly as if Stop had been pressed, then the Companion closes.
-* **Monitoring, with an unsaved profile in use** — the same stop happens, but the native window-close control cannot be intercepted to offer a save decision first, so the unsaved profile is lost with no way to recover it afterward (see "Profile Model" — this is by design, not an oversight: an unsaved profile is held in memory only, specifically so it can't outlive the Companion window). Home should calmly acknowledge this — e.g. noting that the last session's calibration wasn't saved — rather than implying anything was preserved. This is a real, known tradeoff: the interceptable **Close Companion** button on this same page (see "Dock Experience") could in principle offer a save decision before closing, since it isn't a native browser control; whether it should is an open product question, not yet settled.
-* **Welcome, C1, or Calibrating** — nothing has been created yet at Welcome or C1, so there's nothing to lose; mid-capture in Calibrating, capture stops immediately and whatever partial samples existed are discarded. A recalibration in progress leaves its target saved profile completely untouched; closing mid-Recalibrate is always safe for the profile being recalibrated.
-* **A profile save/replace/delete decision screen open** — closes cleanly with no partial write: none of these screens touch storage until their own explicit affirmative action (Save, Replace, Delete) actually completes.
+What happens next depends on how it closed:
 
-There is no separate "Mezzo Companion is closed" status screen and no Re-open Companion action. Instead, Mezzo returns directly to Home. Home does not track or display which profile was in use, or offer to resume anything — its one action, regardless of how the previous session ended, is:
+* **Close Companion, on the running page** — the user asked for it there, so Mezzo returns to the granted page. A temporary profile is discarded.
+* **Any other close** — another picture-in-picture window replacing it (Chrome allows one at a time, and Meet's mini window wins), or the Companion's own native ✕. Mezzo can't tell these apart, so the page stays on the cream running surface: "The Companion closed" / "Another mini window, like Meet's, may have closed it. Reopen it to pick up where you left off.", with **Reopen Companion** and **Done**.
+  * **Reopen Companion** opens it again from that click, with the same profile selected (a temporary one included, from memory), and resumes monitoring if it was running.
+  * **Done** discards the offer (and any temporary profile) and returns to the granted page.
 
-Open Mezzo Companion
-
-Selecting it opens a fresh Companion, which then decides Welcome or Ready for itself the same way it always does — it never resumes monitoring on its own, and Home never makes that decision on the Companion's behalf.
+Opening the Companion from Home always starts fresh: Welcome or Ready, never monitoring.
 
 ---
 
 ## Mezzo Closed
 
 Closing the Dock (the browser tab) ends the monitoring session — this is the primary way a session ends; there is no dedicated End Session control.
-
-When possible, users should understand this before the page closes — see the Dock's own footer guidance ("Closing it will also close the Mezzo Companion").
 
 Ending the session should:
 
@@ -890,8 +782,8 @@ Privacy should be reinforced at moments where users naturally have questions.
 Especially:
 
 * before microphone permission, on Home, before the Companion ever opens
-* on Home, while introducing the product
-* on the Privacy page
+* on Home, while introducing the product, and on the running page
+* on the Privacy page and in the extension popup
 
 Core promises should remain simple and verifiable:
 
