@@ -9,25 +9,16 @@
   <main class="popup" data-state="not-running">
     <div class="popup-head">
       <h1 class="wordmark">mezzo</h1>
-      <p class="open-label" hidden><span class="open-dot" aria-hidden="true"></span>Open</p>
+      <!-- What's open: Tab open / Companion open / Monitoring (lib/popup-state.js). -->
+      <p class="status-chip" hidden><span class="status-dot" aria-hidden="true"></span><span class="status-label"></span></p>
     </div>
 
-    <!-- Not running: Mezzo has no window open. -->
-    <section class="state state-not-running">
-      <p class="lede">A gentle nudge when you're talking louder than you'd like.</p>
-      <button id="btn-open-mezzo" type="button" class="btn-primary">Open Mezzo</button>
-      <p class="note">Opens in its own window. Only measures volume.</p>
-    </section>
-
-    <!-- Mezzo is the tab in front: nothing to do. -->
-    <section class="state state-here" hidden>
-      <p class="lede">You're on Mezzo.</p>
-    </section>
-
-    <!-- Mezzo is open in another tab or window. -->
-    <section class="state state-elsewhere" hidden>
-      <p class="lede">Mezzo is already open.</p>
-      <button id="btn-go-to-mezzo" type="button" class="btn-outline">Go to Mezzo</button>
+    <!-- One body, one button, one optional note; their text and look come
+         from the state (lib/popup-state.js), so the four states can't drift. -->
+    <section class="state" aria-live="polite">
+      <p class="lede"></p>
+      <button id="btn-popup-action" type="button" class="btn-primary"></button>
+      <p class="note" hidden></p>
     </section>
 
     <nav class="popup-links" aria-label="More">

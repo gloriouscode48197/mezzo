@@ -1,19 +1,20 @@
 /**
- * Mezzo extension popup: three states, decided by where Mezzo is open (any
- * tab, any window: lib/mezzo-tabs.js).
- * - Not open: "Open Mezzo" opens it in its own window (background.js ->
- *   lib/window-manager.js).
- * - Open, and it's the tab in front: "You're on Mezzo." Nothing to do.
- * - Open elsewhere: "Go to Mezzo" focuses that window (restoring it if
- *   minimized) and activates that tab. The popup can't open or raise the
- *   Companion itself: Chrome only opens one from a click inside the Mezzo
- *   page, and an open Companion is always on top anyway.
+ * Mezzo extension popup: says what's open, in one of four states
+ * (lib/popup-state.js): no Mezzo tab; the Mezzo tab; the Companion; the
+ * Companion monitoring. The tab is found by URL (lib/mezzo-tabs.js); the
+ * Companion's state comes from the tab itself, through its page bridge
+ * (content-scripts/mezzo-page-bridge.js), asked when the popup opens and
+ * updated live while it's open.
  *
- * The popup reads no profile or monitoring state.
+ * "Open Mezzo" opens Mezzo in its own window (background.js). "Go to Mezzo
+ * tab" focuses the existing tab and its window, restoring it if minimized;
+ * it never opens, navigates or reloads anything. The popup never tries to
+ * open or focus the Companion (see lib/popup-state.js).
  */
 
 import * as mezzoTabs from '../lib/mezzo-tabs.js';
 import * as mezzoUrl from '../lib/mezzo-url.js';
+import { POPUP_STATES, popupStateFor, askTabState } from '../lib/popup-state.js';
 
 /** The screen the popup is on (available area), so Mezzo opens fully on it. */
 function availableScreen(doc) {
@@ -22,27 +23,58 @@ function availableScreen(doc) {
   return { left: s.availLeft ?? 0, top: s.availTop ?? 0, width: s.availWidth, height: s.availHeight };
 }
 
-/** Renders one of 'not-running', 'here', 'elsewhere'. */
-export function renderPopup(doc, state) {
-  doc.querySelector('.popup').dataset.state = state;
-  doc.querySelector('.state-not-running').hidden = state !== 'not-running';
-  doc.querySelector('.state-here').hidden = state !== 'here';
-  doc.querySelector('.state-elsewhere').hidden = state !== 'elsewhere';
-  doc.querySelector('.open-label').hidden = state === 'not-running';
+/** Renders one of POPUP_STATES' keys. */
+export function renderPopup(doc, stateKey) {
+  const state = POPUP_STATES[stateKey];
+  doc.querySelector('.popup').dataset.state = stateKey;
+
+  const chip = doc.querySelector('.status-chip');
+  chip.hidden = !state.chip;
+  if (state.chip) {
+    chip.dataset.tone = state.chip.tone;
+    chip.dataset.dot = state.chip.dot;
+    chip.querySelector('.status-label').textContent = state.chip.label;
+  }
+
+  doc.querySelector('.lede').textContent = state.body;
+
+  const button = doc.getElementById('btn-popup-action');
+  button.textContent = state.button.label;
+  button.className = state.button.kind === 'primary' ? 'btn-primary' : 'btn-outline';
+  button.dataset.action = state.button.action;
+
+  const note = doc.querySelector('.note');
+  note.hidden = !state.note;
+  note.replaceChildren();
+  state.note?.forEach((line, i) => {
+    if (i) note.append(doc.createElement('br'));
+    note.append(line);
+  });
 }
 
-export async function initPopup(doc = document, { tabs = mezzoTabs, chromeApi = globalThis.chrome, closePopup = () => window.close(), urls = mezzoUrl } = {}) {
+export async function initPopup(doc = document, { tabs = mezzoTabs, chromeApi = globalThis.chrome, closePopup = () => window.close(), urls = mezzoUrl, timeoutMs } = {}) {
   const openMezzo = () => chromeApi.runtime.sendMessage({ type: 'OPEN_MEZZO', focused: true, screen: availableScreen(doc) });
+
   const tab = await tabs.findMezzoTab(chromeApi);
-  renderPopup(doc, !tab ? 'not-running' : (await tabs.isFrontTab(tab, chromeApi)) ? 'here' : 'elsewhere');
+  const status = tab ? await askTabState(chromeApi, tab.id, timeoutMs) : null;
+  renderPopup(doc, popupStateFor({ tabOpen: !!tab, ...(status ?? { companionOpen: false, monitoring: false }) }));
 
-  doc.getElementById('btn-open-mezzo').addEventListener('click', () => {
-    // An explicit click on the toolbar popup: bring Mezzo to the front.
-    openMezzo();
-    closePopup();
-  });
+  // The tab reports changes while the popup is open (the Companion opened
+  // or closed, monitoring started or stopped).
+  if (tab) {
+    chromeApi.runtime.onMessage?.addListener?.((message, sender) => {
+      if (message?.type !== 'MEZZO_STATE' || sender?.tab?.id !== tab.id) return;
+      renderPopup(doc, popupStateFor({ tabOpen: true, ...message.state }));
+    });
+  }
 
-  doc.getElementById('btn-go-to-mezzo').addEventListener('click', async () => {
+  doc.getElementById('btn-popup-action').addEventListener('click', async (event) => {
+    if (event.currentTarget.dataset.action === 'open') {
+      // An explicit click on the toolbar popup: bring Mezzo to the front.
+      openMezzo();
+      closePopup();
+      return;
+    }
     const current = await tabs.findMezzoTab(chromeApi);
     if (current) await tabs.focusTab(current, chromeApi);
     else openMezzo(); // closed in the meantime

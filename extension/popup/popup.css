@@ -59,8 +59,7 @@ body {
   flex-direction: column;
   align-items: center;
   text-align: center;
-  /* Same top padding and button position in all three states: the line
-     above the button always reserves two lines. */
+  /* Heading → 8 → body → 16 → button, the same in every state. */
   padding: var(--space-4) var(--space-4) var(--footer-inset);
 }
 
@@ -81,7 +80,9 @@ body {
   color: var(--color-text);
 }
 
-.open-label {
+/* What's open: Tab open (muted, outline dot), Companion open (sage,
+   outline dot), Monitoring (sage, solid dot). Caps from CSS. */
+.status-chip {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
@@ -90,14 +91,17 @@ body {
   font-size: 11px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--color-link);
+  color: var(--color-text-muted);
 }
-.open-dot {
+.status-chip[data-tone="sage"] { color: var(--color-link); }
+.status-dot {
   width: 7px;
   height: 7px;
+  box-sizing: border-box;
   border-radius: 50%;
-  background: var(--color-link);
+  border: 1.5px solid currentColor;
 }
+.status-chip[data-dot="solid"] .status-dot { background: currentColor; }
 
 .state {
   display: flex;
@@ -108,7 +112,6 @@ body {
 
 .lede {
   margin: 0 0 var(--space-4);
-  min-height: calc(2 * 1.45em);
   font-size: 14px;
   line-height: 1.45;
   color: var(--color-text-muted);
@@ -219,10 +222,6 @@ body {
   font-size: 12px;
 }
 
-/* "You're on Mezzo." has no button: text → 16 → links. Only the states
-   with a button reserve two lines above it. */
-.popup[data-state="here"] .lede { min-height: 0; margin-bottom: 0; }
-.popup[data-state="here"] .popup-links { margin-top: var(--space-4); }
 
 /* Hit areas: at least 24px tall, 16px apart. */
 .popup-link {

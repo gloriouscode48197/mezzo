@@ -1,92 +1,137 @@
 /**
- * The browser extension's popup (extension/popup/): three states — Mezzo
- * not open ("Open Mezzo"), Mezzo the tab in front ("You're on Mezzo."), and
- * Mezzo open elsewhere ("Go to Mezzo").
+ * The browser extension's popup (extension/popup/): four states, saying
+ * what's open — no Mezzo tab, the Mezzo tab, the Companion, the Companion
+ * monitoring (extension/lib/popup-state.js).
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { parseHTML } from 'linkedom';
 import { initPopup } from '../extension/popup/popup.js';
+import { POPUP_STATES, popupStateFor, askTabState, STATE_TIMEOUT_MS } from '../extension/lib/popup-state.js';
 
 const html = readFileSync(new URL('../extension/popup/popup.html', import.meta.url), 'utf8');
 const css = readFileSync(new URL('../extension/popup/popup.css', import.meta.url), 'utf8');
 const background = readFileSync(new URL('../extension/background.js', import.meta.url), 'utf8');
 
-function setup({ where = null } = {}) {
-  // where: null (not open), 'here' (the tab in front), 'elsewhere'
+/**
+ * tab: no Mezzo tab when false. reply: what the tab's bridge answers —
+ * an object, or 'silent' (never answers).
+ */
+function setup({ tab = false, reply = 'silent' } = {}) {
   const { document } = parseHTML(html);
-  const calls = { messages: [], focused: [], tabs: [], closed: 0 };
-  const mezzoTab = where ? { id: 42, windowId: 3, active: where === 'here' } : null;
+  const calls = { messages: [], focused: [], tabs: [], closed: 0, asked: [] };
+  const mezzoTab = tab ? { id: 42, windowId: 3, active: false } : null;
+  const listeners = [];
   const tabs = {
     findMezzoTab: async () => mezzoTab,
-    isFrontTab: async (t) => where === 'here' && t === mezzoTab,
     focusTab: async (t) => { calls.focused.push(t.id); },
   };
   const chromeApi = {
-    runtime: { sendMessage: (m) => calls.messages.push(m) },
-    tabs: { create: (o) => calls.tabs.push(o.url) },
+    runtime: { sendMessage: (m) => calls.messages.push(m), onMessage: { addListener: (fn) => listeners.push(fn) } },
+    tabs: {
+      create: (o) => calls.tabs.push(o.url),
+      sendMessage: (id, m) => { calls.asked.push([id, m]); return reply === 'silent' ? new Promise(() => {}) : Promise.resolve(reply); },
+    },
   };
-  return { document, calls, init: () => initPopup(document, { tabs, chromeApi, closePopup: () => { calls.closed += 1; } }) };
+  const emit = (message, sender) => listeners.forEach((fn) => fn(message, sender));
+  return { document, calls, emit, init: () => initPopup(document, { tabs, chromeApi, closePopup: () => { calls.closed += 1; }, timeoutMs: 30 }) };
 }
+const text = (doc, sel) => doc.querySelector(sel).textContent;
 const visible = (el) => !el.hidden;
 
 describe('extension popup', () => {
-  it('not running: the lowercase wordmark, the line, "Open Mezzo", the note, and Privacy and Settings', async () => {
+  it('state 1, no Mezzo tab: wordmark only, no chip; "Open Mezzo" (cream); the two-line note; Privacy and Settings', async () => {
     const { document, init } = setup();
     await init();
-    assert.equal(document.querySelector('.wordmark').textContent, 'mezzo');
-    assert.equal(document.querySelector('.popup').dataset.state, 'not-running');
-    const notRunning = document.querySelector('.state-not-running');
-    assert.ok(visible(notRunning));
-    assert.equal(notRunning.querySelector('.lede').textContent, "A gentle nudge when you're talking louder than you'd like.");
-    assert.equal(notRunning.querySelector('button').textContent, 'Open Mezzo');
-    assert.equal(notRunning.querySelector('.note').textContent, 'Opens in its own window. Only measures volume.');
-    assert.ok(!visible(document.querySelector('.state-here')));
-    assert.ok(!visible(document.querySelector('.state-elsewhere')));
-    assert.ok(!visible(document.querySelector('.open-label')));
-    assert.equal(document.getElementById('link-privacy').textContent, 'Privacy');
-    assert.equal(document.getElementById('btn-settings').textContent, 'Settings');
+    assert.equal(document.querySelector('.popup').dataset.state, 'none');
+    assert.equal(text(document, '.wordmark'), 'mezzo');
+    assert.ok(document.querySelector('.status-chip').hidden);
+    assert.equal(text(document, '.lede'), "A gentle nudge when you're talking louder than you'd like.");
+    const btn = document.getElementById('btn-popup-action');
+    assert.equal(btn.textContent, 'Open Mezzo');
+    assert.equal(btn.className, 'btn-primary');
+    const note = document.querySelector('.note');
+    assert.ok(!note.hidden);
+    assert.equal(note.innerHTML, 'Opens in its own window.<br>Only measures volume.');
+    assert.equal(text(document, '#link-privacy'), 'Privacy');
+    assert.equal(text(document, '#btn-settings'), 'Settings');
   });
 
   it('"Open Mezzo" asks the background to open Mezzo in its own window, focused', async () => {
     const { document, calls, init } = setup();
     await init();
-    document.getElementById('btn-open-mezzo').click();
+    document.getElementById('btn-popup-action').click();
     assert.equal(calls.messages.length, 1);
     assert.equal(calls.messages[0].type, 'OPEN_MEZZO');
     assert.equal(calls.messages[0].focused, true);
     assert.equal(calls.closed, 1);
   });
 
-  it('Mezzo is the tab in front: the sage "Open" label and "You\'re on Mezzo.", no button', async () => {
-    const { document, init } = setup({ where: 'here' });
+  it('state 2, the tab open, no Companion: "TAB OPEN" (muted, outline dot), "Go to Mezzo tab" (cream)', async () => {
+    const { document, calls, init } = setup({ tab: true, reply: { companionOpen: false, monitoring: false } });
     await init();
-    assert.equal(document.querySelector('.popup').dataset.state, 'here');
-    assert.ok(visible(document.querySelector('.open-label')));
-    const here = document.querySelector('.state-here');
-    assert.ok(visible(here));
-    assert.equal(here.querySelector('.lede').textContent, "You're on Mezzo.");
-    assert.equal(here.querySelector('button'), null);
-    assert.ok(!visible(document.querySelector('.state-not-running')));
-    assert.ok(!visible(document.querySelector('.state-elsewhere')));
+    assert.deepEqual(calls.asked, [[42, { type: 'MEZZO_GET_STATE' }]]);
+    assert.equal(document.querySelector('.popup').dataset.state, 'tab');
+    const chip = document.querySelector('.status-chip');
+    assert.ok(!chip.hidden);
+    assert.equal(text(document, '.status-label'), 'Tab open');
+    assert.equal(chip.dataset.tone, 'muted');
+    assert.equal(chip.dataset.dot, 'outline');
+    assert.equal(text(document, '.lede'), 'The Mezzo tab is open. Open the Companion from there to start.');
+    assert.equal(document.getElementById('btn-popup-action').textContent, 'Go to Mezzo tab');
+    assert.equal(document.getElementById('btn-popup-action').className, 'btn-primary');
+    assert.ok(document.querySelector('.note').hidden);
   });
 
-  it('Mezzo is open elsewhere: "Mezzo is already open." and "Go to Mezzo", which brings that tab forward', async () => {
-    const { document, calls, init } = setup({ where: 'elsewhere' });
+  it('state 3, the Companion open, not monitoring: "COMPANION OPEN" (sage, outline dot), "Go to Mezzo tab" (outline)', async () => {
+    const { document, init } = setup({ tab: true, reply: { companionOpen: true, monitoring: false } });
     await init();
-    assert.equal(document.querySelector('.popup').dataset.state, 'elsewhere');
-    const elsewhere = document.querySelector('.state-elsewhere');
-    assert.ok(visible(elsewhere));
-    assert.equal(elsewhere.querySelector('.lede').textContent, 'Mezzo is already open.');
-    assert.equal(elsewhere.querySelector('button').textContent, 'Go to Mezzo');
-    assert.doesNotMatch(document.body.textContent, /profile/i);
+    assert.equal(document.querySelector('.popup').dataset.state, 'companion');
+    assert.equal(text(document, '.status-label'), 'Companion open');
+    assert.equal(document.querySelector('.status-chip').dataset.tone, 'sage');
+    assert.equal(document.querySelector('.status-chip').dataset.dot, 'outline');
+    assert.equal(text(document, '.lede'), 'Your Companion is open, but not monitoring. It floats above your other windows.');
+    assert.equal(document.getElementById('btn-popup-action').className, 'btn-outline');
+  });
 
-    document.getElementById('btn-go-to-mezzo').click();
+  it('state 4, monitoring: "MONITORING" (sage, solid dot), "Go to Mezzo tab" (outline)', async () => {
+    const { document, init } = setup({ tab: true, reply: { companionOpen: true, monitoring: true } });
+    await init();
+    assert.equal(document.querySelector('.popup').dataset.state, 'monitoring');
+    assert.equal(text(document, '.status-label'), 'Monitoring');
+    assert.equal(document.querySelector('.status-chip').dataset.dot, 'solid');
+    assert.equal(text(document, '.lede'), 'Mezzo is monitoring. The Companion floats above your other windows.');
+    assert.equal(document.getElementById('btn-popup-action').textContent, 'Go to Mezzo tab');
+    assert.equal(document.getElementById('btn-popup-action').className, 'btn-outline');
+  });
+
+  it('the tab not answering in time falls back to state 2, "TAB OPEN"', async () => {
+    const { document, init } = setup({ tab: true, reply: 'silent' });
+    await init();
+    assert.equal(document.querySelector('.popup').dataset.state, 'tab');
+  });
+
+  it('"Go to Mezzo tab" focuses the existing tab and never opens anything', async () => {
+    const { document, calls, init } = setup({ tab: true, reply: { companionOpen: true, monitoring: true } });
+    await init();
+    document.getElementById('btn-popup-action').click();
     await new Promise((r) => setTimeout(r, 0));
     assert.deepEqual(calls.focused, [42]);
     assert.deepEqual(calls.messages, []);
+    assert.deepEqual(calls.tabs, []);
     assert.equal(calls.closed, 1);
+  });
+
+  it('updates live when the tab reports a change, and ignores other tabs', async () => {
+    const { document, emit, init } = setup({ tab: true, reply: { companionOpen: false, monitoring: false } });
+    await init();
+    emit({ type: 'MEZZO_STATE', state: { companionOpen: true, monitoring: true } }, { tab: { id: 7 } });
+    assert.equal(document.querySelector('.popup').dataset.state, 'tab');
+    emit({ type: 'MEZZO_STATE', state: { companionOpen: true, monitoring: true } }, { tab: { id: 42 } });
+    assert.equal(document.querySelector('.popup').dataset.state, 'monitoring');
+    emit({ type: 'MEZZO_STATE', state: { companionOpen: false, monitoring: false } }, { tab: { id: 42 } });
+    assert.equal(document.querySelector('.popup').dataset.state, 'tab');
   });
 
   it('the Lantern palette only: charcoal, a cream primary button with 3px corners (chartreuse is reserved for the nudge), sage links; no serif, no old cream or hanko orange', () => {
@@ -117,7 +162,7 @@ describe('extension popup', () => {
         remove: async (k) => { delete store[k]; },
       } },
     };
-    await initPopup(document, { tabs: { findMezzoTab: async () => null, isFrontTab: async () => false, focusTab: async () => {} }, chromeApi, closePopup: () => {} });
+    await initPopup(document, { tabs: { findMezzoTab: async () => null, focusTab: async () => {} }, chromeApi, closePopup: () => {} });
     const form = document.getElementById('dev-url-form');
     const status = document.getElementById('dev-url-status');
     assert.ok(!form.hidden);
@@ -147,3 +192,40 @@ describe('extension popup', () => {
     assert.match(background, /BADGE_TEXT_COLOR = '#F3EBDE'/); // cream: chartreuse is only the nudge
   });
 });
+
+describe('popup state mapping (extension/lib/popup-state.js)', () => {
+  it('maps { tabOpen, companionOpen, monitoring } to the four states', () => {
+    assert.equal(popupStateFor({ tabOpen: false }), 'none');
+    assert.equal(popupStateFor({ tabOpen: false, companionOpen: true, monitoring: true }), 'none');
+    assert.equal(popupStateFor({ tabOpen: true, companionOpen: false, monitoring: false }), 'tab');
+    assert.equal(popupStateFor({ tabOpen: true, companionOpen: true, monitoring: false }), 'companion');
+    assert.equal(popupStateFor({ tabOpen: true, companionOpen: true, monitoring: true }), 'monitoring');
+    assert.equal(popupStateFor(), 'none');
+  });
+
+  it('each state\'s chip, body, button and note', () => {
+    assert.deepEqual(POPUP_STATES.none.button, { label: 'Open Mezzo', kind: 'primary', action: 'open' });
+    assert.equal(POPUP_STATES.none.chip, null);
+    assert.deepEqual(POPUP_STATES.none.note, ['Opens in its own window.', 'Only measures volume.']);
+    assert.deepEqual(POPUP_STATES.tab.chip, { label: 'Tab open', tone: 'muted', dot: 'outline' });
+    assert.deepEqual(POPUP_STATES.tab.button, { label: 'Go to Mezzo tab', kind: 'primary', action: 'focus-tab' });
+    assert.deepEqual(POPUP_STATES.companion.chip, { label: 'Companion open', tone: 'sage', dot: 'outline' });
+    assert.deepEqual(POPUP_STATES.companion.button, { label: 'Go to Mezzo tab', kind: 'outline', action: 'focus-tab' });
+    assert.deepEqual(POPUP_STATES.monitoring.chip, { label: 'Monitoring', tone: 'sage', dot: 'solid' });
+    assert.deepEqual(POPUP_STATES.monitoring.button, { label: 'Go to Mezzo tab', kind: 'outline', action: 'focus-tab' });
+    for (const key of ['tab', 'companion', 'monitoring']) assert.equal(POPUP_STATES[key].note, null);
+  });
+
+  it('askTabState: the answer, or null after the timeout (about 300ms by default), on an error, or a bad answer', async () => {
+    assert.equal(STATE_TIMEOUT_MS, 300);
+    const api = (reply) => ({ tabs: { sendMessage: () => reply } });
+    assert.deepEqual(await askTabState(api(Promise.resolve({ companionOpen: true, monitoring: false })), 1, 50), { companionOpen: true, monitoring: false });
+    const started = Date.now();
+    assert.equal(await askTabState(api(new Promise(() => {})), 1, 40), null);
+    assert.ok(Date.now() - started >= 35);
+    assert.equal(await askTabState(api(Promise.reject(new Error('no receiver'))), 1, 50), null);
+    assert.equal(await askTabState({ tabs: { sendMessage: () => { throw new Error('gone'); } } }, 1, 50), null);
+    assert.equal(await askTabState(api(Promise.resolve(undefined)), 1, 50), null);
+  });
+});
+

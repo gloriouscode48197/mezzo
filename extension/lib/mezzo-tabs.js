@@ -56,13 +56,6 @@ export async function findMezzoTab(chromeApi = globalThis.chrome) {
     ?? home[0];
 }
 
-/** Whether the tab is the one the person is looking at: active, in the focused window. */
-export async function isFrontTab(tab, chromeApi = globalThis.chrome) {
-  if (!tab?.active) return false;
-  const win = await focusedWindow(chromeApi);
-  return !!win && win.focused !== false && win.id === tab.windowId;
-}
-
 /** Brings the tab forward: its window focused (restored if minimized), the tab active. */
 export async function focusTab(tab, chromeApi = globalThis.chrome) {
   let state;

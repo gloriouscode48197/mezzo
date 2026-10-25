@@ -400,13 +400,16 @@ Today, "Open Mezzo" opens Mezzo in its own Chrome window, in front and focused (
 
 ## Extension Popup
 
-The toolbar popup has three states, decided by where Mezzo's Home is open (any tab, any window):
+The toolbar popup says plainly what is open, the Mezzo tab (the page) or the Companion (the floating window), in one of four states:
 
-* **Not open** — the "mezzo" wordmark, "A gentle nudge when you're talking louder than you'd like.", an **Open Mezzo** button, "Opens in its own window. Only measures volume.", and Privacy and Settings links.
-* **The tab in front** (the active tab of the focused window) — the wordmark with an "Open" label and "You're on Mezzo." No button.
-* **Open elsewhere** — the wordmark with an "Open" label, "Mezzo is already open.", and **Go to Mezzo**, which focuses that window (restoring it if minimized) and activates that tab.
+* **No Mezzo tab** — the "mezzo" wordmark (no status chip), "A gentle nudge when you're talking louder than you'd like.", a cream **Open Mezzo** button, and "Opens in its own window." / "Only measures volume."
+* **The Mezzo tab is open, no Companion** — a muted "TAB OPEN" chip with an outline dot, "The Mezzo tab is open. Open the Companion from there to start.", and a cream **Go to Mezzo tab** button.
+* **The Companion is open, not monitoring** — a sage "COMPANION OPEN" chip with an outline dot, "Your Companion is open, but not monitoring. It floats above your other windows.", and an outline **Go to Mezzo tab** button.
+* **Monitoring** — a sage "MONITORING" chip with a solid dot, "Mezzo is monitoring. The Companion floats above your other windows.", and an outline **Go to Mezzo tab** button.
 
-It never shows profile or monitoring state. In a locally loaded (developer) copy only, Settings has a Mezzo address field, so the extension can open a preview deployment instead of the live site. The toolbar badge marks a detected meeting with a cream dot on charcoal.
+Every state keeps the Privacy and Settings links. **Go to Mezzo tab** focuses the existing Mezzo tab and its window (restoring it if minimized); it never opens a new tab and never navigates or reloads the page. The popup never tries to open or focus the Companion: Chrome only opens one from a click inside the page, extensions can't focus it, and it already floats above other windows.
+
+The popup learns the state from the Mezzo tab itself, from the same session state as the running page's "Monitoring is active / not active" line, so the two never disagree. It asks when it opens and updates live while it's open; if the tab doesn't answer within about 300ms, it shows "TAB OPEN". It never shows a profile name or anything about volume. In a locally loaded (developer) copy only, Settings has a Mezzo address field, so the extension can open a preview deployment instead of the live site. The toolbar badge marks a detected meeting with a cream dot on charcoal.
 
 ---
 

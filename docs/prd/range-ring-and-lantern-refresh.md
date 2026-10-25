@@ -345,6 +345,25 @@ Same type, colors, and buttons; copy unchanged.
 
 ---
 
+## 9b. Extension
+
+The extension follows the same Lantern look, with no chartreuse (inside the product it's only the Outside range nudge): charcoal surfaces, cream primary buttons, sage text links, Geist and Geist Mono.
+
+**Toolbar popup** (16px padding; heading → 8 → body → 16 → button; Privacy and Settings links in every state, 20px from the bottom). It says what's open, the Mezzo tab or the Companion:
+
+* **No Mezzo tab** — the "mezzo" wordmark (no status chip), "A gentle nudge when you're talking louder than you'd like.", a cream **Open Mezzo** button, and "Opens in its own window." / "Only measures volume."
+* **The Mezzo tab is open, no Companion** — a muted "TAB OPEN" chip with an outline dot, "The Mezzo tab is open. Open the Companion from there to start.", and a cream **Go to Mezzo tab** button.
+* **The Companion is open, not monitoring** — a sage "COMPANION OPEN" chip with an outline dot, "Your Companion is open, but not monitoring. It floats above your other windows.", and an outline **Go to Mezzo tab** button.
+* **Monitoring** — a sage "MONITORING" chip with a solid dot, "Mezzo is monitoring. The Companion floats above your other windows.", and an outline **Go to Mezzo tab** button.
+
+"Go to Mezzo tab" focuses the existing tab without opening, navigating or reloading anything; the popup never tries to open or focus the Companion, since Chrome only opens one from a click in the page and it already floats above other windows. The state comes from the Mezzo tab's own session state (the same source as the running page's status line); without an answer within about 300ms the popup shows "TAB OPEN".
+
+*Changed during build: an earlier popup said only "Mezzo is already open" / "Go to Mezzo", which didn't say whether the page or the Companion was open.*
+
+**In-Meet banner:** a charcoal card with a cream ring, "Meeting detected" / "Monitor with Mezzo?", a cream **Open Mezzo** button and a sage **Not now** link. **Toolbar badge:** a cream dot on charcoal when a meeting is detected.
+
+---
+
 ## 10. Proposal 6: Tokens First
 
 Before any visual change:

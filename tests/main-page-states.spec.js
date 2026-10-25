@@ -428,3 +428,38 @@ test.describe('Main page: Reopen Companion (2026-10-23)', () => {
     await expect(page.locator('#state-dock .running-privacy')).toBeVisible(); // the closed page keeps its privacy line
   });
 });
+
+test.describe('Main page: status for the browser extension (2026-10-25)', () => {
+  test('reports { companionOpen, monitoring } as the Companion opens, monitors, stops and closes, from the same state as the status line; and answers when asked', async ({ page, context }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('mezzoProfiles', JSON.stringify([{ id: 'k', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 1, peakDb: 2 }]));
+      window.__mezzoReports = [];
+      window.addEventListener('message', (e) => {
+        if (e.source === window && e.data?.source === 'mezzo-page' && e.data.type === 'MEZZO_STATE') window.__mezzoReports.push(e.data.state);
+      });
+    });
+    const last = () => page.evaluate(() => window.__mezzoReports.at(-1) ?? null);
+    const ask = () => page.evaluate(() => window.postMessage({ source: 'mezzo-extension', type: 'MEZZO_STATE_REQUEST' }, location.origin));
+
+    const pip = await openCompanion(page, context);
+    await expect(pip.locator('.pip-screen-ready')).toBeVisible({ timeout: 10000 });
+    await expect.poll(last).toEqual({ companionOpen: true, monitoring: false });
+    await expect(page.locator('#state-dock .running-label')).toHaveText('Monitoring is not active');
+
+    await pip.locator('.pip-ready-start-btn').click();
+    await expect.poll(last).toEqual({ companionOpen: true, monitoring: true });
+    await expect(page.locator('#state-dock .running-label')).toHaveText('Monitoring is active');
+
+    // Asked, it answers with the current state.
+    const before = await page.evaluate(() => window.__mezzoReports.length);
+    await ask();
+    await expect.poll(() => page.evaluate(() => window.__mezzoReports.length)).toBe(before + 1);
+    expect(await last()).toEqual({ companionOpen: true, monitoring: true });
+
+    await pip.getByRole('button', { name: 'Stop monitoring' }).click({ force: true });
+    await expect.poll(last).toEqual({ companionOpen: true, monitoring: false });
+
+    await page.locator('#btn-close-companion').click();
+    await expect.poll(last).toEqual({ companionOpen: false, monitoring: false });
+  });
+});

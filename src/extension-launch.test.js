@@ -8,7 +8,7 @@ import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { placeWindow } from '../extension/lib/positioning.js';
-import { isMezzoHome, findMezzoTab, isFrontTab } from '../extension/lib/mezzo-tabs.js';
+import { isMezzoHome, findMezzoTab } from '../extension/lib/mezzo-tabs.js';
 import { LIVE_BASE_URL, normalizeBaseUrl, isUnpacked, getBaseUrl, setBaseUrlOverride, clearBaseUrlOverride } from '../extension/lib/mezzo-url.js';
 
 function fakeChrome({ unpacked = true } = {}) {
@@ -128,13 +128,6 @@ describe('extension: no second Mezzo', () => {
     ];
     assert.equal((await findMezzoTab(withTabs(tabs))).id, 2);
     assert.equal((await findMezzoTab(withTabs(tabs, 9))).id, 1);
-  });
-
-  it('"in front" means the active tab of the focused window', async () => {
-    const chrome = withTabs([]);
-    assert.equal(await isFrontTab({ id: 1, windowId: 1, active: true }, chrome), true);
-    assert.equal(await isFrontTab({ id: 1, windowId: 1, active: false }, chrome), false);
-    assert.equal(await isFrontTab({ id: 1, windowId: 4, active: true }, chrome), false);
   });
 
   it('an open Mezzo, wherever it is, is brought forward (window focused and restored, tab activated), never opened twice', async () => {

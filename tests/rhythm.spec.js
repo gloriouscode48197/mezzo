@@ -234,43 +234,39 @@ test.describe('Rhythm', () => {
     await expect(creating.locator('button')).toHaveCount(0);
   });
 
-  test('Extension popup: 16px padding; heading → 8 → body → 16 → button; the button sits in the same place whether it says Open Mezzo or Go to Mezzo; links 20px from the bottom', async ({ browser }) => {
-    const measure = async (where) => {
+  test('Extension popup, all four states: 16px padding; heading → 8 → body → 16 → button; links 20px from the bottom; hit areas', async ({ browser }) => {
+    const STATES = {
+      none: null,
+      tab: { companionOpen: false, monitoring: false },
+      companion: { companionOpen: true, monitoring: false },
+      monitoring: { companionOpen: true, monitoring: true },
+    };
+    for (const [key, reply] of Object.entries(STATES)) {
       const context = await browser.newContext({ viewport: { width: 280, height: 400 } });
       const page = await context.newPage();
-      await page.addInitScript((w) => {
-        const tab = w ? { id: 1, windowId: 1, active: w === 'here', url: 'https://mezzo-one.vercel.app/index.html' } : null;
+      await page.addInitScript(({ hasTab, reply }) => {
+        const tab = hasTab ? { id: 1, windowId: 1, active: false, url: 'https://mezzo-one.vercel.app/index.html' } : null;
         globalThis.chrome = {
-          runtime: { id: 'x', getManifest: () => ({ version: '1', update_url: 'x' }), sendMessage() {} },
+          runtime: { id: 'x', getManifest: () => ({ version: '1', update_url: 'x' }), sendMessage() {}, onMessage: { addListener() {} } },
           storage: { local: { get: async () => ({}), set: async () => {}, remove: async () => {} } },
-          tabs: { query: async () => (tab ? [tab] : []), update: async () => {}, create() {} },
+          tabs: { query: async () => (tab ? [tab] : []), update: async () => {}, create() {}, sendMessage: async () => reply },
           windows: { getLastFocused: async () => ({ id: 1, focused: true }), get: async () => ({ id: 1 }), update: async () => {} },
         };
-      }, where);
+      }, { hasTab: reply !== null, reply });
       await page.goto('/extension/popup/popup.html');
-      await page.waitForFunction((w) => document.querySelector('.popup').dataset.state === (w ?? 'not-running'), where);
-      const state = where ? (where === 'here' ? '.state-here' : '.state-elsewhere') : '.state-not-running';
-      const r = await page.evaluate((sel) => {
-        const b = (q) => { const el = document.querySelector(q); if (!el) return null; const x = el.getBoundingClientRect(); return { top: x.top, bottom: x.bottom, left: x.left }; };
-        return { head: b('.popup-head'), lede: b(`${sel} .lede`), btn: b(`${sel} button`), links: b('.popup-links'), popup: b('.popup'), popupBottom: document.querySelector('.popup').getBoundingClientRect().bottom };
-      }, state);
+      await page.waitForFunction((k) => document.querySelector('.popup').dataset.state === k, key);
+      const m = await page.evaluate(() => {
+        const b = (q) => { const x = document.querySelector(q).getBoundingClientRect(); return { top: x.top, bottom: x.bottom, left: x.left }; };
+        return { head: b('.popup-head'), lede: b('.lede'), btn: b('#btn-popup-action'), links: b('.popup-links'), popupBottom: document.querySelector('.popup').getBoundingClientRect().bottom };
+      });
+      expect(m.head.top, key).toBe(16);
+      expect(gap(m.head, m.lede), key).toBe(8);
+      expect(gap(m.lede, m.btn), key).toBe(16);
+      expect(m.btn.left, key).toBe(16);
+      expect(Math.round(m.popupBottom - m.links.bottom), key).toBe(20);
       await expectHitAreas(page, '.popup');
       await context.close();
-      return r;
-    };
-    const open = await measure(null);
-    const elsewhere = await measure('elsewhere');
-    const here = await measure('here');
-    for (const m of [open, elsewhere, here]) {
-      expect(m.head.top).toBe(16);
-      expect(gap(m.head, m.lede)).toBe(8);
-      expect(Math.round(m.popupBottom - m.links.bottom)).toBe(20);
     }
-    expect(gap(open.lede, open.btn)).toBe(16);
-    expect(open.btn.top).toBe(elsewhere.btn.top);
-    expect(open.btn.left).toBe(16);
-    // No button: text → 16 → links, no reserved gap.
-    expect(gap(here.lede, here.links)).toBe(16);
   });
 
   test('Hit areas on the first-time path: Welcome, Calibrating, the new-profile result, and naming', async ({ page, context }) => {

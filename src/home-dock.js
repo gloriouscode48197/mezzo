@@ -78,6 +78,48 @@ export function dockStatusCopy(state, SESSION_STATES) {
   return state === SESSION_STATES.MONITORING_ACTIVE ? 'Monitoring is active' : 'Monitoring is not active';
 }
 
+/**
+ * What the browser extension's popup needs to know, from the same session
+ * state that drives the running page's status line (dockStatusCopy()), so
+ * the two never disagree: is a Companion open, and is it monitoring?
+ */
+export function extensionStatus(state, SESSION_STATES) {
+  return {
+    companionOpen: Boolean(state) && state !== SESSION_STATES.COMPANION_CLOSED,
+    monitoring: state === SESSION_STATES.MONITORING_ACTIVE,
+  };
+}
+
+/**
+ * The page's side of the extension bridge (extension/content-scripts/
+ * mezzo-page-bridge.js). The page posts its status to its own window, and
+ * answers when the extension asks; the content script relays it. Only
+ * same-window, same-origin messages are read or sent, and only the two
+ * booleans ever leave the page.
+ */
+export const MEZZO_PAGE_SOURCE = 'mezzo-page';
+export const MEZZO_EXTENSION_SOURCE = 'mezzo-extension';
+export function createExtensionReporter(win = window) {
+  let status = { companionOpen: false, monitoring: false };
+  // Never allowed to break the page: telling the extension is best-effort.
+  const post = () => {
+    try {
+      win.postMessage?.({ source: MEZZO_PAGE_SOURCE, type: 'MEZZO_STATE', state: status }, win.location.origin);
+    } catch { /* no extension to tell */ }
+  };
+  win.addEventListener?.('message', (event) => {
+    if (event.source !== win || event.data?.source !== MEZZO_EXTENSION_SOURCE) return;
+    if (event.data.type === 'MEZZO_STATE_REQUEST') post();
+  });
+  return {
+    report(next) {
+      if (next.companionOpen === status.companionOpen && next.monitoring === status.monitoring) return;
+      status = { companionOpen: next.companionOpen, monitoring: next.monitoring };
+      post();
+    },
+  };
+}
+
 export function initHomeDock({
   stateHome,
   stateUnsupported,
@@ -340,7 +382,9 @@ export function initHomeDock({
    */
   let running = false;
   let lastStatus = null;
+  const extensionReporter = createExtensionReporter();
   function handleSessionStateChange(state) {
+    extensionReporter.report(extensionStatus(state, session.SESSION_STATES));
     if (state === session.SESSION_STATES.COMPANION_CLOSED) {
       running = false;
       lastStatus = null;
