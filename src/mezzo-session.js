@@ -164,8 +164,8 @@ import {
 // MIC_PERMISSION_DENIED's "...calibrate. Check...") is left exactly as
 // written, since only the terminal period is in scope.
 export const CALIBRATION_FAILURE_COPY = {
-  SILENCE: "Didn't catch enough clear speech — let's try again",
-  INSUFFICIENT_VOICE: "Didn't catch enough clear speech — let's try again",
+  SILENCE: "Didn't catch enough clear speech. Let's try again",
+  INSUFFICIENT_VOICE: "Didn't catch enough clear speech. Let's try again",
   UNSTABLE_ENVIRONMENT: 'Try somewhere a little quieter',
   MIC_PERMISSION_DENIED: 'Mezzo needs microphone access to calibrate. Check your browser\'s microphone permission for this site, then try again',
   // Always routed to the dedicated C0 screen (see showFailedScreen()), same
@@ -173,9 +173,9 @@ export const CALIBRATION_FAILURE_COPY = {
   // kind of defensive fallback MIC_PERMISSION_DENIED's own entry already
   // is, not because this code is expected to reach the generic screen.
   MIC_ACQUISITION_TIMEOUT: 'The connection took longer than expected. Try again to restart calibration',
-  NO_SAMPLES: "Didn't catch enough clear speech — let's try again",
+  NO_SAMPLES: "Didn't catch enough clear speech. Let's try again",
   CROSS_TAB_LOCKED: 'Calibration is already open in another Mezzo tab',
-  UNKNOWN: "Something went wrong — let's try again",
+  UNKNOWN: "Something went wrong. Let's try again",
 };
 
 // C0's own heading/body pairs, keyed by failure code — the two codes that
@@ -3156,7 +3156,7 @@ export function createMezzoSession({
 
     const welcomeDisclaimer = pipDoc.createElement('p');
     welcomeDisclaimer.className = 'pip-intro-disclaimer';
-    welcomeDisclaimer.textContent = "Mezzo doesn't record audio or transcribe speech.";
+    welcomeDisclaimer.textContent = 'Mezzo only measures volume. Nothing you say is recorded.';
     welcomeScreen.appendChild(welcomeDisclaimer);
 
     layout.appendChild(welcomeScreen);
@@ -3395,7 +3395,7 @@ export function createMezzoSession({
 
     const readyDisclaimer = pipDoc.createElement('p');
     readyDisclaimer.className = 'pip-ready-disclaimer';
-    readyDisclaimer.textContent = "Mezzo doesn't record audio or transcribe speech.";
+    readyDisclaimer.textContent = 'Mezzo only measures volume. Nothing you say is recorded.';
     readyScreen.appendChild(readyDisclaimer);
     readyDisclaimerEl = readyDisclaimer;
 

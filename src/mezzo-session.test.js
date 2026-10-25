@@ -98,10 +98,10 @@ describe('calibrationFailureMessage', () => {
   // of these renders as failedMessageEl's sole text, which functions as the
   // Failed screen's heading (see CALIBRATION_FAILURE_COPY's own doc comment).
   it('maps every known failure code to its documented copy', () => {
-    assert.strictEqual(calibrationFailureMessage({ code: 'SILENCE' }), "Didn't catch enough clear speech — let's try again");
-    assert.strictEqual(calibrationFailureMessage({ code: 'INSUFFICIENT_VOICE' }), "Didn't catch enough clear speech — let's try again");
+    assert.strictEqual(calibrationFailureMessage({ code: 'SILENCE' }), "Didn't catch enough clear speech. Let's try again");
+    assert.strictEqual(calibrationFailureMessage({ code: 'INSUFFICIENT_VOICE' }), "Didn't catch enough clear speech. Let's try again");
     assert.strictEqual(calibrationFailureMessage({ code: 'UNSTABLE_ENVIRONMENT' }), 'Try somewhere a little quieter');
-    assert.strictEqual(calibrationFailureMessage({ code: 'NO_SAMPLES' }), "Didn't catch enough clear speech — let's try again");
+    assert.strictEqual(calibrationFailureMessage({ code: 'NO_SAMPLES' }), "Didn't catch enough clear speech. Let's try again");
   });
 
   it('explains microphone permission denial with a return path, not a generic error', () => {

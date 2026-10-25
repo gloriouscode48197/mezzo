@@ -54,7 +54,7 @@ test.describe('First-time copy and calibration-entry routing', () => {
     );
     // The window's accessible name says what the screen is.
     expect(await pipPage.title()).toBe('Mezzo, welcome.');
-    await expect(welcomeScreen.locator('.pip-intro-disclaimer')).toHaveText("Mezzo doesn't record audio or transcribe speech.");
+    await expect(welcomeScreen.locator('.pip-intro-disclaimer')).toHaveText('Mezzo only measures volume. Nothing you say is recorded.');
     await expect(welcomeScreen.locator('button:has-text("Create speaking profile")')).toBeVisible();
 
     // No "Not now" (or any other secondary) action — the PRD's State 01
@@ -197,7 +197,7 @@ test.describe('First-time copy and calibration-entry routing', () => {
     });
     const pipPage = await openCompanion(page, context);
     await expect(pipPage.locator('.pip-screen-ready .pip-ready-disclaimer')).toHaveText(
-      "Mezzo doesn't record audio or transcribe speech."
+      'Mezzo only measures volume. Nothing you say is recorded.'
     );
   });
 
@@ -926,7 +926,7 @@ test.describe('Companion-wide visual-language consistency (2026-08-14 pass)', ()
       letterSpacing: '-0.8px',
       color: 'rgb(243, 235, 222)',
     });
-    await expect(failedMessage).toHaveText("Didn't catch enough clear speech — let's try again");
+    await expect(failedMessage).toHaveText("Didn't catch enough clear speech. Let's try again");
 
     const box = await failedScreen.boundingBox();
     const { scrollWidth, scrollHeight, clientWidth, clientHeight } = await failedScreen.evaluate((el) => ({

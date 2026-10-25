@@ -379,7 +379,7 @@ export function commitSavePromptName(temporaryProfile, name, deps = {}) {
       // caller injected a stale snapshot) is the one way that gap can
       // actually open up, since resolveSavePromptAction() and this write
       // otherwise run back-to-back with nothing else able to interleave.
-      return { action: null, profile: null, error: { code: 'PROFILE_MISSING', message: 'That profile no longer exists — please try again.' } };
+      return { action: null, profile: null, error: { code: 'PROFILE_MISSING', message: 'That profile no longer exists. Please try again.' } };
     }
     return { action: SAVE_PROMPT_ACTIONS.UPDATE, profile: updated, error: null };
   }
