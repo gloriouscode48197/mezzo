@@ -114,7 +114,7 @@
 
 import { AudioProcessor } from './audio.js?v=2';
 import { MezzoEngine, DEFAULT_ZONE_SETTINGS, measureRoomNoiseDb, isNoisyRoom } from './engine.js?v=5';
-import { MezzoRangeRing, edgeForExtent } from './range-ring.js';
+import { MezzoRangeRing, edgeForBandExtent, ringExtent } from './range-ring.js';
 import { MezzoLevelMeter } from './level-meter.js';
 import { createZoneAnnouncer, ZONE_LABELS } from './zone-announcer.js';
 import { createCalibrationController } from './calibration-controller.js';
@@ -2630,8 +2630,18 @@ export function createMezzoSession({
         display: block;
       }
       .pip-screen-monitoring[data-size-band="mini"] .pip-monitoring-header { display: none; }
+      .pip-monitoring-header { text-align: center; }
+      /* The glow may reach under the name (the ring is sized by its solid
+         band), so the name sits on a soft charcoal backing, feathered at
+         its edges: invisible on the plain background, it keeps the name at
+         4.5:1 over the glow. */
       .pip-profile-info {
-        display: block;
+        display: inline-block;
+        vertical-align: top;
+        box-sizing: border-box;
+        padding: 8px 6px;
+        background: var(--color-bg);
+        box-shadow: 0 0 8px 4px var(--color-bg);
         max-width: 100%;
         overflow: hidden;
         white-space: nowrap;
@@ -2639,7 +2649,7 @@ export function createMezzoSession({
         font-family: var(--font-mono);
         font-weight: var(--weight-regular);
         font-size: 11px;
-        line-height: 32px; /* centered on the 32px controls beside it */
+        line-height: 16px; /* plus 8px padding: centered on the 32px controls beside it */
         letter-spacing: 0.12em;
         text-transform: uppercase;
         text-align: center;
@@ -2656,6 +2666,7 @@ export function createMezzoSession({
         align-items: center;
         justify-content: center;
         pointer-events: none;
+        z-index: 0; /* under the name (z-index 1), which the glow may reach */
       }
       .pip-monitoring-controls { padding: 0; }
       .pip-control-btn {
@@ -4228,10 +4239,16 @@ function ringLayout() {
     if (!pipCircle && pipCircleWrapperEl) {
       pipCircle = new MezzoRangeRing(pipCircleWrapperEl, {
         // Sized for its loudest state (the scaling rules, ringLayout()): at
-        // full Outside, band and glow included, it fills the ring area
-        // minus the gap, so it never reaches the name or the controls.
-        preferredEdgePx: () => edgeForExtent(ringLayout().extent),
-        viewportSize: () => { const { extent } = ringLayout(); return { width: extent, height: extent }; },
+        // full Outside, the circle plus its widest band fills the ring area
+        // minus the gap, so the solid band never reaches the name or the
+        // controls. The soft glow isn't counted: it may reach into the gap
+        // and under the name, which draws above the ring.
+        preferredEdgePx: () => edgeForBandExtent(ringLayout().extent),
+        // Room for the glow beyond that, so the ring keeps its widest band.
+        viewportSize: () => {
+          const room = ringExtent(edgeForBandExtent(ringLayout().extent));
+          return { width: room, height: room };
+        },
         levelOffsetDb: (rms) => engine.getLevelOffsetDb(rms),
         // The room noise measured with this profile's calibration, relative
         // to its speaking level; the circle rests below it (plus a margin).

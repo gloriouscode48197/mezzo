@@ -238,6 +238,21 @@ export function edgeForExtent(extentPx, b = DEFAULT_RING_SETTINGS.band) {
   return Math.max(0, extentPx) / (1 + 2 * b.maxFraction + (2 * GLOW_REACH_PX) / REFERENCE_EDGE_PX);
 }
 
+/**
+ * The ring's solid extent (a diameter, in px) for an edge: the voice circle
+ * at its end size plus the band at its widest on both sides. The glow is
+ * left out: the Companion sizes the ring by this, and lets the soft glow
+ * reach into the gap around it.
+ */
+export function bandExtent(edgePx, b = DEFAULT_RING_SETTINGS.band) {
+  return edgePx * (1 + 2 * b.maxFraction);
+}
+
+/** The edge whose solid extent (see bandExtent()) is exactly extentPx. */
+export function edgeForBandExtent(extentPx, b = DEFAULT_RING_SETTINGS.band) {
+  return Math.max(0, extentPx) / (1 + 2 * b.maxFraction);
+}
+
 /** Exponential approach toward a target, frame-rate independent. */
 export function ease(current, target, dtMs, tauMs) {
   if (tauMs <= 0) return target;

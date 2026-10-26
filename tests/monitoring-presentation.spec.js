@@ -30,7 +30,7 @@
 import { test, expect } from '@playwright/test';
 import { openCompanion } from './support/open-companion.js';
 import { installLevelDriver, setLevelDb, rangeBoundsDb } from './support/drive-level.js';
-import { edgeForExtent } from '../src/range-ring.js';
+import { edgeForBandExtent } from '../src/range-ring.js';
 
 const SAVED_PROFILE = [{ id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 100 }];
 const LONG_NAME = 'The Kitchen And Dining Room Combined Open-Plan Space';
@@ -40,7 +40,7 @@ const CHARTREUSE = 'rgb(222, 222, 101)'; // --color-accent
 // The ring at 382×480: the area between the name row (16 + 32) and Stop
 // (480 - 16 - 40) is 376 tall, so its maximum extent is
 // min(382, 376) - 2×16 = 344.
-const EXPANDED_EDGE = edgeForExtent(344);
+const EXPANDED_EDGE = edgeForBandExtent(344);
 const ICON = 'rgb(176, 171, 158)';       // #B0AB9E
 const CREAM = 'rgb(243, 235, 222)';      // #F3EBDE
 const SIZES = { mini: { width: 280, height: 110 }, compact: { width: 220, height: 220 }, expanded: { width: 382, height: 480 } };
@@ -168,7 +168,7 @@ test.describe('Monitoring presentation: the Range Ring', () => {
     expect(outside.edgeOpacity).toBeLessThan(0.01); // hidden under the band
   });
 
-  test('the band grows with how far over the end of range, and stays inside the window at its maximum', async ({ page, context }) => {
+  test('the band grows with how far over the end of range, and the solid band stays inside the window at its maximum', async ({ page, context }) => {
     const { pipPage } = await reachMonitoring(page, context, { size: { width: 382, height: 480 }, driven: true });
     const b = await rangeBoundsDb(page, SAVED_PROFILE[0].spreadDb);
     await settleAt(page, pipPage, b.endDb + 0.5, 1600);
@@ -176,9 +176,8 @@ test.describe('Monitoring presentation: the Range Ring', () => {
     await settleAt(page, pipPage, b.endDb + 6);
     const farOver = await readRing(pipPage);
     expect(farOver.bandPx).toBeGreaterThan(justOver.bandPx);
-    // Band plus glow (outer glow spread + half its blur, scaled) never reaches the window edge.
-    const reach = farOver.edgePx / 2 + farOver.bandPx + (10 + 38 / 2) * farOver.glowScale;
-    expect(reach).toBeLessThanOrEqual(382 / 2 + 0.5);
+    // The solid band stays inside the window (the soft glow is not counted).
+    expect(farOver.edgePx / 2 + farOver.bandPx).toBeLessThanOrEqual(382 / 2 - 16 + 0.5);
   });
 
   test('a single 150ms loud syllable within normal speech never shows the band', async ({ page, context }) => {
@@ -315,8 +314,10 @@ test.describe('Monitoring presentation: retired content', () => {
 // Everything keys off the window's short side: Mini under 160, Compact 160
 // to 299, Expanded 300 and up, with the controls 8 / 12 / 16px from the
 // edges. The ring is sized for its loudest state: at full Outside, band and
-// glow included, it fills the space between the top row (name, Expand or
-// Compact view) and the bottom row (Stop), less an equal gap above and below.
+// it fills the space between the top row (name, Expand or Compact view) and
+// the bottom row (Stop), less an equal gap above and below. That's the solid
+// band; the soft glow may reach into the gap and under the name (drawn above
+// it), but never the controls.
 const GAP = { mini: 8, compact: 12, expanded: 16 };
 
 /** Rects of the things the ring must stay clear of, plus the ring's own
@@ -339,6 +340,37 @@ async function layoutBoxes(pipPage) {
   }, GAP);
 }
 
+/** Every control's rect, hidden ones (Mini at rest) included: the glow must
+ *  clear them whether or not they're showing. */
+async function controlRects(pipPage) {
+  return pipPage.evaluate(() => [...document.querySelectorAll('.pip-screen-monitoring .pip-control-btn')]
+    .filter((el) => getComputedStyle(el).display !== 'none')
+    .map((el) => { const r = el.getBoundingClientRect(); return { name: el.getAttribute('aria-label'), left: r.left, right: r.right, top: r.top, bottom: r.bottom }; }));
+}
+
+/** The brightest pixel behind an element's text: screenshots its box with the
+ *  text made transparent and decodes the image in the page's own canvas. */
+async function brightestBehind(page, pipPage, locator) {
+  const box = await locator.boundingBox();
+  await locator.evaluate((el) => { el.dataset.prevColor = el.style.color; el.style.color = 'transparent'; });
+  const png = await pipPage.screenshot({ clip: box, animations: 'disabled' });
+  await locator.evaluate((el) => { el.style.color = el.dataset.prevColor; });
+  return page.evaluate(async (b64) => {
+    const img = new Image();
+    img.src = `data:image/png;base64,${b64}`;
+    await img.decode();
+    const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+    const ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0);
+    const d = ctx.getImageData(0, 0, c.width, c.height).data;
+    let best = [0, 0, 0]; let bestL = -1;
+    for (let i = 0; i < d.length; i += 4) {
+      const l = 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
+      if (l > bestL) { bestL = l; best = [d[i], d[i + 1], d[i + 2]]; }
+    }
+    return `rgb(${best.join(', ')})`;
+  }, png.toString('base64'));
+}
+
 const overlaps = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
 
 /** WCAG contrast ratio between two rgb() strings. */
@@ -353,7 +385,7 @@ function contrast(fg, bg) {
 
 test.describe('Monitoring presentation: the ring is sized for full Outside', () => {
   for (const [bandName, size] of Object.entries(SIZES)) {
-    test(`${size.width}×${size.height} (${bandName}): at full Outside, band and glow clear the name and Stop, with equal gaps above and below`, async ({ page, context }) => {
+    test(`${size.width}×${size.height} (${bandName}): at full Outside, the band clears the name and Stop with equal gaps, the glow never reaches a control, and the name stays readable`, async ({ page, context }) => {
       const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size, driven: true, layout: bandName === 'expanded' ? 'expanded' : 'compact' });
       await expect(monitoringScreen).toHaveAttribute('data-size-band', bandName);
       const b = await rangeBoundsDb(page, SAVED_PROFILE[0].spreadDb);
@@ -362,12 +394,14 @@ test.describe('Monitoring presentation: the ring is sized for full Outside', () 
       expect(r.zone).toBe(3);
 
       const ringBox = await monitoringScreen.locator('.mezzo-ring').boundingBox();
+      const cx = ringBox.x + ringBox.width / 2;
       const cy = ringBox.y + ringBox.height / 2;
-      const half = r.edgePx / 2 + r.bandPx + (10 + 38 / 2) * r.glowScale;
+      const half = r.edgePx / 2 + r.bandPx; // the solid band, no glow
       const ring = { top: cy - half, bottom: cy + half };
       const boxes = await layoutBoxes(pipPage);
 
-      // The maximum extent fills the area less the gap (within a pixel).
+      // The band is at its widest, and fills the area less the gap (within a pixel).
+      expect(r.bandPx).toBeCloseTo(0.18 * r.edgePx, 0);
       expect(2 * half).toBeCloseTo(boxes.ringMax.bottom - boxes.ringMax.top, 0);
 
       const topEdge = bandName === 'mini' ? 0 : boxes.name.bottom;
@@ -378,12 +412,23 @@ test.describe('Monitoring presentation: the ring is sized for full Outside', () 
       expect(below).toBeGreaterThanOrEqual(GAP[bandName] - 1);
       expect(Math.abs(above - below)).toBeLessThanOrEqual(1);
 
+      // The glow (outer spread plus half its blur) never reaches a control.
+      const glowRadius = half + (10 + 38 / 2) * r.glowScale;
+      for (const c of await controlRects(pipPage)) {
+        const dx = Math.max(c.left - cx, 0, cx - c.right);
+        const dy = Math.max(c.top - cy, 0, cy - c.bottom);
+        expect(Math.hypot(dx, dy), `glow clear of ${c.name}`).toBeGreaterThan(glowRadius);
+      }
+
       if (bandName === 'mini') {
         await expect(monitoringScreen.locator('.pip-profile-info')).toBeHidden();
       } else {
         // The name stays readable in every ring state.
         await expect(monitoringScreen.locator('.pip-profile-info')).toBeVisible();
         await expect(monitoringScreen.locator('.pip-monitoring-header')).toHaveCSS('opacity', '1');
+        // Readable over the glow: 4.5:1 against the brightest pixel behind it.
+        const bg = await brightestBehind(page, pipPage, monitoringScreen.locator('.pip-profile-info'));
+        expect(contrast(ICON, bg), `name contrast over ${bg}`).toBeGreaterThanOrEqual(4.5);
       }
       await assertNoOverflow(pipPage);
     });
@@ -398,7 +443,7 @@ test.describe('Monitoring presentation: the ring is sized for full Outside', () 
       await expect(pipPage.locator('body')).toHaveAttribute('data-layout', 'compact');
       await expect.poll(async () => {
         const boxes = await layoutBoxes(pipPage);
-        return Math.abs((await monitoringScreen.locator('.mezzo-ring').boundingBox()).width - edgeForExtent(boxes.ringMax.bottom - boxes.ringMax.top));
+        return Math.abs((await monitoringScreen.locator('.mezzo-ring').boundingBox()).width - edgeForBandExtent(boxes.ringMax.bottom - boxes.ringMax.top));
       }).toBeLessThan(1);
       await assertNoOverflow(pipPage);
     }

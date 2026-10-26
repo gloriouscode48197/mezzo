@@ -190,7 +190,7 @@ Attention rises in three steps, each using brightness and size, which work in pe
 
 - **Monitoring opens in Compact (220×220)**, the peripheral default. The window is freely resizable.
 - **Size bands**, by the window's short side and recomputed on resize: Mini under 160, Compact 160 to 299, Expanded 300 and up; edge spacing 8 / 12 / 16px.
-- **Ring size:** sized for full Outside range. Its maximum extent (edge plus the band at its widest plus the glow) equals the space between the top row and the bottom row, less twice the edge spacing, and it's centered there. In Mini that space is the whole window.
+- **Ring size:** sized for full Outside range by its solid band: the edge plus the band at its widest equals the space between the top row and the bottom row, less twice the edge spacing, centered there (in Mini, the whole window). The glow isn't counted; it may reach into the gap and under the name (which has a soft charcoal backing to stay at 4.5:1), never the controls. *Changed 2026-10-26: counting the glow made the Compact ring about 67px; sizing by the band gives about 79px.*
 - **Profile name:** Geist Mono 11px, 0.12em, uppercase, #B0AB9E at every size; visible in every ring state in Compact and Expanded, hidden in Mini.
 - **Controls:** 32×32 targets, #B0AB9E icons at full opacity, no boxes.
   - Compact: icon-only Stop bottom left, Expand top right, always visible.

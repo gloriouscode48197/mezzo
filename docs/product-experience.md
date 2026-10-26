@@ -570,7 +570,7 @@ What the window shows depends on its **size band**, keyed off its short side and
 
 It shows:
 
-* the **Range Ring** — the live visualization (see "Monitoring States" and "Visualization Principles"). It's sized for its loudest state: at full Outside range, band and glow included, it fills the space between the top row (name, Expand or Compact view) and the bottom row (Stop), less an equal gap above and below (the band's edge spacing), and it's centered in that space. In Mini the space is the whole window.
+* the **Range Ring** — the live visualization (see "Monitoring States" and "Visualization Principles"). It's sized for its loudest state: at full Outside range, the circle plus its widest band fills the space between the top row (name, Expand or Compact view) and the bottom row (Stop), less an equal gap above and below (the band's edge spacing), and it's centered in that space. In Mini the space is the whole window. The soft glow isn't counted: it may reach into the gap and under the name, never the controls. The name sits on a soft charcoal backing, invisible on the plain background, that keeps it at 4.5:1 over the glow. At 220×220 the ring's edge is about 79px; at 382×480, about 253px.
 * the selected profile name (read only), centered in the top row — one style at every size: Geist Mono 11px, 0.12em letter-spacing, uppercase via CSS, #B0AB9E. Visible in every ring state in Compact and Expanded; hidden in Mini.
 * **Stop**, bottom-left. In Mini and Compact it's icon-only: a 10px square in a 32×32 target. In Expanded it's a labeled "Stop" button styled like the secondary buttons. Its accessible name is always "Stop monitoring".
 * **Expand** (Mini and Compact) or **Compact view** (Expanded), top-right, 32×32 — the same corner, so nothing appears to move across the switch.
@@ -694,7 +694,7 @@ Where the range comes from: the end of range sits just above the calibration's o
 
 The visualization behaves like a natural system. Changes should feel like changes in energy rather than software notifications.
 
-* **The container stays fixed.** The ring never causes surrounding layout changes; it's sized once per window size for its loudest state, so growing into Outside range never reaches the name or Stop.
+* **The container stays fixed.** The ring never causes surrounding layout changes; it's sized once per window size for its loudest state, so the band never reaches the name or Stop when it grows into Outside range.
 * **Motion communicates state**, never decoration: the circle rises quickly and falls gently, settles to rest over a second when the user stops speaking, and the band grows from a thin ring and shrinks back before fading, so it doesn't flicker at the edge.
 * **Silence and room noise don't move it.** A speech-band filter keeps fan rumble and hiss out of the level, and the circle stays at rest unless the voice is clearly above the room's measured noise.
 * **Color reinforces state; it is not the primary channel.** Grey-taupe for the voice, sage for approaching, chartreuse only over range. With reduced motion, the circle still follows the voice, and the band appears at a fixed thickness instead of growing.

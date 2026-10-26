@@ -5,7 +5,7 @@ import {
   VOICE_RISE_TAU_MS, VOICE_FALL_TAU_MS,
   BAND_MIN_FRACTION, BAND_MAX_FRACTION, BAND_FULL_DB, BAND_FADE_MS, BAND_THIN_FRACTION,
   VOICE_FRACTION_END, VOICE_OPACITY_REST, REFERENCE_EDGE_PX,
-  ringExtent, edgeForExtent,
+  ringExtent, edgeForExtent, bandExtent, edgeForBandExtent,
 } from './range-ring.js';
 import { MezzoEngine, OUTSIDE_ENTRY_DWELL_MS } from './engine.js';
 
@@ -344,5 +344,17 @@ describe('ringExtent / edgeForExtent: sizing the ring for full Outside', () => {
   it('edgeForExtent inverts ringExtent, and never goes negative', () => {
     for (const extent of [94, 108, 344, 600]) assert.ok(Math.abs(ringExtent(edgeForExtent(extent)) - extent) < 1e-9);
     assert.equal(edgeForExtent(-20), 0);
+  });
+});
+
+describe('bandExtent / edgeForBandExtent: sizing the ring by its solid band', () => {
+  it('the solid extent is the edge plus the band at its widest, both sides; no glow', () => {
+    assert.ok(Math.abs(bandExtent(100) - 136) < 1e-9);
+    assert.ok(bandExtent(100) < ringExtent(100));
+  });
+  it('edgeForBandExtent inverts bandExtent, and never goes negative', () => {
+    for (const extent of [94, 108, 344]) assert.ok(Math.abs(bandExtent(edgeForBandExtent(extent)) - extent) < 1e-9);
+    assert.ok(Math.abs(edgeForBandExtent(108) - 79.41) < 0.01); // Compact, 220×220
+    assert.equal(edgeForBandExtent(-5), 0);
   });
 });
