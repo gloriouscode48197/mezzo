@@ -76,6 +76,19 @@ export const DEFAULT_RING_SETTINGS = Object.freeze({
   }),
 });
 
+/**
+ * The band's widths scaled by k (its thin start, minimum and maximum), for
+ * a layout that caps the band smaller: the band still grows with how far
+ * over the end of range, over the same dB, in the same steps; only its
+ * widths shrink. k = 1 returns the band unchanged.
+ * @param {typeof DEFAULT_RING_SETTINGS.band} b
+ * @param {number} k
+ */
+export function scaledBand(b, k) {
+  if (k === 1) return b;
+  return { ...b, minFraction: b.minFraction * k, maxFraction: b.maxFraction * k, thinFraction: b.thinFraction * k };
+}
+
 /** The ring's edge as a fraction of the window's short side. */
 export const RING_EDGE_FRACTION = 0.6;
 
@@ -395,6 +408,7 @@ export class MezzoRangeRing {
    *   settings?: typeof DEFAULT_RING_SETTINGS,
    *   viewportSize?: () => { width: number, height: number },
    *   roomNoiseOffsetDb?: () => number,
+   *   bandScale?: () => number,
    * }} [options] -
    *   preferredEdgePx is read on every resize, so Compact and Expanded can
    *   prefer different edges; levelOffsetDb converts an RMS level to dB
@@ -402,7 +416,8 @@ export class MezzoRangeRing {
    *   settings is read every frame (the app passes nothing); viewportSize
    *   is the window the ring must fit (default: the real window);
    *   roomNoiseOffsetDb is the measured room noise vs the calibrated level
-   *   (default: unknown)
+   *   (default: unknown); bandScale scales the band's widths for this
+   *   layout (see scaledBand(); default 1)
    */
   constructor(container, {
     preferredEdgePx = () => REFERENCE_EDGE_PX,
@@ -410,7 +425,9 @@ export class MezzoRangeRing {
     settings = DEFAULT_RING_SETTINGS,
     viewportSize = null,
     roomNoiseOffsetDb = () => -Infinity,
+    bandScale = () => 1,
   } = {}) {
+    this.bandScale = bandScale;
     this.container = container;
     this.doc = container.ownerDocument;
     this.win = this.doc.defaultView;
@@ -498,16 +515,22 @@ export class MezzoRangeRing {
    *  resize; call it directly after a layout-mode change too. */
   relayout() {
     const { width, height } = this.viewportSize();
-    this.geometry = ringGeometry(this.preferredEdgePx(), Math.min(width, height), this.settings.band);
+    this.geometry = ringGeometry(this.preferredEdgePx(), Math.min(width, height), this._band());
     this.el.style.setProperty('--ring-edge', `${this.geometry.edge}px`);
     this.el.style.setProperty('--glow-scale', this.geometry.glowScale.toFixed(3));
+  }
+
+  /** The band settings for the current layout (see bandScale). */
+  _band() {
+    return scaledBand(this.settings.band, this.bandScale());
   }
 
   _loop(now) {
     this.rafId = this.win.requestAnimationFrame(this._boundLoop);
     const dt = this.lastTime === null ? 16 : Math.min(now - this.lastTime, 100);
     this.lastTime = now;
-    const { gate, voice, motion, band: bandSettings } = this.settings;
+    const { gate, voice, motion } = this.settings;
+    const bandSettings = this._band();
 
     const reduced = !!this._reducedMotion?.matches;
     // The circle follows the level under reduced motion too: it is the

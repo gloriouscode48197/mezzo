@@ -30,17 +30,25 @@
 import { test, expect } from '@playwright/test';
 import { openCompanion } from './support/open-companion.js';
 import { installLevelDriver, setLevelDb, rangeBoundsDb } from './support/drive-level.js';
-import { edgeForBandExtent } from '../src/range-ring.js';
+import { edgeForBandExtent, edgeForExtent, scaledBand, DEFAULT_RING_SETTINGS } from '../src/range-ring.js';
 
 const SAVED_PROFILE = [{ id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 100 }];
 const LONG_NAME = 'The Kitchen And Dining Room Combined Open-Plan Space';
 const LONG_PROFILE = [{ id: 'p-long', name: LONG_NAME, speakingDb: -30, spreadDb: 4, calibratedTs: 100 }];
 
 const CHARTREUSE = 'rgb(222, 222, 101)'; // --color-accent
-// The ring at 382×480: the area between the name row (16 + 32) and Stop
-// (480 - 16 - 40) is 376 tall, so its maximum extent is
-// min(382, 376) - 2×16 = 344.
-const EXPANDED_EDGE = edgeForBandExtent(344);
+// The ring at 382×480: the area between the name row and Stop leaves room
+// for a 253px edge, but the glow is kept inside the 382px window width,
+// which limits the edge to about 238px.
+const EXPANDED_EDGE = edgeForExtent(382);
+// Compact caps the band at 0.04 of the edge (Expanded and Mini: 0.18).
+const BAND_CAP = { mini: 0.18, compact: 0.04, expanded: 0.18 };
+const bandFor = (sizeBand) => scaledBand(DEFAULT_RING_SETTINGS.band, BAND_CAP[sizeBand] / DEFAULT_RING_SETTINGS.band.maxFraction);
+/** The edge the ring should have for a layout (see ringEdge() in the app). */
+const expectedEdge = (boxes) => Math.min(
+  edgeForBandExtent(boxes.ringMax.bottom - boxes.ringMax.top, bandFor(boxes.band)),
+  edgeForExtent(boxes.width, bandFor(boxes.band)),
+);
 const ICON = 'rgb(176, 171, 158)';       // #B0AB9E
 const CREAM = 'rgb(243, 235, 222)';      // #F3EBDE
 const SIZES = { mini: { width: 280, height: 110 }, compact: { width: 220, height: 220 }, expanded: { width: 382, height: 480 } };
@@ -168,7 +176,7 @@ test.describe('Monitoring presentation: the Range Ring', () => {
     expect(outside.edgeOpacity).toBeLessThan(0.01); // hidden under the band
   });
 
-  test('the band grows with how far over the end of range, and the solid band stays inside the window at its maximum', async ({ page, context }) => {
+  test('the band grows with how far over the end of range, and band plus glow stay inside the window width at its maximum', async ({ page, context }) => {
     const { pipPage } = await reachMonitoring(page, context, { size: { width: 382, height: 480 }, driven: true });
     const b = await rangeBoundsDb(page, SAVED_PROFILE[0].spreadDb);
     await settleAt(page, pipPage, b.endDb + 0.5, 1600);
@@ -176,8 +184,23 @@ test.describe('Monitoring presentation: the Range Ring', () => {
     await settleAt(page, pipPage, b.endDb + 6);
     const farOver = await readRing(pipPage);
     expect(farOver.bandPx).toBeGreaterThan(justOver.bandPx);
-    // The solid band stays inside the window (the soft glow is not counted).
-    expect(farOver.edgePx / 2 + farOver.bandPx).toBeLessThanOrEqual(382 / 2 - 16 + 0.5);
+    // Band plus glow (outer spread + half its blur, scaled) stays inside the
+    // window's width, so the window's side never cuts the glow off.
+    const reach = farOver.edgePx / 2 + farOver.bandPx + (10 + 38 / 2) * farOver.glowScale;
+    expect(reach).toBeLessThanOrEqual(382 / 2 + 0.5);
+  });
+
+  test('Compact (220×220): a 100px edge; the capped band still grows with how far over, to 4px', async ({ page, context }) => {
+    const { pipPage } = await reachMonitoring(page, context, { size: SIZES.compact, layout: 'compact', driven: true });
+    const b = await rangeBoundsDb(page, SAVED_PROFILE[0].spreadDb);
+    await settleAt(page, pipPage, b.endDb + 0.3, 1600);
+    const justOver = await readRing(pipPage);
+    await settleAt(page, pipPage, b.endDb + 6);
+    const farOver = await readRing(pipPage);
+    expect(justOver.zone).toBe(3);
+    expect(farOver.edgePx).toBeGreaterThanOrEqual(100);
+    expect(farOver.bandPx).toBeGreaterThan(justOver.bandPx + 1);
+    expect(farOver.bandPx).toBeCloseTo(0.04 * farOver.edgePx, 1);
   });
 
   test('a single 150ms loud syllable within normal speech never shows the band', async ({ page, context }) => {
@@ -336,6 +359,7 @@ async function layoutBoxes(pipPage) {
       stop: rect(document.querySelector('.pip-control-btn-stop')),
       ringMax: { left: cx - extent / 2, right: cx + extent / 2, top: cy - extent / 2, bottom: cy + extent / 2 },
       height: innerHeight,
+      width: innerWidth,
     };
   }, GAP);
 }
@@ -400,9 +424,15 @@ test.describe('Monitoring presentation: the ring is sized for full Outside', () 
       const ring = { top: cy - half, bottom: cy + half };
       const boxes = await layoutBoxes(pipPage);
 
-      // The band is at its widest, and fills the area less the gap (within a pixel).
-      expect(r.bandPx).toBeCloseTo(0.18 * r.edgePx, 0);
-      expect(2 * half).toBeCloseTo(boxes.ringMax.bottom - boxes.ringMax.top, 0);
+      // The band is at its widest for this size band, and the ring has the
+      // edge the sizing rule gives: it fills the area less the gap, unless
+      // the glow would pass the window's sides (Expanded).
+      expect(r.bandPx).toBeCloseTo(BAND_CAP[bandName] * r.edgePx, 0);
+      expect(r.edgePx).toBeCloseTo(expectedEdge(boxes), 0);
+      expect(2 * half).toBeLessThanOrEqual(boxes.ringMax.bottom - boxes.ringMax.top + 1);
+      if (bandName !== 'expanded') expect(2 * half).toBeCloseTo(boxes.ringMax.bottom - boxes.ringMax.top, 0);
+      expect(r.edgePx / 2 + r.bandPx + (10 + 38 / 2) * r.glowScale).toBeLessThanOrEqual(boxes.width / 2 + 0.5);
+      if (bandName === 'compact') expect(r.edgePx).toBeGreaterThanOrEqual(100);
 
       const topEdge = bandName === 'mini' ? 0 : boxes.name.bottom;
       const bottomEdge = bandName === 'mini' ? boxes.height : boxes.stop.top;
@@ -443,7 +473,7 @@ test.describe('Monitoring presentation: the ring is sized for full Outside', () 
       await expect(pipPage.locator('body')).toHaveAttribute('data-layout', 'compact');
       await expect.poll(async () => {
         const boxes = await layoutBoxes(pipPage);
-        return Math.abs((await monitoringScreen.locator('.mezzo-ring').boundingBox()).width - edgeForBandExtent(boxes.ringMax.bottom - boxes.ringMax.top));
+        return Math.abs((await monitoringScreen.locator('.mezzo-ring').boundingBox()).width - expectedEdge(boxes));
       }).toBeLessThan(1);
       await assertNoOverflow(pipPage);
     }

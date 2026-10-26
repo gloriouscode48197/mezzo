@@ -114,7 +114,7 @@
 
 import { AudioProcessor } from './audio.js?v=2';
 import { MezzoEngine, DEFAULT_ZONE_SETTINGS, measureRoomNoiseDb, isNoisyRoom } from './engine.js?v=5';
-import { MezzoRangeRing, edgeForBandExtent, ringExtent } from './range-ring.js';
+import { MezzoRangeRing, edgeForBandExtent, edgeForExtent, ringExtent, scaledBand, DEFAULT_RING_SETTINGS } from './range-ring.js';
 import { MezzoLevelMeter } from './level-meter.js';
 import { createZoneAnnouncer, ZONE_LABELS } from './zone-announcer.js';
 import { createCalibrationController } from './calibration-controller.js';
@@ -4203,6 +4203,30 @@ function setUpMiniReveal(screen) {
   });
 }
 
+// In the Compact size band the band's widest width is capped smaller (and
+// its whole range with it, so it still grows with how far over), which
+// lets the ring's edge grow: at 220×220 the cap of 0.04 of the edge gives
+// a 100px edge with a 4px band, where Expanded's 0.18 gave 79px.
+const COMPACT_BAND_CAP = 0.04;
+function ringBandScale() {
+  return monitoringScreenEl?.dataset.sizeBand === 'compact'
+    ? COMPACT_BAND_CAP / DEFAULT_RING_SETTINGS.band.maxFraction
+    : 1;
+}
+function ringBand() {
+  return scaledBand(DEFAULT_RING_SETTINGS.band, ringBandScale());
+}
+
+// The ring's edge: the circle plus its widest band fills the ring area
+// less the gap (the glow isn't counted, so it may reach into the gap and
+// under the name), but the glow stays inside the window's width, where
+// the window's side would otherwise cut it off visibly (Expanded, 382 wide).
+function ringEdge() {
+  const { extent, width } = ringLayout(); // sets the size band first
+  const band = ringBand();
+  return Math.min(edgeForBandExtent(extent, band), edgeForExtent(width, band));
+}
+
 function ringLayout() {
     const width = pipWindow?.innerWidth || 0;
     const height = pipWindow?.innerHeight || 0;
@@ -4226,7 +4250,7 @@ function ringLayout() {
       pipCircleWrapperEl.style.top = `${top}px`;
       pipCircleWrapperEl.style.height = `${Math.max(0, bottom - top)}px`;
     }
-    return { band, gap, top, bottom, extent: Math.max(0, Math.min(width, bottom - top) - 2 * gap) };
+    return { band, gap, top, bottom, width, extent: Math.max(0, Math.min(width, bottom - top) - 2 * gap) };
   }
 
   async function resumeMonitoringFromPipReady() {
@@ -4243,12 +4267,13 @@ function ringLayout() {
         // minus the gap, so the solid band never reaches the name or the
         // controls. The soft glow isn't counted: it may reach into the gap
         // and under the name, which draws above the ring.
-        preferredEdgePx: () => edgeForBandExtent(ringLayout().extent),
+        preferredEdgePx: ringEdge,
         // Room for the glow beyond that, so the ring keeps its widest band.
         viewportSize: () => {
-          const room = ringExtent(edgeForBandExtent(ringLayout().extent));
+          const room = ringExtent(ringEdge(), ringBand());
           return { width: room, height: room };
         },
+        bandScale: ringBandScale,
         levelOffsetDb: (rms) => engine.getLevelOffsetDb(rms),
         // The room noise measured with this profile's calibration, relative
         // to its speaking level; the circle rests below it (plus a margin).

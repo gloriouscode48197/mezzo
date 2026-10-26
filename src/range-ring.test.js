@@ -5,7 +5,7 @@ import {
   VOICE_RISE_TAU_MS, VOICE_FALL_TAU_MS,
   BAND_MIN_FRACTION, BAND_MAX_FRACTION, BAND_FULL_DB, BAND_FADE_MS, BAND_THIN_FRACTION,
   VOICE_FRACTION_END, VOICE_OPACITY_REST, REFERENCE_EDGE_PX,
-  ringExtent, edgeForExtent, bandExtent, edgeForBandExtent,
+  ringExtent, edgeForExtent, bandExtent, edgeForBandExtent, scaledBand,
 } from './range-ring.js';
 import { MezzoEngine, OUTSIDE_ENTRY_DWELL_MS } from './engine.js';
 
@@ -356,5 +356,20 @@ describe('bandExtent / edgeForBandExtent: sizing the ring by its solid band', ()
     for (const extent of [94, 108, 344]) assert.ok(Math.abs(bandExtent(edgeForBandExtent(extent)) - extent) < 1e-9);
     assert.ok(Math.abs(edgeForBandExtent(108) - 79.41) < 0.01); // Compact, 220×220
     assert.equal(edgeForBandExtent(-5), 0);
+  });
+});
+
+describe('scaledBand: a smaller band cap for a layout', () => {
+  it('scales the thin start, minimum and maximum together, so the band still grows', () => {
+    const b = DEFAULT_RING_SETTINGS.band;
+    const c = scaledBand(b, 0.04 / b.maxFraction);
+    assert.ok(Math.abs(c.maxFraction - 0.04) < 1e-12);
+    assert.ok(c.minFraction < c.maxFraction && c.thinFraction < c.minFraction);
+    assert.equal(c.fullDb, b.fullDb); // same dB to full width
+    assert.ok(bandFraction(2, c.maxFraction, c) > bandFraction(0.2, c.maxFraction, c));
+    assert.equal(scaledBand(b, 1), b);
+  });
+  it('a 0.04 cap gives Compact a 100px edge at 220×220 (108px of ring area)', () => {
+    assert.ok(Math.abs(edgeForBandExtent(108, scaledBand(DEFAULT_RING_SETTINGS.band, 0.04 / 0.18)) - 100) < 1e-9);
   });
 });
