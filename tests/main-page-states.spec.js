@@ -377,6 +377,9 @@ test.describe('Main page: Reopen Companion (2026-10-23)', () => {
     await expect(page.locator('body')).toHaveAttribute('data-surface', 'cream');
     await expect(running.locator('.running-label')).toHaveText('Companion closed');
     await expect(running.locator('h1')).toHaveText('The Companion closed');
+    // The page can't tell the user's own ✕ from another mini window, so the
+    // body covers both.
+    await expect(running.locator('.running-body')).toHaveText("If you didn't close it, another mini window like Meet's may have. Reopen it to pick up where you left off.");
     const reopen = running.locator('#btn-reopen-companion');
     await expect(reopen).toBeVisible();
     await page.mouse.move(0, 0); // off the button (the last click left the pointer where it now sits)

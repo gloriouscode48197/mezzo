@@ -731,7 +731,7 @@ Monitoring can never continue without the Mezzo Companion open. If the Companion
 What happens next depends on how it closed:
 
 * **Close Companion, on the running page** — the user asked for it there, so Mezzo returns to the granted page. A temporary profile is discarded.
-* **Any other close** — another picture-in-picture window replacing it (Chrome allows one at a time, and Meet's mini window wins), or the Companion's own native ✕. Mezzo can't tell these apart, so the page stays on the cream running surface: "The Companion closed" / "Another mini window, like Meet's, may have closed it. Reopen it to pick up where you left off.", with **Reopen Companion** and **Done**.
+* **Any other close** — another picture-in-picture window replacing it (Chrome allows one at a time, and Meet's mini window wins), or the Companion's own native ✕. Chrome doesn't tell Mezzo why the window closed, so these can't be told apart, and the page shows the same thing after the user's own ✕ as after another mini window: it stays on the cream running surface, "The Companion closed" / "If you didn't close it, another mini window like Meet's may have. Reopen it to pick up where you left off.", with **Reopen Companion** and **Done**.
   * **Reopen Companion** opens it again from that click, with the same profile selected (a temporary one included, from memory), and resumes monitoring if it was running.
   * **Done** discards the offer (and any temporary profile) and returns to the granted page.
 

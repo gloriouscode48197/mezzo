@@ -427,7 +427,7 @@ export function initHomeDock({
     closed: {
       label: 'Companion closed',
       heading: 'The Companion closed',
-      body: "Another mini window, like Meet's, may have closed it. Reopen it to pick up where you left off.",
+      body: "If you didn't close it, another mini window like Meet's may have. Reopen it to pick up where you left off.",
     },
   };
   function showRunningVariant(variant) {
