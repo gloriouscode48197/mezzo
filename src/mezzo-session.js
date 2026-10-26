@@ -2632,16 +2632,37 @@ export function createMezzoSession({
       .pip-screen-monitoring[data-size-band="mini"] .pip-monitoring-header { display: none; }
       .pip-monitoring-header { text-align: center; }
       /* The glow may reach under the name (the ring is sized by its solid
-         band), so the name sits on a soft charcoal backing, feathered at
-         its edges: invisible on the plain background, it keeps the name at
-         4.5:1 over the glow. */
-      .pip-profile-info {
+         band), so while the ring is Outside range, and only then, a soft
+         oval of the window's own background fades in behind the name. Its
+         center is solid and its edges feather to transparent, so there's
+         no box; it keeps the name at 4.5:1 over the glow. At rest it isn't
+         drawn at all. It's on the status block, not the name, because the
+         name clips its own overflow for the ellipsis. */
+      .pip-monitoring-status-block {
+        position: relative;
         display: inline-block;
         vertical-align: top;
+        max-width: 100%;
+        isolation: isolate;
+      }
+      .pip-monitoring-status-block::before {
+        content: '';
+        position: absolute;
+        inset: -10px -24px;
+        z-index: -1;
+        background: radial-gradient(closest-side, var(--color-bg) 80%, transparent);
+        opacity: 0;
+        transition: opacity 0.1s linear;
+        pointer-events: none;
+      }
+      .pip-screen-monitoring:has(.mezzo-ring[data-zone="3"]) .pip-monitoring-status-block::before { opacity: 1; }
+      @media (prefers-reduced-motion: reduce) {
+        .pip-monitoring-status-block::before { transition: none; }
+      }
+      .pip-profile-info {
+        display: block;
         box-sizing: border-box;
         padding: 8px 6px;
-        background: var(--color-bg);
-        box-shadow: 0 0 8px 4px var(--color-bg);
         max-width: 100%;
         overflow: hidden;
         white-space: nowrap;
@@ -4205,9 +4226,11 @@ function setUpMiniReveal(screen) {
 
 // In the Compact size band the band's widest width is capped smaller (and
 // its whole range with it, so it still grows with how far over), which
-// lets the ring's edge grow: at 220×220 the cap of 0.04 of the edge gives
-// a 100px edge with a 4px band, where Expanded's 0.18 gave 79px.
-const COMPACT_BAND_CAP = 0.04;
+// lets the ring's edge grow: at 220×220 the cap of 0.1 of the edge gives a
+// 90px edge with a band growing from about 3px just over to 9px, where
+// Expanded's 0.18 would give 79px. (0.04 gave 100px, but its 4px band
+// read as an outline: the nudge matters more than the resting size.)
+const COMPACT_BAND_CAP = 0.1;
 function ringBandScale() {
   return monitoringScreenEl?.dataset.sizeBand === 'compact'
     ? COMPACT_BAND_CAP / DEFAULT_RING_SETTINGS.band.maxFraction

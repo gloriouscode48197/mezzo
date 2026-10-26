@@ -369,7 +369,11 @@ describe('scaledBand: a smaller band cap for a layout', () => {
     assert.ok(bandFraction(2, c.maxFraction, c) > bandFraction(0.2, c.maxFraction, c));
     assert.equal(scaledBand(b, 1), b);
   });
-  it('a 0.04 cap gives Compact a 100px edge at 220×220 (108px of ring area)', () => {
-    assert.ok(Math.abs(edgeForBandExtent(108, scaledBand(DEFAULT_RING_SETTINGS.band, 0.04 / 0.18)) - 100) < 1e-9);
+  it('a 0.1 cap gives Compact a 90px edge at 220×220 (108px of ring area): a 9px band at most, about 3px at its minimum', () => {
+    const c = scaledBand(DEFAULT_RING_SETTINGS.band, 0.1 / 0.18);
+    const edge = edgeForBandExtent(108, c);
+    assert.ok(Math.abs(edge - 90) < 1e-9);
+    assert.ok(Math.abs(c.maxFraction * edge - 9) < 1e-9);
+    assert.ok(Math.abs(c.minFraction * edge - 3.25) < 1e-9);
   });
 });

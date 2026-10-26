@@ -41,8 +41,8 @@ const CHARTREUSE = 'rgb(222, 222, 101)'; // --color-accent
 // for a 253px edge, but the glow is kept inside the 382px window width,
 // which limits the edge to about 238px.
 const EXPANDED_EDGE = edgeForExtent(382);
-// Compact caps the band at 0.04 of the edge (Expanded and Mini: 0.18).
-const BAND_CAP = { mini: 0.18, compact: 0.04, expanded: 0.18 };
+// Compact caps the band at 0.1 of the edge (Expanded and Mini: 0.18).
+const BAND_CAP = { mini: 0.18, compact: 0.1, expanded: 0.18 };
 const bandFor = (sizeBand) => scaledBand(DEFAULT_RING_SETTINGS.band, BAND_CAP[sizeBand] / DEFAULT_RING_SETTINGS.band.maxFraction);
 /** The edge the ring should have for a layout (see ringEdge() in the app). */
 const expectedEdge = (boxes) => Math.min(
@@ -190,17 +190,19 @@ test.describe('Monitoring presentation: the Range Ring', () => {
     expect(reach).toBeLessThanOrEqual(382 / 2 + 0.5);
   });
 
-  test('Compact (220×220): a 100px edge; the capped band still grows with how far over, to 4px', async ({ page, context }) => {
+  test('Compact (220×220): a 90px edge; the capped band grows visibly with how far over, from about 3px to 9px', async ({ page, context }) => {
     const { pipPage } = await reachMonitoring(page, context, { size: SIZES.compact, layout: 'compact', driven: true });
     const b = await rangeBoundsDb(page, SAVED_PROFILE[0].spreadDb);
-    await settleAt(page, pipPage, b.endDb + 0.3, 1600);
+    await settleAt(page, pipPage, b.endDb + 0.05, 1600);
     const justOver = await readRing(pipPage);
     await settleAt(page, pipPage, b.endDb + 6);
     const farOver = await readRing(pipPage);
     expect(justOver.zone).toBe(3);
-    expect(farOver.edgePx).toBeGreaterThanOrEqual(100);
-    expect(farOver.bandPx).toBeGreaterThan(justOver.bandPx + 1);
-    expect(farOver.bandPx).toBeCloseTo(0.04 * farOver.edgePx, 1);
+    expect(farOver.edgePx).toBeCloseTo(90, 0);
+    expect(justOver.bandPx).toBeGreaterThanOrEqual(2.5);
+    expect(justOver.bandPx).toBeLessThan(4.5);
+    expect(farOver.bandPx).toBeGreaterThanOrEqual(8);
+    expect(farOver.bandPx).toBeLessThanOrEqual(9.5);
   });
 
   test('a single 150ms loud syllable within normal speech never shows the band', async ({ page, context }) => {
@@ -432,7 +434,11 @@ test.describe('Monitoring presentation: the ring is sized for full Outside', () 
       expect(2 * half).toBeLessThanOrEqual(boxes.ringMax.bottom - boxes.ringMax.top + 1);
       if (bandName !== 'expanded') expect(2 * half).toBeCloseTo(boxes.ringMax.bottom - boxes.ringMax.top, 0);
       expect(r.edgePx / 2 + r.bandPx + (10 + 38 / 2) * r.glowScale).toBeLessThanOrEqual(boxes.width / 2 + 0.5);
-      if (bandName === 'compact') expect(r.edgePx).toBeGreaterThanOrEqual(100);
+      if (bandName === 'compact') {
+        expect(r.edgePx).toBeCloseTo(90, 0);
+        expect(r.bandPx).toBeGreaterThanOrEqual(8);
+        expect(r.bandPx).toBeLessThanOrEqual(9.5);
+      }
 
       const topEdge = bandName === 'mini' ? 0 : boxes.name.bottom;
       const bottomEdge = bandName === 'mini' ? boxes.height : boxes.stop.top;
@@ -461,6 +467,32 @@ test.describe('Monitoring presentation: the ring is sized for full Outside', () 
         expect(contrast(ICON, bg), `name contrast over ${bg}`).toBeGreaterThanOrEqual(4.5);
       }
       await assertNoOverflow(pipPage);
+    });
+  }
+
+  for (const [bandName, size] of [['compact', SIZES.compact], ['expanded', SIZES.expanded]]) {
+    test(`${size.width}×${size.height} at rest: nothing is drawn behind the name; the pixels around it match the window background`, async ({ page, context }) => {
+      const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size, driven: true, layout: bandName === 'expanded' ? 'expanded' : 'compact' });
+      await settleAt(page, pipPage, 0, 900); // Within range
+      const name = monitoringScreen.locator('.pip-profile-info');
+      const nb = await name.boundingBox();
+      // The name's box plus the backing's feathered margin, text hidden.
+      const clip = { x: Math.max(0, nb.x - 24), y: Math.max(0, nb.y - 10), width: nb.width + 48, height: nb.height + 20 };
+      await name.evaluate((el) => { el.style.color = 'transparent'; });
+      const png = await pipPage.screenshot({ clip, animations: 'disabled' });
+      await name.evaluate((el) => { el.style.color = ''; });
+      const { bg, off } = await page.evaluate(async (b64) => {
+        const img = new Image(); img.src = `data:image/png;base64,${b64}`; await img.decode();
+        const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+        const ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0);
+        const d = ctx.getImageData(0, 0, c.width, c.height).data;
+        const bg = [d[0], d[1], d[2]];
+        let off = 0;
+        for (let i = 0; i < d.length; i += 4) if (Math.max(Math.abs(d[i] - bg[0]), Math.abs(d[i + 1] - bg[1]), Math.abs(d[i + 2] - bg[2])) > 1) off++;
+        return { bg, off };
+      }, png.toString('base64'));
+      expect(bg).toEqual([45, 46, 49]); // --color-bg, #2D2E31
+      expect(off).toBe(0);
     });
   }
 
