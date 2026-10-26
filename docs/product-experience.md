@@ -192,15 +192,15 @@ Mezzo Companion opens, showing Welcome — a first-time-only moment, not an inst
 
 ↓
 
-Create speaking profile — Welcome's one action; opens the calibration-introduction screen (C1). Microphone access is already granted by this point, so nothing is requested again here.
+Create speaking profile — Welcome's one action; opens Step 1's prep screen. Microphone access is already granted by this point, so nothing is requested again here.
 
 ↓
 
-I'm ready, from C1 — begins capture; the microphone was already granted back on the marketing page, so this resolves silently, with no second prompt
+Step 1 of 2 — "First, stay quiet for a moment"; I'm ready starts 3 seconds of listening to the room (the microphone was already granted back on the marketing page, so this resolves silently, with no second prompt)
 
 ↓
 
-Active calibration — a 3-2-1, then six seconds of listening, with a live six-segment level meter; no manual "I'm done" action (see "Calibration")
+Step 2 of 2 — "Now speak at the level you want to maintain"; I'm ready starts 6 seconds of listening to the voice; no manual "I'm done" action (see "Calibration")
 
 ↓
 
@@ -264,23 +264,30 @@ Microphone permission is requested exactly once per browser, on Home's own Enabl
 
 ### Calibration Entry
 
-Reaching capture always starts with a short instructional step (C1) first, except when recalibrating a profile that already exists:
+Every calibration is two steps, and each step has a prep screen and a listening screen ("say it once, then count"): the prep screen says which step it is, what to do and for how long, then waits for **I'm ready**; the listening screen only names what Mezzo is listening to, with a large countdown. Nothing is measured on a prep screen.
 
-* **First-time calibration** — Welcome's Create speaking profile — goes through C1 first.
-* **Create new profile**, from a saved-profile Ready state — also goes through C1 first: it's creating a brand-new profile from scratch, so the brief instructional step stays useful.
-* **Recalibrate**, on a saved or unsaved profile — skips C1 and begins capture immediately. Recalibrating is a faster, repeat action for someone who has already been through calibration before, so the instructional step isn't needed again.
+* **First-time setup**: Welcome's **Create speaking profile** → Step 1 prep → Step 1 listening (3s) → Step 2 prep → Step 2 listening (6s) → the result screen.
+* **Create new profile**, from Ready's selector: the same steps.
+* **Recalibrate**, on a saved or the temporary profile: the same steps, with "Recalibrating {name}" (or "Recalibrating Temporary profile") above "Step 1 of 2" on Step 1's prep screen, ending on the recalibration result ("New calibration ready") for a saved profile.
 
-C1 ("Create speaking profile" / "Talk for a few seconds so Mezzo can learn the speaking level you'd like to maintain.") explains, briefly, what the user should do before capture starts — not why microphone access is needed, which Home already covered before the Companion opened. Its one action, "I'm ready," begins capture; microphone permission is normally already granted by this point, so this resolves silently rather than prompting again. A **Cancel** text link returns to wherever C1 was opened from (Welcome, or the same Ready state, with its selection and any existing temporary profile left untouched) without starting calibration or changing any profile.
+There is no separate introduction screen any more: the old "Create speaking profile" screen with its "I'm ready" (C1) is retired, since each step's prep screen does its job.
 
-### Active Calibration
+### The Steps
 
-Calibrating's heading follows the phase — "Get ready" through the 3-2-1, then "Speak at your meeting volume" while listening (with a "Recalibrating {name}" label above it when recalibrating a saved profile). The heading stays put at the top; below it, centered above Cancel, one slot shows the 3-2-1 number and then "Listening… Ns", with the six-segment level meter and a hint beneath:
+**Step 1 prep**: "Step 1 of 2" / **First, stay quiet for a moment** / "Mezzo will listen to the room for 3 seconds." / **I'm ready** / Cancel.
 
-* **3-2-1** — only the countdown number, in the meter's place, and "Stay quiet for a moment…": the room's own noise level is measured from these readings and saved with the profile, so silence helps. The meter stays hidden.
-* **Listening, six seconds** — the meter appears; "Listening… Ns", counting down / "Keep talking until the timer ends." The meter's lit segments follow the live, filtered microphone level, so the user can see their voice being picked up without being shown a target. It completes automatically; there is no manual "I'm done" action.
-* **Cancel** stops capture, discards the partial samples, and returns to where calibration started.
+**Step 1 listening**: the eyebrow "Listening to background noise", a large 3-to-1 countdown, and the six-segment level meter showing the live level. The room's noise level is measured during these 3 seconds and saved with the profile.
 
-Two one-time screen-reader announcements mark the start of each phase; nothing is announced every second. With reduced motion, the segments follow the level directly, without easing. Exact sizes and values: `docs/prd/range-ring-and-lantern-refresh.md` §8.
+**Step 2 prep**: "Step 2 of 2" / **Now speak at the level you want to maintain** / "Talk for 6 seconds at a level that won't carry to people nearby." / **I'm ready** / Cancel. The microphone stays open between the steps, but nothing is measured until I'm ready.
+
+**Step 2 listening**: the eyebrow "Listening to your voice", a large 6-to-1 countdown, the meter, and "Keep talking until the timer ends." under it. The voice is captured during these 6 seconds. It completes on its own; there is no "I'm done" action.
+
+Both listening screens share one layout and the same sage meter; only the eyebrow and Step 2's helper line differ. Neither repeats its prep screen's instructions. Cancel is pinned at the bottom of each. Prep screens use the single-choice layout (eyebrow, 8, heading, 8, body, 24, I'm ready, then Cancel); listening screens use the sequence layout (the eyebrow fixed at the top, the countdown and meter centered below it).
+
+* **Cancel**, from any step, stops calibration, discards what it measured, and returns to where it started: Welcome for first-time setup, Ready otherwise.
+* **Try again**, after a failure: "Didn't catch enough clear speech" (or any other failure of the voice capture) returns to Step 2's prep screen, since the room reading is still valid; a failure before the room was measured (the microphone, or calibration already open in another Mezzo tab) returns to Step 1's.
+
+Focus moves to the heading on each prep screen. Each listening screen is announced once, politely ("Listening to background noise, 3 seconds"; "Listening to your voice, 6 seconds"), never every second; the countdown itself is hidden from screen readers. Screens switch without animation. If acquiring the microphone takes a moment, "Preparing microphone…" shows in the countdown's place until the step starts. Exact sizes and values: `docs/prd/range-ring-and-lantern-refresh.md` §8.
 
 If microphone access is blocked or denied at this point — access must have been revoked after the Companion already opened, since Home's own permission gate already ensured it was granted before the Companion could open at all — calibration cannot continue: a dedicated recovery screen explains what happened and how to fix it (see "Companion States → Microphone Access Blocked"), with an in-app Try again rather than requiring a manual page reload.
 
@@ -486,9 +493,9 @@ The Companion should:
 
 The Companion should feel like a quiet instrument—not a dashboard.
 
-Before monitoring ever begins, the Companion moves through several distinct screens — Welcome, the calibration-introduction step (C1), Calibrating, and Ready, plus recovery and decision screens (Microphone Access Blocked, the calibration result, and the profile save/replace/delete decisions covered under "Profile Model") — before reaching Monitoring itself, which has two layouts, Compact and Expanded. See below for each.
+Before monitoring ever begins, the Companion moves through several distinct screens — Welcome, the two calibration steps (each a prep screen and a listening screen), and Ready, plus recovery and decision screens (Microphone Access Blocked, the calibration result, and the profile save/replace/delete decisions covered under "Profile Model") — before reaching Monitoring itself, which has two layouts, Compact and Expanded. See below for each.
 
-Every screen follows one spacing scale and one 280px column, in three layouts: a sequence (Calibrating), with the heading fixed at the top so nothing moves between steps; a single choice (Welcome, the calibration introduction, Ready), centered, with 24px between groups; and a decision (the result and save/update/delete screens), centered below the decision bar. It uses the Lantern visual system throughout (`docs/prd/range-ring-and-lantern-refresh.md` §4): one dark theme, Geist type, cream primary buttons, sage text links, and chartreuse reserved for one meaning inside the product (the Companion and the extension) — the over-range band. Screens come in three layers: a flat screen, the Ready selector's menu panel over a dimmed screen, and decision states, which turn the whole window a lighter grey with a 44px header bar naming the decision and actions pinned to the bottom.
+Every screen follows one spacing scale and one 280px column, in three layouts: a sequence (the listening screens), with the eyebrow fixed at the top so nothing moves between steps; a single choice (Welcome, the calibration prep screens, Ready), centered, with 24px between groups; and a decision (the result and save/update/delete screens), centered below the decision bar. It uses the Lantern visual system throughout (`docs/prd/range-ring-and-lantern-refresh.md` §4): one dark theme, Geist type, cream primary buttons, sage text links, and chartreuse reserved for one meaning inside the product (the Companion and the extension) — the over-range band. Screens come in three layers: a flat screen, the Ready selector's menu panel over a dimmed screen, and decision states, which turn the whole window a lighter grey with a 44px header bar naming the decision and actions pinned to the bottom.
 
 ---
 
@@ -502,17 +509,17 @@ Purpose: the first thing a genuinely new user sees inside the Companion — a de
 
 Target size: shared with every other pre-monitoring screen — see "Companion Sizing."
 
-Reached exactly once: the very first time the Companion opens with zero saved profiles and no temporary profile (see "Profile Model"). Shows the lowercase "mezzo" wordmark as its heading, "A gentle nudge when you're talking louder than you'd like. First, a quick voice calibration.", then **Create speaking profile** with "Mezzo only measures volume. Nothing you say is recorded." beneath it. The window's own title reads "Mezzo, welcome." here. Its one action, **Create speaking profile**, opens the calibration-introduction screen (C1) — this does not itself request microphone access. There is no secondary dismiss action on Welcome; closing the Companion remains available through the native window control regardless of which screen is showing.
+Reached exactly once: the very first time the Companion opens with zero saved profiles and no temporary profile (see "Profile Model"). Shows the lowercase "mezzo" wordmark as its heading, "A gentle nudge when you're talking louder than you'd like. First, a quick voice calibration.", then **Create speaking profile** with "Mezzo only measures volume. Nothing you say is recorded." beneath it. The window's own title reads "Mezzo, welcome." here. Its one action, **Create speaking profile**, opens Step 1's prep screen (see "Calibration → The Steps"); this does not itself request microphone access. There is no secondary dismiss action on Welcome; closing the Companion remains available through the native window control regardless of which screen is showing.
 
 Once a saved profile or an unsaved profile exists, the Companion never shows Welcome again for the rest of that Companion-open lifetime.
 
-## Calibration Introduction (C1)
+## Calibration Prep (Step 1 and Step 2)
 
-Purpose: a short instructional step before capture begins, explaining what the user should do.
+Purpose: say which step is next, what to do and for how long, before anything is measured.
 
 Target size: shared with every other pre-monitoring screen.
 
-Reached from Welcome's Create speaking profile, and from Ready's Create new profile — see "Calibration → Calibration Entry" for the full rule (Recalibrate skips this screen). Its one action, **I'm ready**, begins the 3-2-1 and the six-second capture. Microphone permission is normally already granted by this point — Home's own permission gate handled that before the Companion ever opened — so this doesn't prompt again. A **Cancel** text link returns to wherever C1 was opened from — Welcome, or the same Ready state, with its selection and any existing unsaved profile untouched — without starting calibration or changing any profile.
+Step 1's prep screen is where every calibration starts: Welcome's Create speaking profile, Ready's Create new profile, and Recalibrate. Step 2's follows Step 1's listening screen, or a failed voice capture's Try again. Each has one action, **I'm ready**, which starts that step's listening, and a **Cancel** link back to where calibration started. See "Calibration → The Steps" for the copy.
 
 ## Ready
 
@@ -542,7 +549,7 @@ Purpose: measurement — either a fresh, session-only calibration, or a recalibr
 
 Target size: shared with every other pre-monitoring screen.
 
-Reached from C1's "I'm ready," or directly from a Recalibrate action (see "Calibration → Calibration Entry"). Shows the 3-2-1 and six-second capture with the live level meter (see "Calibration → Active Calibration"), a brief automatic completion, and then the mode-appropriate result screen — a navigation, not a modal overlaid on this one. On a microphone-permission failure specifically, shows the dedicated Microphone Access Blocked screen below instead of a generic failure message; every other failure shows a calm, specific message with Try Again/Back, and never fails silently.
+Reached from either prep screen's "I'm ready" (see "Calibration → The Steps"). Shows Step 1's 3-second room listening or Step 2's 6-second voice listening, with the large countdown and the live level meter, a brief automatic completion, and then the mode-appropriate result screen — a navigation, not a modal overlaid on this one. On a microphone-permission failure specifically, shows the dedicated Microphone Access Blocked screen below instead of a generic failure message; every other failure shows a calm, specific message with Try Again/Back, and never fails silently.
 
 Calibrating always uses the shared pre-monitoring size — it never appears in Compact.
 
@@ -556,7 +563,7 @@ Purpose: recovery, specifically for a denied or unavailable microphone — a ded
 
 Target size: shared with every other pre-monitoring screen.
 
-Explains what happened and how to fix it, alongside a schematic illustration pointing at the browser's own address-bar permission icon, and offers an in-app **Try again** — re-attempts calibration directly, no manual page reload needed — alongside **Back**, which returns to Ready without touching microphone state.
+Explains what happened and how to fix it, alongside a schematic illustration pointing at the browser's own address-bar permission icon, and offers an in-app **Try again**, which returns to the prep screen of the step that needs repeating (no manual page reload needed), alongside **Back**, which returns to where calibration started.
 
 ---
 
@@ -589,7 +596,7 @@ Stopping monitoring ends the session, releases the microphone, and returns direc
 
 ## Companion Sizing
 
-Welcome, C1, Calibrating, Microphone Access Blocked, Ready, and every profile save/replace/delete decision screen (see "Profile Model") all share one fixed size, regardless of how many profiles are saved. Ready used to grow taller as more profiles were saved, each shown as an always-visible row; the current selector instead expands as an overlay panel that scrolls internally within the existing card, so the surrounding window never needs to resize as the profile library grows. Monitoring keeps its own two sizes, Expanded and Compact, unrelated to profile count. See `CLAUDE.md`'s Non-Negotiable Decisions for the exact pixel values.
+Welcome, the calibration prep and listening screens, Microphone Access Blocked, Ready, and every profile save/replace/delete decision screen (see "Profile Model") all share one fixed size, regardless of how many profiles are saved. Ready used to grow taller as more profiles were saved, each shown as an always-visible row; the current selector instead expands as an overlay panel that scrolls internally within the existing card, so the surrounding window never needs to resize as the profile library grows. Monitoring keeps its own two sizes, Expanded and Compact, unrelated to profile count. See `CLAUDE.md`'s Non-Negotiable Decisions for the exact pixel values.
 
 ---
 
@@ -629,7 +636,7 @@ An **unsaved profile** — called the **Temporary profile** in the interface —
 
 Selecting Recalibrate never risks losing a completed calibration: recalibrating a saved profile always asks — Update the saved profile, Keep temporarily, or Discard (see "Calibration → On Completion") — before anything changes.
 
-A saved profile stores its id, name, speaking level, spread, calibration time, `peakDb` (how far above the speaking level the calibration's own peaks reached) and `roomNoiseDb` (the room's noise during the 3-2-1). A profile saved before peaks were recorded still works, with an older end-of-range rule, and Ready suggests recalibrating it.
+A saved profile stores its id, name, speaking level, spread, calibration time, `peakDb` (how far above the speaking level the calibration's own peaks reached) and `roomNoiseDb` (the room's noise during calibration's Step 1). A profile saved before peaks were recorded still works, with an older end-of-range rule, and Ready suggests recalibrating it.
 
 Calibration, recalibration, profile selection, saving, replacing, discarding, and deleting all happen inside the Mezzo Companion now — there is no second, page-level implementation of any of it to keep in sync, and no handoff between two surfaces to reason about.
 

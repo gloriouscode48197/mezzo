@@ -36,7 +36,7 @@
  * wiring step.
  */
 
-import { MezzoEngine } from './engine.js';
+import { MezzoEngine, measureRoomNoiseDb } from './engine.js';
 import {
   addSavedProfile as defaultAddSavedProfile,
   updateSavedProfile as defaultUpdateSavedProfile,
@@ -112,6 +112,10 @@ function idleState() {
     // for the Companion's own visible countdown, not something this
     // controller's own logic branches on — see runCapture()'s own comment.
     capturing: false,
+    // True between the room step ending (Step 1, the 3s room reading) and
+    // the caller's beginVoiceCapture() (the person pressing "I'm ready" on
+    // Step 2's prep screen). The mic stays held; nothing is measured.
+    awaitingVoice: false,
   };
 }
 
@@ -219,6 +223,9 @@ export function createCalibrationController({
   // wiring bug for the test suite to catch, not a real-world uncertainty
   // like a slow getUserMedia() this controller needs to defend against.
   let pendingCountdownResolve = null;
+  // Resolved by the caller's beginVoiceCapture(): Step 2 starts only when
+  // the person says they're ready (see `awaitingVoice`).
+  let pendingVoiceResolve = null;
   // Bounds the fixed preparation window (see idleState()'s own comment on
   // `preparing` and runCapture() below) — a separate timer from both
   // acquireTimeoutHandle above and activeTimerHandle below, since none of
@@ -283,14 +290,20 @@ export function createCalibrationController({
   // without the controller needing a second, redundant mic acquisition.
   const levelListeners = new Set();
 
-  // The room's noise level (absolute dB), measured by the caller during the
-  // 3-2-1 before this attempt's capture (see setRoomNoiseDb()), saved with
-  // the result so monitoring can rest the circle below it. null when not
-  // measured. Cleared with every reset().
+  // The room's noise level (absolute dB), measured during Step 1 (the 3s
+  // room step) from the raw levels the caller feeds recordRoomSample(),
+  // saved with the result so monitoring can rest the circle below it. null
+  // when not measured. Kept across a failed voice capture, so a voice-only
+  // retry (retryVoice()) reuses it; cleared with every reset().
   let roomNoiseDb = null;
+  // Accepting room samples only while Step 1 runs: a level read on a prep
+  // screen, or during the voice capture, is never part of the room reading.
+  let roomListening = false;
+  let roomSamples = [];
 
-  function setRoomNoiseDb(db) {
-    roomNoiseDb = Number.isFinite(db) ? db : null;
+  /** One raw level reading (RMS) for the room step. Ignored outside it. */
+  function recordRoomSample(rms) {
+    if (roomListening) roomSamples.push(rms);
   }
 
   function subscribeToLevel(fn) {
@@ -341,6 +354,27 @@ export function createCalibrationController({
     return runCapture(MODES.RECALIBRATE, profileId);
   }
 
+  /**
+   * Try again after a failed voice capture: the room reading from Step 1
+   * is still valid, so this acquires the mic and captures the voice right
+   * away (the person has just pressed "I'm ready" on Step 2's prep screen),
+   * skipping the room step.
+   */
+  function retryVoice() {
+    if (state.status !== STATUSES.FAILED) {
+      throw new Error(`Cannot retry the voice step from status "${state.status}"`);
+    }
+    const { mode, targetProfileId } = state;
+    if (mode === MODES.RECALIBRATE) {
+      const profile = findSavedProfile(targetProfileId);
+      if (!profile) {
+        throw unknownProfileError(targetProfileId);
+      }
+      targetSnapshot = { ...profile };
+    }
+    return runCapture(mode, targetProfileId, { voiceOnly: true });
+  }
+
   function retry() {
     if (state.status !== STATUSES.FAILED && state.status !== STATUSES.CALIBRATED) {
       throw new Error(`Cannot retry from status "${state.status}"`);
@@ -358,8 +392,9 @@ export function createCalibrationController({
     return runCapture(mode, targetProfileId);
   }
 
-  async function runCapture(mode, targetProfileId) {
+  async function runCapture(mode, targetProfileId, { voiceOnly = false } = {}) {
     const myGeneration = ++generation;
+    if (!voiceOnly) roomNoiseDb = null;
 
     setState({
       status: STATUSES.CALIBRATING,
@@ -375,6 +410,7 @@ export function createCalibrationController({
       // still-acquiring attempt via setState()'s shallow merge.
       preparing: false,
       capturing: false,
+      awaitingVoice: false,
     });
 
     // Bounds the audio.acquire() wait — an unresolved (not just rejected)
@@ -463,49 +499,68 @@ export function createCalibrationController({
     // after an explicit tick, not from a synchronous subscribe callback, so
     // this ordering bug had no coverage until now — see the dedicated
     // regression test added alongside this fix.
-    const countdownPromise = new Promise((resolve) => {
-      pendingCountdownResolve = resolve;
-    });
-    setState({ preparing: true });
-    await countdownPromise;
+    if (!voiceOnly) {
+      const countdownPromise = new Promise((resolve) => {
+        pendingCountdownResolve = resolve;
+      });
+      setState({ preparing: true });
+      await countdownPromise;
 
-    if (myGeneration !== generation) {
-      // Cancelled/closed while waiting for beginCountdown(); teardown
-      // already ran in reset() — micHeld is unconditionally already true
-      // by this point (set right after acquire() resolved), so reset()'s
-      // own micHeld-gated cleanup has already released the mic. See the
-      // matching comment below (Stage 2's own generation check) for why
-      // this deliberately doesn't call audio.release() again.
-      return;
+      if (myGeneration !== generation) {
+        // Cancelled/closed while waiting for beginCountdown(); teardown
+        // already ran in reset() — micHeld is unconditionally already true
+        // by this point (set right after acquire() resolved), so reset()'s
+        // own micHeld-gated cleanup has already released the mic. See the
+        // matching comment below (Stage 2's own generation check) for why
+        // this deliberately doesn't call audio.release() again.
+        return;
+      }
+
+      // Stage 2 — the real, fixed countdown window (see DEFAULT_PREPARATION_MS's
+      // own comment and idleState()'s `preparing` field) — unchanged in
+      // spirit from the original design, just relocated to start only once
+      // Stage 1 resolves rather than immediately when acquire() resolves. A
+      // cancel/close arriving during this window resolves the promise early
+      // (see reset() below); the generation check afterward tells the two
+      // cases apart.
+      // Step 1: the room step. Room samples count only inside this window.
+      roomSamples = [];
+      roomListening = true;
+      await new Promise((resolve) => {
+        activePreparationResolve = resolve;
+        preparationTimerHandle = setTimeoutFn(() => {
+          preparationTimerHandle = null;
+          activePreparationResolve = null;
+          resolve();
+        }, preparationMs);
+      });
+
+      // Cancelled/closed during the fixed countdown window; teardown already
+      // ran in reset() — unlike the post-acquire generation check above,
+      // micHeld is unconditionally already true by this point (set right
+      // after acquire() resolved, before preparation even began), so
+      // reset()'s own micHeld-gated cleanup has already released the mic
+      // here. Calling audio.release() again would be a genuine redundant
+      // call, not just a harmless idempotent one — the mock audio used in
+      // tests counts raw invocations, and a real duplicate call is simply
+      // unnecessary work regardless.
+      roomListening = false;
+      if (myGeneration !== generation) return;
+      roomNoiseDb = measureRoomNoiseDb(roomSamples);
+      roomSamples = [];
+      setState({ preparing: false });
+
+      // Step 2's prep screen: the mic stays held, nothing is measured, until
+      // the person presses "I'm ready" (beginVoiceCapture()). Assigned before
+      // setState() for the same reason pendingCountdownResolve is.
+      const voicePromise = new Promise((resolve) => {
+        pendingVoiceResolve = resolve;
+      });
+      setState({ awaitingVoice: true });
+      await voicePromise;
+      if (myGeneration !== generation) return; // cancelled on Step 2's prep screen
+      setState({ awaitingVoice: false });
     }
-
-    // Stage 2 — the real, fixed countdown window (see DEFAULT_PREPARATION_MS's
-    // own comment and idleState()'s `preparing` field) — unchanged in
-    // spirit from the original design, just relocated to start only once
-    // Stage 1 resolves rather than immediately when acquire() resolves. A
-    // cancel/close arriving during this window resolves the promise early
-    // (see reset() below); the generation check afterward tells the two
-    // cases apart.
-    await new Promise((resolve) => {
-      activePreparationResolve = resolve;
-      preparationTimerHandle = setTimeoutFn(() => {
-        preparationTimerHandle = null;
-        activePreparationResolve = null;
-        resolve();
-      }, preparationMs);
-    });
-
-    // Cancelled/closed during the fixed countdown window; teardown already
-    // ran in reset() — unlike the post-acquire generation check above,
-    // micHeld is unconditionally already true by this point (set right
-    // after acquire() resolved, before preparation even began), so
-    // reset()'s own micHeld-gated cleanup has already released the mic
-    // here. Calling audio.release() again would be a genuine redundant
-    // call, not just a harmless idempotent one — the mock audio used in
-    // tests counts raw invocations, and a real duplicate call is simply
-    // unnecessary work regardless.
-    if (myGeneration !== generation) return;
-    setState({ preparing: false });
 
     const samples = [];
     audio.onLevelChange = ({ rms, rawRms }) => {
@@ -548,7 +603,7 @@ export function createCalibrationController({
       engine.calibrate(samples);
     } catch (err) {
       if (myGeneration !== generation) return;
-      setState({ status: STATUSES.FAILED, failure: mapCalibrationError(err), capturing: false });
+      setState({ status: STATUSES.FAILED, failure: mapCalibrationError(err), capturing: false, awaitingVoice: false });
       return;
     }
 
@@ -587,6 +642,13 @@ export function createCalibrationController({
   function reset() {
     generation++;
     roomNoiseDb = null;
+    roomListening = false;
+    roomSamples = [];
+    if (pendingVoiceResolve !== null) {
+      const resolve = pendingVoiceResolve;
+      pendingVoiceResolve = null;
+      resolve(); // unstick a runCapture() waiting on Step 2's prep screen
+    }
     if (acquireTimeoutHandle !== null) {
       clearTimeoutFn(acquireTimeoutHandle);
       acquireTimeoutHandle = null;
@@ -640,6 +702,15 @@ export function createCalibrationController({
    * moved on) — safe to call defensively rather than needing the caller to
    * track whether it's still relevant.
    */
+  /** The person pressed "I'm ready" on Step 2's prep screen: start the
+   *  voice capture. A no-op unless the controller is waiting for it. */
+  function beginVoiceCapture() {
+    if (pendingVoiceResolve === null) return;
+    const resolve = pendingVoiceResolve;
+    pendingVoiceResolve = null;
+    resolve();
+  }
+
   function beginCountdown() {
     if (pendingCountdownResolve === null) return;
     const resolve = pendingCountdownResolve;
@@ -767,11 +838,13 @@ export function createCalibrationController({
     getState,
     subscribe,
     subscribeToLevel,
-    setRoomNoiseDb,
+    recordRoomSample,
     getTargetSnapshot,
     startSessionCalibration,
     startRecalibration,
     retry,
+    retryVoice,
+    beginVoiceCapture,
     cancel,
     close,
     beginCountdown,

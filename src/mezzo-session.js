@@ -113,7 +113,7 @@
  */
 
 import { AudioProcessor } from './audio.js?v=2';
-import { MezzoEngine, DEFAULT_ZONE_SETTINGS, measureRoomNoiseDb, isNoisyRoom } from './engine.js?v=5';
+import { MezzoEngine, DEFAULT_ZONE_SETTINGS, isNoisyRoom } from './engine.js?v=5';
 import { MezzoRangeRing, edgeForBandExtent, edgeForExtent, ringExtent, scaledBand, DEFAULT_RING_SETTINGS } from './range-ring.js';
 import { MezzoLevelMeter } from './level-meter.js';
 import { createZoneAnnouncer, ZONE_LABELS } from './zone-announcer.js';
@@ -314,20 +314,34 @@ const C0_BLOCKED_ICON_SVG = '<svg width="44" height="44" viewBox="0 0 44 44" fil
 // truth for when capture ends; this constant only decides what the
 // countdown text counts down from.
 const CALIBRATION_COUNTDOWN_SECONDS = 6;
-// The 3-2-1 measures the room's own noise (see finishMicCheck()), so it
-// asks for quiet, and shows only the number; the meter appears when
-// listening starts.
-const CALIBRATING_HINT_PREPARING = 'Stay quiet for a moment…';
 // Result screens, when speech sat less than NOISY_ROOM_GAP_DB above the room.
 const NOISY_ROOM_TIP = 'Your room is a bit noisy for how softly you speak. Try moving a little closer to your mic.';
 // Ready, under a profile saved before the speech-band filter and peaks.
 // "Recalibrate" in it is an inline link (see renderContextualActions()).
 const RECALIBRATE_NOTE = ['Made before the new sound filter. ', 'Recalibrate', ''];
+// Calibration is two steps (2026-10-26, "say it once, then count"): each
+// has a prep screen that says what to do and for how long, then waits for
+// "I'm ready"; its listening screen only names what Mezzo is listening to,
+// with a large countdown. Step 1 listens to the room (3s), Step 2 to the
+// voice (6s).
+const PREP_COPY = Object.freeze({
+  1: Object.freeze({
+    eyebrow: 'Step 1 of 2',
+    heading: 'First, stay quiet for a moment',
+    body: 'Mezzo will listen to the room for 3 seconds.',
+  }),
+  2: Object.freeze({
+    eyebrow: 'Step 2 of 2',
+    heading: 'Now speak at the level you want to maintain',
+    body: "Talk for 6 seconds at a level that won't carry to people nearby.",
+  }),
+});
+const LISTENING_EYEBROW = Object.freeze({
+  room: 'Listening to background noise',
+  voice: 'Listening to your voice',
+});
+// Step 2's listening screen only, under the meter.
 const CALIBRATING_HINT_LISTENING = 'Keep talking until the timer ends.';
-// The Calibrating heading follows the phase: the 3-2-1 asks for quiet, then
-// listening names the target volume (see setCalibratingPhase()).
-const CALIBRATING_HEADING_PREPARING = 'Get ready';
-const CALIBRATING_HEADING_LISTENING = 'Speak at your meeting volume';
 // How often the 3-2-1 mic check reads the level — audio.js's own sampling
 // interval during capture, so the circle moves the same way before and after.
 const MIC_CHECK_INTERVAL_MS = 50;
@@ -630,11 +644,12 @@ export function createMezzoSession({
     if (state.capturing && !calibrationCountdownStarted) {
       calibrationCountdownStarted = true;
       stopPreparationCountdown();
-      finishMicCheck();
-      setCalibratingPhase('listening');
+      stopMicCheck();
+      clearPreparingMessageTimers();
+      if (calibratingStatusEl) calibratingStatusEl.textContent = '';
+      setCalibratingPhase('voice');
       levelMeter?.start();
-      if (calibratingHintEl) calibratingHintEl.textContent = CALIBRATING_HINT_LISTENING;
-      if (calibratingAnnounceEl) calibratingAnnounceEl.textContent = 'Listening for 6 seconds.';
+      if (calibratingAnnounceEl) calibratingAnnounceEl.textContent = `${LISTENING_EYEBROW.voice}, ${CALIBRATION_COUNTDOWN_SECONDS} seconds`;
       startCalibratingCountdown();
     }
   });
@@ -676,16 +691,20 @@ export function createMezzoSession({
   // callers below for the resolved rule (this PRD's own §19 flagged the
   // recalibrate case as an open item; "Create new profile" was not — see
   // docs/prd/ready-screen-speaking-profiles-mvp.md's §12 State Transitions).
-  let c1ScreenEl = null;
-  let c1BackBtn = null;
+  // The two calibration prep screens (Step 1, the room; Step 2, the voice).
+  let prepScreenEls = { 1: null, 2: null };
+  let prepRecalibratingEl = null; // Step 1's "Recalibrating {name}" eyebrow
+  let prepHeadingEls = { 1: null, 2: null };
 
-  // Which screen opened C1 — 'welcome' or 'ready' — tracked explicitly
-  // (never inferred from saved-profile count or any other mutable state,
-  // both of which can legitimately be ambiguous: a zero-saved-profile
-  // Companion can still reach C1 via Create new profile if an unsaved
-  // profile is already selected on Ready). Read only by handleC1BackClick()
-  // below to decide where Back returns to.
-  let c1EntrySource = null;
+  // What the current calibration is, and where it started: set when Step
+  // 1's prep screen opens, read by Step 1's "I'm ready", by every Cancel
+  // (which returns to `source`: Welcome for first-time setup, Ready
+  // otherwise) and by Try again. Never inferred from profile counts.
+  // { mode: 'session'|'recalibrate', targetProfileId, source: 'welcome'|'ready', recalibratingName }
+  let calibrationIntent = null;
+  // True once Step 1 has measured the room in the current calibration, so
+  // a failed voice capture's Try again returns to Step 2's prep screen.
+  let roomStepDone = false;
 
   // C0 — dedicated microphone-blocked screen, reached instead of the
   // generic Calibration Failed screen for MIC_PERMISSION_DENIED and
@@ -831,13 +850,11 @@ export function createMezzoSession({
   let calibratingStatusEl = null; // aria-hidden visible text: blank, then (if shown) "Preparing microphone…", blank during the 3-2-1 (calibratingCountEl shows the number), then a live "Listening… {n}s" countdown
   let calibratingAnnounceEl = null; // visually-hidden aria-live region — exactly two one-time announcements, see its own construction comment above
   let levelMeter = null; // MezzoLevelMeter: six segments following the live level (3-2-1 mic check, then capture)
-  let calibratingHintEl = null; // CALIBRATING_HINT_PREPARING during the countdown, then CALIBRATING_HINT_LISTENING
-  let calibratingCountEl = null; // the 3-2-1 number, in the meter's place until listening starts
-  let calibratingHeadingEl = null; // CALIBRATING_HEADING_PREPARING, then CALIBRATING_HEADING_LISTENING
+  let calibratingHintEl = null; // empty in Step 1, CALIBRATING_HINT_LISTENING in Step 2
+  let calibratingCountEl = null; // the large countdown: 3 to 1, then 6 to 1
   let creatingEyebrowEl = null; // the same "Recalibrating {name}" eyebrow as Calibrating
   let creatingTextEl = null; // "Saving your calibration…" (a saved profile) or "Creating your speaking profile…"
   let micCheckTimer = null; // reads the mic level during the 3-2-1 so the circle can react before capture — see startMicCheck()
-  let micCheckSamples = []; // those readings, which become the room-noise level (finishMicCheck())
   let calibratingCountdownTimer = null;
   // Guards the countdown's false→true "start exactly once per attempt"
   // requirement — reset in prepareCalibratingScreen() at the top of every
@@ -1497,7 +1514,7 @@ export function createMezzoSession({
          experience visually continuous rather than three unrelated
          layouts. ── */
       .pip-screen-welcome,
-      .pip-screen-c1,
+      .pip-screen-prep,
       .pip-screen-c0 {
         justify-content: center;
         padding: 28px 24px;
@@ -2165,8 +2182,6 @@ export function createMezzoSession({
         font-variant-numeric: tabular-nums;
         color: var(--color-text);
       }
-      .pip-screen-calibrating:not([data-phase="listening"]) .mezzo-level-meter { visibility: hidden; }
-      .pip-screen-calibrating[data-phase="listening"] .pip-calibrating-count { display: none; }
       /* "Preparing microphone…" / the 3-2-1 number / "Listening…
          {n}s" — aria-hidden (see calibratingAnnounceEl for what assistive
          tech actually hears). min-height holds its space while blank. */
@@ -2837,6 +2852,7 @@ export function createMezzoSession({
       }
       .pip-ready-profile-label,
       .pip-calibrating-subheading,
+      .pip-prep-eyebrow,
       .pip-decision-bar-title {
         font-family: var(--font-mono);
         font-size: 11px;
@@ -2889,7 +2905,7 @@ export function createMezzoSession({
 
       /* ── B. Single choice ── */
       .pip-screen-welcome,
-      .pip-screen-c1,
+      .pip-screen-prep,
       .pip-screen-c0,
       .pip-screen-failed,
       .pip-screen-ready {
@@ -2898,18 +2914,40 @@ export function createMezzoSession({
         padding: var(--space-6);
       }
       .pip-screen-welcome > *,
-      .pip-screen-c1 > *,
+      .pip-screen-prep > *,
       .pip-screen-c0 > *,
       .pip-screen-failed > *,
       .pip-screen-ready > * { margin: 0; flex-shrink: 0; }
       /* Heading → 8 → its subtext (one group). */
-      .pip-screen-welcome > .pip-intro-body,
-      .pip-screen-c1 > .pip-intro-body { margin-top: var(--space-2); }
+      .pip-screen-welcome > .pip-intro-body { margin-top: var(--space-2); }
+      /* Prep screens: [Recalibrating {name} → 8 →] Step N of 2 → 8 →
+         heading → 8 → body → 24 → I'm ready → Cancel (16 clear between the
+         two hit areas: the tap-target floor, as on every screen). */
+      .pip-prep-eyebrow { line-height: 1.4; text-align: center; }
+      .pip-prep-recalibrating:empty { display: none; }
+      .pip-prep-recalibrating:not(:empty) + .pip-prep-step { margin-top: var(--space-2); }
+      .pip-screen-prep > .pip-prep-heading {
+        margin-top: var(--space-2);
+        font-size: 22px;
+        font-weight: var(--weight-medium);
+        line-height: 1.25;
+        text-wrap: balance;
+      }
+      .pip-prep-heading:focus { outline: none; } /* focused for screen readers, not an interactive control */
+      .pip-screen-prep > .pip-prep-body {
+        margin-top: var(--space-2);
+        max-width: 316px;
+        font-family: var(--font-body);
+        font-size: 14px;
+        line-height: 1.45;
+        color: var(--color-text-muted);
+        text-wrap: balance;
+      }
       /* Between groups. */
       .pip-screen-c0 > .pip-c0-illustration,
       .pip-screen-ready > .pip-ready-profile-label,
       .pip-screen-welcome > .pip-intro-primary-btn,
-      .pip-screen-c1 > .pip-intro-primary-btn,
+      .pip-screen-prep > .pip-intro-primary-btn,
       .pip-screen-c0 > .pip-intro-primary-btn,
       .pip-screen-failed > .pip-decision-actions,
       .pip-screen-ready > .pip-ready-start-btn { margin-top: var(--space-5); }
@@ -2920,7 +2958,7 @@ export function createMezzoSession({
       .pip-screen-ready > .pip-ready-contextual-actions:empty { display: none; }
       /* Primary button → 12 → its fine print or text link. */
       .pip-screen-welcome > .pip-intro-disclaimer,
-      .pip-screen-c1 > .pip-text-btn,
+      .pip-screen-prep > .pip-text-btn,
       .pip-screen-c0 > .pip-text-btn,
       .pip-screen-failed > .pip-text-btn,
       .pip-screen-ready > .pip-ready-disclaimer { margin-top: var(--space-3); }
@@ -2968,6 +3006,24 @@ export function createMezzoSession({
       .pip-calibrating-count { top: 50%; }
       .pip-calibrating-visual { margin: var(--space-3) 0 0; }
       .pip-calibrating-hint { margin-top: var(--space-3); text-align: center; }
+      /* The listening screens (both steps, one layout): the eyebrow, then,
+         centered in the middle, a large countdown → 24 → the sage meter →
+         8 → (Step 2 only) "Keep talking until the timer ends." The helper
+         keeps its line in Step 1, empty, so nothing moves between steps. */
+      .pip-screen-calibrating .pip-calibrating-slot { height: 72px; }
+      .pip-screen-calibrating .pip-calibrating-count {
+        font-family: var(--font-mono);
+        font-size: 72px;
+        font-weight: var(--weight-regular);
+        line-height: 1;
+        color: #F3EBDE;
+      }
+      .pip-screen-calibrating .pip-calibrating-visual { margin-top: var(--space-5); }
+      .pip-screen-calibrating .pip-calibrating-hint {
+        margin-top: var(--space-2);
+        min-height: calc(12px * 1.45);
+        color: #B0AB9E;
+      }
       .pip-calibrating-cancel { bottom: var(--footer-inset); }
 
       /* ── C. Decision ── */
@@ -3011,7 +3067,7 @@ export function createMezzoSession({
       .pip-ready-recalibrate-note { line-height: 24px; }
       .pip-inline-link { display: inline-block; line-height: 24px; padding-inline: 2px; }
       /* A link under a button: 16px clear between the two hit areas. */
-      .pip-screen-c1 > .pip-text-btn,
+      .pip-screen-prep > .pip-text-btn,
       .pip-screen-c0 > .pip-text-btn,
       .pip-screen-failed > .pip-text-btn { margin-top: var(--space-4); }
       /* Ready: the link or note under the dropdown, 16px clear (12 asked
@@ -3073,58 +3129,56 @@ export function createMezzoSession({
     layout.appendChild(welcomeScreen);
     welcomeScreenEl = welcomeScreen;
 
-    // ── C1 — calibration-introduction interstitial, shown before every
-    //    session-mode calibration (see the module doc comment on c1ScreenEl
-    //    above for the resolved routing rule). Copy matches
-    //    docs/prd/ready-screen-speaking-profiles-mvp.md and
-    //    design/prototypes/ready-screen-states.html exactly. ──
-    const c1Screen = pipDoc.createElement('div');
-    c1Screen.className = 'pip-screen pip-screen-c1 hidden';
+    // ── Calibration prep screens (the Single choice template): one per
+    //    step. Each says which step this is, what to do and for how long,
+    //    then waits: nothing is measured until "I'm ready". Step 1 adds a
+    //    "Recalibrating {name}" eyebrow above "Step 1 of 2" when
+    //    recalibrating. See PREP_COPY. ──
+    for (const step of [1, 2]) {
+      const copy = PREP_COPY[step];
+      const prepScreen = pipDoc.createElement('div');
+      prepScreen.className = `pip-screen pip-screen-prep pip-screen-prep-${step === 1 ? 'room' : 'voice'} hidden`;
 
-    const c1Heading = pipDoc.createElement('h1');
-    c1Heading.className = 'pip-h1 pip-intro-heading';
-    c1Heading.textContent = 'Create speaking profile';
-    c1Screen.appendChild(c1Heading);
+      if (step === 1) {
+        const recalibrating = pipDoc.createElement('p');
+        recalibrating.className = 'pip-prep-eyebrow pip-prep-recalibrating';
+        prepScreen.appendChild(recalibrating);
+        prepRecalibratingEl = recalibrating;
+      }
+      const eyebrow = pipDoc.createElement('p');
+      eyebrow.className = 'pip-prep-eyebrow pip-prep-step';
+      eyebrow.textContent = copy.eyebrow;
+      prepScreen.appendChild(eyebrow);
 
-    const c1Body = pipDoc.createElement('p');
-    c1Body.className = 'pip-intro-body';
-    c1Body.textContent = "Talk for a few seconds so Mezzo can learn the speaking level you'd like to maintain.";
-    c1Screen.appendChild(c1Body);
+      const heading = pipDoc.createElement('h1');
+      heading.className = 'pip-h1 pip-prep-heading';
+      heading.tabIndex = -1; // focused when the screen opens
+      heading.textContent = copy.heading;
+      prepScreen.appendChild(heading);
+      prepHeadingEls[step] = heading;
 
-    // No mic icon here (2026-08-16 — Welcome's own primary action, above,
-    // keeps its icon; this button's own accessible name was already just
-    // its text, since the icon was aria-hidden, so removing it changes
-    // nothing about the accessible name). Plain textContent, no wrapping
-    // <span> needed once there's no icon to lay out beside — the button's
-    // existing display:inline-flex + justify-content:center already
-    // centers a single text child with no extra rule required.
-    const c1PrimaryBtn = pipDoc.createElement('button');
-    c1PrimaryBtn.type = 'button';
-    c1PrimaryBtn.className = 'pip-intro-primary-btn';
-    c1PrimaryBtn.textContent = "I'm ready";
-    c1PrimaryBtn.addEventListener('click', handleC1StartClick);
-    c1Screen.appendChild(c1PrimaryBtn);
+      const body = pipDoc.createElement('p');
+      body.className = 'pip-prep-body';
+      body.textContent = copy.body;
+      prepScreen.appendChild(body);
 
-    // Low-emphasis text link, beneath the primary action — reuses
-    // .pip-text-btn, the same established treatment Cancel/Back already use
-    // on every other screen (Calibrating, Calibration Failed, C0). Labeled
-    // "Cancel" (2026-08-19), not "Back": this screen is the calibration
-    // *introduction*, not a step in a linear flow the user is stepping back
-    // through, and "Cancel" is already this Companion's own canonical term
-    // for leaving a not-yet-committed flow without starting/continuing it.
-    // Behavior (handleC1BackClick(), unrenamed — see its own doc comment
-    // below) is completely unchanged: pure navigation back to wherever C1
-    // was opened from, no calibration ever started, nothing mutated.
-    const c1BackButton = pipDoc.createElement('button');
-    c1BackButton.type = 'button';
-    c1BackButton.className = 'pip-text-btn';
-    c1BackButton.textContent = 'Cancel';
-    c1BackButton.addEventListener('click', handleC1BackClick);
-    c1Screen.appendChild(c1BackButton);
-    c1BackBtn = c1BackButton;
+      const readyBtn = pipDoc.createElement('button');
+      readyBtn.type = 'button';
+      readyBtn.className = 'pip-intro-primary-btn';
+      readyBtn.textContent = "I'm ready";
+      readyBtn.addEventListener('click', step === 1 ? handleRoomStepReady : handleVoiceStepReady);
+      prepScreen.appendChild(readyBtn);
 
-    layout.appendChild(c1Screen);
-    c1ScreenEl = c1Screen;
+      const cancelBtn = pipDoc.createElement('button');
+      cancelBtn.type = 'button';
+      cancelBtn.className = 'pip-text-btn';
+      cancelBtn.textContent = 'Cancel';
+      cancelBtn.addEventListener('click', handleCalibrationCancel);
+      prepScreen.appendChild(cancelBtn);
+
+      layout.appendChild(prepScreen);
+      prepScreenEls[step] = prepScreen;
+    }
 
     // ── C0 — dedicated microphone-blocked screen, reached instead of the
     //    generic Calibration Failed screen for MIC_PERMISSION_DENIED and
@@ -3317,35 +3371,32 @@ export function createMezzoSession({
     const calibratingScreen = pipDoc.createElement('div');
     calibratingScreen.className = 'pip-screen pip-screen-calibrating hidden';
 
-    // The Sequence template: the eyebrow and heading sit at a fixed top
-    // position (.pip-calibrating-top), and the middle slot is centered in
-    // the space between them and Cancel, so nothing moves when the 3-2-1
-    // ends.
+    // The Sequence template: the eyebrow ("Listening to background noise" /
+    // "Listening to your voice") sits at a fixed top position
+    // (.pip-calibrating-top), and the middle slot (the countdown, the meter
+    // and, in Step 2, its helper) is centered between it and Cancel. Both
+    // steps share this one screen and its layout; only the eyebrow and the
+    // helper line differ.
     const calibratingTop = pipDoc.createElement('div');
     calibratingTop.className = 'pip-calibrating-top';
     calibratingScreen.appendChild(calibratingTop);
 
+    // aria-hidden: the one-time announcement (calibratingAnnounceEl) says
+    // the step and its length instead.
     const calibratingSubheading = pipDoc.createElement('div');
-    calibratingSubheading.className = 'pip-calibrating-subheading';
-    calibratingSubheading.setAttribute('aria-live', 'polite');
+    calibratingSubheading.className = 'pip-calibrating-subheading pip-listening-eyebrow';
+    calibratingSubheading.setAttribute('aria-hidden', 'true');
     calibratingTop.appendChild(calibratingSubheading);
     calibratingSubheadingEl = calibratingSubheading;
-
-    const calibratingHeading = pipDoc.createElement('p');
-    calibratingHeading.className = 'pip-h1 pip-calibrating-heading';
-    calibratingHeading.textContent = CALIBRATING_HEADING_PREPARING;
-    calibratingTop.appendChild(calibratingHeading);
-    calibratingHeadingEl = calibratingHeading;
 
     const calibratingMiddle = pipDoc.createElement('div');
     calibratingMiddle.className = 'pip-calibrating-middle';
     calibratingScreen.appendChild(calibratingMiddle);
 
-    // One slot for the 3-2-1 number and the status line ("Preparing
-    // microphone…", then "Listening… {n}s"), so they sit in the same place.
-    // The status is aria-hidden: assistive tech gets exactly two one-time
-    // announcements instead (calibratingAnnounceEl, below), since narrating
-    // every visible tick was found to be noisy, not helpful.
+    // One slot for the countdown and, only while a slow microphone is still
+    // starting, "Preparing microphone…", so they sit in the same place.
+    // Both are aria-hidden: assistive tech hears one announcement per step
+    // instead (calibratingAnnounceEl, below), never every second.
     const calibratingSlot = pipDoc.createElement('div');
     calibratingSlot.className = 'pip-calibrating-slot';
     calibratingMiddle.appendChild(calibratingSlot);
@@ -3360,11 +3411,9 @@ export function createMezzoSession({
     calibratingSlot.appendChild(calibratingStatus);
     calibratingStatusEl = calibratingStatus;
 
-    // Segmented level meter (PRD §8): six segments that follow the live,
-    // filtered level, so the user can see their voice being picked up
-    // during capture. role="meter", 0–6. Hidden (keeping its space) during
-    // the 3-2-1, when the room is asked to be quiet; see
-    // setCalibratingPhase().
+    // Segmented level meter (PRD §8): six sage segments that follow the
+    // live level in both steps (the room in Step 1, the voice in Step 2).
+    // role="meter", 0–6.
     const calibratingVisual = pipDoc.createElement('div');
     calibratingVisual.className = 'pip-calibrating-visual';
     calibratingMiddle.appendChild(calibratingVisual);
@@ -3372,14 +3421,13 @@ export function createMezzoSession({
 
     const calibratingHint = pipDoc.createElement('p');
     calibratingHint.className = 'pip-calibrating-hint';
-    calibratingHint.textContent = CALIBRATING_HINT_PREPARING;
     calibratingMiddle.appendChild(calibratingHint);
     calibratingHintEl = calibratingHint;
 
-    // Static, visually-hidden live region carrying exactly two one-time
-    // announcements ("Stay quiet for a moment. Calibration starts in 3 seconds." /
-    // "Listening for 6 seconds.") — kept separate from calibratingStatusEl
-    // above so its rapid visible-text changes never reach assistive tech.
+    // Static, visually-hidden live region carrying one announcement per
+    // step ("Listening to background noise, 3 seconds" / "Listening to your
+    // voice, 6 seconds"), kept separate from the countdown so its
+    // per-second changes never reach assistive tech.
     const calibratingAnnounce = pipDoc.createElement('div');
     calibratingAnnounce.className = 'pip-calibrating-announce';
     calibratingAnnounce.setAttribute('aria-live', 'polite');
@@ -3391,7 +3439,7 @@ export function createMezzoSession({
     calibratingCancelBtn.type = 'button';
     calibratingCancelBtn.className = 'pip-text-btn pip-calibrating-cancel';
     calibratingCancelBtn.textContent = 'Cancel';
-    calibratingCancelBtn.addEventListener('click', handleCalibratingCancel);
+    calibratingCancelBtn.addEventListener('click', handleCalibrationCancel);
     calibratingScreen.appendChild(calibratingCancelBtn);
 
     layout.appendChild(calibratingScreen);
@@ -4332,7 +4380,7 @@ function ringLayout() {
     // decision resolving, Stop, and so on) without a per-caller hook.
     hideTooltip();
     [
-      welcomeScreenEl, c1ScreenEl, c0ScreenEl, readyScreenEl, calibratingScreenEl, creatingScreenEl,
+      welcomeScreenEl, prepScreenEls[1], prepScreenEls[2], c0ScreenEl, readyScreenEl, calibratingScreenEl, creatingScreenEl,
       failedScreenEl, m1ScreenEl, resultScreenEl, m2ScreenEl, m3ScreenEl, deleteScreenEl, monitoringScreenEl,
     ].forEach((el) => {
       if (el) el.classList.toggle('hidden', el !== screenEl);
@@ -4374,50 +4422,91 @@ function ringLayout() {
     sessionState.set(SESSION_STATES.COMPANION_READY);
   }
 
-  /** "Create speaking profile" — navigates to C1, the calibration-
-   *  introduction interstitial. Microphone permission isn't requested until
-   *  C1's own primary action actually starts a calibration (see
-   *  handleC1StartClick() -> beginCalibrationFlow() ->
-   *  calibrationController.startSessionCalibration() -> audio.acquire()).
-   *  Never reached automatically. */
+  /** "Create speaking profile": straight to Step 1's prep screen. The
+   *  microphone isn't touched until its "I'm ready". */
   function handleWelcomeCalibrateClick() {
-    showC1Screen('welcome');
+    startCalibrationIntro({ mode: 'session', targetProfileId: null, source: 'welcome', recalibratingName: null });
   }
 
-  /** @param {'welcome'|'ready'} source - recorded in c1EntrySource so
-   *  handleC1BackClick() below knows where to return to. Explicit, not
-   *  inferred from saved-profile count or any other mutable state — both
-   *  Welcome and Ready can reach C1 while, say, zero saved profiles exist
-   *  (Ready can too, if an unsaved profile is already selected there). */
-  function showC1Screen(source) {
+  /** Every calibration starts here, at Step 1's prep screen: first-time
+   *  setup (Welcome), Create new profile, and Recalibrate alike. */
+  function startCalibrationIntro(intent) {
     if (!pipWindow) return;
-    c1EntrySource = source;
-    activeCircle = null; // defensive, matching every other screen-show function — never actually non-null here, since C1 is only ever reached before monitoring starts
-    showOnlyScreen(c1ScreenEl);
-    sessionState.set(SESSION_STATES.COMPANION_READY);
+    calibrationIntent = intent;
+    roomStepDone = false;
+    showPrepScreen(1);
   }
 
-  function handleC1StartClick() {
-    beginCalibrationFlow('session', null);
+  /** A prep screen: the step, what to do and for how long, "I'm ready" and
+   *  Cancel. Focus moves to its heading. Step 2's prep screen is shown while
+   *  the controller holds the mic between the steps (or after a failed
+   *  voice capture); nothing is measured on either. */
+  function showPrepScreen(step) {
+    if (!pipWindow) return;
+    layoutMode = LAYOUT_MODES.EXPANDED;
+    if (pipDocument?.body) pipDocument.body.setAttribute('data-layout', LAYOUT_MODES.EXPANDED);
+    resizeCompanionToContent(MEZZO_COMPANION_READY_SIZE);
+    activeCircle = null;
+    if (step === 1 && prepRecalibratingEl) {
+      const name = calibrationIntent?.recalibratingName;
+      prepRecalibratingEl.textContent = name ? `Recalibrating ${name}` : '';
+    }
+    showOnlyScreen(prepScreenEls[step]);
+    sessionState.set(step === 1 ? SESSION_STATES.COMPANION_READY : SESSION_STATES.COMPANION_CALIBRATING);
+    prepHeadingEls[step]?.focus();
   }
 
-  /** C1's own "Cancel" link (visible label changed from "Back", 2026-08-19
-   *  — see this button's own construction comment above; function name and
-   *  behavior below are unchanged) — pure navigation, never starts
-   *  calibration and never touches activeProfile/unsavedProfile/saved-
-   *  profile storage/the first-monitoring flag: C1 itself doesn't mutate
-   *  any of that (only beginCalibrationFlow(), never called here, does),
-   *  so simply not calling it is what preserves everything. Returns to
-   *  wherever C1 was actually opened from (see c1EntrySource) — Welcome,
-   *  or the same Ready state (selection and any existing unsaved profile
-   *  untouched). */
-  function handleC1BackClick() {
-    if (c1EntrySource === 'welcome') {
+  /** Step 1's "I'm ready": start the calibration (the room step). */
+  function handleRoomStepReady() {
+    const intent = calibrationIntent ?? { mode: 'session', targetProfileId: null, source: 'ready', recalibratingName: null };
+    beginCalibrationFlow(intent.mode, intent.targetProfileId);
+  }
+
+  /** Step 2's "I'm ready": start the voice capture. Between the steps the
+   *  controller is waiting for exactly this; after a failed voice capture
+   *  it retries only the voice step, keeping Step 1's room reading. */
+  function handleVoiceStepReady() {
+    const state = calibrationController.getState();
+    if (state.awaitingVoice) {
+      prepareCalibratingScreen('voice');
+      calibrationController.beginVoiceCapture();
+      return;
+    }
+    if (state.status !== 'failed') { showPrepScreen(1); return; } // defensive: nothing to continue
+    if (!calibrationLock.acquire()) {
+      pendingLockedAttempt = { mode: state.mode, targetProfileId: state.targetProfileId };
+      showFailedScreen({ code: 'CROSS_TAB_LOCKED' });
+      return;
+    }
+    pendingLockedAttempt = null;
+    prepareCalibratingScreen('voice');
+    try {
+      calibrationController.retryVoice();
+    } catch (err) {
+      console.error('[Session] Could not retry the voice step:', err.message);
+      calibrationLock.release();
+      handleCalibrationCancel();
+    }
+  }
+
+  /** Cancel, from any step (and Back on the failure screens): stops any
+   *  calibration, discards what it measured, and returns to where it
+   *  started: Welcome for first-time setup, Ready otherwise. */
+  function handleCalibrationCancel() {
+    calibrationController.cancel();
+    // The whole creation flow is abandoned (not superseded by a retry), so
+    // the snapshot can't leak into a later, unrelated flow. A no-op for
+    // recalibrate mode, which never sets it.
+    priorProfileBeforeCreation = undefined;
+    pendingLockedAttempt = null;
+    roomStepDone = false;
+    const source = calibrationIntent?.source;
+    calibrationIntent = null;
+    if (source === 'welcome' && getSavedProfiles().length === 0 && !unsavedProfile) {
       showWelcomeScreen();
     } else {
       showReadyScreen();
     }
-    c1EntrySource = null;
   }
 
   /** Dedicated microphone-blocked/timed-out screen — reused Try Again/Back
@@ -5186,7 +5275,7 @@ function ringLayout() {
    *  unsavedProfile wholesale on completion, satisfying "at most one unsaved
    *  profile at a time" without this needing to special-case anything. */
   function handleUnsavedRecalibrateClick() {
-    beginCalibrationFlow('session', null);
+    startCalibrationIntro({ mode: 'session', targetProfileId: null, source: 'ready', recalibratingName: 'Temporary profile' });
   }
 
   /** Ready selector panel's own per-row Recalibrate icon (2026-08-17 —
@@ -5222,15 +5311,13 @@ function ringLayout() {
       handleUnsavedRecalibrateClick();
     } else {
       if (!profile?.id) return; // defensive — should be unreachable, every saved profile has an id
-      beginCalibrationFlow('recalibrate', profile.id);
+      startCalibrationIntro({ mode: 'recalibrate', targetProfileId: profile.id, source: 'ready', recalibratingName: profile.name });
     }
   }
 
-  /** Create new profile — routes through C1 first, same as Welcome's own
-   *  first-time entry (see the PRD's §12 State Transitions: "02 → C1 → C2 →
-   *  04"). Unlike Recalibrate, this is creating a brand-new profile from
-   *  scratch, so it keeps the instructional interstitial rather than
-   *  skipping straight to Calibrating.
+  /** Create new profile — Step 1's prep screen, same as Welcome's own
+   *  first-time entry and Recalibrate (2026-10-26: the old intro screen,
+   *  C1, is retired; each step's prep screen does its job).
    *
    *  At the five-profile cap (2026-08-18 — now reachable at the cap too,
    *  since this is a persistent selector-panel footer action rather than a
@@ -5245,7 +5332,7 @@ function ringLayout() {
       showM3Screen(event?.currentTarget ?? null, 'create');
       return;
     }
-    showC1Screen('ready');
+    startCalibrationIntro({ mode: 'session', targetProfileId: null, source: 'ready', recalibratingName: null });
   }
 
   /** Save profile — below cap opens M2; at cap goes straight to M3, never
@@ -5323,7 +5410,8 @@ function ringLayout() {
       priorProfileBeforeCreation = activeProfile;
     }
 
-    prepareCalibratingScreen(mode, targetProfileId);
+    roomStepDone = false;
+    prepareCalibratingScreen('room');
 
     try {
       if (mode === 'recalibrate') {
@@ -5339,41 +5427,25 @@ function ringLayout() {
   }
 
   /**
-   * Shows and resets the Calibrating screen to its pre-capture state —
-   * shared by beginCalibrationFlow() (a fresh attempt) and
-   * handleFailedTryAgain()'s retry path (calibration-stall reliability
-   * correction), so a retry after a timeout visibly goes through the same
-   * "show Calibrating, then wait for real capture to begin" sequence as the
-   * very first attempt, rather than silently doing nothing on screen for
-   * however long the retried acquisition takes. Resets layout/size, the
-   * subheading, the meter (hidden, unfilled), every preparation-stage timer
-   * and flag, the countdown-started guard, and the status text — blank,
-   * deliberately: calibration pacing revision, second pass, no longer shows
-   * "Getting microphone ready…" (or anything else) synchronously here. The
-   * delayed-disclosure "Preparing microphone…" message (if it appears at
-   * all), the 3-2-1 number, and "Listening… {n}s" are each driven by
-   * their own timer/listener below, none of which fire until real progress
-   * (acquisition succeeding, then beginCountdown(), then real capture
-   * starting) actually happens.
+   * Shows a listening screen, reset to its starting state: 'room' for Step
+   * 1 (at the start of every calibration) and 'voice' for Step 2 (from
+   * Step 2's "I'm ready"). Resets layout/size, the meter, every timer and
+   * flag, and the countdown, then waits: the countdown starts only when
+   * the real step does (the room step once the mic is acquired, see
+   * handleAcquisitionConfirmed(); the voice step on the capturing:true
+   * edge). If acquiring the mic takes a while, "Preparing microphone…"
+   * shows in the countdown's place (delayed disclosure, below).
    */
-  function prepareCalibratingScreen(mode, targetProfileId) {
-    const targetName = targetProfileId
-      ? getSavedProfiles().find((p) => p.id === targetProfileId)?.name ?? null
-      : null;
-
+  function prepareCalibratingScreen(phase) {
     layoutMode = LAYOUT_MODES.EXPANDED;
     if (pipDocument?.body) pipDocument.body.setAttribute('data-layout', LAYOUT_MODES.EXPANDED);
-    resizeCompanionToContent(MEZZO_COMPANION_READY_SIZE); // Calibrating shares Ready's fixed size — see CLAUDE.md's Companion sizes
+    resizeCompanionToContent(MEZZO_COMPANION_READY_SIZE); // the listening screens share Ready's fixed size — see CLAUDE.md's Companion sizes
     activeCircle = null;
 
-    if (calibratingSubheadingEl) {
-      calibratingSubheadingEl.textContent = mode === 'recalibrate' && targetName ? `Recalibrating ${targetName}` : '';
-    }
     stopMicCheck();
-    levelMeter?.reset(); // nothing lit, and hidden, until listening starts
-    setCalibratingPhase('preparing');
-    if (calibratingHintEl) calibratingHintEl.textContent = CALIBRATING_HINT_PREPARING;
-    stopCalibratingCountdown(); // defensive — see startCalibratingCountdown()'s own trigger below; this guarantees a clean slate even on a retry
+    levelMeter?.reset(); // nothing lit until the step starts
+    setCalibratingPhase(phase);
+    stopCalibratingCountdown();
     stopPreparationCountdown();
     clearPreparingMessageTimers();
     preparingHandled = false;
@@ -5384,11 +5456,10 @@ function ringLayout() {
     unsubscribeCalibrationLevel = calibrationController.subscribeToLevel(handleCalibrationLevelSample);
     sessionState.set(SESSION_STATES.COMPANION_CALIBRATING);
 
-    // Delayed-disclosure timer for "Preparing microphone…" — started here,
-    // covering the real audio.acquire() wait (the span before
-    // calibration-controller.js's state.preparing turns true), not
-    // restarted or referenced anywhere else. See handleAcquisitionConfirmed()
-    // for the corresponding cancel-on-fast-acquisition path.
+    // Delayed disclosure for "Preparing microphone…": shown only if
+    // acquiring the mic is still pending after PREPARING_MESSAGE_DELAY_MS.
+    // Cleared when the step starts (see handleAcquisitionConfirmed() and
+    // the capturing:true edge).
     preparingMessageDelayTimer = setTimeout(() => {
       preparingMessageDelayTimer = null;
       preparingMessageShown = true;
@@ -5410,22 +5481,11 @@ function ringLayout() {
     preparingMessageShownAt = 0;
   }
 
-  /** state.preparing's false→true edge (calibration pacing revision, second
-   *  pass) — the point calibration-controller.js's runCapture() confirms
-   *  microphone acquisition actually succeeded, immediately before it
-   *  begins waiting on this module's own beginCountdown() call (Stage 1).
-   *  Decides, per the delayed-disclosure spec, whether beginCountdown() can
-   *  fire immediately (acquisition was fast enough that "Preparing
-   *  microphone…" never rendered) or must first wait out whatever remains
-   *  of PREPARING_MESSAGE_MIN_DISPLAY_MS (acquisition was slow enough that
-   *  the message did render, and disappearing it immediately would be the
-   *  same unreadable-flash problem in reverse). preparingHandled guards
-   *  this to run at most once per attempt — reset in
-   *  prepareCalibratingScreen() — matching the guard pattern
-   *  calibrationCountdownStarted already uses for the capturing:true edge
-   *  below, for the same reason: nothing structurally prevents a second
-   *  notification carrying preparing:true, even though today's controller
-   *  never produces one. */
+  /** state.preparing's false→true edge: the mic is acquired and the
+   *  controller is ready to run Step 1. Starts the room step at once, or,
+   *  if "Preparing microphone…" is showing, once it has been readable for
+   *  PREPARING_MESSAGE_MIN_DISPLAY_MS. preparingHandled keeps this to once
+   *  per attempt (reset in prepareCalibratingScreen()). */
   calibrationController.subscribe((state) => {
     if (state.preparing && !preparingHandled) {
       preparingHandled = true;
@@ -5433,14 +5493,24 @@ function ringLayout() {
     }
   });
 
+  /** state.awaitingVoice's false→true edge: Step 1 has measured the room.
+   *  The mic stays held (nothing measured) while Step 2's prep screen asks
+   *  for the voice. */
+  calibrationController.subscribe((state) => {
+    if (state.awaitingVoice && calibratingScreenEl && !calibratingScreenEl.classList.contains('hidden')) {
+      stopMicCheck();
+      stopPreparationCountdown();
+      roomStepDone = true;
+      showPrepScreen(2);
+    }
+  });
+
   function handleAcquisitionConfirmed() {
     if (preparingMessageDelayTimer) {
-      // Fast acquisition — the 500ms delayed-disclosure window hadn't
-      // elapsed yet, so "Preparing microphone…" never rendered at all.
-      // Nothing to wait out; go straight to the countdown.
+      // Fast acquisition: "Preparing microphone…" never rendered.
       clearTimeout(preparingMessageDelayTimer);
       preparingMessageDelayTimer = null;
-      beginPreparationCountdown();
+      beginRoomStep();
       return;
     }
     if (preparingMessageShown) {
@@ -5448,85 +5518,67 @@ function ringLayout() {
       if (remaining > 0) {
         preparingMessageMinDisplayTimer = setTimeout(() => {
           preparingMessageMinDisplayTimer = null;
-          beginPreparationCountdown();
+          beginRoomStep();
         }, remaining);
         return;
       }
     }
-    beginPreparationCountdown();
+    beginRoomStep();
   }
 
-  /** The one place calibrationController.beginCountdown() is ever called —
-   *  signals the controller that its own fixed Stage 2 window may start,
-   *  and starts this module's own visible/announced 3-2-1 countdown in the
-   *  exact same synchronous step, so the two stay in
-   *  lockstep (both begin, and both last PREPARATION_COUNTDOWN_SECONDS/
-   *  DEFAULT_PREPARATION_MS, from this same instant). */
-  function beginPreparationCountdown() {
-    if (calibratingAnnounceEl) calibratingAnnounceEl.textContent = `Stay quiet for a moment. Calibration starts in ${PREPARATION_COUNTDOWN_SECONDS} seconds.`;
+  /** Step 1 starts: the one place calibrationController.beginCountdown()
+   *  is called. The controller's 3s room window and this screen's visible
+   *  3-2-1 begin in the same synchronous step, so they stay in lockstep;
+   *  the live room level feeds both the meter and the room reading. */
+  function beginRoomStep() {
+    if (calibratingStatusEl) calibratingStatusEl.textContent = '';
+    if (calibratingAnnounceEl) calibratingAnnounceEl.textContent = `${LISTENING_EYEBROW.room}, ${PREPARATION_COUNTDOWN_SECONDS} seconds`;
     calibrationController.beginCountdown();
     startPreparationCountdown();
+    levelMeter?.start();
     startMicCheck();
   }
 
-  /** The 3-2-1 room-noise reading: the controller collects no samples and
-   *  doesn't start audio.js's monitoring until capture begins, so this
-   *  reads the already-acquired microphone's raw level directly
-   *  (audio.calculateRms(), a plain read of the analyser that touches
-   *  neither audio.js's smoothing nor the controller's samples). The meter
-   *  stays hidden meanwhile; the person is asked to stay quiet. Stopped on
-   *  the capturing:true edge, and whenever Calibrating is left. */
+  /** Step 1's live level: reads the already-acquired microphone's raw level
+   *  directly (audio.calculateRms(), which touches neither audio.js's
+   *  smoothing nor the voice samples) and hands it to the controller's room
+   *  reading (recordRoomSample(), which counts it only during Step 1) and
+   *  to the meter. Stopped when Step 1 ends or the screen is left. */
   function startMicCheck() {
     stopMicCheck();
-    micCheckSamples = [];
     micCheckTimer = setInterval(() => {
       if (!audio.isMicrophoneActive) return;
-      micCheckSamples.push(audio.calculateRms()); // the room-noise reading (see finishMicCheck())
+      const rms = audio.calculateRms();
+      calibrationController.recordRoomSample(rms);
+      levelMeter?.setLevel(rms);
     }, MIC_CHECK_INTERVAL_MS);
-  }
-
-  /** 'preparing' | 'countdown' | 'listening': which of the number or the
-   *  meter shows (CSS keys off data-phase). */
-  function setCalibratingPhase(phase) {
-    if (calibratingScreenEl) calibratingScreenEl.dataset.phase = phase;
-    if (calibratingHeadingEl) calibratingHeadingEl.textContent = phase === 'listening' ? CALIBRATING_HEADING_LISTENING : CALIBRATING_HEADING_PREPARING;
-    if (phase !== 'countdown' && calibratingCountEl) calibratingCountEl.textContent = '';
-  }
-
-  /** Capture is starting: the 3-2-1's readings become the room-noise level,
-   *  saved with this calibration (monitoring rests the circle below it). */
-  function finishMicCheck() {
-    stopMicCheck();
-    const roomNoiseDb = measureRoomNoiseDb(micCheckSamples);
-    micCheckSamples = [];
-    calibrationController.setRoomNoiseDb(roomNoiseDb);
   }
 
   function stopMicCheck() {
     if (micCheckTimer) { clearInterval(micCheckTimer); micCheckTimer = null; }
   }
 
-  /** The visible-only (aria-hidden) 3-2-1 number — decorative pacing, not
-   *  an accessibility announcement (see beginPreparationCountdown()'s
-   *  one-time "Stay quiet for a moment…" announcement and
-   *  the capturing:true edge listener's own one-time "Listening for 6
-   *  seconds." announcement below, which are the only two things assistive
-   *  tech actually hears). Purely presentational: calibration-controller.js's
-   *  own Stage 2 timer (preparationMs) is the real source of truth for when
-   *  the countdown ends and real capture may begin — this only decides what
-   *  the number reads meanwhile. No calibration samples are collected and
-   *  the meter stays hidden for the countdown's whole duration (only the
-   *  room-noise reading runs); both start on the capturing:true edge. */
+  /** 'room' (Step 1) | 'voice' (Step 2): sets the eyebrow and the helper
+   *  line (Step 2 only), and clears the countdown. CSS keys off data-phase. */
+  function setCalibratingPhase(phase) {
+    if (calibratingScreenEl) calibratingScreenEl.dataset.phase = phase;
+    if (calibratingSubheadingEl) calibratingSubheadingEl.textContent = LISTENING_EYEBROW[phase] ?? '';
+    if (calibratingHintEl) calibratingHintEl.textContent = phase === 'voice' ? CALIBRATING_HINT_LISTENING : '';
+    if (calibratingCountEl) calibratingCountEl.textContent = '';
+  }
+
+  /** Step 1's visible 3-2-1 (aria-hidden; the one-time announcement in
+   *  beginRoomStep() is what assistive tech hears). The controller's own
+   *  room-window timer is the real source of truth for when Step 1 ends;
+   *  the number stays on 1 until it does. */
   function startPreparationCountdown() {
     stopPreparationCountdown();
     let remaining = PREPARATION_COUNTDOWN_SECONDS;
-    setCalibratingPhase('countdown');
-    if (calibratingStatusEl) calibratingStatusEl.textContent = '';
     if (calibratingCountEl) calibratingCountEl.textContent = String(remaining);
     preparationCountdownTimer = setInterval(() => {
       remaining -= 1;
       if (remaining > 0 && calibratingCountEl) calibratingCountEl.textContent = String(remaining);
-      if (remaining <= 0) stopPreparationCountdown(); // the capturing:true edge listener below takes over the status text from here
+      if (remaining <= 1) stopPreparationCountdown();
     }, 1000);
   }
 
@@ -5534,28 +5586,19 @@ function ringLayout() {
     if (preparationCountdownTimer) { clearInterval(preparationCountdownTimer); preparationCountdownTimer = null; }
   }
 
-  /** Live "Listening… {n}s" countdown — text, not just the meter, so
-   *  progress/completion is conveyed to assistive tech too (via the
-   *  separate one-time "Listening for 6 seconds." announcement — see the
-   *  capturing:true edge listener below; this visible text itself stays
-   *  aria-hidden). Purely a presentational countdown; the controller's own
-   *  capture timer (see calibration-controller.js's
-   *  DEFAULT_CAPTURE_DURATION_MS) is the actual source of truth for when
-   *  capture ends. Started only once per attempt, by the dedicated
-   *  calibrationController.subscribe() listener below that watches for
-   *  state.capturing's false→true edge — never called eagerly from
-   *  beginCalibrationFlow()/prepareCalibratingScreen() itself, since the
-   *  microphone-acquisition wait and the fixed preparation countdown that
-   *  precede real capture must not be counted as part of this countdown —
-   *  see the calibration-stall reliability correction. */
+  /** Step 2's visible 6-to-1 countdown (aria-hidden, like Step 1's). The
+   *  controller's capture timer (calibration-controller.js's
+   *  DEFAULT_CAPTURE_DURATION_MS) is the real source of truth for when
+   *  capture ends; the number stays on 1 until it does. Started on the
+   *  capturing:true edge, never before: acquiring the mic isn't counted. */
   function startCalibratingCountdown() {
     stopCalibratingCountdown();
     let remaining = CALIBRATION_COUNTDOWN_SECONDS;
-    if (calibratingStatusEl) calibratingStatusEl.textContent = `Listening… ${remaining}s`;
+    if (calibratingCountEl) calibratingCountEl.textContent = String(remaining);
     calibratingCountdownTimer = setInterval(() => {
       remaining -= 1;
-      if (calibratingStatusEl) calibratingStatusEl.textContent = remaining > 0 ? `Listening… ${remaining}s` : 'Almost done…';
-      if (remaining <= 0) stopCalibratingCountdown();
+      if (remaining > 0 && calibratingCountEl) calibratingCountEl.textContent = String(remaining);
+      if (remaining <= 1) stopCalibratingCountdown();
     }, 1000);
   }
 
@@ -5563,21 +5606,11 @@ function ringLayout() {
     if (calibratingCountdownTimer) { clearInterval(calibratingCountdownTimer); calibratingCountdownTimer = null; }
   }
 
-  /** Feeds the level meter during capture with the raw, per-sample level
-   *  (the controller's samples stay the EMA-smoothed values). Before
-   *  capture, startMicCheck() feeds it instead. */
+  /** Feeds the level meter during the voice capture with the raw,
+   *  per-sample level (the controller's samples stay the EMA-smoothed
+   *  values). During Step 1, startMicCheck() feeds it instead. */
   function handleCalibrationLevelSample(rms, rawRms) {
     levelMeter?.setLevel(rawRms ?? rms);
-  }
-
-  function handleCalibratingCancel() {
-    calibrationController.cancel();
-    // The whole creation flow is being abandoned outright here (not
-    // superseded via Redo) — clear the snapshot so it can't leak into some
-    // later, unrelated flow. A no-op for recalibrate mode, which never sets
-    // this in the first place.
-    priorProfileBeforeCreation = undefined;
-    showReadyScreen();
   }
 
   /** MIC_PERMISSION_DENIED and MIC_ACQUISITION_TIMEOUT both route to the
@@ -5594,47 +5627,27 @@ function ringLayout() {
     sessionState.set(SESSION_STATES.COMPANION_NEEDS_ATTENTION);
   }
 
-  /** Try Again — retry() re-enters the same mode and, in recalibrate mode,
-   *  the same target, so this alone is what keeps session mode session and
-   *  recalibration targeted at the same saved profile across a retry. When
-   *  the Failed/C0 screen is showing because of a cross-tab lock rejection
-   *  (pendingLockedAttempt set), no controller run ever started, so this
-   *  re-attempts via beginCalibrationFlow() — re-checking the lock fresh —
-   *  instead of calling retry(), which would throw from an idle controller.
-   *  Shared by both the generic Failed screen and C0 — see their DOM
-   *  construction above.
-   *
-   *  Calibration-stall reliability correction: calls
-   *  prepareCalibratingScreen() itself before retry() — previously this
-   *  called retry() directly, so a retry never visibly showed the
-   *  Calibrating screen at all (invisible only because the one tested retry
-   *  path failed near-instantly; a retry that goes on to actually succeed
-   *  after a real multi-second wait would otherwise look frozen on
-   *  Failed/C0 throughout it). mode/targetProfileId are read from the
-   *  controller's own current (failed) state — still populated, since nothing
-   *  clears them on a FAILED transition — the same values retry() itself
-   *  is about to re-enter runCapture() with. */
+  /** Try again (the Failed screen and C0): back to the prep screen of the
+   *  step that failed. A failed voice capture ("Didn't catch enough clear
+   *  speech") returns to Step 2's prep screen, since Step 1's room reading
+   *  is still valid; anything that failed before the room was measured
+   *  (the mic, or another tab holding calibration) returns to Step 1's. */
   function handleFailedTryAgain() {
-    if (pendingLockedAttempt) {
-      const { mode, targetProfileId } = pendingLockedAttempt;
-      beginCalibrationFlow(mode, targetProfileId);
+    if (roomStepDone && !pendingLockedAttempt) {
+      showPrepScreen(2);
       return;
     }
-    const { mode, targetProfileId } = calibrationController.getState();
-    prepareCalibratingScreen(mode, targetProfileId);
-    try {
-      calibrationController.retry();
-    } catch (err) {
-      console.error('[Session] Could not retry calibration:', err.message);
-      calibrationController.cancel();
-      showReadyScreen();
+    if (pendingLockedAttempt && !calibrationIntent) {
+      calibrationIntent = { ...pendingLockedAttempt, source: 'ready', recalibratingName: null };
     }
+    pendingLockedAttempt = null;
+    roomStepDone = false;
+    showPrepScreen(1);
   }
 
-  /** Shared by both the generic Failed screen and C0. */
+  /** Back (the Failed screen and C0): the same as Cancel. */
   function handleFailedBack() {
-    calibrationController.cancel();
-    showReadyScreen();
+    handleCalibrationCancel();
   }
 
   // ===========================================================================
@@ -5692,7 +5705,10 @@ function ringLayout() {
     // creates a speaking profile. The eyebrow carries over from Calibrating.
     const savingCalibration = state?.mode === 'recalibrate';
     if (creatingTextEl) creatingTextEl.textContent = savingCalibration ? 'Saving your calibration…' : 'Creating your speaking profile…';
-    if (creatingEyebrowEl) creatingEyebrowEl.textContent = calibratingSubheadingEl?.textContent ?? '';
+    if (creatingEyebrowEl) {
+      const name = calibrationIntent?.mode === 'recalibrate' ? calibrationIntent.recalibratingName : null;
+      creatingEyebrowEl.textContent = name ? `Recalibrating ${name}` : '';
+    }
     showOnlyScreen(creatingScreenEl);
     sessionState.set(SESSION_STATES.COMPANION_READY);
     // Announced once, immediately, independent of the paint-confirmation
@@ -6358,9 +6374,11 @@ function ringLayout() {
     pipWindow = null;
     pipDocument = null;
     welcomeScreenEl = null;
-    c1ScreenEl = null;
-    c1BackBtn = null;
-    c1EntrySource = null;
+    prepScreenEls = { 1: null, 2: null };
+    prepRecalibratingEl = null;
+    prepHeadingEls = { 1: null, 2: null };
+    calibrationIntent = null;
+    roomStepDone = false;
     c0ScreenEl = null;
     c0HeadingEl = null;
     c0BodyEl = null;
@@ -6428,7 +6446,6 @@ function ringLayout() {
     levelMeter = null;
     calibratingHintEl = null;
     calibratingCountEl = null;
-    calibratingHeadingEl = null;
     creatingEyebrowEl = null;
     creatingTextEl = null;
     stopCalibratingCountdown();

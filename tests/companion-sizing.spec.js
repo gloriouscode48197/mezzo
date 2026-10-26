@@ -48,6 +48,7 @@
 import { test, expect } from '@playwright/test';
 import { openCompanion } from './support/open-companion.js';
 import { recalibrateFromSelector } from './support/recalibrate-from-selector.js';
+import { completeCalibrationSteps } from './support/complete-calibration-steps.js';
 
 test.describe('Companion: Ready-screen button width cap', () => {
   test('Start monitoring shares the 280px column with the speaking-profile selector, centered (rhythm pass, 2026-10-23)', async ({ page, context }) => {
@@ -425,7 +426,7 @@ test.describe('Companion: preferInitialWindowPlacement on every open and reopen 
     await expect(pipPage.locator('.pip-screen-welcome')).toBeVisible();
 
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await expect(pipPage.locator('.pip-screen-result')).toBeVisible({ timeout: 15000 });
 
     // Closing natively while the result screen is showing discards the
@@ -457,7 +458,7 @@ test.describe('Companion: preferInitialWindowPlacement on every open and reopen 
     await expect(pipPage.locator('.pip-screen-welcome')).toBeVisible();
 
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     // Deliberately not waiting out the full capture window — closing while
     // still mid-capture (preparation/countdown/sampling) is the point.
     await expect(pipPage.locator('.pip-screen-calibrating')).toBeVisible({ timeout: 5000 });

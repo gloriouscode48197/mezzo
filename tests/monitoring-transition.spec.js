@@ -23,6 +23,7 @@
 import { test, expect } from '@playwright/test';
 import { openCompanion } from './support/open-companion.js';
 import { recalibrateFromSelector } from './support/recalibrate-from-selector.js';
+import { completeCalibrationSteps } from './support/complete-calibration-steps.js';
 
 /** Waits out the full pre-capture window (delayed disclosure + fixed 3-2-1
  *  countdown, see the calibration pacing revision) plus the ~6s capture
@@ -36,11 +37,11 @@ test.describe('Companion: calibration -> Ready -> Monitoring -> Ready', () => {
   test('a freshly-created speaking profile reaches Monitoring only via Ready\'s own Start monitoring — never directly from the result screen', async ({ page, context }) => {
     const pipPage = await openCompanion(page, context);
 
-    // Welcome (zero saved profiles) -> Create speaking profile -> C1 -> I'm ready -> real capture.
+    // Welcome (zero saved profiles) -> Create speaking profile -> Step 1 prep -> both steps -> real capture.
     await expect(pipPage.locator('.pip-screen-welcome')).toBeVisible();
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await expect(pipPage.locator('.pip-screen-c1')).toBeVisible();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await expect(pipPage.locator('.pip-screen-prep-room')).toBeVisible();
+    await completeCalibrationSteps(pipPage);
     await waitForCapture(pipPage);
 
     // Slice 2 (revised): session-mode calibration lands on "Your new

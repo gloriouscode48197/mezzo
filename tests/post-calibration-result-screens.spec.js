@@ -43,6 +43,7 @@ import { openCompanion } from './support/open-companion.js';
 import { recalibrateFromSelector } from './support/recalibrate-from-selector.js';
 import { createNewProfileFromSelector } from './support/create-new-profile-from-selector.js';
 import { normalizeColor } from './support/normalize-color.js';
+import { completeCalibrationSteps } from './support/complete-calibration-steps.js';
 
 /** Waits out the full pre-capture window (delayed disclosure + fixed 3-2-1
  *  countdown, see the calibration pacing revision) plus the ~6s capture
@@ -147,7 +148,7 @@ test.describe('"Creating your speaking profile…" completion transition', () =>
   test('appears after real capture ends, shows a single spinner-plus-text processing state, and gives way to the result screen on its own', async ({ page, context }) => {
     const pipPage = await openCompanion(page, context);
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
 
     // Real capture (delayed disclosure + 3-2-1 + 6s) takes up to ~10s —
     // generous but bounded lower wait so this test catches the transition
@@ -186,7 +187,7 @@ test.describe('"Creating your speaking profile…" completion transition', () =>
 
     const pipPage = await openCompanion(page, context);
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
 
     const creatingScreen = pipPage.locator('.pip-screen-creating');
     await expect(creatingScreen).toBeVisible({ timeout: 12000 });
@@ -219,7 +220,7 @@ test.describe('"Creating your speaking profile…" completion transition', () =>
     // built from.
     const pipPage = await openCompanion(page, context);
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
 
     const creatingScreen = pipPage.locator('.pip-screen-creating');
     await expect(creatingScreen).toBeVisible({ timeout: 12000 });
@@ -250,7 +251,7 @@ test.describe('"Creating your speaking profile…" completion transition', () =>
   test('stays visible for approximately its minimum budget, not an instant flash and not a full extra artificial second', async ({ page, context }) => {
     const pipPage = await openCompanion(page, context);
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
 
     const creatingScreen = pipPage.locator('.pip-screen-creating');
     await expect(creatingScreen).toBeVisible({ timeout: 12000 });
@@ -275,7 +276,7 @@ test.describe('"Creating your speaking profile…" completion transition', () =>
   test('announces once via a visually-hidden live region, as soon as the screen appears, without narrating the spinner', async ({ page, context }) => {
     const pipPage = await openCompanion(page, context);
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
 
     const creatingScreen = pipPage.locator('.pip-screen-creating');
     await expect(creatingScreen).toBeVisible({ timeout: 12000 });
@@ -301,7 +302,7 @@ test.describe('"Creating your speaking profile…" completion transition', () =>
     // opening the Companion never reaches the PiP document's own CSSOM.
     await pipPage.emulateMedia({ reducedMotion: 'reduce' });
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
 
     const creatingScreen = pipPage.locator('.pip-screen-creating');
     await expect(creatingScreen).toBeVisible({ timeout: 12000 });
@@ -328,7 +329,7 @@ test.describe('"Creating your speaking profile…" completion transition', () =>
     const pipPage = await openCompanion(page, context);
     const readyScreen = pipPage.locator('.pip-screen-ready');
     await createNewProfileFromSelector(pipPage);
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
 
     const creatingScreen = pipPage.locator('.pip-screen-creating');
     await expect(creatingScreen).toBeVisible({ timeout: 12000 });
@@ -352,7 +353,7 @@ test.describe('"Your new speaking profile is ready" (Variant 1 — session mode)
   test('a brand-new profile shows the exact copy and actions — no Start monitoring', async ({ page, context }) => {
     const pipPage = await openCompanion(page, context);
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await waitForCapture(pipPage);
 
     const resultScreen = pipPage.locator('.pip-screen-result');
@@ -383,7 +384,7 @@ test.describe('"Your new speaking profile is ready" (Variant 1 — session mode)
     const pipPage = await openCompanion(page, context);
     await pipPage.setViewportSize({ width: 382, height: 512 });
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await waitForCapture(pipPage);
 
     const resultScreen = pipPage.locator('.pip-screen-result');
@@ -438,7 +439,7 @@ test.describe('"Your new speaking profile is ready" (Variant 1 — session mode)
   test('Discard contains no icon — a plain text label only, matching sentence case, with no duplicate or unclear accessible name', async ({ page, context }) => {
     const pipPage = await openCompanion(page, context);
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await waitForCapture(pipPage);
 
     const resultScreen = pipPage.locator('.pip-screen-result');
@@ -464,7 +465,7 @@ test.describe('"Your new speaking profile is ready" (Variant 1 — session mode)
   test('no horizontal rule or replacement separator remains between the retired Speak again/Discard pairing', async ({ page, context }) => {
     const pipPage = await openCompanion(page, context);
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await waitForCapture(pipPage);
 
     const resultScreen = pipPage.locator('.pip-screen-result');
@@ -478,7 +479,7 @@ test.describe('"Your new speaking profile is ready" (Variant 1 — session mode)
   test('Save speaking profile opens the existing naming flow; successful saving returns to Ready with the saved profile selected, no duplicate Temporary profile, and one "Speaking profile saved" toast', async ({ page, context }) => {
     const pipPage = await openCompanion(page, context);
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await waitForCapture(pipPage);
 
     const resultScreen = pipPage.locator('.pip-screen-result');
@@ -506,7 +507,7 @@ test.describe('"Your new speaking profile is ready" (Variant 1 — session mode)
   test('cancelling Save speaking profile returns to Variant 1 with the profile still available, reachable via the same actions', async ({ page, context }) => {
     const pipPage = await openCompanion(page, context);
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await waitForCapture(pipPage);
 
     const resultScreen = pipPage.locator('.pip-screen-result');
@@ -539,7 +540,7 @@ test.describe('"Your new speaking profile is ready" (Variant 1 — session mode)
     const pipPage = await openCompanion(page, context);
     await pipPage.setViewportSize({ width: 382, height: 512 });
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await waitForCapture(pipPage);
 
     const resultScreen = pipPage.locator('.pip-screen-result');
@@ -570,7 +571,7 @@ test.describe('"Your new speaking profile is ready" (Variant 1 — session mode)
   test('Discard (first-ever creation, nothing selected before) restores the application\'s existing default — Welcome, with nothing saved', async ({ page, context }) => {
     const pipPage = await openCompanion(page, context);
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await waitForCapture(pipPage);
 
     const resultScreen = pipPage.locator('.pip-screen-result');
@@ -602,7 +603,7 @@ test.describe('"Your new speaking profile is ready" (Variant 1 — session mode)
     await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Home Office');
 
     await createNewProfileFromSelector(pipPage);
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await waitForCapture(pipPage);
 
     const resultScreen = pipPage.locator('.pip-screen-result');
@@ -630,7 +631,7 @@ test.describe('"Your new speaking profile is ready" (Variant 1 — session mode)
     await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Kitchen');
 
     await createNewProfileFromSelector(pipPage);
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await waitForCapture(pipPage);
 
     // Kitchen (the prior selection) is deleted elsewhere — e.g. another
@@ -660,7 +661,7 @@ test.describe('"Your new speaking profile is ready" (Variant 1 — session mode)
     const pipPage = await openCompanion(page, context);
     const readyScreen = pipPage.locator('.pip-screen-ready');
     await createNewProfileFromSelector(pipPage);
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await waitForCapture(pipPage);
 
     const resultScreen = pipPage.locator('.pip-screen-result');
@@ -684,7 +685,7 @@ test.describe('"Your new speaking profile is ready" (Variant 1 — session mode)
     await pipPage.emulateMedia({ reducedMotion: 'reduce' });
     await pipPage.setViewportSize({ width: 382, height: 512 });
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await waitForCapture(pipPage);
 
     const resultScreen = pipPage.locator('.pip-screen-result');
@@ -886,7 +887,7 @@ test.describe('Accessibility, H1 consistency, and sizing — both result variant
   test('both variants: focus moves to the heading on show, a real h1, every action has its exact displayed label as its accessible name', async ({ page, context }) => {
     const pipPage = await openCompanion(page, context);
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await waitForCapture(pipPage);
 
     const resultScreen = pipPage.locator('.pip-screen-result');
@@ -918,12 +919,14 @@ test.describe('Accessibility, H1 consistency, and sizing — both result variant
 
     const reference = await readStyle(readyScreen.locator('.pip-ready-heading'));
 
-    // C1 (Create new profile -> C1).
+    // Step 1's prep screen (Create new profile): the same heading family,
+    // weight, tracking and color, at the prep screens' own 22px.
     await createNewProfileFromSelector(pipPage);
-    const c1Style = await readStyle(pipPage.locator('.pip-screen-c1 .pip-intro-heading'));
-    expect(c1Style).toEqual(reference);
+    const prepStyle = await readStyle(pipPage.locator('.pip-screen-prep-room h1'));
+    expect({ ...prepStyle, fontSize: reference.fontSize, lineHeight: reference.lineHeight, letterSpacing: reference.letterSpacing }).toEqual(reference); // tracking is in em, so it scales with the size
+    expect(prepStyle.fontSize).toBe('22px');
 
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await waitForCapture(pipPage);
 
     // Variant 1 result screen.
@@ -1005,7 +1008,7 @@ test.describe('Accessibility, H1 consistency, and sizing — both result variant
     // Variant 1 (fresh session-mode calibration) — same treatment.
     await expect(readyScreen).toBeVisible({ timeout: 3000 });
     await createNewProfileFromSelector(pipPage);
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await waitForCapture(pipPage);
     const resultScreen = pipPage.locator('.pip-screen-result');
     await expect(resultScreen).toBeVisible({ timeout: 15000 });
@@ -1023,7 +1026,7 @@ test.describe('Accessibility, H1 consistency, and sizing — both result variant
   test('the slate decision surface is a presentational change only — no dialog/modal semantics, no overlay positioning, no new border, same full-screen layout as every other Companion state', async ({ page, context }) => {
     const pipPage = await openCompanion(page, context);
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await waitForCapture(pipPage);
 
     const resultScreen = pipPage.locator('.pip-screen-result');
@@ -1057,7 +1060,7 @@ test.describe('Accessibility, H1 consistency, and sizing — both result variant
   test('Keep temporarily and Discard share the exact same secondary treatment; Discard has no icon, is not destructive-red, remains enabled and keyboard-focusable, and is separated from Keep by spacing alone, never a divider', async ({ page, context }) => {
     const pipPage = await openCompanion(page, context);
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await waitForCapture(pipPage);
 
     const resultScreen = pipPage.locator('.pip-screen-result');
@@ -1152,7 +1155,7 @@ test.describe('Result-screen action hierarchy spacing (2026-08-18 — Try again 
     const pipPage = await openCompanion(page, context);
     await pipPage.setViewportSize({ width: 382, height: 512 });
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await waitForCapture(pipPage);
 
     const resultScreen = pipPage.locator('.pip-screen-result');
@@ -1243,7 +1246,7 @@ test.describe('Shared toast (2026-10-26: a lighter, fully rounded chip with a sa
     const readyScreen = pipPage.locator('.pip-screen-ready');
     await expect(readyScreen).toBeVisible();
     await createNewProfileFromSelector(pipPage);
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await waitForCapture(pipPage);
 
     const resultScreen = pipPage.locator('.pip-screen-result');
@@ -1284,7 +1287,7 @@ test.describe('Shared toast (2026-10-26: a lighter, fully rounded chip with a sa
     const pipPage = await openCompanion(page, context);
     await pipPage.setViewportSize({ width: 382, height: 512 });
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await waitForCapture(pipPage);
 
     const resultScreen = pipPage.locator('.pip-screen-result');
@@ -1308,7 +1311,7 @@ test.describe('Shared toast (2026-10-26: a lighter, fully rounded chip with a sa
     const pipPage = await openCompanion(page, context);
     await pipPage.setViewportSize({ width: 382, height: 512 });
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await waitForCapture(pipPage);
 
     const resultScreen = pipPage.locator('.pip-screen-result');
@@ -1350,7 +1353,7 @@ test.describe('Shared toast (2026-10-26: a lighter, fully rounded chip with a sa
     await pipPage.emulateMedia({ reducedMotion: 'reduce' });
     await pipPage.setViewportSize({ width: 382, height: 512 });
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await waitForCapture(pipPage);
 
     const resultScreen = pipPage.locator('.pip-screen-result');
@@ -1372,7 +1375,7 @@ test.describe('Keep temporarily toast scoping (2026-08-16)', () => {
     const pipPage = await openCompanion(page, context);
     await pipPage.setViewportSize({ width: 382, height: 512 });
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await waitForCapture(pipPage);
 
     const resultScreen = pipPage.locator('.pip-screen-result');
@@ -1390,7 +1393,7 @@ test.describe('Keep temporarily toast scoping (2026-08-16)', () => {
     const pipPage = await openCompanion(page, context);
     await pipPage.setViewportSize({ width: 382, height: 512 });
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await waitForCapture(pipPage);
 
     const resultScreen = pipPage.locator('.pip-screen-result');
@@ -1410,7 +1413,7 @@ test.describe('Keep temporarily toast scoping (2026-08-16)', () => {
     const pipPage = await openCompanion(page, context);
     await pipPage.setViewportSize({ width: 382, height: 512 });
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await waitForCapture(pipPage);
 
     const resultScreen = pipPage.locator('.pip-screen-result');

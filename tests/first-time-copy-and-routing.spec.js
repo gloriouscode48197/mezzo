@@ -1,14 +1,10 @@
 /**
- * Regression coverage for a PRD-alignment correction: Welcome (01), C1, C2,
- * and C0's copy had drifted from docs/prd/ready-screen-speaking-profiles-mvp.md
- * and design/prototypes/ready-screen-states.html during initial
- * implementation (both were out of context at the time), and Create new
- * profile skipped C1 entirely instead of following the PRD's §12 State
- * Transitions ("02 → C1 → C2 → 04"). This file locks in the corrected copy
- * and the resolved calibration-entry routing rule:
- *   - First-time Create speaking profile: C1 → C2
- *   - Create new profile from Ready: C1 → C2
- *   - Recalibrate (saved or unsaved profile): C2 directly
+ * First-time copy (Welcome, C0, Ready's disclaimer), the microphone-
+ * acquisition timeout and delayed-disclosure behavior, heading punctuation,
+ * and the room-noise tip. The calibration steps themselves (2026-10-26:
+ * Step 1 prep -> room listening -> Step 2 prep -> voice listening, which
+ * retired the C1 intro screen and the "Get ready" 3-2-1) are covered in
+ * tests/calibration-steps.spec.js.
  */
 
 import { test, expect } from '@playwright/test';
@@ -18,6 +14,7 @@ import { recalibrateFromSelector } from './support/recalibrate-from-selector.js'
 import { createNewProfileFromSelector } from './support/create-new-profile-from-selector.js';
 import { normalizeColor } from './support/normalize-color.js';
 import { installLevelDriver, setLevelDb } from './support/drive-level.js';
+import { completeCalibrationSteps, completeVoiceStep, startRoomStep } from './support/complete-calibration-steps.js';
 
 test.describe('First-time copy and calibration-entry routing', () => {
   test('Welcome shows the approved copy and has no secondary dismiss action', async ({ page, context }) => {
@@ -64,87 +61,6 @@ test.describe('First-time copy and calibration-entry routing', () => {
     await expect(welcomeScreen.locator('button')).toHaveCount(1);
   });
 
-  test('C1 shows the approved copy, reached via Welcome\'s primary action', async ({ page, context }) => {
-    const pipPage = await openCompanion(page, context);
-    await pipPage.locator('button:has-text("Create speaking profile")').click();
-
-    const c1Screen = pipPage.locator('.pip-screen-c1');
-    await expect(c1Screen).toBeVisible();
-    await expect(c1Screen.locator('.pip-intro-heading')).toHaveText('Create speaking profile');
-    await expect(c1Screen.locator('.pip-intro-body')).toHaveText(
-      "Talk for a few seconds so Mezzo can learn the speaking level you'd like to maintain."
-    );
-    await expect(c1Screen.locator('button:has-text("I\'m ready")')).toBeVisible();
-  });
-
-  test('C1\'s "I\'m ready" button has no microphone icon, retains its accessible name, and the paragraph-to-button gap is visibly larger than the heading-to-paragraph gap (2026-08-16 polish pass)', async ({ page, context }) => {
-    const pipPage = await openCompanion(page, context);
-    await pipPage.setViewportSize({ width: 382, height: 512 });
-    await pipPage.locator('button:has-text("Create speaking profile")').click();
-
-    const c1Screen = pipPage.locator('.pip-screen-c1');
-    await expect(c1Screen).toBeVisible();
-    const readyBtn = c1Screen.locator('button:has-text("I\'m ready")');
-
-    // No icon of any kind — Welcome's own primary action (a different
-    // button) keeps its mic icon; only this one lost it.
-    await expect(readyBtn.locator('svg')).toHaveCount(0);
-
-    // Accessible name is exactly the visible label, unchanged by the icon's
-    // removal (the icon was already aria-hidden, so this was never at risk,
-    // but confirms it directly rather than assuming).
-    await expect(readyBtn).toHaveAccessibleName("I'm ready");
-    await expect(readyBtn).toHaveText("I'm ready");
-
-    // Text re-centered — with the icon gone, the remaining text node's own
-    // left/right gaps from the button's edges should be equal (a Range over
-    // the text node, since a bare text node has no getBoundingClientRect of
-    // its own).
-    const centering = await readyBtn.evaluate((el) => {
-      const btnRect = el.getBoundingClientRect();
-      const range = document.createRange();
-      range.selectNodeContents(el);
-      const textRect = range.getBoundingClientRect();
-      return {
-        leftGap: textRect.left - btnRect.left,
-        rightGap: btnRect.right - textRect.right,
-      };
-    });
-    expect(Math.abs(centering.leftGap - centering.rightGap)).toBeLessThan(2);
-
-    // Heading-to-paragraph relationship preserved (base gap, unchanged);
-    // paragraph-to-button gap is noticeably larger.
-    const [headingBox, bodyBox, btnBox] = await Promise.all([
-      c1Screen.locator('.pip-intro-heading').boundingBox(),
-      c1Screen.locator('.pip-intro-body').boundingBox(),
-      readyBtn.boundingBox(),
-    ]);
-    const gapHeadingToBody = bodyBox.y - (headingBox.y + headingBox.height);
-    const gapBodyToButton = btnBox.y - (bodyBox.y + bodyBox.height);
-    expect(gapBodyToButton).toBeGreaterThan(gapHeadingToBody * 1.5);
-
-    // Cancel and the rest of the screen are unaffected.
-    await expect(c1Screen.locator('button:has-text("Cancel")')).toBeVisible();
-
-    // Still comfortably contained at 382x512.
-    const { scrollWidth, scrollHeight, clientWidth, clientHeight } = await c1Screen.evaluate((el) => ({
-      scrollWidth: el.scrollWidth, scrollHeight: el.scrollHeight, clientWidth: el.clientWidth, clientHeight: el.clientHeight,
-    }));
-    expect(scrollWidth).toBeLessThanOrEqual(clientWidth + 1);
-    expect(scrollHeight).toBeLessThanOrEqual(clientHeight + 1);
-  });
-
-  test('C2\'s heading follows the phase: "Get ready" through the 3-2-1, then "Speak at your meeting volume"', async ({ page, context }) => {
-    const pipPage = await openCompanion(page, context);
-    await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
-
-    const calibratingScreen = pipPage.locator('.pip-screen-calibrating');
-    await expect(calibratingScreen).toBeVisible();
-    await expect(calibratingScreen.locator('.pip-calibrating-heading')).toHaveText('Get ready');
-    await expect(calibratingScreen.locator('.pip-calibrating-heading')).toHaveText('Speak at your meeting volume', { timeout: 8000 });
-  });
-
   test('C0 shows the approved copy when microphone access is blocked, and Try again retries in-app', async ({ page, context }) => {
     // C0 is now specifically the mid-session/revoked-after-open fallback
     // (see CLAUDE.md's Non-Negotiable Decisions, "permission should follow
@@ -170,7 +86,7 @@ test.describe('First-time copy and calibration-entry routing', () => {
 
     const pipPage = await openCompanion(page, context);
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await startRoomStep(pipPage);
 
     const c0Screen = pipPage.locator('.pip-screen-c0');
     await expect(c0Screen).toBeVisible({ timeout: 10000 });
@@ -184,7 +100,10 @@ test.describe('First-time copy and calibration-entry routing', () => {
     // rather than requiring a manual page reload (a Document PiP window has
     // no navigable URL of its own to reload in the first place — this is
     // the same document, re-running the calibration flow via JS).
+    // Try again returns to Step 1's prep screen (nothing was measured);
+    // still blocked, so C0 reappears.
     await c0Screen.locator('button:has-text("Try again")').click();
+    await startRoomStep(pipPage);
     await expect(c0Screen).toBeVisible({ timeout: 10000 });
     await expect(c0Screen.locator('.pip-intro-heading')).toHaveText('Your browser has blocked microphone access');
   });
@@ -201,197 +120,8 @@ test.describe('First-time copy and calibration-entry routing', () => {
     );
   });
 
-  test('Create new profile from a saved-profile Ready state routes through C1 before Calibrating', async ({ page, context }) => {
-    await page.addInitScript(() => {
-      localStorage.setItem('mezzoProfiles', JSON.stringify([
-        { id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 200 },
-      ]));
-    });
-    const pipPage = await openCompanion(page, context);
-    const readyScreen = pipPage.locator('.pip-screen-ready');
-    await expect(readyScreen).toBeVisible();
-
-    await createNewProfileFromSelector(pipPage);
-
-    // Lands on C1, not directly on Calibrating.
-    await expect(pipPage.locator('.pip-screen-c1')).toBeVisible();
-    await expect(pipPage.locator('.pip-screen-calibrating')).toBeHidden();
-
-    await pipPage.locator('button:has-text("I\'m ready")').click();
-    await expect(pipPage.locator('.pip-screen-calibrating')).toBeVisible();
-  });
-
-  test('Recalibrate on a saved profile routes directly to Calibrating, skipping C1', async ({ page, context }) => {
-    await page.addInitScript(() => {
-      localStorage.setItem('mezzoProfiles', JSON.stringify([
-        { id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 200 },
-      ]));
-    });
-    const pipPage = await openCompanion(page, context);
-    const readyScreen = pipPage.locator('.pip-screen-ready');
-    await expect(readyScreen).toBeVisible();
-
-    await recalibrateFromSelector(pipPage, 'Kitchen');
-
-    await expect(pipPage.locator('.pip-screen-calibrating')).toBeVisible();
-    await expect(pipPage.locator('.pip-screen-c1')).toBeHidden();
-  });
-
-  test('Recalibrate on an unsaved profile routes directly to Calibrating, skipping C1', async ({ page, context }) => {
-    const pipPage = await openCompanion(page, context);
-    await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
-    await pipPage.waitForTimeout(12000);
-
-    // Slice 2: reach Ready via the new "Your new speaking profile is ready" result
-    // screen first — see tests/post-calibration-result-screens.spec.js for
-    // dedicated coverage of that screen's OWN Try again action, which uses
-    // the exact same handler. This test's own concern is the Ready
-    // selector panel's own per-row Recalibrate icon (2026-08-17 — replaced
-    // the old standalone contextual link).
-    const readyScreen = await reachReadyAfterSessionCalibration(pipPage);
-    await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Temporary profile');
-
-    await recalibrateFromSelector(pipPage);
-
-    await expect(pipPage.locator('.pip-screen-calibrating')).toBeVisible();
-    await expect(pipPage.locator('.pip-screen-c1')).toBeHidden();
-  });
 });
 
-test.describe('C1 Cancel navigation', () => {
-  // Label changed from "Back" to "Cancel" (2026-08-19) — same handler
-  // (handleC1BackClick(), unrenamed), same destination-per-entry-route and
-  // cleanup behavior; see src/mezzo-session.js's own construction comment
-  // on this button. This describe block (and its own test titles) were
-  // renamed to match; nothing about what's actually asserted changed.
-  test('Welcome -> C1 -> Cancel -> Welcome', async ({ page, context }) => {
-    const pipPage = await openCompanion(page, context);
-    await pipPage.locator('button:has-text("Create speaking profile")').click();
-    const c1Screen = pipPage.locator('.pip-screen-c1');
-    await expect(c1Screen).toBeVisible();
-
-    await c1Screen.locator('button:has-text("Cancel")').click();
-
-    await expect(pipPage.locator('.pip-screen-welcome')).toBeVisible();
-    await expect(c1Screen).toBeHidden();
-  });
-
-  test('Ready (saved profile selected) -> Create new profile -> C1 -> Cancel -> the same saved profile stays selected', async ({ page, context }) => {
-    await page.addInitScript(() => {
-      localStorage.setItem('mezzoProfiles', JSON.stringify([
-        { id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 200 },
-      ]));
-    });
-    const pipPage = await openCompanion(page, context);
-    const readyScreen = pipPage.locator('.pip-screen-ready');
-    await expect(readyScreen).toBeVisible();
-    await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Kitchen');
-
-    await createNewProfileFromSelector(pipPage);
-    const c1Screen = pipPage.locator('.pip-screen-c1');
-    await expect(c1Screen).toBeVisible();
-
-    await c1Screen.locator('button:has-text("Cancel")').click();
-
-    await expect(readyScreen).toBeVisible();
-    await expect(c1Screen).toBeHidden();
-    await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Kitchen');
-  });
-
-  test('Ready (unsaved profile exists, saved profile selected) -> Create new profile -> C1 -> Cancel preserves both the unsaved profile and the original selection', async ({ page, context }) => {
-    await page.addInitScript(() => {
-      localStorage.setItem('mezzoProfiles', JSON.stringify([
-        { id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 200 },
-      ]));
-    });
-    const pipPage = await openCompanion(page, context);
-    const readyScreen = pipPage.locator('.pip-screen-ready');
-    await expect(readyScreen).toBeVisible();
-
-    // Produce an unsaved profile, then switch selection back to the saved one.
-    await createNewProfileFromSelector(pipPage);
-    await pipPage.locator('button:has-text("I\'m ready")').click();
-    await pipPage.waitForTimeout(12000);
-    // Slice 2: reach Ready via the new "Your new speaking profile is ready" result screen first.
-    await reachReadyAfterSessionCalibration(pipPage);
-    await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Temporary profile');
-
-    await readyScreen.locator('.pip-ready-selector-trigger').click();
-    const panel = pipPage.locator('.pip-ready-selector-panel');
-    // The radio itself is visually hidden (Batch 2) — a real user clicks
-    // the visible label, which native <label for> semantics check it via.
-    await panel.locator('.pip-ready-selector-row', { hasText: 'Kitchen' }).locator('.pip-ready-selector-row-label').click();
-    await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Kitchen');
-
-    // Now Create new profile again, from the saved-profile selection, with
-    // the unsaved profile still present but not selected.
-    await createNewProfileFromSelector(pipPage);
-    const c1Screen = pipPage.locator('.pip-screen-c1');
-    await expect(c1Screen).toBeVisible();
-
-    await c1Screen.locator('button:has-text("Cancel")').click();
-
-    await expect(readyScreen).toBeVisible();
-    await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Kitchen');
-
-    await readyScreen.locator('.pip-ready-selector-trigger').click();
-    await expect(panel.locator('.pip-ready-selector-group-label')).toHaveText(['Temporary', 'Saved profiles']);
-    await expect(panel.locator('.pip-ready-selector-row')).toHaveCount(2);
-  });
-
-  test('Cancel never starts calibration', async ({ page, context }) => {
-    const pipPage = await openCompanion(page, context);
-    await pipPage.locator('button:has-text("Create speaking profile")').click();
-    const c1Screen = pipPage.locator('.pip-screen-c1');
-    await expect(c1Screen).toBeVisible();
-
-    await c1Screen.locator('button:has-text("Cancel")').click();
-
-    await expect(pipPage.locator('.pip-screen-calibrating')).toBeHidden();
-    // No lingering calibration attempt either — re-entering C1 and actually
-    // starting calibration still works cleanly afterward (would fail/hang
-    // on a stray "already calibrating" state if Cancel had left one running).
-    await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
-    await expect(pipPage.locator('.pip-screen-calibrating')).toBeVisible();
-  });
-
-  test('Cancel does not change saved-profile data or the first-monitoring flag', async ({ page, context }) => {
-    await page.addInitScript(() => {
-      localStorage.setItem('mezzoProfiles', JSON.stringify([
-        { id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 200 },
-      ]));
-    });
-    const pipPage = await openCompanion(page, context);
-    const readyScreen = pipPage.locator('.pip-screen-ready');
-    await expect(readyScreen).toBeVisible();
-
-    const profilesBefore = await page.evaluate(() => localStorage.getItem('mezzoProfiles'));
-    const flagBefore = await page.evaluate(() => localStorage.getItem('mezzoHasStartedMonitoring'));
-    expect(flagBefore).not.toBe('true');
-
-    await createNewProfileFromSelector(pipPage);
-    await pipPage.locator('.pip-screen-c1').locator('button:has-text("Cancel")').click();
-    await expect(readyScreen).toBeVisible();
-
-    const profilesAfter = await page.evaluate(() => localStorage.getItem('mezzoProfiles'));
-    const flagAfter = await page.evaluate(() => localStorage.getItem('mezzoHasStartedMonitoring'));
-    expect(profilesAfter).toBe(profilesBefore);
-    expect(flagAfter).toBe(flagBefore);
-  });
-
-  test('I\'m ready still routes from C1 to C2', async ({ page, context }) => {
-    const pipPage = await openCompanion(page, context);
-    await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await expect(pipPage.locator('.pip-screen-c1')).toBeVisible();
-
-    await pipPage.locator('button:has-text("I\'m ready")').click();
-
-    await expect(pipPage.locator('.pip-screen-calibrating')).toBeVisible();
-    await expect(pipPage.locator('.pip-screen-c1')).toBeHidden();
-  });
-});
 
 // =============================================================================
 // Calibration-stall reliability correction — a permanently pending (never
@@ -443,7 +173,7 @@ test.describe('Calibration-stall reliability correction (acquisition timeout)', 
     await mockSecondGetUserMediaCall(context, 'hang');
     const pipPage = await openCompanion(page, context);
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await startRoomStep(pipPage);
 
     const calibratingScreen = pipPage.locator('.pip-screen-calibrating');
     await expect(calibratingScreen).toBeVisible();
@@ -490,7 +220,7 @@ test.describe('Calibration-stall reliability correction (acquisition timeout)', 
 
     const pipPage = await openCompanion(page, context);
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await startRoomStep(pipPage);
 
     const calibratingScreen = pipPage.locator('.pip-screen-calibrating');
     const status = calibratingScreen.locator('.pip-calibrating-status');
@@ -512,11 +242,9 @@ test.describe('Calibration-stall reliability correction (acquisition timeout)', 
     await expect(count).toHaveText('2', { timeout: 3000 });
     await expect(count).toHaveText('1', { timeout: 3000 });
 
-    // The countdown begins at 6 only once the full fixed window elapses too
-    // — never skipping straight past a number, never counting acquisition,
-    // the delayed-disclosure wait, or the countdown itself as part of the
-    // six seconds of actual capture.
-    await expect(status).toHaveText('Listening… 6s', { timeout: 5000 });
+    // Then Step 2's prep screen; its "I'm ready" starts the 6s count.
+    await completeVoiceStep(pipPage);
+    await expect(count).toHaveText('6', { timeout: 5000 });
 
     // And completes normally afterward — lands on the Slice 2 result screen
     // (a brief "Creating your speaking profile…" transition, then "Your new
@@ -529,159 +257,17 @@ test.describe('Calibration-stall reliability correction (acquisition timeout)', 
     await expect(resultScreen).toBeVisible({ timeout: 15000 });
   });
 
-  test('a fast (<500ms) acquisition never shows "Preparing microphone…" — the 3-2-1 countdown is the first visible change, each number holding a real second, before capture begins', async ({ page, context }) => {
-    const pipPage = await openCompanion(page, context);
-    await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
-
-    const calibratingScreen = pipPage.locator('.pip-screen-calibrating');
-    const status = calibratingScreen.locator('.pip-calibrating-status');
-    const count = calibratingScreen.locator('.pip-calibrating-count');
-    await expect(calibratingScreen).toBeVisible();
-
-    // 1. "3" — real (fake-device) acquisition here is
-    // fast, well under the 500ms delayed-disclosure threshold, so
-    // "Preparing microphone…" is never rendered at all.
-    await expect(count).toHaveText('3', { timeout: 2000 });
-    await expect(status).not.toHaveText('Preparing microphone…');
-
-    const countdownObservedAt = Date.now();
-
-    // 2. Still "3" partway through — proves this is a
-    // held state, not an instantaneous flash-through.
-    await pipPage.waitForTimeout(400);
-    await expect(count).toHaveText('3');
-
-    // 3. Each remaining number holds for a real second too. Generous
-    // per-tick timeouts — this shared Document PiP realm is susceptible to
-    // background-tab timer throttling (see CLAUDE.md's
-    // monitoring-runtime-investigation notes), so this suite follows its
-    // own established precedent of generous timeouts for real-timing-
-    // dependent waits rather than asserting tight windows.
-    await expect(count).toHaveText('2', { timeout: 3000 });
-    await expect(count).toHaveText('1', { timeout: 3000 });
-
-    // 4. "Listening… 6s" only once the fixed
-    // countdown has genuinely elapsed. Measures real wall-clock time, not
-    // just the label change, against DEFAULT_PREPARATION_MS (3000ms), with
-    // slack for scheduling jitter — this is the actual enforcement the fix
-    // exists for, not merely a copy check.
-    await expect(status).toHaveText('Listening… 6s', { timeout: 5000 });
-    const elapsedMs = Date.now() - countdownObservedAt;
-    expect(elapsedMs).toBeGreaterThanOrEqual(2700);
-  });
-
-  test('Calibrating matches PRD §8: heading; the 3-2-1 number with "Stay quiet for a moment…" (meter hidden); then "Listening… Ns" above a six-segment meter, then the hint; Cancel pinned to the bottom', async ({ page, context }) => {
-    const pipPage = await openCompanion(page, context);
-    await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
-
-    const screen = pipPage.locator('.pip-screen-calibrating');
-    await expect(screen).toBeVisible();
-    const style = (loc, props) => loc.evaluate((el, ps) => Object.fromEntries(ps.map((p) => [p, getComputedStyle(el)[p]])), props);
-
-    const heading = screen.locator('.pip-calibrating-heading');
-    await expect(heading).toHaveText('Get ready');
-    expect(await style(heading, ['fontSize', 'fontWeight', 'textAlign', 'color'])).toEqual({ fontSize: '20px', fontWeight: '500', textAlign: 'center', color: 'rgb(243, 235, 222)' });
-
-    // No progress ring or voice circle any more.
-    await expect(screen.locator('.mezzo-cal-ring, [role="progressbar"]')).toHaveCount(0);
-
-    const meter = screen.locator('.mezzo-level-meter');
-    await expect(meter).toHaveAttribute('role', 'meter');
-    await expect(meter).toHaveAttribute('aria-label', 'Your voice level');
-    await expect(meter).toHaveAttribute('aria-valuemin', '0');
-    await expect(meter).toHaveAttribute('aria-valuemax', '6');
-    const segments = meter.locator('.mezzo-level-meter-segment');
-    await expect(segments).toHaveCount(6);
-    const boxes = await segments.evaluateAll((els) => els.map((el) => el.getBoundingClientRect()).map((r) => ({ x: r.x, w: r.width, h: r.height })));
-    for (const b of boxes) expect([b.w, b.h]).toEqual([34, 14]);
-    for (let k = 1; k < boxes.length; k++) expect(Math.round(boxes[k].x - (boxes[k - 1].x + boxes[k - 1].w))).toBe(6);
-    expect(await segments.first().evaluate((el) => getComputedStyle(el).borderRadius)).toBe('2px');
-
-    const status = screen.locator('.pip-calibrating-status');
-
-    const count = screen.locator('.pip-calibrating-count');
-    const hint = screen.locator('.pip-calibrating-hint');
-    await expect(count).toHaveText(/^[1-3]$/, { timeout: 4000 });
-    await expect(hint).toHaveText('Stay quiet for a moment…');
-    // The 3-2-1 shows only the number: the meter keeps its place, hidden.
-    await expect(meter).toBeHidden();
-    await expect(status).toHaveText('');
-    await expect(status).toHaveText('Listening… 6s', { timeout: 8000 });
-    expect(await style(status, ['fontSize', 'fontWeight', 'color'])).toEqual({ fontSize: '15px', fontWeight: '500', color: 'rgb(206, 226, 196)' });
-    await expect(hint).toHaveText('Keep talking until the timer ends.');
-    await expect(heading).toHaveText('Speak at your meeting volume');
-    await expect(meter).toBeVisible();
-    await expect(count).toBeHidden();
-    // The Sequence layout (rhythm pass): status above the meter, 12 apart,
-    // the hint 12 below; the meter centered. See tests/rhythm.spec.js.
-    const meterBox = await meter.boundingBox();
-    const statusBox = await status.boundingBox();
-    expect(meterBox.y).toBeGreaterThan(statusBox.y + statusBox.height);
-    expect(Math.abs(meterBox.x + meterBox.width / 2 - (pipPage.viewportSize().width / 2))).toBeLessThan(2);
-    expect(await style(hint, ['fontSize', 'color'])).toEqual({ fontSize: '12px', color: 'rgb(176, 171, 158)' });
-
-    // The old bar and its hint are gone.
-    await expect(screen.locator('.pip-calibrating-meter-row, .pip-calibrating-meter-hint')).toHaveCount(0);
-
-    // Cancel sits at the bottom, below everything else, and nothing scrolls
-    // or clips at 380x364.
-    const hintBox = await hint.boundingBox();
-    const cancelBox = await screen.locator('button:has-text("Cancel")').boundingBox();
-    const viewport = pipPage.viewportSize();
-    expect(viewport.height - (cancelBox.y + cancelBox.height)).toBeLessThan(24);
-    expect(cancelBox.y).toBeGreaterThan(hintBox.y + hintBox.height);
-    const fits = await screen.evaluate((el) => [el.scrollHeight <= el.clientHeight, el.scrollWidth <= el.clientWidth]);
-    expect(fits).toEqual([true, true]);
-  });
-
-  test('the meter is hidden during the 3-2-1, then lights sage segments with the live level during capture: low, normal, loud', async ({ page, context }) => {
-    const pipPage = await openCompanion(page, context);
-    await installLevelDriver(page, { speakingDb: 0 }); // levels below are absolute dB
-    await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
-    const screen = pipPage.locator('.pip-screen-calibrating');
-    const meter = screen.locator('.mezzo-level-meter');
-    const lit = async () => Number(await meter.getAttribute('aria-valuenow'));
-
-    // During the 3-2-1 (room noise is measured): the meter stays hidden and unlit.
-    await setLevelDb(page, -38);
-    await expect(screen.locator('.pip-calibrating-count')).toHaveText(/^[1-3]$/, { timeout: 4000 });
-    await expect(meter).toBeHidden();
-    await pipPage.waitForTimeout(400);
-    expect(await lit()).toBe(0);
-
-    await expect(screen.locator('.pip-calibrating-status')).toHaveText('Listening… 6s', { timeout: 6000 });
-    await setLevelDb(page, -80);
-    await expect.poll(lit, { timeout: 3000 }).toBe(0);
-    await setLevelDb(page, -43); // normal speech
-    await expect.poll(lit, { timeout: 2000 }).toBeGreaterThanOrEqual(2);
-    expect(await lit()).toBeLessThanOrEqual(4);
-    await setLevelDb(page, -28); // loud
-    await expect.poll(lit, { timeout: 2000 }).toBe(6);
-    // Lit segments are sage, unlit cream at 12%.
-    await setLevelDb(page, -43);
-    await expect.poll(lit, { timeout: 3000 }).toBeLessThanOrEqual(4);
-    const colors = await meter.locator('.mezzo-level-meter-segment').evaluateAll((els) => els.map((el) => [el.hasAttribute('data-lit'), getComputedStyle(el).backgroundColor]));
-    for (const [on, color] of colors) {
-      if (on) expect(color).toBe('rgb(206, 226, 196)');
-      else expect(color).toMatch(/rgba\(243, 235, 222, 0\.12\)|color\(srgb [\d.]+ [\d.]+ [\d.]+ \/ 0\.12\)/);
-    }
-    await setLevelDb(page, null);
-  });
-
   test('with reduced motion, the meter follows the level without easing', async ({ browser }) => {
     const context = await browser.newContext({ reducedMotion: 'reduce' });
     const page = await context.newPage();
     const pipPage = await openCompanion(page, context);
     await installLevelDriver(page, { speakingDb: 0 });
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     const screen = pipPage.locator('.pip-screen-calibrating');
     const meter = screen.locator('.mezzo-level-meter');
     await setLevelDb(page, -80);
-    await expect(screen.locator('.pip-calibrating-status')).toHaveText('Listening… 6s', { timeout: 6000 });
+    await expect(screen).toHaveAttribute('data-phase', 'voice', { timeout: 6000 });
     // audio.js's own 50ms frames and smoothing still apply; with no easing on
     // top, a jump to loud lights every segment within a few frames.
     await setLevelDb(page, -28);
@@ -694,7 +280,7 @@ test.describe('Calibration-stall reliability correction (acquisition timeout)', 
     await mockSecondGetUserMediaCall(context, 'hang-then-resolve-late');
     const pipPage = await openCompanion(page, context);
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await startRoomStep(pipPage);
 
     const c0Screen = pipPage.locator('.pip-screen-c0');
     await expect(c0Screen).toBeVisible({ timeout: 8000 });
@@ -732,7 +318,8 @@ test.describe('Calibration-stall reliability correction (acquisition timeout)', 
     const pipPage = await openCompanion(page, context);
     const readyScreen = pipPage.locator('.pip-screen-ready');
     await expect(readyScreen).toBeVisible();
-    await recalibrateFromSelector(pipPage, 'Kitchen');
+    await recalibrateFromSelector(pipPage, 'Kitchen', { throughSteps: false });
+    await startRoomStep(pipPage);
 
     const calibratingScreen = pipPage.locator('.pip-screen-calibrating');
     await expect(calibratingScreen).toBeVisible();
@@ -769,8 +356,8 @@ test.describe('Calibration-stall reliability correction (acquisition timeout)', 
 
     // A fresh Recalibrate attempt afterward still works cleanly — no stuck
     // "already calibrating" state left over from the cancelled one.
-    await recalibrateFromSelector(pipPage, 'Kitchen');
-    await expect(calibratingScreen).toBeVisible();
+    await recalibrateFromSelector(pipPage, 'Kitchen', { throughSteps: false });
+    await expect(pipPage.locator('.pip-screen-prep-room')).toBeVisible();
   });
 
   test('closing the Companion during a pending acquisition does not throw', async ({ page, context }) => {
@@ -784,7 +371,7 @@ test.describe('Calibration-stall reliability correction (acquisition timeout)', 
 
     const pipPage = await openCompanion(page, context);
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await startRoomStep(pipPage);
     await expect(pipPage.locator('.pip-screen-calibrating')).toBeVisible();
 
     await pipPage.close();
@@ -809,19 +396,16 @@ test.describe('Calibration-stall reliability correction (acquisition timeout)', 
 
     const pipPage = await openCompanion(page, context);
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await startRoomStep(pipPage);
 
     const c0Screen = pipPage.locator('.pip-screen-c0');
     await expect(c0Screen).toBeVisible({ timeout: 8000 });
     await expect(c0Screen.locator('.pip-intro-heading')).toHaveText('Mezzo couldn’t connect to your microphone');
 
     await c0Screen.locator('button:has-text("Try again")').click();
-
-    // Retry visibly shows Calibrating again — the retry-visibility
-    // correction bundled into this pass (previously this called retry()
-    // directly, never showing the Calibrating screen at all).
+    // Nothing was measured yet, so Try again returns to Step 1's prep screen.
+    await startRoomStep(pipPage);
     const calibratingScreen = pipPage.locator('.pip-screen-calibrating');
-    const status = calibratingScreen.locator('.pip-calibrating-status');
     const count = calibratingScreen.locator('.pip-calibrating-count');
     await expect(calibratingScreen).toBeVisible();
     // The retry's own acquisition is fast (realGetUserMedia, unmocked) —
@@ -829,7 +413,8 @@ test.describe('Calibration-stall reliability correction (acquisition timeout)', 
     // visible change. Generous timeout for the full countdown-to-capture
     // transition — see the fast-acquisition test above for why.
     await expect(count).toHaveText('3', { timeout: 2000 });
-    await expect(status).toHaveText('Listening… 6s', { timeout: 6000 });
+    await completeVoiceStep(pipPage);
+    await expect(count).toHaveText('6', { timeout: 6000 });
 
     // And completes normally: lands on the Slice 2 result screen ("Your new
     // speaking profile is ready"), not directly on Ready anymore — see
@@ -871,45 +456,12 @@ test.describe('Companion-wide visual-language consistency (2026-08-14 pass)', ()
     });
   }
 
-  test('Calibrating\'s heading shares the result heading\'s family, tracking, and color, at its own PRD §8 size and weight (20px, 500)', async ({ page, context }) => {
-    const pipPage = await openCompanion(page, context);
-    await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
-    // Full pre-capture window + ~6s capture + the brief completion
-    // transition — same wait this suite's own dedicated result-screen spec
-    // uses (tests/post-calibration-result-screens.spec.js's own
-    // waitForCapture()), inlined here since this file has no equivalent
-    // helper of its own.
-    await pipPage.waitForTimeout(12000);
-
-    const resultScreen = pipPage.locator('.pip-screen-result');
-    await expect(resultScreen).toBeVisible({ timeout: 15000 });
-    const readStyle = (loc) => loc.evaluate((el) => {
-      const s = getComputedStyle(el);
-      return { fontFamily: s.fontFamily, fontSize: s.fontSize, fontWeight: s.fontWeight, lineHeight: s.lineHeight, letterSpacing: s.letterSpacing, color: s.color };
-    });
-    const reference = await readStyle(resultScreen.locator('.pip-decision-heading'));
-
-    // Back to Ready, then a fresh Calibrating screen, captured before
-    // capture completes (the heading is visible from the very start).
-    await resultScreen.locator('.pip-decision-secondary-btn:not(.pip-decision-discard-btn)').click(); // Keep temporarily
-    const readyScreen = pipPage.locator('.pip-screen-ready');
-    await expect(readyScreen).toBeVisible({ timeout: 3000 });
-    await recalibrateFromSelector(pipPage); // Temporary profile
-    const calibratingScreen = pipPage.locator('.pip-screen-calibrating');
-    await expect(calibratingScreen).toBeVisible();
-    // Same family, tracking (-0.04em), and color as the result heading; PRD §8 sets
-    // its own smaller size and lighter weight (20px, 500).
-    const calibratingStyle = await readStyle(calibratingScreen.locator('.pip-calibrating-heading'));
-    expect(calibratingStyle).toEqual({ ...reference, fontSize: '20px', fontWeight: '500', lineHeight: '25px', letterSpacing: '-0.8px' }); // the same -0.04em tracking, at 20px
-  });
-
   test('the Failed screen\'s heading matches the approved result-heading typography exactly, and the screen fits at 382x512 without clipping', async ({ page, context }) => {
     await mockSilentSecondGetUserMediaCall(context);
     const pipPage = await openCompanion(page, context);
     await pipPage.setViewportSize({ width: 382, height: 512 });
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
 
     const failedScreen = pipPage.locator('.pip-screen-failed');
     await expect(failedScreen).toBeVisible({ timeout: 15000 });
@@ -937,107 +489,6 @@ test.describe('Companion-wide visual-language consistency (2026-08-14 pass)', ()
     expect(scrollHeight).toBeLessThanOrEqual(clientHeight + 1);
   });
 
-  test('the countdown and "Listening…" status use one consistent, enlarged treatment across pre-capture and active capture, without changing the wording or timing', async ({ page, context }) => {
-    const pipPage = await openCompanion(page, context);
-    await pipPage.setViewportSize({ width: 382, height: 512 });
-    await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
-
-    const status = pipPage.locator('.pip-calibrating-status');
-
-    const count = pipPage.locator('.pip-calibrating-count');
-    await expect(count).toHaveText('3', { timeout: 2000 });
-    // The 3-2-1 number: 36px, weight 500, cream, in the meter's place.
-    const numberStyle = await count.evaluate((el) => {
-      const s = getComputedStyle(el);
-      return { fontSize: s.fontSize, fontWeight: s.fontWeight, color: s.color };
-    });
-    expect(numberStyle).toEqual({ fontSize: '36px', fontWeight: '500', color: 'rgb(243, 235, 222)' });
-    const countdownStyle = await status.evaluate((el) => {
-      const s = getComputedStyle(el);
-      return { fontSize: s.fontSize, fontWeight: s.fontWeight, color: s.color };
-    });
-    // The status line (empty during the 3-2-1, then "Listening… Ns"): PRD
-    // §8: 15px, weight 500, solid sage — never chartreuse or the retired amber.
-    expect(countdownStyle.fontSize).toBe('15px');
-    expect(countdownStyle.fontWeight).toBe('500');
-    expect(normalizeColor(countdownStyle.color)).toBe('rgb(206, 226, 196)');
-
-    const countdownObservedAt = Date.now();
-    await expect(count).toHaveText('2', { timeout: 3000 });
-    await expect(count).toHaveText('1', { timeout: 3000 });
-    await expect(status).toHaveText('Listening… 6s', { timeout: 5000 });
-    // Timing itself is unchanged by this styling pass.
-    expect(Date.now() - countdownObservedAt).toBeGreaterThanOrEqual(2700);
-
-    const listeningStyle = await status.evaluate((el) => {
-      const s = getComputedStyle(el);
-      return { fontSize: s.fontSize, fontWeight: s.fontWeight, color: s.color };
-    });
-    // One consistent treatment across both states — not a size/weight
-    // change between pre-capture and active capture.
-    expect(listeningStyle).toEqual(countdownStyle);
-
-    // Contained at 382x512 — a larger status string never overflows.
-    const calibratingScreen = pipPage.locator('.pip-screen-calibrating');
-    const { scrollWidth, clientWidth } = await calibratingScreen.evaluate((el) => ({ scrollWidth: el.scrollWidth, clientWidth: el.clientWidth }));
-    expect(scrollWidth).toBeLessThanOrEqual(clientWidth + 1);
-  });
-
-  test('Cancel (Calibrating) and Cancel (C1, relabeled from "Back" 2026-08-19) use the same sentence-case, underlined, non-uppercase treatment as Ready\'s own Save profile link', async ({ page, context }) => {
-    await page.addInitScript(() => {
-      localStorage.setItem('mezzoProfiles', JSON.stringify([
-        { id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 100 },
-      ]));
-    });
-    const pipPage = await openCompanion(page, context);
-    const readyScreen = pipPage.locator('.pip-screen-ready');
-    await expect(readyScreen).toBeVisible();
-
-    // Recalibrate's own standalone Ready-screen link was retired in favor
-    // of the selector panel's per-row icon (2026-08-17), and Create new
-    // profile moved into the selector panel's own persistent footer action
-    // (2026-08-18) — Save profile is now the only occupant of the
-    // contextual-actions row, and the reference for this shared
-    // .pip-ready-contextual-link/.pip-text-btn treatment. It only renders
-    // for an unsaved profile, so produce one first via a session-mode
-    // calibration (unrelated to the style comparison itself).
-    await createNewProfileFromSelector(pipPage);
-    await pipPage.locator('button:has-text("I\'m ready")').click();
-    await pipPage.waitForTimeout(12000);
-    await reachReadyAfterSessionCalibration(pipPage);
-
-    const saveProfileLink = readyScreen.locator('button', { hasText: 'Save profile' });
-    const readStyle = (loc) => loc.evaluate((el) => {
-      const s = getComputedStyle(el);
-      return { textDecorationLine: s.textDecorationLine, textTransform: s.textTransform, letterSpacing: s.letterSpacing, fontSize: s.fontSize, fontFamily: s.fontFamily };
-    });
-    const reference = await readStyle(saveProfileLink);
-    expect(reference.textTransform).toBe('none');
-
-    // Cancel, reached via the selector panel's own Recalibrate icon on the
-    // still-present saved Kitchen profile — not the text-link reference
-    // itself, just how Calibrating gets reached, unrelated to the style
-    // comparison.
-    await recalibrateFromSelector(pipPage, 'Kitchen');
-    const calibratingScreen = pipPage.locator('.pip-screen-calibrating');
-    await expect(calibratingScreen).toBeVisible();
-    const cancelBtn = calibratingScreen.locator('button', { hasText: 'Cancel' });
-    await expect(cancelBtn).toHaveText('Cancel'); // sentence case in the DOM, not just via CSS
-    expect(await readStyle(cancelBtn)).toEqual(reference);
-
-    await cancelBtn.click();
-    await expect(readyScreen).toBeVisible({ timeout: 3000 });
-
-    // C1's own Cancel, reached via the selector panel's Create new profile
-    // footer action -> C1 (Kitchen remains below the five-profile cap).
-    await createNewProfileFromSelector(pipPage);
-    const c1Screen = pipPage.locator('.pip-screen-c1');
-    await expect(c1Screen).toBeVisible();
-    const c1CancelBtn = c1Screen.locator('button', { hasText: 'Cancel' });
-    await expect(c1CancelBtn).toHaveText('Cancel'); // sentence case in the DOM, not just via CSS
-    expect(await readStyle(c1CancelBtn)).toEqual(reference);
-  });
 });
 
 // =============================================================================
@@ -1065,21 +516,13 @@ test.describe('Companion heading punctuation audit (2026-08-16)', () => {
 
     await expect(readyScreen.locator('.pip-ready-heading')).toHaveText('Ready when you are');
 
-    // C1, reached via Create new profile.
+    // Step 1's prep screen, reached via Create new profile.
     await createNewProfileFromSelector(pipPage);
-    const c1Screen = pipPage.locator('.pip-screen-c1');
-    await expect(c1Screen).toBeVisible();
-    await expect(c1Screen.locator('.pip-intro-heading')).toHaveText('Create speaking profile');
-    await c1Screen.locator('button:has-text("Cancel")').click();
+    const roomPrep = pipPage.locator('.pip-screen-prep-room');
+    await expect(roomPrep).toBeVisible();
+    await expect(roomPrep.locator('h1')).toHaveText('First, stay quiet for a moment');
+    await roomPrep.locator('button:has-text("Cancel")').click();
     await expect(readyScreen).toBeVisible();
-
-    // Calibrating, via Recalibrate.
-    await recalibrateFromSelector(pipPage, 'Kitchen');
-    const calibratingScreen = pipPage.locator('.pip-screen-calibrating');
-    await expect(calibratingScreen).toBeVisible();
-    await expect(calibratingScreen.locator('.pip-calibrating-heading')).toHaveText('Get ready');
-    await calibratingScreen.locator('button:has-text("Cancel")').click();
-    await expect(readyScreen).toBeVisible({ timeout: 3000 });
 
     // Every heading text captured above is asserted with toHaveText (exact
     // match), which already fails if a stray period were present — this
@@ -1087,9 +530,8 @@ test.describe('Companion heading punctuation audit (2026-08-16)', () => {
     // rather than each screen's copy test individually re-confirming it.
     const allHeadingTexts = [
       'Ready when you are',
-      'Create speaking profile',
-      'Get ready',
-      'Speak at your meeting volume',
+      'First, stay quiet for a moment',
+      'Now speak at the level you want to maintain',
       'New calibration ready',
     ];
     for (const text of allHeadingTexts) {
@@ -1104,7 +546,7 @@ test.describe('Companion heading punctuation audit (2026-08-16)', () => {
     await expect(welcomeScreen.locator('h1')).toHaveText('mezzo');
 
     await welcomeScreen.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await pipPage.waitForTimeout(12000);
     const resultScreen = pipPage.locator('.pip-screen-result');
     await expect(resultScreen).toBeVisible({ timeout: 15000 });
@@ -1144,7 +586,7 @@ test.describe('Companion heading punctuation audit (2026-08-16)', () => {
     });
     const pipPage = await openCompanion(page, context);
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await startRoomStep(pipPage);
 
     const c0Screen = pipPage.locator('.pip-screen-c0');
     await expect(c0Screen).toBeVisible({ timeout: 10000 });
@@ -1160,14 +602,12 @@ test.describe('Companion heading punctuation audit (2026-08-16)', () => {
     const pipPage = await openCompanion(page, context);
     await pipPage.locator('button:has-text("Create speaking profile")').click();
 
-    const c1Screen = pipPage.locator('.pip-screen-c1');
-    await expect(c1Screen).toBeVisible();
+    const roomPrep = pipPage.locator('.pip-screen-prep-room');
+    await expect(roomPrep).toBeVisible();
     // Paragraph punctuation untouched — still ends in its own period.
-    await expect(c1Screen.locator('.pip-intro-body')).toHaveText(
-      "Talk for a few seconds so Mezzo can learn the speaking level you'd like to maintain."
-    );
+    await expect(roomPrep.locator('.pip-prep-body')).toHaveText('Mezzo will listen to the room for 3 seconds.');
 
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     // "Creating your speaking profile…" — its ellipsis communicates active
     // processing and must survive unchanged (it isn't a terminal period).
     const creatingScreen = pipPage.locator('.pip-screen-creating');
@@ -1177,16 +617,15 @@ test.describe('Companion heading punctuation audit (2026-08-16)', () => {
 });
 
 test.describe('Room noise and the noisy-room tip (2026-10-22)', () => {
-  // The level driver feeds every mic reading, including the 3-2-1 readings
+  // The level driver feeds every mic reading, including Step 1's readings
   // that become the room-noise level. Levels below are absolute dB.
   async function calibrateWith(page, context, { roomDb, speechDb }) {
     const pipPage = await openCompanion(page, context);
     await installLevelDriver(page, { speakingDb: 0 });
     await setLevelDb(page, roomDb);
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
-    const status = pipPage.locator('.pip-calibrating-status');
-    await expect(status).toHaveText('Listening… 6s', { timeout: 8000 });
+    await completeCalibrationSteps(pipPage);
+    await expect(pipPage.locator('.pip-screen-calibrating')).toHaveAttribute('data-phase', 'voice', { timeout: 8000 });
     await setLevelDb(page, speechDb);
     const result = pipPage.locator('.pip-screen-result');
     await expect(result).toBeVisible({ timeout: 15000 });

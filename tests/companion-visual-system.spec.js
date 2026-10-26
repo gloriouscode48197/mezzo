@@ -22,6 +22,7 @@ import { recalibrateFromSelector } from './support/recalibrate-from-selector.js'
 import { createNewProfileFromSelector } from './support/create-new-profile-from-selector.js';
 import { reachReadyAfterSessionCalibration } from './support/reach-ready-after-calibration.js';
 import { normalizeColor } from './support/normalize-color.js';
+import { completeCalibrationSteps } from './support/complete-calibration-steps.js';
 
 async function waitForCapture(pipPage) {
   await pipPage.waitForTimeout(12000);
@@ -31,7 +32,7 @@ async function openM2(pipPage, { seedExisting = false } = {}) {
   const readyScreen = pipPage.locator('.pip-screen-ready');
   await expect(readyScreen).toBeVisible({ timeout: 10000 }); // generous under parallel-worker load, matching this suite's established convention
   await createNewProfileFromSelector(pipPage);
-  await pipPage.locator('button:has-text("I\'m ready")').click();
+  await completeCalibrationSteps(pipPage);
   await waitForCapture(pipPage);
   await reachReadyAfterSessionCalibration(pipPage);
   await readyScreen.locator('button:has-text("Save profile")').click();
@@ -542,7 +543,7 @@ test.describe('Companion: toast styling completeness (2026-08-20)', () => {
   test('"Available until you close the Companion" (Keep temporarily) uses the toast look: #4A4B4F, a thin cream edge, fully rounded, cream 13px regular text, a 12px sage check', async ({ page, context }) => {
     const pipPage = await openCompanion(page, context);
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await waitForCapture(pipPage);
 
     const resultScreen = pipPage.locator('.pip-screen-result');
@@ -580,7 +581,7 @@ test.describe('Companion: toast styling completeness (2026-08-20)', () => {
     const pipPage = await openCompanion(page, context);
     await pipPage.setViewportSize({ width: 380, height: 364 });
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await waitForCapture(pipPage);
     await pipPage.locator('.pip-screen-result .pip-decision-secondary-btn', { hasText: 'Keep temporarily' }).click();
     const toast = pipPage.locator('.pip-toast');
@@ -619,7 +620,7 @@ test.describe('Companion: toast styling completeness (2026-08-20)', () => {
     await pipPage.keyboard.press('Escape');
 
     await createNewProfileFromSelector(pipPage);
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await waitForCapture(pipPage);
     await pipPage.locator('.pip-screen-result').locator('.pip-decision-secondary-btn', { hasText: 'Keep temporarily' }).click();
     await expect(pipPage.locator('.pip-toast')).toHaveClass(/pip-toast-visible/);
@@ -830,7 +831,7 @@ test.describe('Companion: row-action tooltips (2026-08-20)', () => {
     await expect(pipPage.locator('#pip-row-tooltip')).toBeVisible({ timeout: 8000 });
     await expect(recalibrateBtn).toHaveAttribute('aria-describedby', 'pip-row-tooltip');
     await recalibrateBtn.click();
-    await expect(pipPage.locator('.pip-screen-calibrating')).toBeVisible();
+    await expect(pipPage.locator('.pip-screen-prep-room')).toBeVisible(); // Recalibrate opens Step 1's prep screen
     await expect(pipPage.locator('#pip-row-tooltip')).toBeHidden();
     // The button that triggered the transition no longer references the
     // (now hidden, and about to be torn down along with the rest of the
@@ -853,7 +854,7 @@ test.describe('Companion: row-action tooltips (2026-08-20)', () => {
     expect(pointerEvents).toBe('none');
     // The click still lands on the real button, not swallowed by the tooltip.
     await recalibrateBtn.click();
-    await expect(pipPage.locator('.pip-screen-calibrating')).toBeVisible();
+    await expect(pipPage.locator('.pip-screen-prep-room')).toBeVisible(); // Recalibrate opens Step 1's prep screen
   });
 
   test('no native duplicate tooltip remains — the recalibrate icon\'s old title attribute is gone', async ({ page, context }) => {
@@ -944,6 +945,7 @@ test.describe('Companion: row-action tooltips (2026-08-20)', () => {
     // via the panel's own Recalibrate icon, then Keep temporarily.
     const panel = await openPanel(pipPage);
     await panel.getByRole('button', { name: 'Recalibrate Kitchen', exact: true }).click();
+    await completeCalibrationSteps(pipPage);
     await pipPage.waitForTimeout(12000);
     const m1 = pipPage.locator('.pip-screen-m1');
     await expect(m1).toBeVisible({ timeout: 15000 });
@@ -1023,9 +1025,11 @@ test.describe('Companion: row-action tooltips (2026-08-20)', () => {
     const pipPage = await openCompanion(page, context);
     const panel = await openPanel(pipPage);
     await panel.locator('button[aria-label="Recalibrate Home Office"]').click();
-    await expect(pipPage.locator('.pip-screen-calibrating')).toBeVisible();
+    await expect(pipPage.locator('.pip-screen-prep-room')).toBeVisible(); // Recalibrate opens Step 1's prep screen
     // Recalibrating Home Office, not the initially-selected Kitchen —
     // confirms the click still targets the row it was clicked on.
+    await expect(pipPage.locator('.pip-prep-recalibrating')).toHaveText('Recalibrating Home Office');
+    await completeCalibrationSteps(pipPage);
     await waitForCapture(pipPage);
     const m1Screen = pipPage.locator('.pip-screen-m1');
     await expect(m1Screen).toBeVisible({ timeout: 15000 });
@@ -1139,6 +1143,7 @@ test.describe('Companion: expanded-panel positioning and overflow (2026-08-20)',
     let panel = await openPanel(pipPage, readyScreen);
     const firstRowRecal = panel.locator('.pip-ready-selector-row').first().locator('.pip-ready-selector-row-action').first();
     await firstRowRecal.click();
+    await completeCalibrationSteps(pipPage);
     await pipPage.waitForTimeout(12000);
     const m1 = pipPage.locator('.pip-screen-m1');
     await expect(m1).toBeVisible({ timeout: 15000 });

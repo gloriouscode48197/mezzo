@@ -10,6 +10,7 @@ import { openCompanion } from './support/open-companion.js';
 import { reachReadyAfterSessionCalibration } from './support/reach-ready-after-calibration.js';
 import { recalibrateFromSelector } from './support/recalibrate-from-selector.js';
 import { createNewProfileFromSelector } from './support/create-new-profile-from-selector.js';
+import { completeCalibrationSteps } from './support/complete-calibration-steps.js';
 
 test.describe('Companion: selector open/close and decision-state focus', () => {
   test('Escape closes the expanded selector panel and returns focus to the trigger', async ({ page, context }) => {
@@ -66,7 +67,7 @@ test.describe('Companion: selector open/close and decision-state focus', () => {
     // own doc comment in src/mezzo-session.js.
     const pipPage = await openCompanion(page, context);
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await pipPage.waitForTimeout(12000);
 
     // Slice 2: reach Ready via the new "Your new speaking profile is ready" result
@@ -96,7 +97,7 @@ test.describe('Companion: selector open/close and decision-state focus', () => {
     const pipPage = await openCompanion(page, context);
 
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await pipPage.waitForTimeout(12000);
 
     const readyScreen = await reachReadyAfterSessionCalibration(pipPage);
@@ -307,7 +308,7 @@ test.describe('Companion: selector row Recalibrate icon (2026-08-17)', () => {
 
     // Temporary profile row also gets one, labeled for the Temporary profile.
     await createNewProfileFromSelector(pipPage);
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await pipPage.waitForTimeout(12000);
     const resultScreen = pipPage.locator('.pip-screen-result');
     await expect(resultScreen).toBeVisible({ timeout: 15000 });
@@ -673,14 +674,14 @@ test.describe('Companion: selector native semantics (Batch 2)', () => {
 
 test.describe('Companion: selector section grouping and trigger accessible name (Batch 2 audit)', () => {
   /** Seeds one saved profile, then creates a second, unsaved one via the
-   *  real Create new profile -> C1 -> Calibrating flow — landing on Ready
+   *  real Create new profile -> calibration steps flow — landing on Ready
    *  with both an unsaved AND a saved profile present, exactly like
    *  ready-screen-flows.spec.js's own "selector groups Unsaved and Saved
    *  profiles" test. */
   async function seedSavedPlusUnsaved(page, pipPage) {
     const readyScreen = pipPage.locator('.pip-screen-ready');
     await createNewProfileFromSelector(pipPage);
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await pipPage.waitForTimeout(12000);
     // Slice 2: reach Ready via the new "Your new speaking profile is ready" result
     // screen first.
@@ -821,7 +822,7 @@ test.describe('Companion: selector section grouping and trigger accessible name 
 
     // 4. When the selected item is the unsaved profile.
     await createNewProfileFromSelector(pipPage);
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await pipPage.waitForTimeout(12000);
     // Slice 2: reach Ready via the new "Your new speaking profile is ready" result
     // screen first.

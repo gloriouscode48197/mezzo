@@ -17,6 +17,7 @@
  * old standalone link.
  */
 import { expect } from '@playwright/test';
+import { completeCalibrationSteps } from './complete-calibration-steps.js';
 
 /**
  * @param {import('@playwright/test').Page} pipPage
@@ -24,7 +25,10 @@ import { expect } from '@playwright/test';
  *   omitted/undefined to target the Temporary (unsaved) profile's own row.
  * @returns {Promise<void>}
  */
-export async function recalibrateFromSelector(pipPage, profileName) {
+// Recalibrate opens Step 1's prep screen (2026-10-26); by default this then
+// walks both steps, so the voice capture is running when it returns. Pass
+// { throughSteps: false } to stop on Step 1's prep screen.
+export async function recalibrateFromSelector(pipPage, profileName, { throughSteps = true } = {}) {
   const readyScreen = pipPage.locator('.pip-screen-ready');
   await expect(readyScreen).toBeVisible();
   const trigger = readyScreen.locator('.pip-ready-selector-trigger');
@@ -44,4 +48,5 @@ export async function recalibrateFromSelector(pipPage, profileName) {
   // computed accessible name directly, with no escaping of its own to
   // get wrong.
   await panel.getByRole('button', { name: recalibrateLabel, exact: true }).click();
+  if (throughSteps) await completeCalibrationSteps(pipPage);
 }

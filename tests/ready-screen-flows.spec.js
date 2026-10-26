@@ -12,6 +12,7 @@ import { openCompanion } from './support/open-companion.js';
 import { reachReadyAfterSessionCalibration } from './support/reach-ready-after-calibration.js';
 import { recalibrateFromSelector } from './support/recalibrate-from-selector.js';
 import { createNewProfileFromSelector } from './support/create-new-profile-from-selector.js';
+import { completeCalibrationSteps } from './support/complete-calibration-steps.js';
 
 /** Waits out the full pre-capture window (see the calibration pacing
  *  revision, second pass) — up to a 500ms delayed-disclosure wait, a
@@ -38,10 +39,10 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
     await expect(readyScreen).toBeVisible();
     await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Kitchen');
 
-    // Create new profile routes through C1 first (see
+    // Create new profile starts at Step 1's prep screen (see
     // tests/first-time-copy-and-routing.spec.js for dedicated coverage).
     await createNewProfileFromSelector(pipPage);
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await waitForCapture(pipPage);
     // Slice 2: lands on "Speaking profile ready" first — see
     // tests/post-calibration-result-screens.spec.js for that screen's own
@@ -67,7 +68,7 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
     const pipPage = await openCompanion(page, context);
 
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await waitForCapture(pipPage);
 
     // Slice 2: reach Ready via the new "Your new speaking profile is ready" result
@@ -106,7 +107,7 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
     const readyScreen = pipPage.locator('.pip-screen-ready');
     await expect(readyScreen).toBeVisible();
     await createNewProfileFromSelector(pipPage);
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await waitForCapture(pipPage);
     await reachReadyAfterSessionCalibration(pipPage);
 
@@ -201,11 +202,11 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
 
     await footerAction.click();
 
-    // Straight to M3 — never C1, never Calibrating, never the microphone.
+    // Straight to M3: never the calibration steps, never the microphone.
     const m3Screen = pipPage.locator('.pip-screen-decision').filter({ hasText: '5 of 5 profiles saved' });
     await expect(m3Screen).toBeVisible();
     await expect(m3Screen).toContainText('Delete a saved profile before creating another.');
-    await expect(pipPage.locator('.pip-screen-c1')).toBeHidden();
+    await expect(pipPage.locator('.pip-screen-prep-room')).toBeHidden();
     await expect(pipPage.locator('.pip-screen-calibrating')).toBeHidden();
 
     await m3Screen.locator('.pip-decision-bar-cancel').click(); // M3's way out is the header bar's Cancel
@@ -547,7 +548,7 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
     await expect(readyScreen).toBeVisible();
 
     await createNewProfileFromSelector(pipPage);
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await waitForCapture(pipPage);
     await reachReadyAfterSessionCalibration(pipPage);
     await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Temporary profile');
@@ -570,7 +571,7 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
   test('discarding the only unsaved profile, with no saved profiles, transitions to Create speaking profile (Welcome)', async ({ page, context }) => {
     const pipPage = await openCompanion(page, context);
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await waitForCapture(pipPage);
     const readyScreen = await reachReadyAfterSessionCalibration(pipPage);
     await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Temporary profile');
@@ -597,7 +598,7 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
     // Produce an unsaved profile, then switch selection back to Kitchen —
     // the unsaved profile still exists in the background, just not selected.
     await createNewProfileFromSelector(pipPage);
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await waitForCapture(pipPage);
     await reachReadyAfterSessionCalibration(pipPage);
     await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Temporary profile');
@@ -731,7 +732,7 @@ test.describe('Naming flow (M2/M2a) polish — decision layer, heading typograph
    *  point most of this describe block's tests use. */
   async function openM2(pipPage) {
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await waitForCapture(pipPage);
     const resultScreen = pipPage.locator('.pip-screen-result');
     await expect(resultScreen).toBeVisible({ timeout: 15000 });
@@ -745,7 +746,7 @@ test.describe('Naming flow (M2/M2a) polish — decision layer, heading typograph
     const pipPage = await openCompanion(page, context);
     await pipPage.setViewportSize({ width: 382, height: 512 });
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await waitForCapture(pipPage);
     const resultScreen = pipPage.locator('.pip-screen-result');
     await expect(resultScreen).toBeVisible({ timeout: 15000 });
@@ -805,12 +806,12 @@ test.describe('Naming flow (M2/M2a) polish — decision layer, heading typograph
     await pipPage.setViewportSize({ width: 382, height: 512 });
 
     // A saved profile already exists, so the Companion opens on Ready, not
-    // Welcome — reach M2 via Ready's own "Create new profile" (through C1)
+    // Welcome — reach M2 via Ready's own "Create new profile" (through the calibration steps)
     // rather than openM2()'s Welcome-only entry point.
     const readyScreen = pipPage.locator('.pip-screen-ready');
     await expect(readyScreen).toBeVisible();
     await createNewProfileFromSelector(pipPage);
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await waitForCapture(pipPage);
     const resultScreen = pipPage.locator('.pip-screen-result');
     await expect(resultScreen).toBeVisible({ timeout: 15000 });
@@ -895,7 +896,7 @@ test.describe('Naming flow (M2/M2a) polish — decision layer, heading typograph
   test('Save uses the approved primary-button font weight — the exact same weight as "Save speaking profile", not a heavier one', async ({ page, context }) => {
     const pipPage = await openCompanion(page, context);
     await pipPage.locator('button:has-text("Create speaking profile")').click();
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await waitForCapture(pipPage);
     const resultScreen = pipPage.locator('.pip-screen-result');
     await expect(resultScreen).toBeVisible({ timeout: 15000 });
@@ -928,6 +929,7 @@ test.describe('Naming flow (M2/M2a) polish — decision layer, heading typograph
   });
 
   test('naming validation, cancellation, success, and the five-profile-limit behavior are unaffected by the reorder/modal-card pass', async ({ page, context }) => {
+    test.setTimeout(60000); // two full calibrations, each two steps
     await page.addInitScript(() => {
       localStorage.setItem('mezzoProfiles', JSON.stringify([
         { id: 'p1', name: 'One', speakingDb: -30, spreadDb: 4, calibratedTs: 1 },
@@ -940,7 +942,7 @@ test.describe('Naming flow (M2/M2a) polish — decision layer, heading typograph
     const readyScreen = pipPage.locator('.pip-screen-ready');
     await expect(readyScreen).toBeVisible();
     await createNewProfileFromSelector(pipPage);
-    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pipPage);
     await waitForCapture(pipPage);
     const resultScreen = pipPage.locator('.pip-screen-result');
     await expect(resultScreen).toBeVisible({ timeout: 15000 });
@@ -1041,6 +1043,7 @@ test.describe('Migration: profiles saved before the speech-band filter (2026-10-
     await expect(note).toBeVisible();
 
     await note.locator('.pip-inline-link').click();
+    await completeCalibrationSteps(pipPage);
     const m1Screen = pipPage.locator('.pip-screen-m1');
     await expect(m1Screen).toBeVisible({ timeout: 20000 });
     await m1Screen.locator('.pip-decision-primary-btn', { hasText: 'Update “Old office”' }).click();
@@ -1068,8 +1071,8 @@ test.describe('Migration: profiles saved before the speech-band filter (2026-10-
     const pipPage = await openCompanion(page, context);
     const readyScreen = pipPage.locator('.pip-screen-ready');
     await readyScreen.locator('.pip-ready-recalibrate-note .pip-inline-link').click();
-    const calibrating = pipPage.locator('.pip-screen-calibrating');
-    await expect(calibrating).toBeVisible();
-    await expect(calibrating.locator('.pip-calibrating-subheading')).toHaveText('Recalibrating Old office');
+    const roomPrep = pipPage.locator('.pip-screen-prep-room');
+    await expect(roomPrep).toBeVisible();
+    await expect(roomPrep.locator('.pip-prep-recalibrating')).toHaveText('Recalibrating Old office');
   });
 });

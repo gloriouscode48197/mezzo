@@ -169,7 +169,9 @@ async function resolveAcquireAndPrepare(controller, audio, scheduler) {
   // as a microtask — the fixed-window timer isn't actually registered with
   // the scheduler until that continuation resumes, one tick later.
   await tick();
-  scheduler.flush(); // the preparation timer
+  scheduler.flush(); // the preparation timer (Step 1, the room step)
+  await tick();
+  controller.beginVoiceCapture(); // "I'm ready" on Step 2's prep screen
   await tick();
 }
 
@@ -543,6 +545,8 @@ describe('microphone acquisition timeout', () => {
     await tick(); // let beginCountdown()'s resolve() continuation actually register the fixed-window timer
     scheduler.flush(); // preparation timer — the acquire-timeout was already cleared on resolve
     await tick();
+    controller.beginVoiceCapture(); // "I'm ready" on Step 2's prep screen
+    await tick();
     assert.strictEqual(controller.getState().preparing, false);
     assert.strictEqual(controller.getState().capturing, true, 'monitoring actually started, so capturing must be true');
 
@@ -620,6 +624,8 @@ describe('microphone acquisition timeout', () => {
     await tick(); // let beginCountdown()'s resolve() continuation actually register the fixed-window timer
     scheduler.flush(); // the retry's own preparation timer
     await tick();
+    controller.beginVoiceCapture(); // "I'm ready" on Step 2's prep screen
+    await tick();
     assert.strictEqual(controller.getState().capturing, true);
     audio.emitSamples(dbToRms(-30), 100);
     scheduler.flush(); // the retry's own capture-duration timer
@@ -681,6 +687,10 @@ describe('preparation phase (calibration-stall reliability correction, part 2)',
     scheduler.flush(); // the preparation timer — the only way past this window
     await tick();
 
+    controller.beginVoiceCapture(); // "I'm ready" on Step 2's prep screen
+
+    await tick();
+
     assert.strictEqual(controller.getState().preparing, false);
     assert.strictEqual(controller.getState().capturing, true);
     assert.strictEqual(audio.calls.startMonitoring, 1);
@@ -698,6 +708,8 @@ describe('preparation phase (calibration-stall reliability correction, part 2)',
     assert.strictEqual(scheduler.pendingCount(), 1);
 
     scheduler.flush();
+    await tick();
+    controller.beginVoiceCapture();
     await tick();
     assert.strictEqual(controller.getState().capturing, true);
   });
@@ -732,6 +744,10 @@ describe('preparation phase (calibration-stall reliability correction, part 2)',
     scheduler.flush(); // the preparation timer
     await tick();
 
+    controller.beginVoiceCapture(); // "I'm ready" on Step 2's prep screen
+
+    await tick();
+
     assert.strictEqual(controller.getState().preparing, false);
     assert.strictEqual(controller.getState().capturing, true);
     assert.strictEqual(audio.calls.startMonitoring, 1);
@@ -760,6 +776,10 @@ describe('preparation phase (calibration-stall reliability correction, part 2)',
 
     scheduler.flush(); // preparation timer
     await tick();
+
+    controller.beginVoiceCapture(); // "I'm ready" on Step 2's prep screen
+
+    await tick();
     audio.emitLevel(dbToRms(-20));
     assert.deepStrictEqual(seen, [dbToRms(-20)], 'samples emitted after preparation elapses must reach subscribers normally');
   });
@@ -774,6 +794,10 @@ describe('preparation phase (calibration-stall reliability correction, part 2)',
     assert.strictEqual(audio.calls.startMonitoring, 0);
 
     scheduler.flush(); // preparation timer
+    await tick();
+
+    controller.beginVoiceCapture(); // "I'm ready" on Step 2's prep screen
+
     await tick();
 
     // Both true immediately after the same flush/tick pair — there is no
@@ -877,6 +901,8 @@ describe('capturing state transitions', () => {
     assert.strictEqual(controller.getState().capturing, false, 'still false during the fixed preparation window');
     await tick(); // let beginCountdown()'s resolve() continuation actually register the fixed-window timer
     scheduler.flush(); // preparation timer
+    await tick();
+    controller.beginVoiceCapture(); // "I'm ready" on Step 2's prep screen
     await tick();
     assert.strictEqual(controller.getState().capturing, true);
   });
@@ -1146,6 +1172,8 @@ describe('concurrency guards', () => {
     await tick(); // let beginCountdown()'s resolve() continuation actually register the fixed-window timer
     scheduler.flush(); // the second run's own preparation timer
     await tick();
+    controller.beginVoiceCapture(); // "I'm ready" on Step 2's prep screen
+    await tick();
     audio.emitSamples(dbToRms(-30), 100);
     scheduler.flush(); // the second run's own capture-duration timer
     await tick();
@@ -1386,29 +1414,46 @@ describe('commit writes only calibration fields, using storage-authoritative ide
     assert.deepStrictEqual(Object.keys(capturedArgs.fields).sort(), ['calibratedTs', 'peakDb', 'roomNoiseDb', 'speakingDb', 'spreadDb']);
   });
 
-  it('the result carries the capture peak and the room noise the caller measured during the 3-2-1', async () => {
+  it('the result carries the capture peak and the room noise measured in Step 1', async () => {
     const { controller, audio, scheduler } = setup([]);
     const done = controller.startSessionCalibration();
-    controller.setRoomNoiseDb(-55);
-    await runToCalibrated(controller, audio, scheduler);
+    audio.resolveAcquire();
+    await tick();
+    controller.beginCountdown();
+    await tick();
+    for (let i = 0; i < 20; i++) controller.recordRoomSample(dbToRms(-55)); // Step 1: the room
+    scheduler.flush(); // the room step ends
+    await tick();
+    controller.beginVoiceCapture();
+    await tick();
+    audio.emitSamples(dbToRms(-30), 100);
+    scheduler.flush();
+    await tick();
     await done;
     const { result } = controller.getState();
-    assert.strictEqual(result.roomNoiseDb, -55);
+    assert.ok(Math.abs(result.roomNoiseDb - -55) < 1e-6);
     assert.ok(Number.isFinite(result.peakDb));
     const temp = controller.commitStartMonitoring();
-    assert.strictEqual(temp.roomNoiseDb, -55);
+    assert.ok(Math.abs(temp.roomNoiseDb - -55) < 1e-6);
     assert.strictEqual(temp.peakDb, result.peakDb);
   });
 
   it('a new attempt forgets the previous attempt’s room noise', async () => {
     const { controller, audio, scheduler } = setup([]);
-    controller.setRoomNoiseDb(-55);
+    const first = controller.startSessionCalibration();
+    audio.resolveAcquire();
+    await tick();
+    controller.beginCountdown();
+    await tick();
+    controller.recordRoomSample(dbToRms(-55));
     controller.cancel();
+    await first;
     const done = controller.startSessionCalibration();
     await runToCalibrated(controller, audio, scheduler);
     await done;
     assert.strictEqual(controller.getState().result.roomNoiseDb, null);
   });
+
 
 });
 
@@ -1563,3 +1608,111 @@ describe('commitKeepAsUnsaved', () => {
   });
 });
 
+
+// =============================================================================
+// Two steps (2026-10-26): Step 1 measures the room for 3s, then the mic
+// waits, measuring nothing, until "I'm ready" on Step 2's prep screen; Step 2
+// captures the voice for 6s. A failed voice capture retries only Step 2.
+// =============================================================================
+
+describe('two steps: the room in Step 1, the voice in Step 2', () => {
+  async function toRoomStep(controller, audio) {
+    audio.resolveAcquire();
+    await tick();
+    controller.beginCountdown();
+    await tick();
+  }
+
+  it('room samples count only during Step 1; levels before it, on Step 2\'s prep screen, or during the voice capture are ignored', async () => {
+    const { controller, audio, scheduler } = setup([]);
+    const done = controller.startSessionCalibration();
+    controller.recordRoomSample(dbToRms(-10)); // before Step 1 (still acquiring)
+    audio.resolveAcquire();
+    await tick();
+    controller.recordRoomSample(dbToRms(-10)); // acquired, Step 1 not started
+    controller.beginCountdown();
+    await tick();
+    for (let i = 0; i < 9; i++) controller.recordRoomSample(dbToRms(-60)); // Step 1
+    scheduler.flush();
+    await tick();
+    assert.strictEqual(controller.getState().awaitingVoice, true);
+    controller.recordRoomSample(dbToRms(-10)); // Step 2's prep screen
+    controller.beginVoiceCapture();
+    await tick();
+    controller.recordRoomSample(dbToRms(-10)); // during the voice capture
+    audio.emitSamples(dbToRms(-30), 100);
+    scheduler.flush();
+    await tick();
+    await done;
+    assert.ok(Math.abs(controller.getState().result.roomNoiseDb - -60) < 1e-6);
+  });
+
+  it('voice samples are collected only during Step 2: nothing during Step 1 or on Step 2\'s prep screen', async () => {
+    const { controller, audio, scheduler } = setup([]);
+    const seen = [];
+    controller.subscribeToLevel((rms) => seen.push(rms));
+    controller.startSessionCalibration();
+    await toRoomStep(controller, audio);
+    audio.emitLevel(dbToRms(-20)); // Step 1
+    assert.strictEqual(audio.calls.startMonitoring, 0);
+    scheduler.flush();
+    await tick();
+    audio.emitLevel(dbToRms(-20)); // Step 2's prep screen
+    for (let i = 0; i < 5; i++) await tick();
+    assert.deepStrictEqual(seen, []);
+    assert.strictEqual(controller.getState().capturing, false);
+    assert.strictEqual(audio.calls.startMonitoring, 0, 'nothing is measured until "I\'m ready"');
+    assert.strictEqual(scheduler.pendingCount(), 0, 'no capture timer runs on the prep screen');
+    controller.beginVoiceCapture();
+    await tick();
+    assert.strictEqual(controller.getState().capturing, true);
+    audio.emitLevel(dbToRms(-25));
+    assert.deepStrictEqual(seen, [dbToRms(-25)]);
+  });
+
+  it('cancel on Step 2\'s prep screen releases the mic and never captures', async () => {
+    const { controller, audio, scheduler } = setup([]);
+    const done = controller.startSessionCalibration();
+    await toRoomStep(controller, audio);
+    scheduler.flush();
+    await tick();
+    controller.cancel();
+    await done;
+    assert.strictEqual(controller.getState().status, 'idle');
+    assert.strictEqual(audio.calls.release, 1);
+    assert.strictEqual(audio.calls.startMonitoring, 0);
+  });
+
+  it('retryVoice() after a failed voice capture skips the room step and keeps its reading', async () => {
+    const { controller, audio, scheduler } = setup([]);
+    const first = controller.startSessionCalibration();
+    await toRoomStep(controller, audio);
+    for (let i = 0; i < 9; i++) controller.recordRoomSample(dbToRms(-58));
+    scheduler.flush();
+    await tick();
+    controller.beginVoiceCapture();
+    await tick();
+    audio.emitSamples(0, 100); // silence
+    scheduler.flush();
+    await tick();
+    await first;
+    assert.strictEqual(controller.getState().status, 'failed');
+
+    const retry = controller.retryVoice();
+    audio.resolveAcquire();
+    await tick();
+    assert.strictEqual(controller.getState().preparing, false, 'no room step on a voice retry');
+    assert.strictEqual(controller.getState().capturing, true, 'the voice capture starts as soon as the mic is acquired');
+    audio.emitSamples(dbToRms(-30), 100);
+    scheduler.flush();
+    await tick();
+    await retry;
+    assert.strictEqual(controller.getState().status, 'calibrated');
+    assert.ok(Math.abs(controller.getState().result.roomNoiseDb - -58) < 1e-6);
+  });
+
+  it('retryVoice() is only for a failed attempt', () => {
+    const { controller } = setup([]);
+    assert.throws(() => controller.retryVoice());
+  });
+});

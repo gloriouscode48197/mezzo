@@ -183,7 +183,7 @@ Attention rises in three steps, each using brightness and size, which work in pe
 
 - **Speech-band filter, on:** a 120 Hz high-pass then a 3400 Hz low-pass (the telephone speech band) before the level is measured, for both the circle and the zones. This keeps fan rumble and hiss from moving either. Browser noise suppression stays off, and automatic gain stays off.
 - **Silence floor −25 dB:** below 25 dB under the speaking level, the circle rests, with 1.5 dB hysteresis.
-- **Room noise:** measured during the calibration's 3-2-1 as the median raw level, and saved with the profile as `roomNoiseDb`. In monitoring, the circle rests unless the level is 4 dB above it.
+- **Room noise:** measured during calibration's Step 1 (3s, §8) as the median raw level, and saved with the profile as `roomNoiseDb`. In monitoring, the circle rests unless the level is 4 dB above it.
 - **Noisy rooms:** where speech sits less than 12 dB above the room, the margin drops to 2 dB so a soft voice still moves the circle. The result screen then says: "Your room is a bit noisy for how softly you speak. Try moving a little closer to your mic."
 
 ### 5.7 Sizes and the default window
@@ -226,7 +226,7 @@ Three levels, readable from the background alone:
 
 | Level | Used for | Look |
 |---|---|---|
-| 1. Screen | Welcome, calibration intro, Calibrating, Ready, Monitoring, microphone blocked | Flat `--color-bg` |
+| 1. Screen | Welcome, calibration prep and listening, Ready, Monitoring, microphone blocked | Flat `--color-bg` |
 | 2. Menu | Ready's profile selector | `--color-bg-menu` panel with 1px border and shadow, attached to its trigger; the screen behind dims (about 60% black scrim); trigger shows an open state |
 | 3. Decision | New-profile result, Save profile, Update / Keep temporarily / Discard, five-profile limit, Delete | Whole window turns `--color-bg-decision`; a 44px header bar names the decision in Geist Mono and holds Cancel in the corner; actions pinned to the bottom |
 
@@ -236,34 +236,34 @@ Decision states stay full-screen, per CLAUDE.md. The one-off card on the new-pro
 
 ## 8. Proposal 4: Calibrating
 
-Revised 2026-10-22. The user must see live feedback that their voice is being captured, so this replaces the countdown-number version.
+Revised 2026-10-26: two steps, "say it once, then count" (canvas board "v3-explore-Calibration · room check and voice steps (options)", Option C). Each step has a prep screen that says which step it is, what to do and for how long, then waits for "I'm ready"; its listening screen only names what Mezzo is listening to, with a large countdown. Nothing is measured on a prep screen.
 
-Top to bottom, at the shared 380×364 pre-monitoring size (revised again 2026-10-22: a segmented level meter replaces the progress ring and voice circle):
+**Flow.** First-time setup: Welcome → Step 1 prep → Step 1 listening (3s) → Step 2 prep → Step 2 listening (6s) → the result screen. Create new profile takes the same steps. Recalibrate: the same steps, with "Recalibrating {name}" above "Step 1 of 2" (8px gap), ending on "New calibration ready" for a saved profile. Welcome's "Create speaking profile" goes straight to Step 1 prep: the old introduction screen ("Create speaking profile" with "I'm ready", C1) is retired, and so is the old "Get ready" 3-2-1.
 
-- **Heading:** "Get ready" during the 3-2-1, then "Speak at your meeting volume" while listening. Geist 500, 20px, cream, centered, `text-wrap: balance`. When recalibrating a saved profile, the existing "Recalibrating {name}" mono label stays above it.
-- **Level meter**, centered about 52px below the heading:
+**Prep screens** (Single choice template, centered stack): eyebrow → 8 → heading → 8 → body → 24 → **I'm ready** (cream) → Cancel link (16px clear between the two hit areas, the tap-target floor used on every screen; asked for as 12). Heading Geist 500, 22px, `text-wrap: balance`; body 14px, muted (#B0AB9E), max 316px, balanced. Focus moves to the heading.
+- Step 1: "Step 1 of 2" / "First, stay quiet for a moment" / "Mezzo will listen to the room for 3 seconds."
+- Step 2: "Step 2 of 2" / "Now speak at the level you want to maintain" / "Talk for 6 seconds at a level that won't carry to people nearby."
+
+**Listening screens** (Sequence template, one layout for both steps):
+- **Eyebrow** at the top: "Listening to background noise" (Step 1) or "Listening to your voice" (Step 2). Mono, uppercase via CSS.
+- **Countdown**, centered in the middle: Geist Mono, 72px, cream (#F3EBDE), whole seconds, 3 to 1 then 6 to 1. `aria-hidden`.
+- **Level meter**, 24px below, in both steps:
   - Six segments, 34×14px, 6px gaps, 2px corners. Lit segments are sage (#CEE2C4); unlit ones are cream at 12%.
-  - The lit count follows the live, filtered microphone level, eased like the Range Ring (150ms rise, 400ms fall), on the old meter's -55 to -30 dB scale, so normal speech lights about 3–4 segments.
-  - It reacts during the 3-2-1 as a mic check, then during the capture.
+  - The lit count follows the live level, eased like the Range Ring (150ms rise, 400ms fall), on the -55 to -30 dB scale.
   - `role="meter"`, `aria-label` "Your voice level", `aria-valuenow` 0–6.
-  - Why a meter: it says "your voice is being picked up" without suggesting a target size or a range that doesn't exist yet. The ring and circle looked like Monitoring before there was anything to monitor.
-- **The 3-2-1**: only the countdown number (Geist 500, 36px, cream) in the meter's place, with "Stay quiet for a moment…" below; the meter is hidden while the room's noise is measured.
-- **Status**, 18px below the meter: "Preparing microphone…" (if acquiring is slow), empty during the 3-2-1, then "Listening… Ns" counting down. Sage, 15px, weight 500, `aria-hidden`. This is the only time cue.
-- **Hint**, 6px below: "Stay quiet for a moment…" during the 3-2-1, then "Keep talking until the timer ends." 13px, muted (#B0AB9E).
+- **Helper**, Step 2 only, 8px below the meter: "Keep talking until the timer ends." 12px, muted. In Step 1 its line stays empty, so nothing moves between steps.
+- **Cancel**, a sage text link pinned to the bottom.
+- No other text. If acquiring the microphone is slow, "Preparing microphone…" shows in the countdown's place until the step starts.
 
-*Changed during build: the meter showed during the 3-2-1 as a mic check, and the copy said "talk normally"; the 3-2-1 now asks for quiet (it measures the room), and the listening heading names the target: your meeting volume.*
-- **Cancel**, a sage text link pinned to the bottom. Behavior unchanged.
-- **Room noise** is measured from the 3-2-1's readings (§5.6) and saved with the profile.
+**Measurement.** Room noise is measured during Step 1's 3 seconds (the median raw level, §5.6); the controller accepts room readings only then (`recordRoomSample()`). The voice is captured during Step 2's 6 seconds, as before. Between the steps the microphone stays open but nothing is measured; the controller waits for `beginVoiceCapture()`. The speech filter, room-noise gate and calibration math are unchanged.
 
-The horizontal meter bar, "Background sounds may move the meter too.", the progress ring and the calibrating voice circle are all removed.
+**Cancel and Try again.** Cancel at any point stops calibration, discards what it measured, and returns to where it started (Welcome for first-time setup, Ready otherwise). Try again after "Didn't catch enough clear speech" (any voice failure) returns to Step 2 prep, keeping the room reading (`retryVoice()`); a failure before the room was measured returns to Step 1 prep.
 
-*Changed during build: a segmented level meter replaced the filling progress ring, which felt rushed.*
+**Accessibility.** One polite announcement per listening screen ("Listening to background noise, 3 seconds"; "Listening to your voice, 6 seconds"), never every second. Screens switch without animation, so reduced motion needs nothing extra; the meter follows the level without easing under reduced motion.
 
-**Accessibility.** The existing live region is kept, with its two one-time announcements ("Stay quiet for a moment. Calibration starts in 3 seconds." and "Listening for 6 seconds."). Nothing is announced every second.
+*History: 2026-10-22 replaced the progress ring with the level meter, with a "Get ready" 3-2-1 (measuring the room, meter hidden) running straight into "Speak at your meeting volume" / "Listening… Ns". People couldn't tell what each part was for or how long it took, so the 2026-10-26 two-step flow replaced it.*
 
-**Reduced motion.** The segments still follow the level, without easing: the meter is the feedback.
-
-**Sizes.** Calibrating always runs at the 380×364 pre-monitoring size; it can't be reached in Compact.
+**Sizes.** The prep and listening screens always run at the 380×364 pre-monitoring size; they can't be reached in Compact.
 
 ---
 
@@ -423,7 +423,7 @@ This makes the refresh reviewable as small, safe steps and leaves one place to c
 2. **Band maximum.** At what dB over the end of range should the band reach full thickness? The ring experiment used about +4 dB.
 3. **Live-region debounce.** Confirm about 1 second and "into/out of Outside range only" with a screen-reader user if possible.
 4. **Sustained drift.** Keep `SUSTAINED_DRIFT_MS` as a separate effect, or fold it into band intensity?
-5. **Calibrating.** Resolved 2026-10-22: a six-segment level meter that follows the voice, with "Speak at your meeting volume" / "Keep talking until the timer ends." (§8). It replaced a progress ring with a voice circle inside.
+5. **Calibrating.** Resolved 2026-10-22: a six-segment level meter that follows the voice, with "Speak at your meeting volume" / "Keep talking until the timer ends." (§8). It replaced a progress ring with a voice circle inside. Revised 2026-10-26: two steps, each with a prep screen and a listening screen (§8).
 6. **Website chartreuse buttons.** Confirmed in design; revisit if it ever causes confusion with the in-product nudge.
 
 ---

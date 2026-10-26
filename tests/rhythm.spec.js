@@ -7,6 +7,7 @@
 import { test, expect } from '@playwright/test';
 import { openCompanion } from './support/open-companion.js';
 import { installLevelDriver, setLevelDb } from './support/drive-level.js';
+import { completeCalibrationSteps, startRoomStep } from './support/complete-calibration-steps.js';
 
 const LEGACY = { id: 'old', name: 'Home Office', speakingDb: -30, spreadDb: 4, calibratedTs: 1 };
 const CURRENT = { id: 'k', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 2, peakDb: 2.4, roomNoiseDb: -49 };
@@ -87,8 +88,8 @@ test.describe('Rhythm', () => {
     expect(Math.abs(m.h.top - (364 - m.fine.bottom))).toBeLessThanOrEqual(1);
   });
 
-  for (const which of ['c1', 'c0']) {
-    test(`${which === 'c1' ? 'Calibration intro (C1)' : 'Microphone blocked (C0)'} (Single choice): the stack is centered; groups 24 apart; the button → 16 → its link; hit areas`, async ({ page, context }) => {
+  for (const which of ['prep-room', 'c0']) {
+    test(`${which === 'prep-room' ? 'Calibration prep (Step 1)' : 'Microphone blocked (C0)'} (Single choice): the stack is centered; groups 24 apart; the button → 16 → its link; hit areas`, async ({ page, context }) => {
       if (which === 'c0') {
         await context.addInitScript(() => {
           let n = 0; const real = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
@@ -98,53 +99,57 @@ test.describe('Rhythm', () => {
       const pip = await openCompanion(page, context);
       await pip.setViewportSize({ width: 380, height: 364 });
       await pip.locator('button:has-text("Create speaking profile")').click();
-      if (which === 'c0') await pip.locator('button:has-text("I\'m ready")').click();
+      if (which === 'c0') await startRoomStep(pip);
       const screen = pip.locator(`.pip-screen-${which}`);
       await expect(screen).toBeVisible({ timeout: 10000 });
       await pip.waitForTimeout(300);
-      const heading = await box(screen.locator('.pip-intro-heading'));
+      const heading = await box(screen.locator('h1'));
       const btn = await box(screen.locator('.pip-intro-primary-btn'));
       const link = await box(screen.locator('.pip-text-btn'));
-      const body = await box(screen.locator('.pip-intro-body'));
+      const body = await box(screen.locator(which === 'c0' ? '.pip-intro-body' : '.pip-prep-body'));
+      const top = which === 'c0' ? heading : await box(screen.locator('.pip-prep-step'));
       expect(gap(btn, link)).toBe(16); // 16px clear between the two hit areas
       expect(link.height).toBeGreaterThanOrEqual(24);
       expect(gap(body, btn)).toBe(24);
-      if (which === 'c1') expect(gap(heading, body)).toBe(8);
-      else expect(gap(heading, await box(screen.locator('.pip-c0-illustration')))).toBe(24);
+      if (which === 'c0') expect(gap(heading, await box(screen.locator('.pip-c0-illustration')))).toBe(24);
+      else { expect(gap(top, heading)).toBe(8); expect(gap(heading, body)).toBe(8); }
       expect(btn.width).toBe(280);
-      expect(Math.abs(heading.top - (364 - link.bottom))).toBeLessThanOrEqual(1);
+      expect(Math.abs(top.top - (364 - link.bottom))).toBeLessThanOrEqual(1);
       await expectHitAreas(pip, `.pip-screen-${which}`);
     });
   }
 
-  test('Calibrating (Sequence): the heading never moves from the 3-2-1 to listening; the number and "Listening… Ns" share one slot; slot → 12 → meter → 12 → hint; Cancel 20px from the bottom', async ({ page, context }) => {
+  test('Listening (Sequence): the eyebrow 32px from the top in both steps; the countdown slot → 24 → meter → 8 → helper; nothing moves between steps; Cancel 20px from the bottom', async ({ page, context }) => {
     const pip = await openCompanion(page, context);
     await pip.setViewportSize({ width: 380, height: 364 });
     await installLevelDriver(page, { speakingDb: 0 });
     await setLevelDb(page, -70);
     await pip.locator('button:has-text("Create speaking profile")').click();
-    await pip.locator('button:has-text("I\'m ready")').click();
+    await startRoomStep(pip);
     const screen = pip.locator('.pip-screen-calibrating');
     await expect(screen.locator('.pip-calibrating-count')).toHaveText('2', { timeout: 6000 });
-    const headingCountdown = await box(screen.locator('.pip-calibrating-heading'));
-    const numberBox = await box(screen.locator('.pip-calibrating-count'));
-    await expect(screen.locator('.pip-calibrating-status')).toHaveText(/Listening… [3-6]s/, { timeout: 8000 });
-    const headingListening = await box(screen.locator('.pip-calibrating-heading'));
-    const status = await box(screen.locator('.pip-calibrating-status'));
-    const slot = await box(screen.locator('.pip-calibrating-slot'));
-    const meter = await box(screen.locator('.mezzo-level-meter'));
-    const hint = await box(screen.locator('.pip-calibrating-hint'));
-    const cancel = await box(screen.locator('.pip-calibrating-cancel'));
+    const measure = async () => ({
+      eyebrow: await box(screen.locator('.pip-calibrating-subheading')),
+      count: await box(screen.locator('.pip-calibrating-count')),
+      slot: await box(screen.locator('.pip-calibrating-slot')),
+      meter: await box(screen.locator('.mezzo-level-meter')),
+      hint: await box(screen.locator('.pip-calibrating-hint')),
+      cancel: await box(screen.locator('.pip-calibrating-cancel')),
+    });
+    const room = await measure();
+    await pip.locator('.pip-screen-prep-voice .pip-intro-primary-btn').click({ timeout: 6000 });
+    await expect(screen.locator('.pip-calibrating-count')).toHaveText('5', { timeout: 4000 });
+    const voice = await measure();
 
-    expect(headingListening.top).toBe(headingCountdown.top);
-    expect(headingCountdown.top).toBe(32);
-    // The same slot: both centered on its middle.
-    const mid = slot.top + slot.height / 2;
-    expect(Math.abs(numberBox.top + numberBox.height / 2 - mid)).toBeLessThanOrEqual(1);
-    expect(Math.abs(status.top + status.height / 2 - mid)).toBeLessThanOrEqual(1);
-    expect(gap(slot, meter)).toBe(12);
-    expect(gap(meter, hint)).toBe(12);
-    expect(Math.round(364 - cancel.bottom)).toBe(20);
+    expect(room.eyebrow.top).toBe(32);
+    // Only the eyebrow's and the helper's text change: nothing moves up or down.
+    const vertical = (m) => Object.fromEntries(Object.entries(m).map(([k, b]) => [k, [Math.round(b.top), Math.round(b.height)]]));
+    expect(vertical(voice)).toEqual(vertical(room));
+    const mid = room.slot.top + room.slot.height / 2;
+    expect(Math.abs(room.count.top + room.count.height / 2 - mid)).toBeLessThanOrEqual(1);
+    expect(gap(room.slot, room.meter)).toBe(24);
+    expect(gap(room.meter, room.hint)).toBe(8);
+    expect(Math.round(364 - room.cancel.bottom)).toBe(20);
   });
 
   test('Decision: heading → 8 → subtext, 24, buttons 16 apart at the column width, centered below the bar; Delete is an outline button; hit areas', async ({ page, context }) => {
@@ -177,7 +182,7 @@ test.describe('Rhythm', () => {
     await installLevelDriver(page, { speakingDb: 0 });
     await setLevelDb(page, -40);
     await pip.locator('button:has-text("Create speaking profile")').click();
-    await pip.locator('button:has-text("I\'m ready")').click();
+    await completeCalibrationSteps(pip);
     await pip.locator('.pip-screen-result button:has-text("Keep temporarily")').click({ timeout: 20000 });
     const ready = pip.locator('.pip-screen-ready');
     await expect(ready).toBeVisible();
@@ -210,27 +215,25 @@ test.describe('Rhythm', () => {
     await expect(pip.locator('.pip-ready-selector-panel').getByRole('button', { name: 'Delete Room 1 profile' })).toBeVisible();
   });
 
-  test('Processing (Sequence): the heading sits exactly where listening\'s does, and the spinner in the same slot; no Cancel', async ({ page, context }) => {
+  test('Processing (Sequence): the eyebrow sits exactly where listening\'s does, the heading 8 below it; no Cancel', async ({ page, context }) => {
     await seed(page, [{ id: 'old', name: 'Home Office', speakingDb: -30, spreadDb: 4, calibratedTs: 1 }]);
     const pip = await openCompanion(page, context);
     await pip.setViewportSize({ width: 380, height: 364 });
     await installLevelDriver(page, { speakingDb: 0 });
     await setLevelDb(page, -40);
     await pip.locator('.pip-ready-recalibrate-note .pip-inline-link').click();
+    await completeCalibrationSteps(pip);
     const cal = pip.locator('.pip-screen-calibrating');
-    await expect(cal.locator('.pip-calibrating-status')).toHaveText(/Listening/, { timeout: 8000 });
-    const listenHeading = await box(cal.locator('.pip-calibrating-heading'));
+    await expect(cal).toHaveAttribute('data-phase', 'voice', { timeout: 8000 });
     const listenEyebrow = await box(cal.locator('.pip-calibrating-subheading'));
-    const listenSlot = await box(cal.locator('.pip-calibrating-slot'));
     const creating = pip.locator('.pip-screen-creating');
     await expect(creating).toBeVisible({ timeout: 15000 });
     const heading = creating.locator('.pip-calibrating-heading');
     await expect(heading).toHaveText('Saving your calibration…');
     await expect(creating.locator('.pip-calibrating-subheading')).toHaveText('Recalibrating Home Office');
-    expect((await box(heading)).top).toBe(listenHeading.top);
+    // The eyebrow stays where listening's was; the heading follows it.
     expect((await box(creating.locator('.pip-calibrating-subheading'))).top).toBe(listenEyebrow.top);
-    const spinner = await box(creating.locator('.pip-creating-icon'));
-    expect(Math.abs((spinner.top + spinner.height / 2) - (listenSlot.top + listenSlot.height / 2))).toBeLessThanOrEqual(1);
+    expect(gap(await box(creating.locator('.pip-calibrating-subheading')), await box(heading))).toBe(8);
     await expect(creating.locator('button')).toHaveCount(0);
   });
 
@@ -269,15 +272,16 @@ test.describe('Rhythm', () => {
     }
   });
 
-  test('Hit areas on the first-time path: Welcome, Calibrating, the new-profile result, and naming', async ({ page, context }) => {
+  test('Hit areas on the first-time path: Welcome, Step 1 prep, listening, the new-profile result, and naming', async ({ page, context }) => {
     const pip = await openCompanion(page, context);
     await pip.setViewportSize({ width: 380, height: 364 });
     await installLevelDriver(page, { speakingDb: 0 });
     await setLevelDb(page, -40);
     await expectHitAreas(pip, '.pip-screen-welcome');
     await pip.locator('button:has-text("Create speaking profile")').click();
-    await pip.locator('button:has-text("I\'m ready")').click();
-    await expect(pip.locator('.pip-calibrating-status')).toHaveText(/Listening/, { timeout: 8000 });
+    await expectHitAreas(pip, '.pip-screen-prep-room');
+    await completeCalibrationSteps(pip);
+    await expect(pip.locator('.pip-screen-calibrating')).toHaveAttribute('data-phase', 'voice', { timeout: 8000 });
     await expectHitAreas(pip, '.pip-screen-calibrating');
     const result = pip.locator('.pip-screen-result');
     await expect(result).toBeVisible({ timeout: 20000 });
@@ -294,6 +298,7 @@ test.describe('Rhythm', () => {
     await installLevelDriver(page, { speakingDb: 0 });
     await setLevelDb(page, -40);
     await pip.locator('.pip-ready-recalibrate-note .pip-inline-link').click();
+    await completeCalibrationSteps(pip);
     const m1 = pip.locator('.pip-screen-m1');
     await expect(m1).toBeVisible({ timeout: 20000 });
     await expectHitAreas(pip, '.pip-screen-m1');
