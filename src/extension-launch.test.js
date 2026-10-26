@@ -186,8 +186,11 @@ describe('extension: meeting banner', () => {
   const src = readFileSync(new URL('../extension/content-scripts/meeting-detect.js', import.meta.url), 'utf8');
   const manifest = JSON.parse(readFileSync(new URL('../extension/manifest.json', import.meta.url), 'utf8'));
 
-  it('is Lantern: charcoal card, cream ring and cream button with 3px corners, sage link; no chartreuse, serif or hanko orange', () => {
-    for (const c of ['#2D2E31', '#CEE2C4', '#F3EBDE']) assert.ok(src.includes(c), c);
+  it('is Lantern: charcoal card, no icon, a cream button with 3px corners, a muted text button, an X; no chartreuse, serif or hanko orange', () => {
+    // No ring or circle icon: the text sits on the card's left padding.
+    assert.doesNotMatch(src, /class="ring"|\.ring \{/);
+    assert.match(src, /<button class="btn-close" type="button" aria-label="Dismiss">/);
+    for (const c of ['#2D2E31', '#B0AB9E', '#F3EBDE']) assert.ok(src.includes(c), c);
     // Chartreuse is reserved for the nudge (Outside range): never buttons or UI chrome.
     for (const c of ['#dede65', '#e6e68a']) assert.ok(!src.toLowerCase().includes(c), `no ${c} in the banner`);
     assert.match(src, /\.btn-start \{[^}]*background: #F3EBDE;[^}]*color: #2D2E31;/);
@@ -198,6 +201,14 @@ describe('extension: meeting banner', () => {
   it('"Open Mezzo" asks for a focused window and sends the screen it was clicked on', () => {
     assert.match(src, /type: 'OPEN_MEZZO', focused: true, screen: availableScreen\(\)/);
     assert.doesNotMatch(src, /focused: false/);
+  });
+
+  it('Not now and X both dismiss it for this meeting (it shows again only after leaving the call)', () => {
+    assert.match(src, /btn-dismiss'\)\.addEventListener\('click', dismiss\)/);
+    assert.match(src, /btn-close'\)\.addEventListener\('click', dismiss\)/);
+    // The detection loop's one-shot flag: shown once per call, reset on leaving.
+    assert.match(src, /if \(inCall && !notified\)/);
+    assert.match(src, /else if \(!inCall && notified\)/);
   });
 
   it('says "Meeting detected", "Open Mezzo" and "Not now"', () => {

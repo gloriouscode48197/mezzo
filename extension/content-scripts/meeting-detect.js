@@ -82,18 +82,21 @@
     loadBannerFonts();
     const shadow = bannerHost.attachShadow({ mode: 'closed' });
     // Lantern, matching the extension popup: a charcoal card, a cream
-    // ring, a cream primary button with 3px corners, and a sage text link.
-    // No chartreuse: it's reserved for the nudge (Outside range).
+    // primary button with 3px corners, a muted text button, and an X. No icon:
+    // the text sits on the card's left padding. No chartreuse: inside the
+    // product it's reserved for the nudge (Outside range).
+    // Spacing on the rhythm scale: 16px padding; title → 4 → subtext → 16 →
+    // buttons, 16px apart; every control at least 24px tall.
     shadow.innerHTML = `
       <style>
         :host { all: initial; }
         .card {
           display: flex;
           align-items: flex-start;
-          gap: 14px;
-          width: 340px;
+          gap: 16px;
+          width: 320px;
           box-sizing: border-box;
-          padding: 16px 16px 18px 18px;
+          padding: 16px;
           background: #2D2E31;
           border: 1px solid rgba(243, 235, 222, 0.12);
           border-radius: 8px;
@@ -102,33 +105,30 @@
           color: #F3EBDE;
           -webkit-font-smoothing: antialiased;
         }
-        .ring {
-          flex-shrink: 0;
-          width: 22px;
-          height: 22px;
-          box-sizing: border-box;
-          border-radius: 50%;
-          border: 3px solid #F3EBDE;
-          margin-top: 1px;
-        }
         .body { flex: 1; min-width: 0; }
         .title {
-          margin: 0 0 4px;
+          margin: 0;
           font-size: 15px;
           font-weight: 500;
-          line-height: 1.35;
+          line-height: 20px;
           letter-spacing: -0.01em;
         }
         .subtitle {
-          margin: 0 0 14px;
+          margin: 4px 0 0;
           font-size: 13px;
-          line-height: 1.45;
+          line-height: 18px;
           color: #B0AB9E;
         }
-        .actions { display: flex; align-items: center; gap: 16px; }
+        .actions {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+          margin-top: 16px;
+        }
         button { font-family: inherit; cursor: pointer; }
         .btn-start {
-          padding: 9px 16px;
+          min-height: 32px;
+          padding: 7px 16px;
           border: none;
           border-radius: 3px;
           background: #F3EBDE;
@@ -138,13 +138,14 @@
         }
         .btn-start:hover { background: #F3EBDE; } /* never dimmed: cream stays cream */
         .btn-dismiss {
-          padding: 0;
+          min-height: 24px;
+          padding: 4px 0;
           border: none;
           background: none;
-          color: #CEE2C4;
+          color: #B0AB9E;
           font-size: 13px;
         }
-        .btn-dismiss:hover { text-decoration: underline; }
+        .btn-dismiss:hover { color: #F3EBDE; }
         .btn-close {
           flex-shrink: 0;
           display: flex;
@@ -152,7 +153,7 @@
           justify-content: center;
           width: 24px;
           height: 24px;
-          margin: -4px -4px 0 0;
+          margin: -2px -2px 0 0; /* the 10px X lines up with the title */
           padding: 0;
           border: none;
           border-radius: 3px;
@@ -166,7 +167,6 @@
         }
       </style>
       <div class="card" role="region" aria-label="Mezzo">
-        <div class="ring" aria-hidden="true"></div>
         <div class="body">
           <p class="title">Meeting detected</p>
           <p class="subtitle">Monitor with Mezzo?</p>
@@ -182,16 +182,16 @@
     `;
 
     shadow.querySelector('.btn-start').addEventListener('click', () => {
-      // Open/reuse the Companion Window at its Ready state — it never
-      // auto-starts monitoring, so there's no meaningful distinction left
-      // between "start with last profile" and "let me pick a profile"
-      // (both land in the same place); background.js clears the badge too.
-      // Brings an open Mezzo forward instead of opening a second one
-      // (lib/window-manager.js). screen: lets a new window open fully on
-      // this screen (lib/positioning.js).
+      // The same logic as the popup's buttons (background.js →
+      // lib/window-manager.js): an open Mezzo tab is focused, with its
+      // window, never reloaded or duplicated; otherwise Mezzo opens in its
+      // own window. screen: lets a new window open fully on this screen
+      // (lib/positioning.js). background.js clears the badge too.
       sendMessageSafely({ type: 'OPEN_MEZZO', focused: true, screen: availableScreen() });
       removeBanner();
     });
+    // Not now and X: gone for this meeting. The detection loop only shows
+    // the banner again after leaving the call and joining another.
     const dismiss = () => {
       sendMessageSafely({ type: 'MEETING_ACTIVE', active: false });
       removeBanner();

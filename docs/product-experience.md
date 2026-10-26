@@ -383,7 +383,7 @@ If no saved profile exists yet — including when the last session used an unsav
 
 # Meeting Prompt Journey
 
-When a supported meeting is detected, the extension shows a small banner at the top of the meeting page: "Meeting detected" / "Monitor with Mezzo?", with **Open Mezzo** and **Not now** (and a close control). It uses the Lantern look of the extension popup: a charcoal card, a cream ring, a cream button, a sage link.
+When a supported meeting is detected, the extension shows a small banner at the top of the meeting page, the same in every case: "Meeting detected" / "Monitor with Mezzo?", a cream **Open Mezzo** button, a **Not now** text button, and an X (Dismiss). It uses the Lantern look of the extension popup: a charcoal card with no icon. **Open Mezzo** works like the popup's buttons: if a Mezzo tab is open, that tab and its window come forward (never reloaded or duplicated); otherwise Mezzo opens in its own window. **Not now** and the X dismiss the banner for this meeting; it shows again only on the next call.
 
 Selecting Open Mezzo should:
 

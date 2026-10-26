@@ -360,7 +360,9 @@ The extension follows the same Lantern look, with no chartreuse (inside the prod
 
 *Changed during build: an earlier popup said only "Mezzo is already open" / "Go to Mezzo", which didn't say whether the page or the Companion was open.*
 
-**In-Meet banner:** a charcoal card with a cream ring, "Meeting detected" / "Monitor with Mezzo?", a cream **Open Mezzo** button and a sage **Not now** link. **Toolbar badge:** a cream dot on charcoal when a meeting is detected.
+**In-Meet banner:** one state for every case. A charcoal card with no icon (the text sits on the 16px left padding): "Meeting detected" → 4 → "Monitor with Mezzo?" → 16 → a cream **Open Mezzo** button and a muted **Not now** text button 16px apart, and an X (Dismiss) in the corner. **Open Mezzo** uses the popup's logic: an open Mezzo tab is focused with its window, never reloaded or duplicated; otherwise Mezzo opens in its own window. **Not now** and the X dismiss it for this meeting.
+
+*Changed during build: the banner's ring icon was removed (2026-10-26).* **Toolbar badge:** a cream dot on charcoal when a meeting is detected.
 
 ---
 

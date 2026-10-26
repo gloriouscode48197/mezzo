@@ -314,5 +314,30 @@ test.describe('Rhythm', () => {
     await expect(page.locator('#btn-reopen-companion')).toBeVisible();
     await expectHitAreas(page, '#state-dock');
   });
+
+  test('In-Meet banner: no icon; 16px padding, text on the left padding; title → 4 → subtext → 16 → buttons, 16 apart; hit areas', async ({ page }) => {
+    // The banner's own markup, rendered from the content script's template
+    // (it only runs on meeting sites).
+    const src = await (await page.request.get('/extension/content-scripts/meeting-detect.js')).text();
+    const start = src.indexOf('shadow.innerHTML = `') + 'shadow.innerHTML = `'.length;
+    const html = src.slice(start, src.indexOf('`;', start));
+    await page.setViewportSize({ width: 600, height: 300 });
+    await page.setContent('<body style="margin:40px;background:#1e2433"><div id="host"></div></body>');
+    await page.evaluate((h) => { document.getElementById('host').attachShadow({ mode: 'open' }).innerHTML = h; }, html);
+    const m = await page.evaluate(() => {
+      const root = document.getElementById('host').shadowRoot;
+      const b = (q) => { const r = root.querySelector(q).getBoundingClientRect(); return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, height: r.height }; };
+      return { card: b('.card'), title: b('.title'), sub: b('.subtitle'), start: b('.btn-start'), notNow: b('.btn-dismiss'), close: b('.btn-close'), icons: root.querySelectorAll('.ring, svg:not(.btn-close svg)').length };
+    });
+    expect(m.icons).toBe(0);
+    expect(Math.round(m.title.left - m.card.left)).toBe(17); // 16px padding inside the 1px border
+    expect(Math.round(m.title.top - m.card.top)).toBe(17);
+    expect(gap(m.title, m.sub)).toBe(4);
+    expect(gap(m.sub, m.start)).toBe(16);
+    expect(Math.round(m.notNow.left - m.start.right)).toBe(16);
+    expect(Math.round(m.card.bottom - m.start.bottom)).toBe(17);
+    for (const b of [m.start, m.notNow, m.close]) expect(b.height).toBeGreaterThanOrEqual(24);
+    await expect(page.locator('#host >> .btn-close')).toHaveAttribute('aria-label', 'Dismiss');
+  });
 });
 
