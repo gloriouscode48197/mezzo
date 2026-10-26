@@ -520,7 +520,7 @@ test.describe('Companion heading punctuation audit (2026-08-16)', () => {
     await createNewProfileFromSelector(pipPage);
     const roomPrep = pipPage.locator('.pip-screen-prep-room');
     await expect(roomPrep).toBeVisible();
-    await expect(roomPrep.locator('h1')).toHaveText('First, stay quiet for a moment');
+    await expect(roomPrep.locator('h1')).toHaveText("First, let's hear the room");
     await roomPrep.locator('button:has-text("Cancel")').click();
     await expect(readyScreen).toBeVisible();
 
@@ -530,7 +530,7 @@ test.describe('Companion heading punctuation audit (2026-08-16)', () => {
     // rather than each screen's copy test individually re-confirming it.
     const allHeadingTexts = [
       'Ready when you are',
-      'First, stay quiet for a moment',
+      "First, let's hear the room",
       'Now speak at the level you want to maintain',
       'New calibration ready',
     ];
@@ -605,7 +605,7 @@ test.describe('Companion heading punctuation audit (2026-08-16)', () => {
     const roomPrep = pipPage.locator('.pip-screen-prep-room');
     await expect(roomPrep).toBeVisible();
     // Paragraph punctuation untouched — still ends in its own period.
-    await expect(roomPrep.locator('.pip-prep-body')).toHaveText('Mezzo will listen to the room for 3 seconds.');
+    await expect(roomPrep.locator('.pip-prep-body')).toHaveText('For 3 seconds, Mezzo measures the background noise without your voice, so it can tell the two apart.');
 
     await completeCalibrationSteps(pipPage);
     // "Creating your speaking profile…" — its ellipsis communicates active

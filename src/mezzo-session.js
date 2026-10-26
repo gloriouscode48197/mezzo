@@ -327,8 +327,8 @@ const RECALIBRATE_NOTE = ['Made before the new sound filter. ', 'Recalibrate', '
 const PREP_COPY = Object.freeze({
   1: Object.freeze({
     eyebrow: 'Step 1 of 2',
-    heading: 'First, stay quiet for a moment',
-    body: 'Mezzo will listen to the room for 3 seconds.',
+    heading: "First, let's hear the room",
+    body: 'For 3 seconds, Mezzo measures the background noise without your voice, so it can tell the two apart.',
   }),
   2: Object.freeze({
     eyebrow: 'Step 2 of 2',

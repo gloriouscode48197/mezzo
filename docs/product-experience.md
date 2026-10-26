@@ -196,7 +196,7 @@ Create speaking profile — Welcome's one action; opens Step 1's prep screen. Mi
 
 ↓
 
-Step 1 of 2 — "First, stay quiet for a moment"; I'm ready starts 3 seconds of listening to the room (the microphone was already granted back on the marketing page, so this resolves silently, with no second prompt)
+Step 1 of 2 — "First, let's hear the room"; I'm ready starts 3 seconds of listening to the room (the microphone was already granted back on the marketing page, so this resolves silently, with no second prompt)
 
 ↓
 
@@ -274,7 +274,7 @@ There is no separate introduction screen any more: the old "Create speaking prof
 
 ### The Steps
 
-**Step 1 prep**: "Step 1 of 2" / **First, stay quiet for a moment** / "Mezzo will listen to the room for 3 seconds." / **I'm ready** / Cancel.
+**Step 1 prep**: "Step 1 of 2" / **First, let's hear the room** / "For 3 seconds, Mezzo measures the background noise without your voice, so it can tell the two apart." / **I'm ready** / Cancel.
 
 **Step 1 listening**: the eyebrow "Listening to background noise", a large 3-to-1 countdown, and the six-segment level meter showing the live level. The room's noise level is measured during these 3 seconds and saved with the profile.
 

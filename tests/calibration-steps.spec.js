@@ -75,12 +75,12 @@ test.describe('Calibration steps: first-time setup', () => {
     await expect(pip.locator('.pip-screen-c1')).toHaveCount(0);
     await expect(roomPrep.locator('.pip-prep-recalibrating')).toBeHidden();
     await expect(roomPrep.locator('.pip-prep-step')).toHaveText('Step 1 of 2');
-    await expect(roomPrep.locator('h1')).toHaveText('First, stay quiet for a moment');
-    await expect(roomPrep.locator('.pip-prep-body')).toHaveText('Mezzo will listen to the room for 3 seconds.');
+    await expect(roomPrep.locator('h1')).toHaveText("First, let's hear the room");
+    await expect(roomPrep.locator('.pip-prep-body')).toHaveText('For 3 seconds, Mezzo measures the background noise without your voice, so it can tell the two apart.');
     await expect(roomPrep.locator('.pip-intro-primary-btn')).toHaveText("I'm ready");
     await expect(roomPrep.locator('.pip-text-btn')).toHaveText('Cancel');
     await expect(roomPrep.locator('h1')).toBeFocused();
-    expect(await visibleText(roomPrep)).toBe("STEP 1 OF 2 First, stay quiet for a moment Mezzo will listen to the room for 3 seconds. I'm ready Cancel");
+    expect(await visibleText(roomPrep)).toBe("STEP 1 OF 2 First, let's hear the room For 3 seconds, Mezzo measures the background noise without your voice, so it can tell the two apart. I'm ready Cancel");
 
     // Nothing is measured on a prep screen.
     await pip.waitForTimeout(1000);
@@ -278,7 +278,7 @@ test.describe('Calibration steps: recalibration', () => {
     await expect(roomPrep.locator('.pip-prep-step')).toHaveText('Step 1 of 2');
     const gap = await roomPrep.evaluate((el) => Math.round(el.querySelector('.pip-prep-step').getBoundingClientRect().top - el.querySelector('.pip-prep-recalibrating').getBoundingClientRect().bottom));
     expect(gap).toBe(8);
-    await expect(roomPrep.locator('h1')).toHaveText('First, stay quiet for a moment');
+    await expect(roomPrep.locator('h1')).toHaveText("First, let's hear the room");
     await expect(roomPrep.locator('h1')).toBeFocused();
 
     await roomPrep.locator('.pip-intro-primary-btn').click();
