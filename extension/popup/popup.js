@@ -75,9 +75,12 @@ export async function initPopup(doc = document, { tabs = mezzoTabs, chromeApi = 
       closePopup();
       return;
     }
-    const current = await tabs.findMezzoTab(chromeApi);
-    if (current) await tabs.focusTab(current, chromeApi);
-    else openMezzo(); // closed in the meantime
+    // "Go to Mezzo tab": the background does the switch. Focusing a window
+    // closes this popup, which used to end the switch halfway (the window
+    // focused, the tab never activated) when Mezzo shared the meeting's
+    // window. The background finds the tab again, and opens Mezzo if it
+    // has closed in the meantime.
+    chromeApi.runtime.sendMessage({ type: 'FOCUS_MEZZO_TAB', screen: availableScreen(doc) });
     closePopup();
   });
 

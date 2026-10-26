@@ -63,6 +63,12 @@ chrome.runtime.onMessage.addListener((message, sender) => {
 
   if (message?.type === 'MEETING_ACTIVE') {
     setBadge(sender?.tab?.id, message.active);
+  } else if (message?.type === 'FOCUS_MEZZO_TAB') {
+    // The popup's "Go to Mezzo tab". Done here, not in the popup, which
+    // closes as soon as a window takes focus. openMezzo() finds the Mezzo
+    // tab and focuses it (lib/mezzo-tabs.js), or opens Mezzo if it closed
+    // in the meantime.
+    openMezzo({ screen: message.screen ?? null });
   } else if (message?.type === 'OPEN_MEZZO') {
     // The meeting banner's and the popup's "Open Mezzo" button.
     openMezzo({

@@ -20,7 +20,7 @@ const background = readFileSync(new URL('../extension/background.js', import.met
  */
 function setup({ tab = false, reply = 'silent' } = {}) {
   const { document } = parseHTML(html);
-  const calls = { messages: [], focused: [], tabs: [], closed: 0, asked: [] };
+  const calls = { messages: [], focused: [], tabs: [], updates: [], closed: 0, asked: [] };
   const mezzoTab = tab ? { id: 42, windowId: 3, active: false } : null;
   const listeners = [];
   const tabs = {
@@ -29,8 +29,10 @@ function setup({ tab = false, reply = 'silent' } = {}) {
   };
   const chromeApi = {
     runtime: { sendMessage: (m) => calls.messages.push(m), onMessage: { addListener: (fn) => listeners.push(fn) } },
+    windows: { update: (...a) => calls.updates.push(['window', ...a]) },
     tabs: {
       create: (o) => calls.tabs.push(o.url),
+      update: (...a) => calls.updates.push(['tab', ...a]),
       sendMessage: (id, m) => { calls.asked.push([id, m]); return reply === 'silent' ? new Promise(() => {}) : Promise.resolve(reply); },
     },
   };
@@ -112,15 +114,26 @@ describe('extension popup', () => {
     assert.equal(document.querySelector('.popup').dataset.state, 'tab');
   });
 
-  it('"Go to Mezzo tab" focuses the existing tab and never opens anything', async () => {
+  it('"Go to Mezzo tab" delegates the switch to the background and closes: the popup never calls the tabs or windows APIs itself', async () => {
+    // Focusing a window closes the popup, which used to end the switch
+    // halfway when Mezzo shared the meeting's window (the window focused,
+    // the tab never activated). The background does it now.
     const { document, calls, init } = setup({ tab: true, reply: { companionOpen: true, monitoring: true } });
     await init();
     document.getElementById('btn-popup-action').click();
     await new Promise((r) => setTimeout(r, 0));
-    assert.deepEqual(calls.focused, [42]);
-    assert.deepEqual(calls.messages, []);
+    assert.equal(calls.messages.length, 1);
+    assert.equal(calls.messages[0].type, 'FOCUS_MEZZO_TAB');
+    assert.deepEqual(calls.focused, [], 'no focusTab() in the popup');
+    assert.deepEqual(calls.updates, [], 'no chrome.tabs.update or chrome.windows.update in the popup');
     assert.deepEqual(calls.tabs, []);
     assert.equal(calls.closed, 1);
+  });
+
+  it('the background handles FOCUS_MEZZO_TAB with openMezzo(): find the Mezzo tab and focus it, or open Mezzo if it closed meanwhile', () => {
+    assert.match(background, /message\?\.type === 'FOCUS_MEZZO_TAB'\) \{[\s\S]*?openMezzo\(/);
+    const popupSource = readFileSync(new URL('../extension/popup/popup.js', import.meta.url), 'utf8');
+    assert.ok(!/focusTab\(|tabs\.update\(|windows\.update\(/.test(popupSource), 'the popup never switches tabs or windows itself');
   });
 
   it('updates live when the tab reports a change, and ignores other tabs', async () => {

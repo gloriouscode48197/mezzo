@@ -130,13 +130,15 @@ describe('extension: no second Mezzo', () => {
     assert.equal((await findMezzoTab(withTabs(tabs, 9))).id, 1);
   });
 
-  it('an open Mezzo, wherever it is, is brought forward (window focused and restored, tab activated), never opened twice', async () => {
+  it('an open Mezzo, wherever it is, is brought forward (tab activated first, then its window focused and restored), never opened twice', async () => {
     const chrome = withTabs([{ id: 5, windowId: 2, active: false, url: `${LIVE}/index.html` }]);
     globalThis.chrome = chrome;
     const { MezzoWindowManager } = await import('../extension/lib/window-manager.js');
     await MezzoWindowManager.openOrFocus({ url: `${LIVE}/index.html` });
     assert.equal(chrome.created.length, 0);
-    assert.deepEqual(chrome.updates, [['window', 2, { focused: true, state: 'normal' }], ['tab', 5, { active: true }]]);
+    // Tab first: focusing a window closes the toolbar popup, so if anything
+    // ends the switch after one step, the right tab is already showing.
+    assert.deepEqual(chrome.updates, [['tab', 5, { active: true }], ['window', 2, { focused: true, state: 'normal' }]]);
   });
 
   it('with no Mezzo open, a new focused window', async () => {

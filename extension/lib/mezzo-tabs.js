@@ -56,13 +56,19 @@ export async function findMezzoTab(chromeApi = globalThis.chrome) {
     ?? home[0];
 }
 
-/** Brings the tab forward: its window focused (restored if minimized), the tab active. */
+/**
+ * Brings the tab forward: the tab active first, then its window focused
+ * (restored if minimized). Tab first, so if anything cuts this short after
+ * the first step (focusing a window closes the toolbar popup, for one), the
+ * right tab is already showing. Runs in the background service worker
+ * (FOCUS_MEZZO_TAB), never in the popup, for the same reason.
+ */
 export async function focusTab(tab, chromeApi = globalThis.chrome) {
+  await chromeApi.tabs.update(tab.id, { active: true });
   let state;
   try {
     const win = await chromeApi.windows.get(tab.windowId);
     if (win.state === 'minimized') state = 'normal';
   } catch { /* window gone; the update below will say so */ }
   await chromeApi.windows.update(tab.windowId, { focused: true, ...(state ? { state } : {}) });
-  await chromeApi.tabs.update(tab.id, { active: true });
 }
