@@ -566,12 +566,18 @@ Purpose: ambient awareness.
 
 Monitoring opens in **Compact** (220×220), the peripheral default; **Expand** resizes it to Expanded (382×480). Both are `applyLayoutMode()`'s targets for an explicit action — manual resizing is otherwise freeform, at any aspect ratio, and never snaps back.
 
+What the window shows depends on its **size band**, keyed off its short side and recomputed on every resize (never on the layout mode): **Mini** under 160px, **Compact** 160 to 299px, **Expanded** 300px and up. Controls sit 8, 12, or 16px from the edges respectively.
+
 It shows:
 
-* the **Range Ring** — the live visualization (see "Monitoring States" and "Visualization Principles"); its edge is always 60% of the window's short side
-* the selected profile name (read only), above the ring — in Compact, Geist Mono 11px uppercase; it steps aside while the over-range band shows
-* **Stop**, bottom-left: a 32px icon in windows under about 300px on the short side, a "Stop" pill at least 44px tall above that; its accessible name is always "Stop monitoring"
-* **Compact** (in Expanded) or **Expand** (in Compact), top-right — the same corner, so nothing appears to move across the switch
+* the **Range Ring** — the live visualization (see "Monitoring States" and "Visualization Principles"). It's sized for its loudest state: at full Outside range, band and glow included, it fills the space between the top row (name, Expand or Compact view) and the bottom row (Stop), less an equal gap above and below (the band's edge spacing), and it's centered in that space. In Mini the space is the whole window.
+* the selected profile name (read only), centered in the top row — one style at every size: Geist Mono 11px, 0.12em letter-spacing, uppercase via CSS, #B0AB9E. Visible in every ring state in Compact and Expanded; hidden in Mini.
+* **Stop**, bottom-left. In Mini and Compact it's icon-only: a 10px square in a 32×32 target. In Expanded it's a labeled "Stop" button styled like the secondary buttons. Its accessible name is always "Stop monitoring".
+* **Expand** (Mini and Compact) or **Compact view** (Expanded), top-right, 32×32 — the same corner, so nothing appears to move across the switch.
+
+Icons are #B0AB9E at full opacity (about 6:1 on charcoal). On hover an icon turns cream over a 10% cream square (16% while pressed), and after about 500ms a small tooltip names it, beside the control and never over the ring (in Mini, where the ring has the whole window, it's shown above or below the control, or not at all). Expanded's Stop strengthens its border and adds a faint fill on hover. Keyboard focus gets the sage ring and no tooltip. Color and background change over 120ms, with no transition under reduced motion.
+
+In **Mini** the window shows only the ring at rest. The pointer entering it, or keyboard focus on a control, fades Stop and Expand in (150ms) over soft top and bottom scrims; they hide again 2 seconds after the pointer leaves and focus moves out. They stay in the tab order the whole time.
 
 There is no visible status text: the four zone labels are announced to screen readers only (see "Monitoring States"). There is no Pause — Stop and Start monitoring cover it, and one control keeps the window quiet.
 
@@ -593,7 +599,7 @@ Compact is an intentional product mode, and the default for every monitoring ses
 
 Target size: 220×220.
 
-It exists only while monitoring. Its purpose is peripheral awareness: at rest, the ring and the profile name, with Stop and Expand quiet (35% opacity) until the pointer hovers the window or either control receives keyboard focus. Both remain real, focusable buttons the entire time; on touch/no-hover devices they are shown outright.
+It exists only while monitoring. Its purpose is peripheral awareness: the ring, the profile name above it, an icon-only Stop bottom-left, and Expand top-right, always visible and readable (see "Monitoring" for the size bands; a window shrunk under 160px on the short side becomes Mini, which shows the controls only on hover or focus).
 
 It does not display:
 
@@ -688,7 +694,7 @@ Where the range comes from: the end of range sits just above the calibration's o
 
 The visualization behaves like a natural system. Changes should feel like changes in energy rather than software notifications.
 
-* **The container stays fixed.** The ring never causes surrounding layout changes; it scales with the window's short side.
+* **The container stays fixed.** The ring never causes surrounding layout changes; it's sized once per window size for its loudest state, so growing into Outside range never reaches the name or Stop.
 * **Motion communicates state**, never decoration: the circle rises quickly and falls gently, settles to rest over a second when the user stops speaking, and the band grows from a thin ring and shrinks back before fading, so it doesn't flicker at the edge.
 * **Silence and room noise don't move it.** A speech-band filter keeps fan rumble and hiss out of the level, and the circle stays at rest unless the voice is clearly above the room's measured noise.
 * **Color reinforces state; it is not the primary channel.** Grey-taupe for the voice, sage for approaching, chartreuse only over range. With reduced motion, the circle still follows the voice, and the band appears at a fixed thickness instead of growing.

@@ -5,6 +5,7 @@ import {
   VOICE_RISE_TAU_MS, VOICE_FALL_TAU_MS,
   BAND_MIN_FRACTION, BAND_MAX_FRACTION, BAND_FULL_DB, BAND_FADE_MS, BAND_THIN_FRACTION,
   VOICE_FRACTION_END, VOICE_OPACITY_REST, REFERENCE_EDGE_PX,
+  ringExtent, edgeForExtent,
 } from './range-ring.js';
 import { MezzoEngine, OUTSIDE_ENTRY_DWELL_MS } from './engine.js';
 
@@ -332,5 +333,16 @@ describe('edgeOpacityFor — the range edge is never brighter than the voice cir
     assert.equal(edgeOpacityFor({ ...v, edgeOpacity: 0.3 }), 0.3);
     assert.equal(edgeOpacityFor({ ...v, edgeOpacity: 0.9 }), v.opacityRest);
     assert.equal(edgeOpacityFor({ ...v, opacityRest: 0.2, edgeOpacity: 0.45 }), 0.2);
+  });
+});
+
+describe('ringExtent / edgeForExtent: sizing the ring for full Outside', () => {
+  it('the extent is the edge plus the band at its widest plus the glow, both sides', () => {
+    // 236px edge (the reference): 236 × (1 + 2×0.18) + 2 × 29 = 378.96
+    assert.ok(Math.abs(ringExtent(236) - 378.96) < 1e-9);
+  });
+  it('edgeForExtent inverts ringExtent, and never goes negative', () => {
+    for (const extent of [94, 108, 344, 600]) assert.ok(Math.abs(ringExtent(edgeForExtent(extent)) - extent) < 1e-9);
+    assert.equal(edgeForExtent(-20), 0);
   });
 });

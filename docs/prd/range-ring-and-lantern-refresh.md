@@ -188,16 +188,20 @@ Attention rises in three steps, each using brightness and size, which work in pe
 
 ### 5.7 Sizes and the default window
 
-- **Monitoring opens in Compact (220×220)**, the peripheral default. The window is freely resizable, and the ring edge stays at 60% of the short side at any size.
-- **Profile name:** it always shows. In Compact it's above the ring in Geist Mono 11px uppercase, muted, and it steps aside while the over-range band shows (the band and glow reach the top of a 220px window).
-- **Controls:** Stop bottom left, Expand top right; in Compact they're revealed on hover or focus.
-  - In windows under about 300px on the short side, Stop is icon-only, 32px.
-  - In larger windows it's a "Stop" pill at least 44px tall.
-  - Its accessible name is always "Stop monitoring".
+- **Monitoring opens in Compact (220×220)**, the peripheral default. The window is freely resizable.
+- **Size bands**, by the window's short side and recomputed on resize: Mini under 160, Compact 160 to 299, Expanded 300 and up; edge spacing 8 / 12 / 16px.
+- **Ring size:** sized for full Outside range. Its maximum extent (edge plus the band at its widest plus the glow) equals the space between the top row and the bottom row, less twice the edge spacing, and it's centered there. In Mini that space is the whole window.
+- **Profile name:** Geist Mono 11px, 0.12em, uppercase, #B0AB9E at every size; visible in every ring state in Compact and Expanded, hidden in Mini.
+- **Controls:** 32×32 targets, #B0AB9E icons at full opacity, no boxes.
+  - Compact: icon-only Stop bottom left, Expand top right, always visible.
+  - Expanded: a labeled "Stop" button styled like the secondary buttons, and a Compact view icon top right.
+  - Mini: ring only at rest; Stop and Expand fade in over soft scrims on hover or keyboard focus, and hide 2s after both leave.
+  - Hover turns icons cream over a 10% cream square (16% pressed); a tooltip names icon-only controls after about 500ms, never over the ring. Focus gets the sage ring.
+  - Stop's accessible name is always "Stop monitoring".
 - **What Stop does:** it ends the session, releases the microphone, and returns to Ready with the current profile still selected.
 - **No pause:** an earlier Pause/Resume was removed. Stop and Start monitoring cover it, and one control keeps the peripheral window quiet.
 
-*Changed during build: Monitoring opens in Compact instead of Expanded, and Pause was removed; Compact is the peripheral view the product is for, and one control keeps it quiet.*
+*Changed during build: Monitoring opens in Compact instead of Expanded, and Pause was removed; Compact is the peripheral view the product is for, and one control keeps it quiet. Later (2026-10-26): the 60%-of-short-side ring and the 35%-opacity controls were replaced by the size bands above. The ring had to step the name aside at full Outside, and 35% opacity failed the 3:1 contrast minimum for icons.*
 - Band and glow are scaled so they never touch the window edge.
 
 ### 5.8 Implementation boundary

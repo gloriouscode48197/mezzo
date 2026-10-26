@@ -223,6 +223,21 @@ export function ringGeometry(preferredEdgePx, windowMinPx, b = DEFAULT_RING_SETT
   return { edge, bandMax, glowScale: edge / REFERENCE_EDGE_PX };
 }
 
+/**
+ * The ring's largest outer extent (a diameter, in px) for an edge: the
+ * voice circle at its end size (it fills the edge at full Outside), the
+ * band at its widest on both sides, and the glow's visible reach (scaled
+ * with the edge, like the glow itself).
+ */
+export function ringExtent(edgePx, b = DEFAULT_RING_SETTINGS.band) {
+  return edgePx * (1 + 2 * b.maxFraction) + 2 * GLOW_REACH_PX * (edgePx / REFERENCE_EDGE_PX);
+}
+
+/** The edge whose largest extent (see ringExtent()) is exactly extentPx. */
+export function edgeForExtent(extentPx, b = DEFAULT_RING_SETTINGS.band) {
+  return Math.max(0, extentPx) / (1 + 2 * b.maxFraction + (2 * GLOW_REACH_PX) / REFERENCE_EDGE_PX);
+}
+
 /** Exponential approach toward a target, frame-rate independent. */
 export function ease(current, target, dtMs, tauMs) {
   if (tauMs <= 0) return target;

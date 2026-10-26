@@ -30,14 +30,20 @@
 import { test, expect } from '@playwright/test';
 import { openCompanion } from './support/open-companion.js';
 import { installLevelDriver, setLevelDb, rangeBoundsDb } from './support/drive-level.js';
+import { edgeForExtent } from '../src/range-ring.js';
 
 const SAVED_PROFILE = [{ id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 100 }];
 const LONG_NAME = 'The Kitchen And Dining Room Combined Open-Plan Space';
 const LONG_PROFILE = [{ id: 'p-long', name: LONG_NAME, speakingDb: -30, spreadDb: 4, calibratedTs: 100 }];
 
 const CHARTREUSE = 'rgb(222, 222, 101)'; // --color-accent
-const EXPANDED_EDGE = 0.6 * 382; // RING_EDGE_FRACTION of the Expanded window's short side
-const COMPACT_EDGE = 0.6 * 220;
+// The ring at 382×480: the area between the name row (16 + 32) and Stop
+// (480 - 16 - 40) is 376 tall, so its maximum extent is
+// min(382, 376) - 2×16 = 344.
+const EXPANDED_EDGE = edgeForExtent(344);
+const ICON = 'rgb(176, 171, 158)';       // #B0AB9E
+const CREAM = 'rgb(243, 235, 222)';      // #F3EBDE
+const SIZES = { mini: { width: 280, height: 110 }, compact: { width: 220, height: 220 }, expanded: { width: 382, height: 480 } };
 const SAGE = 'rgb(206, 226, 196)';       // --color-link
 
 /**
@@ -66,26 +72,16 @@ async function reachMonitoring(page, context, { profiles = SAVED_PROFILE, size, 
   await expect(monitoringScreen.locator('.mezzo-ring')).toBeVisible({ timeout: 5000 });
   await expect(pipPage.locator('body')).toHaveAttribute('data-layout', 'compact');
   if (layout === 'expanded') {
+    // Playwright doesn't honor the Companion's resizeTo(), so stand in for
+    // it: Expand is shown at a Compact size, and the window then takes the
+    // size the test asked for.
+    await pipPage.setViewportSize(SIZES.compact);
     await monitoringScreen.locator('.pip-control-btn-expand').click();
     await expect(pipPage.locator('body')).toHaveAttribute('data-layout', 'expanded');
+    await pipPage.setViewportSize(size || SIZES.expanded);
   }
-  return { pipPage, monitoringScreen };
-}
-
-/** Clicks the Compact toggle and waits for the explicit mode switch, then
- *  moves the real mouse cursor off the card entirely — the click itself
- *  leaves the cursor sitting inside .pip-screen-monitoring's own bounding
- *  box (the toggle is inside it), which would otherwise satisfy Compact's
- *  own :hover reveal rule by accident and make every "at rest" assertion
- *  false-negative. */
-async function enterCompact(pipPage, monitoringScreen) {
-  await monitoringScreen.locator('.pip-control-btn-compact').click();
-  await expect(pipPage.locator('body')).toHaveAttribute('data-layout', 'compact');
-  // Outside the window, not (0,0): since the Companion's screens went
-  // square-cornered (2026-10-20), (0,0) is inside the card and counts as
-  // hovering it. It only used to work because the rounded corner left
-  // that pixel outside the card's hit area.
   await pipPage.mouse.move(-10, -10);
+  return { pipPage, monitoringScreen };
 }
 
 /** Reads what the ring is showing right now. */
@@ -275,19 +271,6 @@ test.describe('Monitoring presentation: the Range Ring', () => {
     expect(await pipPage.locator('.mezzo-ring-band').evaluate((el) => getComputedStyle(el).boxShadow)).toContain(CHARTREUSE);
   });
 
-  test('Compact: a 132px edge (60% of 220), and band plus glow scaled down so they never touch the window edge at maximum', async ({ page, context }) => {
-    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 220, height: 220 }, driven: true });
-    await enterCompact(pipPage, monitoringScreen);
-    const b = await rangeBoundsDb(page, SAVED_PROFILE[0].spreadDb);
-    await settleAt(page, pipPage, b.endDb + 8, 1800);
-    const r = await readRing(pipPage);
-    expect(r.zone).toBe(3);
-    expect(r.edgePx).toBeCloseTo(COMPACT_EDGE, 0);
-    expect(r.glowScale).toBeLessThan(1);
-    const reach = r.edgePx / 2 + r.bandPx + (10 + 38 / 2) * r.glowScale;
-    expect(reach).toBeLessThanOrEqual(110 + 0.5);
-  });
-
   test('respects prefers-reduced-motion: the band stays a fixed thickness instead of growing with the level', async ({ page, context }) => {
     const { pipPage } = await reachMonitoring(page, context, { size: { width: 382, height: 480 }, driven: true });
     await pipPage.emulateMedia({ reducedMotion: 'reduce' });
@@ -328,181 +311,359 @@ test.describe('Monitoring presentation: retired content', () => {
   });
 });
 
-// Stop (2026-10-22): bottom left at every size. Under about 300px on the
-// short side it's a 32px icon; larger, a "Stop" pill at least 44px tall.
-// Its accessible name is always "Stop monitoring". The profile name always
-// shows.
-async function stopShape(monitoringScreen) {
-  const stop = monitoringScreen.locator('.pip-control-btn-stop');
-  const screenBox = await monitoringScreen.boundingBox();
-  const box = await stop.boundingBox();
-  return {
-    stop, box,
-    left: box.x - screenBox.x,
-    bottom: screenBox.y + screenBox.height - (box.y + box.height),
-    labelShown: await stop.locator('.pip-control-label').isVisible(),
-  };
+// ── Size bands (2026-10-26) ──
+// Everything keys off the window's short side: Mini under 160, Compact 160
+// to 299, Expanded 300 and up, with the controls 8 / 12 / 16px from the
+// edges. The ring is sized for its loudest state: at full Outside, band and
+// glow included, it fills the space between the top row (name, Expand or
+// Compact view) and the bottom row (Stop), less an equal gap above and below.
+const GAP = { mini: 8, compact: 12, expanded: 16 };
+
+/** Rects of the things the ring must stay clear of, plus the ring's own
+ *  maximum box (from the area ringLayout() set on the wrapper). */
+async function layoutBoxes(pipPage) {
+  return pipPage.evaluate((GAP) => {
+    const screen = document.querySelector('.pip-screen-monitoring');
+    const band = screen.dataset.sizeBand;
+    const rect = (el) => { if (!el || el.offsetParent === null) return null; const r = el.getBoundingClientRect(); return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height }; };
+    const wrap = document.querySelector('.pip-circle-wrapper').getBoundingClientRect();
+    const extent = Math.min(innerWidth, wrap.height) - 2 * GAP[band];
+    const cx = innerWidth / 2; const cy = wrap.top + wrap.height / 2;
+    return {
+      band,
+      name: rect(document.querySelector('.pip-profile-info')),
+      stop: rect(document.querySelector('.pip-control-btn-stop')),
+      ringMax: { left: cx - extent / 2, right: cx + extent / 2, top: cy - extent / 2, bottom: cy + extent / 2 },
+      height: innerHeight,
+    };
+  }, GAP);
 }
 
-test.describe('Monitoring presentation: Stop and the profile name at every size (Expanded)', () => {
-  for (const size of [{ width: 382, height: 480 }, { width: 340, height: 425 }, { width: 300, height: 375 }]) {
-    test(`${size.width}×${size.height}: profile name, Range Ring, a "Stop" pill (≥44px) bottom left, and the top-right Compact toggle`, async ({ page, context }) => {
-      const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size });
-      await expect(monitoringScreen.locator('.pip-profile-info')).toBeVisible();
-      await expect(monitoringScreen.locator('.mezzo-ring')).toBeVisible();
-      const { stop, box, left, bottom, labelShown } = await stopShape(monitoringScreen);
-      expect(labelShown).toBe(true);
-      await expect(stop).toHaveText('Stop');
-      await expect(stop).toHaveAttribute('aria-label', 'Stop monitoring');
-      expect(box.height).toBeGreaterThanOrEqual(44);
-      expect(left).toBeLessThan(20);
-      expect(bottom).toBeLessThan(20);
-      await expect(monitoringScreen.locator('.pip-control-btn-compact')).toBeVisible();
+const overlaps = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+
+/** WCAG contrast ratio between two rgb() strings. */
+function contrast(fg, bg) {
+  const lum = (c) => {
+    const [r, g, b] = c.match(/[\d.]+/g).slice(0, 3).map(Number).map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const [hi, lo] = [lum(fg), lum(bg)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+test.describe('Monitoring presentation: the ring is sized for full Outside', () => {
+  for (const [bandName, size] of Object.entries(SIZES)) {
+    test(`${size.width}×${size.height} (${bandName}): at full Outside, band and glow clear the name and Stop, with equal gaps above and below`, async ({ page, context }) => {
+      const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size, driven: true, layout: bandName === 'expanded' ? 'expanded' : 'compact' });
+      await expect(monitoringScreen).toHaveAttribute('data-size-band', bandName);
+      const b = await rangeBoundsDb(page, SAVED_PROFILE[0].spreadDb);
+      await settleAt(page, pipPage, b.endDb + 8, 1800);
+      const r = await readRing(pipPage);
+      expect(r.zone).toBe(3);
+
+      const ringBox = await monitoringScreen.locator('.mezzo-ring').boundingBox();
+      const cy = ringBox.y + ringBox.height / 2;
+      const half = r.edgePx / 2 + r.bandPx + (10 + 38 / 2) * r.glowScale;
+      const ring = { top: cy - half, bottom: cy + half };
+      const boxes = await layoutBoxes(pipPage);
+
+      // The maximum extent fills the area less the gap (within a pixel).
+      expect(2 * half).toBeCloseTo(boxes.ringMax.bottom - boxes.ringMax.top, 0);
+
+      const topEdge = bandName === 'mini' ? 0 : boxes.name.bottom;
+      const bottomEdge = bandName === 'mini' ? boxes.height : boxes.stop.top;
+      const above = ring.top - topEdge;
+      const below = bottomEdge - ring.bottom;
+      expect(above).toBeGreaterThanOrEqual(GAP[bandName] - 1);
+      expect(below).toBeGreaterThanOrEqual(GAP[bandName] - 1);
+      expect(Math.abs(above - below)).toBeLessThanOrEqual(1);
+
+      if (bandName === 'mini') {
+        await expect(monitoringScreen.locator('.pip-profile-info')).toBeHidden();
+      } else {
+        // The name stays readable in every ring state.
+        await expect(monitoringScreen.locator('.pip-profile-info')).toBeVisible();
+        await expect(monitoringScreen.locator('.pip-monitoring-header')).toHaveCSS('opacity', '1');
+      }
       await assertNoOverflow(pipPage);
     });
   }
 
-  for (const size of [{ width: 260, height: 325 }, { width: 400, height: 280 }]) {
-    test(`${size.width}×${size.height} (short side under 300px): Stop is a 32px icon bottom left; the profile name still shows`, async ({ page, context }) => {
-      const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size });
-      await expect(monitoringScreen.locator('.pip-profile-info')).toBeVisible();
-      const { stop, box, left, bottom, labelShown } = await stopShape(monitoringScreen);
-      expect(labelShown).toBe(false);
-      await expect(stop).toHaveAttribute('aria-label', 'Stop monitoring');
-      expect([Math.round(box.width), Math.round(box.height)]).toEqual([32, 32]);
-      expect(left).toBeLessThan(20);
-      expect(bottom).toBeLessThan(20);
+  test('resizing recomputes the band and the ring', async ({ page, context }) => {
+    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: SIZES.compact, layout: 'compact' });
+    for (const [bandName, size] of [['expanded', SIZES.expanded], ['mini', SIZES.mini], ['compact', SIZES.compact], ['expanded', { width: 600, height: 400 }]]) {
+      await pipPage.setViewportSize(size);
+      await expect(monitoringScreen).toHaveAttribute('data-size-band', bandName);
+      // Resizing never changes the layout mode itself.
+      await expect(pipPage.locator('body')).toHaveAttribute('data-layout', 'compact');
+      await expect.poll(async () => {
+        const boxes = await layoutBoxes(pipPage);
+        return Math.abs((await monitoringScreen.locator('.mezzo-ring').boundingBox()).width - edgeForExtent(boxes.ringMax.bottom - boxes.ringMax.top));
+      }).toBeLessThan(1);
       await assertNoOverflow(pipPage);
-    });
-  }
+    }
+  });
 });
 
-test.describe('Monitoring presentation: explicit Compact', () => {
-  test('220×220 at rest: the Range Ring with the profile name above it; Stop and Expand quiet at 35%', async ({ page, context }) => {
-    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 220, height: 220 } });
-    await enterCompact(pipPage, monitoringScreen);
-
-    const name = monitoringScreen.locator('.pip-profile-info');
-    await expect(name).toBeVisible();
-    await expect(name).toHaveText('Kitchen');
-    await expect(name).toHaveCSS('font-size', '11px');
-    await expect(name).toHaveCSS('text-transform', 'uppercase');
-    await expect(name).toHaveCSS('color', 'rgb(176, 171, 158)');
-    expect((await name.evaluate((el) => getComputedStyle(el).fontFamily))).toMatch(/Geist Mono/);
-    const nameBox = await name.boundingBox();
-    const ringBox = await monitoringScreen.locator('.mezzo-ring').boundingBox();
-    expect(nameBox.y + nameBox.height).toBeLessThanOrEqual(ringBox.y);
-    await expect(monitoringScreen.locator('.mezzo-ring')).toBeVisible();
+test.describe('Monitoring presentation: controls by size band', () => {
+  test('Compact (220×220): name, icon-only Stop bottom left, Expand top right; 32×32, #B0AB9E at full opacity, 12px from the edges', async ({ page, context }) => {
+    const { monitoringScreen } = await reachMonitoring(page, context, { size: SIZES.compact, layout: 'compact' });
+    await expect(monitoringScreen.locator('.pip-profile-info')).toBeVisible();
     const stop = monitoringScreen.locator('.pip-control-btn-stop');
     const expandBtn = monitoringScreen.locator('.pip-control-btn-expand');
-    // Present but quiet at rest (35%): always reachable by keyboard and touch.
-    await expect(stop).toHaveCSS('opacity', '0.35');
-    await expect(expandBtn).toHaveCSS('opacity', '0.35');
+    await expect(monitoringScreen.locator('.pip-control-btn-compact')).toBeHidden();
+    await expect(stop.locator('.pip-control-label')).toBeHidden();
+    await expect(stop).toHaveAttribute('aria-label', 'Stop monitoring');
+    await expect(expandBtn).toHaveAttribute('aria-label', 'Expand');
     for (const btn of [stop, expandBtn]) {
-      expect(await btn.evaluate((el) => getComputedStyle(el).pointerEvents)).not.toBe('none');
-      expect(await btn.evaluate((el) => el.tabIndex)).toBe(0);
+      await expect(btn).toHaveCSS('opacity', '1');
+      await expect(btn).toHaveCSS('color', ICON);
+      await expect(btn).toHaveCSS('border-top-style', 'none');
+      await expect(btn).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
     }
-    // Never focusable-while-invisible check is separate (below) — this only
-    // confirms the resting, unrevealed visual state.
-    await assertNoOverflow(pipPage);
+    const stopIcon = stop.locator('.pip-control-icon-stop');
+    await expect(stopIcon).toHaveCSS('background-color', ICON);
+    await expect(stopIcon).toHaveCSS('width', '10px');
+    await expect(stopIcon).toHaveCSS('border-radius', '2px');
+    const s = await stop.boundingBox(); const e = await expandBtn.boundingBox();
+    expect([s.width, s.height, e.width, e.height].map(Math.round)).toEqual([32, 32, 32, 32]);
+    expect([s.x, 220 - (s.y + s.height), 220 - (e.x + e.width), e.y].map(Math.round)).toEqual([12, 12, 12, 12]);
   });
 
-  test('220×220 with controls revealed by hover: Stop (bottom-left) and Expand (top-right) both become visible, correctly positioned, with accessible names', async ({ page, context }) => {
-    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 220, height: 220 } });
-    await enterCompact(pipPage, monitoringScreen);
+  test('Expanded (382×480): name, a labeled Stop button bottom left, Compact view top right; 16px from the edges', async ({ page, context }) => {
+    const { monitoringScreen } = await reachMonitoring(page, context, { size: SIZES.expanded });
+    await expect(monitoringScreen.locator('.pip-profile-info')).toBeVisible();
+    const stop = monitoringScreen.locator('.pip-control-btn-stop');
+    const compactBtn = monitoringScreen.locator('.pip-control-btn-compact');
+    await expect(monitoringScreen.locator('.pip-control-btn-expand')).toBeHidden();
+    await expect(stop.locator('.pip-control-label')).toBeVisible();
+    await expect(stop).toHaveText('Stop');
+    await expect(stop).toHaveAttribute('aria-label', 'Stop monitoring');
+    await expect(stop).toHaveCSS('border-top-color', 'rgba(243, 235, 222, 0.3)');
+    await expect(stop).toHaveCSS('border-radius', '3px');
+    await expect(stop).toHaveCSS('color', CREAM);
+    await expect(stop).toHaveCSS('font-size', '14px');
+    await expect(stop.locator('.pip-control-icon-stop')).toHaveCSS('width', '9px');
+    await expect(compactBtn).toHaveAttribute('aria-label', 'Compact view');
+    await expect(compactBtn).toHaveCSS('color', ICON);
+    await expect(compactBtn).toHaveCSS('opacity', '1');
+    const s = await stop.boundingBox(); const c = await compactBtn.boundingBox();
+    expect(s.height).toBeGreaterThanOrEqual(32);
+    expect([c.width, c.height].map(Math.round)).toEqual([32, 32]);
+    expect([s.x, 480 - (s.y + s.height), 382 - (c.x + c.width), c.y].map(Math.round)).toEqual([16, 16, 16, 16]);
+  });
 
-    await monitoringScreen.hover();
+  test('Mini (280×110): ring only at rest; pointer entry reveals Stop and Expand over soft scrims, hidden again 2s after it leaves', async ({ page, context }) => {
+    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: SIZES.mini, layout: 'compact' });
     const stop = monitoringScreen.locator('.pip-control-btn-stop');
     const expandBtn = monitoringScreen.locator('.pip-control-btn-expand');
+    await expect(monitoringScreen.locator('.pip-profile-info')).toBeHidden();
+    await expect(stop).toHaveCSS('opacity', '0');
+    await expect(expandBtn).toHaveCSS('opacity', '0');
+    // Still in the tab order while hidden.
+    for (const btn of [stop, expandBtn]) expect(await btn.evaluate((el) => el.tabIndex)).toBe(0);
+    const s = await stop.boundingBox(); const e = await expandBtn.boundingBox();
+    expect([s.width, s.height, e.width, e.height].map(Math.round)).toEqual([32, 32, 32, 32]);
+    expect([s.x, 110 - (s.y + s.height), 280 - (e.x + e.width), e.y].map(Math.round)).toEqual([8, 8, 8, 8]);
+
+    await pipPage.mouse.move(140, 55);
     await expect(stop).toHaveCSS('opacity', '1');
     await expect(expandBtn).toHaveCSS('opacity', '1');
+    await expect(stop).toHaveCSS('color', ICON);
+    const scrims = await monitoringScreen.evaluate((el) => ['::before', '::after'].map((p) => ({ opacity: getComputedStyle(el, p).opacity, bg: getComputedStyle(el, p).backgroundImage })));
+    for (const sc of scrims) { expect(sc.opacity).toBe('1'); expect(sc.bg).toContain('rgba(36, 37, 40, 0.55)'); }
 
-    await expect(stop).toHaveAttribute('aria-label', 'Stop monitoring');
-    await expect(expandBtn).toHaveAttribute('aria-label', 'Expand Companion');
-
-    const screenBox = await monitoringScreen.boundingBox();
-    const stopBox = await stop.boundingBox();
-    const expandBox = await expandBtn.boundingBox();
-    // Stop: bottom-left.
-    expect(stopBox.x - screenBox.x).toBeLessThan(30);
-    expect(screenBox.y + screenBox.height - (stopBox.y + stopBox.height)).toBeLessThan(30);
-    // Expand: top-right — the same corner the Expanded-mode Compact toggle occupies.
-    expect(screenBox.x + screenBox.width - (expandBox.x + expandBox.width)).toBeLessThan(30);
-    expect(expandBox.y - screenBox.y).toBeLessThan(30);
-    // Stop: a 32px icon at this size; Expand: 28px.
-    expect(stopBox.width).toBeCloseTo(32, 0);
-    expect(stopBox.height).toBeCloseTo(32, 0);
-    expect(expandBox.width).toBeCloseTo(28, 0);
-    expect(expandBox.height).toBeCloseTo(28, 0);
+    await pipPage.mouse.move(-10, -10);
+    await pipPage.waitForTimeout(1200);
+    await expect(stop).toHaveCSS('opacity', '1'); // still shown within the 2s
+    await expect(stop).toHaveCSS('opacity', '0', { timeout: 3000 });
   });
 
-  test('220×220 with controls revealed by keyboard focus (no hover): tabbing to either control reveals both, and neither is focusable while invisible', async ({ page, context }) => {
-    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 220, height: 220 } });
-    await enterCompact(pipPage, monitoringScreen);
-
+  test('Mini: keyboard focus reveals the controls; they stay while focus is inside', async ({ page, context }) => {
+    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: SIZES.mini, layout: 'compact' });
     const stop = monitoringScreen.locator('.pip-control-btn-stop');
-    // A control must never be focusable while invisible — focusing it
-    // directly (no hover) still works, proving it was reachable the whole
-    // time, and its own reveal rule then makes it visibly opaque.
-    await stop.focus();
+    await expect(stop).toHaveCSS('opacity', '0');
+    for (let i = 0; i < 6 && !(await stop.evaluate((el) => el === document.activeElement)); i++) await pipPage.keyboard.press('Tab');
     await expect(stop).toBeFocused();
     await expect(stop).toHaveCSS('opacity', '1');
-    const expandBtn = monitoringScreen.locator('.pip-control-btn-expand');
-    await expect(expandBtn).toHaveCSS('opacity', '1'); // :focus-within reveals both
-  });
-
-  test('touch/no-hover environments show both controls outright, without needing hover or focus', async ({ browser }) => {
-    const context = await browser.newContext({
-      hasTouch: true,
-      permissions: ['microphone'],
-    });
-    const page = await context.newPage();
-    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 220, height: 220 } });
-    await monitoringScreen.locator('.pip-control-btn-compact').click();
-    await expect(pipPage.locator('body')).toHaveAttribute('data-layout', 'compact');
-    await pipPage.mouse.move(0, 0);
-
-    await expect(monitoringScreen.locator('.pip-control-btn-stop')).toHaveCSS('opacity', '1');
     await expect(monitoringScreen.locator('.pip-control-btn-expand')).toHaveCSS('opacity', '1');
-    await context.close();
+    await pipPage.waitForTimeout(2500);
+    await expect(stop).toHaveCSS('opacity', '1');
   });
 
-  test('Expand returns to the 382×480 Expanded layout without stopping monitoring; Compact toggle returns to Compact', async ({ page, context }) => {
-    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 220, height: 220 } });
-    await enterCompact(pipPage, monitoringScreen);
+  test('Mini with reduced motion: the controls appear without a fade', async ({ page, context }) => {
+    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: SIZES.mini, layout: 'compact' });
+    await pipPage.emulateMedia({ reducedMotion: 'reduce' });
+    const durations = await monitoringScreen.evaluate((el) => [getComputedStyle(el.querySelector('.pip-control-btn')).transitionDuration, getComputedStyle(el, '::before').transitionDuration]);
+    for (const d of durations) expect(d.split(',').every((x) => parseFloat(x) === 0)).toBe(true);
+  });
 
-    const expandBtn = monitoringScreen.locator('.pip-control-btn-expand');
-    await expandBtn.click({ force: true }); // opacity:0 doesn't block a real click target — this exercises the handler directly, not the hover animation
+  test('contrast: icons at least 3:1 and text at least 4.5:1 against the Companion background', async ({ page, context }) => {
+    const { pipPage } = await reachMonitoring(page, context, { size: SIZES.expanded });
+    const colors = await pipPage.evaluate(() => {
+      let el = document.querySelector('.pip-screen-monitoring'); let bg = 'rgba(0, 0, 0, 0)';
+      while (el && /rgba\(0, 0, 0, 0\)|transparent/.test(bg)) { bg = getComputedStyle(el).backgroundColor; el = el.parentElement; }
+      const c = (sel) => getComputedStyle(document.querySelector(sel)).color;
+      return { bg, icon: c('.pip-control-btn-compact'), name: c('.pip-profile-info'), stopLabel: c('.pip-control-btn-stop') };
+    });
+    expect(contrast(colors.icon, colors.bg)).toBeGreaterThanOrEqual(3);
+    expect(contrast(colors.name, colors.bg)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(colors.stopLabel, colors.bg)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  test('Expand and Compact view switch the layout mode without stopping monitoring', async ({ page, context }) => {
+    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: SIZES.compact, layout: 'compact' });
+    await monitoringScreen.locator('.pip-control-btn-expand').click();
     await expect(pipPage.locator('body')).toHaveAttribute('data-layout', 'expanded');
-    // Monitoring is still active — the ring and Stop pill are back.
+    await pipPage.setViewportSize(SIZES.expanded); // what resizeTo() does outside Playwright
     await expect(monitoringScreen.locator('.mezzo-ring')).toBeVisible();
-    await expect(monitoringScreen.locator('.pip-control-btn-stop')).toHaveText('Stop');
-
     await monitoringScreen.locator('.pip-control-btn-compact').click();
     await expect(pipPage.locator('body')).toHaveAttribute('data-layout', 'compact');
+    await expect(monitoringScreen).toBeVisible();
   });
 });
 
-test.describe('Monitoring presentation: manual resize, larger windows, and non-reference aspect ratios', () => {
-  test('the window is freely resizable: the ring stays at 60% of the short side at any size', async ({ page, context }) => {
-    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 480, height: 600 } });
-    for (const size of [{ width: 480, height: 600 }, { width: 400, height: 280 }, { width: 240, height: 480 }, { width: 600, height: 600 }]) {
-      await pipPage.setViewportSize(size);
-      await expect.poll(async () => (await monitoringScreen.locator('.mezzo-ring').boundingBox()).width).toBeCloseTo(0.6 * Math.min(size.width, size.height), 0);
-      await assertNoOverflow(pipPage);
-    }
-    await expect(monitoringScreen.locator('.pip-profile-info')).toBeVisible();
+// ── Interaction states ──
+// Icon-only controls: cream icon over a 10% cream square on hover, 16% while
+// pressed, the sage ring on keyboard focus. Expanded's Stop: a stronger
+// border and a faint fill on hover, 12% pressed. 120ms on color and
+// background; none with reduced motion.
+async function hoverCenter(pipPage, locator) {
+  const b = await locator.boundingBox();
+  await pipPage.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+}
+
+async function tabTo(pipPage, locator) {
+  // Start from nothing focused: a mouse press focuses a button without
+  // :focus-visible, and Tab must be what lands on it.
+  await pipPage.evaluate(() => document.activeElement?.blur());
+  for (let i = 0; i < 8 && !(await locator.evaluate((el) => el === document.activeElement)); i++) await pipPage.keyboard.press('Tab');
+  await expect(locator).toBeFocused();
+}
+
+test.describe('Monitoring presentation: hover, pressed and focus', () => {
+  const iconControls = [
+    { band: 'compact', sel: '.pip-control-btn-stop', label: 'Stop monitoring' },
+    { band: 'compact', sel: '.pip-control-btn-expand', label: 'Expand' },
+    { band: 'expanded', sel: '.pip-control-btn-compact', label: 'Compact view' },
+  ];
+  for (const c of iconControls) {
+    test(`${c.label} (${c.band}): hover, pressed and keyboard focus`, async ({ page, context }) => {
+      const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: SIZES[c.band], layout: c.band === 'expanded' ? 'expanded' : 'compact' });
+      const btn = monitoringScreen.locator(c.sel);
+      expect(await btn.evaluate((el) => getComputedStyle(el).transitionDuration)).toContain('0.12s');
+
+      await hoverCenter(pipPage, btn);
+      await expect(btn).toHaveCSS('color', CREAM);
+      await expect(btn).toHaveCSS('background-color', 'rgba(243, 235, 222, 0.1)');
+      await expect(btn).toHaveCSS('cursor', 'pointer');
+
+      await pipPage.mouse.down();
+      await expect(btn).toHaveCSS('background-color', 'rgba(243, 235, 222, 0.16)');
+      // Release away from the button, so the press doesn't click it.
+      await pipPage.mouse.move(-10, -10);
+      await pipPage.mouse.up();
+      await expect(btn).toHaveCSS('color', ICON);
+      await expect(btn).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+
+      await tabTo(pipPage, btn);
+      await expect(btn).toHaveCSS('outline-style', 'solid');
+      await expect(btn).toHaveCSS('outline-width', '2px');
+      await expect(btn).toHaveCSS('outline-color', SAGE);
+      await expect(btn).toHaveCSS('outline-offset', '2px');
+    });
+  }
+
+  test('Expanded Stop: hover strengthens the border with a faint fill; pressed deepens it; keyboard focus gets the sage ring', async ({ page, context }) => {
+    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: SIZES.expanded });
+    const stop = monitoringScreen.locator('.pip-control-btn-stop');
+    await hoverCenter(pipPage, stop);
+    await expect(stop).toHaveCSS('border-top-color', 'rgba(243, 235, 222, 0.6)');
+    await expect(stop).toHaveCSS('background-color', 'rgba(243, 235, 222, 0.06)');
+    await pipPage.mouse.down();
+    await expect(stop).toHaveCSS('background-color', 'rgba(243, 235, 222, 0.12)');
+    await pipPage.mouse.move(-10, -10);
+    await pipPage.mouse.up();
+    await expect(monitoringScreen).toBeVisible(); // the press didn't stop monitoring
+    await tabTo(pipPage, stop);
+    await expect(stop).toHaveCSS('outline-color', SAGE);
+    await expect(stop).toHaveCSS('outline-width', '2px');
   });
 
-  test('manual resize does not itself change [data-layout] — layout mode stays Expanded the whole time', async ({ page, context }) => {
-    const { pipPage, monitoringScreen } = await reachMonitoring(page, context);
-    await expect(pipPage.locator('body')).toHaveAttribute('data-layout', 'expanded');
-
-    for (const size of [{ width: 382, height: 480 }, { width: 260, height: 325 }, { width: 220, height: 220 }, { width: 480, height: 600 }]) {
-      await pipPage.setViewportSize(size);
-      await expect(pipPage.locator('body')).toHaveAttribute('data-layout', 'expanded');
+  test('reduced motion: no transitions on the controls', async ({ page, context }) => {
+    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: SIZES.expanded });
+    await pipPage.emulateMedia({ reducedMotion: 'reduce' });
+    for (const sel of ['.pip-control-btn-stop', '.pip-control-btn-compact']) {
+      const d = await monitoringScreen.locator(sel).evaluate((el) => getComputedStyle(el).transitionDuration);
+      expect(d.split(',').every((x) => parseFloat(x) === 0)).toBe(true);
     }
-    await expect(monitoringScreen).toBeVisible();
+  });
+});
+
+test.describe('Monitoring presentation: tooltips', () => {
+  async function expectTooltipClear(pipPage, tip, btn) {
+    const t = await tip.boundingBox();
+    const b = await btn.boundingBox();
+    const { ringMax } = await layoutBoxes(pipPage);
+    const tr = { left: t.x, right: t.x + t.width, top: t.y, bottom: t.y + t.height };
+    expect(overlaps(tr, ringMax), 'tooltip clear of the ring at its largest').toBe(false);
+    expect(overlaps(tr, { left: b.x, right: b.x + b.width, top: b.y, bottom: b.y + b.height }), 'tooltip beside the control, not over it').toBe(false);
+    await expect(tip).toHaveCSS('background-color', 'rgb(74, 75, 79)');
+    await expect(tip).toHaveCSS('font-size', '12px');
+    await expect(tip).toHaveCSS('border-radius', '3px');
+  }
+
+  for (const c of [
+    { band: 'compact', sel: '.pip-control-btn-stop', label: 'Stop monitoring' },
+    { band: 'compact', sel: '.pip-control-btn-expand', label: 'Expand' },
+    { band: 'expanded', sel: '.pip-control-btn-compact', label: 'Compact view' },
+  ]) {
+    test(`${c.label} (${c.band}): a tooltip after about 500ms of hover, beside the control and clear of the ring; gone on leave`, async ({ page, context }) => {
+      const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: SIZES[c.band], layout: c.band === 'expanded' ? 'expanded' : 'compact' });
+      const btn = monitoringScreen.locator(c.sel);
+      const tip = monitoringScreen.locator('.pip-control-tooltip');
+      await hoverCenter(pipPage, btn);
+      await pipPage.waitForTimeout(250);
+      await expect(tip).toBeHidden();
+      await expect(tip).toBeVisible({ timeout: 1000 });
+      await expect(tip).toHaveText(c.label);
+      await expectTooltipClear(pipPage, tip, btn);
+      await pipPage.mouse.move(-10, -10);
+      await expect(tip).toBeHidden();
+    });
+  }
+
+  test('the tooltip hides when the control is pressed, and never shows for keyboard focus or on the labeled Stop', async ({ page, context }) => {
+    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: SIZES.expanded });
+    const tip = monitoringScreen.locator('.pip-control-tooltip');
+    const compactBtn = monitoringScreen.locator('.pip-control-btn-compact');
+    await hoverCenter(pipPage, compactBtn);
+    await expect(tip).toBeVisible({ timeout: 1000 });
+    await pipPage.mouse.down();
+    await expect(tip).toBeHidden();
+    await pipPage.mouse.move(-10, -10);
+    await pipPage.mouse.up();
+
+    await hoverCenter(pipPage, monitoringScreen.locator('.pip-control-btn-stop'));
+    await pipPage.waitForTimeout(800);
+    await expect(tip).toBeHidden();
+    await pipPage.mouse.move(-10, -10);
+
+    await tabTo(pipPage, compactBtn);
+    await pipPage.waitForTimeout(800);
+    await expect(tip).toBeHidden();
+  });
+
+  test('Mini: once revealed, a tooltip never covers the ring (shown elsewhere, or not at all)', async ({ page, context }) => {
+    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: SIZES.mini, layout: 'compact' });
+    const tip = monitoringScreen.locator('.pip-control-tooltip');
+    for (const sel of ['.pip-control-btn-stop', '.pip-control-btn-expand']) {
+      const btn = monitoringScreen.locator(sel);
+      await hoverCenter(pipPage, btn);
+      await pipPage.waitForTimeout(800);
+      if (await tip.isVisible()) await expectTooltipClear(pipPage, tip, btn);
+      await pipPage.mouse.move(140, 55);
+    }
   });
 });
 
@@ -525,32 +686,12 @@ test.describe('Monitoring presentation: visualization stability', () => {
 });
 
 test.describe('Monitoring presentation: the Compact default (2026-10-22)', () => {
-  test('Start monitoring opens Compact (220×220): ring at 60% of the short side, name above, Expand top right, Stop bottom left; no Pause', async ({ page, context }) => {
-    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 220, height: 220 }, layout: 'compact' });
+  test('Start monitoring opens Compact; no Pause', async ({ page, context }) => {
+    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: SIZES.compact, layout: 'compact' });
     await expect(pipPage.locator('body')).toHaveAttribute('data-layout', 'compact');
-    await pipPage.mouse.move(110, 110); // reveal the corner controls
-    const ring = await monitoringScreen.locator('.mezzo-ring').boundingBox();
-    expect(ring.width).toBeCloseTo(COMPACT_EDGE, 0);
-    await expect(monitoringScreen.locator('.pip-profile-info')).toBeVisible();
-    const box = (sel) => monitoringScreen.locator(sel).boundingBox();
-    const [expandBox, stopBox] = await Promise.all([box('.pip-control-btn-expand'), box('.pip-control-btn-stop')]);
-    expect(expandBox.x).toBeGreaterThan(150); expect(expandBox.y).toBeLessThan(40);
-    expect(stopBox.x).toBeLessThan(40); expect(stopBox.y).toBeGreaterThan(170);
+    await expect(monitoringScreen).toHaveAttribute('data-size-band', 'compact');
     await expect(monitoringScreen.locator('.pip-control-btn-pause, [aria-label*="Pause"]')).toHaveCount(0);
     await assertNoOverflow(pipPage);
-  });
-
-  test('Compact: the profile name is centered above the ring, and steps aside while the over-range band shows', async ({ page, context }) => {
-    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 220, height: 220 }, layout: 'compact', driven: true });
-    const header = monitoringScreen.locator('.pip-monitoring-header');
-    const name = await monitoringScreen.locator('.pip-profile-info').boundingBox();
-    expect(Math.abs(name.x + name.width / 2 - 110)).toBeLessThan(2);
-    await expect(header).toHaveCSS('opacity', '1');
-    const b = await rangeBoundsDb(page, SAVED_PROFILE[0].spreadDb);
-    await settleAt(page, pipPage, b.endDb + 4, 1600);
-    await expect(header).toHaveCSS('opacity', '0');
-    await settleAt(page, pipPage, 0, 1600);
-    await expect(header).toHaveCSS('opacity', '1');
   });
 
   test('Stop ends the session, releases the microphone, and returns to Ready with the profile still selected', async ({ page, context }) => {
