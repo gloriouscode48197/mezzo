@@ -1219,7 +1219,7 @@ test.describe('Result-screen action hierarchy spacing (2026-08-18 — Try again 
   });
 });
 
-test.describe('Shared toast restyle (2026-08-20 pass, supersedes 2026-08-15)', () => {
+test.describe('Shared toast (2026-10-26: a lighter, fully rounded chip with a sage check)', () => {
   /** Reads the toast pill's own rendered surface. */
   async function readToastSurface(pipPage) {
     return pipPage.locator('.pip-toast-card').evaluate((el) => {
@@ -1228,7 +1228,7 @@ test.describe('Shared toast restyle (2026-08-20 pass, supersedes 2026-08-15)', (
     });
   }
 
-  test('the discard toast reads as a dark notification, distinct from the now-lighter selector surface — modest rounded rectangle, no border', async ({ page, context }) => {
+  test('the discard toast is a lighter, fully rounded chip with a thin cream edge, distinct from the selector surface', async ({ page, context }) => {
     // A saved profile must already exist and be selected before creating,
     // so Discard restores to Ready (not Welcome — see handleResultDiscard's
     // own fallback-to-Welcome behavior for a true first-ever creation) and
@@ -1270,25 +1270,12 @@ test.describe('Shared toast restyle (2026-08-20 pass, supersedes 2026-08-15)', (
     // the panel's identity — background color is what must differ.)
     expect(toastSurface.backgroundColor).not.toBe(selectorSurface.backgroundColor);
 
-    // The approved dark #222222/light-text pairing, matching the
-    // modal-card system — existing values, no new color family
-    // introduced beyond the accent border below.
-    expect(toastSurface.backgroundColor).toBe('rgb(56, 57, 60)'); // slate, --color-bg-raised
-    expect(normalizeColor(toastSurface.color)).toBe('rgba(243, 235, 222, 0.85)');
-
-    // No border at all (2026-08-20 manual-review correction — an
-    // orange-tinted accent border briefly existed here and read as an
-    // unintended warning color; removed outright rather than replaced with
-    // a different colored border). borderWidth, not borderColor: an
-    // element with no border declared can still report *some*
-    // browser-internal borderColor even though nothing renders, so width
-    // is the check that can't give a false pass.
-    expect(toastSurface.borderWidth).toBe('0px');
-
-    // A modest rounded rectangle, not a capsule (the selector TRIGGER's
-    // own 100px+ pill shape — a different element from the panel — stays
-    // far above this).
-    expect(parseFloat(toastSurface.borderRadius)).toBeLessThan(20);
+    // Option A (2026-10-26): #4A4B4F, a thin cream edge, cream text at
+    // regular weight, fully rounded so it can't read as a 3px button.
+    expect(toastSurface.backgroundColor).toBe('rgb(74, 75, 79)');
+    expect(toastSurface.color).toBe('rgb(243, 235, 222)');
+    expect(toastSurface.borderWidth).toBe('1px');
+    expect(parseFloat(toastSurface.borderRadius)).toBeGreaterThanOrEqual(999);
     const triggerRadius = await readyScreenLater.locator('.pip-ready-selector-trigger').evaluate((el) => getComputedStyle(el).borderRadius);
     expect(toastSurface.borderRadius).not.toBe(triggerRadius);
   });
@@ -1311,13 +1298,13 @@ test.describe('Shared toast restyle (2026-08-20 pass, supersedes 2026-08-15)', (
     await expect(pipPage.locator('.pip-toast')).toHaveClass(/pip-toast-visible/);
     await expect(pipPage.locator('.pip-toast-card')).toHaveText('Speaking profile saved');
     const toastSurface = await readToastSurface(pipPage);
-    expect(toastSurface.backgroundColor).toBe('rgb(56, 57, 60)');
-    expect(normalizeColor(toastSurface.color)).toBe('rgba(243, 235, 222, 0.85)');
-    expect(toastSurface.borderWidth).toBe('0px');
-    expect(parseFloat(toastSurface.borderRadius)).toBeLessThan(20);
+    expect(toastSurface.backgroundColor).toBe('rgb(74, 75, 79)');
+    expect(toastSurface.color).toBe('rgb(243, 235, 222)');
+    expect(toastSurface.borderWidth).toBe('1px');
+    expect(parseFloat(toastSurface.borderRadius)).toBeGreaterThanOrEqual(999);
   });
 
-  test('the toast reaches full opacity and stays fully visible for at least three seconds after fade-in completes, then fades out — remaining fully within the viewport throughout', async ({ page, context }) => {
+  test('the toast fades in over 150ms, holds about 2s fully visible, then fades out over 200ms — fully within the viewport', async ({ page, context }) => {
     const pipPage = await openCompanion(page, context);
     await pipPage.setViewportSize({ width: 382, height: 512 });
     await pipPage.locator('button:has-text("Create speaking profile")').click();
@@ -1331,44 +1318,27 @@ test.describe('Shared toast restyle (2026-08-20 pass, supersedes 2026-08-15)', (
 
     const toast = pipPage.locator('.pip-toast');
     await expect(toast).toHaveClass(/pip-toast-visible/);
-    await expect.poll(
-      () => toast.evaluate((el) => getComputedStyle(el).opacity),
-      { timeout: 2000 }
-    ).toBe('1');
-    const fadeInDoneAt = Date.now() - t0;
+    expect(await toast.evaluate((el) => getComputedStyle(el).transitionDuration)).toBe('0.15s'); // the fade in
+    await expect.poll(() => toast.evaluate((el) => getComputedStyle(el).opacity), { timeout: 1000 }).toBe('1');
 
-    // Stays fully opaque, in the viewport, for at least ~3s after fade-in
-    // completes (poll partway through the hold window — comfortably inside
-    // the approved 3s floor without racing the fade-out's own start).
-    await pipPage.waitForTimeout(2500);
-    const midHold = await toast.evaluate((el) => getComputedStyle(el).opacity);
-    expect(midHold).toBe('1');
+    // Fully shown partway through the hold, inside the viewport.
+    await pipPage.waitForTimeout(1200);
+    expect(await toast.evaluate((el) => getComputedStyle(el).opacity)).toBe('1');
     const viewport = pipPage.viewportSize();
-    const rectMidHold = await toast.evaluate((el) => {
-      const r = el.getBoundingClientRect();
-      return { x: r.x, y: r.y, width: r.width, height: r.height };
-    });
-    expect(rectMidHold.x).toBeGreaterThanOrEqual(0);
-    expect(rectMidHold.y).toBeGreaterThanOrEqual(0);
-    expect(rectMidHold.x + rectMidHold.width).toBeLessThanOrEqual(viewport.width);
-    expect(rectMidHold.y + rectMidHold.height).toBeLessThanOrEqual(viewport.height);
+    const r = await toast.locator('.pip-toast-card').evaluate((el) => { const b = el.getBoundingClientRect(); return { x: b.x, y: b.y, w: b.width, h: b.height }; });
+    expect(r.x).toBeGreaterThanOrEqual(0);
+    expect(Math.round(r.y)).toBe(12); // 12px below the top of the window
+    expect(r.x + r.w).toBeLessThanOrEqual(viewport.width);
 
-    // Eventually fades out (the existing behavior, unchanged) — confirms
-    // the longer duration doesn't strand the toast visible forever. Total
-    // time from click to the visible class being removed should sit close
-    // to TOAST_VISIBLE_MS (3200ms): comfortably more than 3000ms (leaving
-    // room for the initial 200ms fade-in plus the click/dispatch overhead
-    // already folded into t0), with generous slack below the exact
-    // constant for expect.poll's own ~100ms granularity rather than
-    // re-deriving "hold time after fade-in" from a second, independently
-    // jittery measurement.
-    await expect(toast).not.toHaveClass(/pip-toast-visible/, { timeout: 3000 });
-    const totalVisibleWindow = Date.now() - t0;
-    expect(totalVisibleWindow).toBeGreaterThanOrEqual(3000);
-    expect(fadeInDoneAt).toBeLessThan(600); // fade-in itself was genuinely quick
+    // Then the fade out (200ms) begins at about 2.15s.
+    await expect(toast).not.toHaveClass(/pip-toast-visible/, { timeout: 2000 });
+    const visibleFor = Date.now() - t0;
+    expect(visibleFor).toBeGreaterThanOrEqual(2000);
+    expect(visibleFor).toBeLessThan(3000);
+    expect(await toast.evaluate((el) => getComputedStyle(el).transitionDuration)).toBe('0.2s'); // the fade out
   });
 
-  test('the toast respects prefers-reduced-motion — no slide transform, opacity fade preserved, message still understandable', async ({ page, context }) => {
+  test('the toast respects prefers-reduced-motion — no slide and no fade, message still understandable', async ({ page, context }) => {
     const pipPage = await openCompanion(page, context);
     // Emulated on pipPage itself, not the opener page: the Document PiP
     // window is Playwright's own separate target with its own document —
@@ -1391,6 +1361,8 @@ test.describe('Shared toast restyle (2026-08-20 pass, supersedes 2026-08-15)', (
     await expect(toast).toHaveClass(/pip-toast-visible/);
     const transform = await toast.evaluate((el) => getComputedStyle(el).transform);
     expect(['none', 'matrix(1, 0, 0, 1, 0, 0)']).toContain(transform);
+    // With reduced motion it appears without fading.
+    expect(await toast.evaluate((el) => getComputedStyle(el).transitionDuration)).toBe('0s');
     await expect(pipPage.locator('.pip-toast-card')).toHaveText('New profile discarded');
   });
 });

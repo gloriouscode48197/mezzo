@@ -539,7 +539,7 @@ test.describe('Companion: selector surface and caret badge (2026-08-20)', () => 
 // =============================================================================
 
 test.describe('Companion: toast styling completeness (2026-08-20)', () => {
-  test('"Available until you close the Companion" (Keep temporarily) uses the exact same dark restyled surface as the other two toast messages', async ({ page, context }) => {
+  test('"Available until you close the Companion" (Keep temporarily) uses the toast look: #4A4B4F, a thin cream edge, fully rounded, cream 13px regular text, a 12px sage check', async ({ page, context }) => {
     const pipPage = await openCompanion(page, context);
     await pipPage.locator('button:has-text("Create speaking profile")').click();
     await pipPage.locator('button:has-text("I\'m ready")').click();
@@ -553,16 +553,56 @@ test.describe('Companion: toast styling completeness (2026-08-20)', () => {
     await expect(pipPage.locator('.pip-toast-card')).toHaveText('Available until you close the Companion');
     const style = await pipPage.locator('.pip-toast-card').evaluate((el) => {
       const cs = getComputedStyle(el);
-      return { backgroundColor: cs.backgroundColor, color: cs.color, borderWidth: cs.borderWidth };
+      return { backgroundColor: cs.backgroundColor, color: cs.color, borderWidth: cs.borderWidth, borderColor: cs.borderColor, borderRadius: cs.borderRadius, fontSize: cs.fontSize, fontWeight: cs.fontWeight, boxShadow: cs.boxShadow, padding: cs.padding };
     });
-    expect(style.backgroundColor).toBe('rgb(56, 57, 60)'); // slate decision layer, --color-bg-raised
-    expect(normalizeColor(style.color)).toBe('rgba(243, 235, 222, 0.85)');
-    // No border at all (2026-08-20 manual-review correction) — borderWidth
-    // is the unambiguous check here: an element with no border declared
-    // can still report *some* browser-internal borderColor value even
-    // though nothing renders, so asserting on width (0px = genuinely no
-    // visible border) is the check that can't give a false pass.
-    expect(style.borderWidth).toBe('0px');
+    // Option A (2026-10-26).
+    expect(style.backgroundColor).toBe('rgb(74, 75, 79)');
+    expect(style.borderWidth).toBe('1px');
+    expect(normalizeColor(style.borderColor)).toBe('rgba(243, 235, 222, 0.18)');
+    expect(style.borderRadius).toBe('999px');
+    expect(style.color).toBe('rgb(243, 235, 222)');
+    expect(style.fontSize).toBe('13px');
+    expect(style.fontWeight).toBe('400');
+    expect(style.padding).toBe('6px 14px 6px 10px');
+    expect(style.boxShadow).toBe('rgba(0, 0, 0, 0.45) 0px 8px 24px 0px');
+    // The 12px sage check, before the text, 8px apart, hidden from screen readers.
+    const icon = await pipPage.locator('.pip-toast-icon').evaluate((el) => { const r = el.getBoundingClientRect(); return { w: r.width, color: getComputedStyle(el).color, hidden: el.getAttribute('aria-hidden'), right: r.right }; });
+    const textLeft = await pipPage.locator('.pip-toast-text').evaluate((el) => el.getBoundingClientRect().left);
+    expect(icon.w).toBe(12);
+    expect(icon.color).toBe('rgb(206, 226, 196)');
+    expect(icon.hidden).toBe('true');
+    expect(Math.round(textLeft - icon.right)).toBe(8);
+    await expect(pipPage.locator('.pip-toast')).toHaveAttribute('role', 'status');
+    expect(await pipPage.locator('.pip-toast').evaluate((el) => el.tabIndex)).toBe(-1);
+  });
+
+  test('the toast never covers the profile name or a control: 12px from the top on Ready, 8px below the profile name in Monitoring', async ({ page, context }) => {
+    const pipPage = await openCompanion(page, context);
+    await pipPage.setViewportSize({ width: 380, height: 364 });
+    await pipPage.locator('button:has-text("Create speaking profile")').click();
+    await pipPage.locator('button:has-text("I\'m ready")').click();
+    await waitForCapture(pipPage);
+    await pipPage.locator('.pip-screen-result .pip-decision-secondary-btn', { hasText: 'Keep temporarily' }).click();
+    const toast = pipPage.locator('.pip-toast');
+    await expect(toast).toHaveClass(/pip-toast-visible/);
+
+    const boxes = (sel) => pipPage.locator(sel).evaluateAll((els) => els.filter((el) => el.offsetParent !== null).map((el) => { const r = el.getBoundingClientRect(); return { top: r.top, bottom: r.bottom, left: r.left, right: r.right }; }));
+    const overlaps = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+    let card = (await boxes('.pip-toast-card'))[0];
+    expect(Math.round(card.top)).toBe(12);
+    for (const control of await boxes('.pip-screen-ready button, .pip-screen-ready .pip-ready-heading')) expect(overlaps(card, control)).toBe(false);
+
+    // Start monitoring while the toast still shows: it moves below the name.
+    await pipPage.locator('.pip-ready-start-btn').click();
+    await expect(pipPage.locator('.pip-screen-monitoring')).toBeVisible();
+    await pipPage.setViewportSize({ width: 220, height: 220 });
+    await expect(toast).toHaveClass(/pip-toast-visible/);
+    await pipPage.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+    card = (await boxes('.pip-toast-card'))[0];
+    const [name] = await boxes('.pip-profile-info');
+    expect(Math.round(card.top - name.bottom)).toBeGreaterThanOrEqual(8);
+    expect(overlaps(card, name)).toBe(false);
+    for (const control of await boxes('.pip-screen-monitoring button')) expect(overlaps(card, control)).toBe(false);
   });
 
   test('the toast surface is visibly different from the (lighter) selector surface, confirmed directly', async ({ page, context }) => {

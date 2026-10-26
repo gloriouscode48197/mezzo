@@ -357,14 +357,10 @@ const PREPARING_MESSAGE_MIN_DISPLAY_MS = 500;
 // Shared full-screen-decision affirmative-action timing (see the PRD's
 // "Processing and Toast Feedback" requirements).
 const DECISION_PROCESSING_MS = 1000;
-// Toast auto-dismiss timing — the elapsed time from showToast() adding the
-// visible class to it removing that class again, at which point the
-// existing 0.2s CSS fade-out (see .pip-toast's own transition) takes over.
-// 3200ms (2026-08-15, was 2000ms): the fade-in itself takes 200ms, so this
-// leaves the toast fully opaque for 3000ms after the fade-in completes —
-// "at least three seconds," per the requested read duration — before the
-// fade-out begins.
-const TOAST_VISIBLE_MS = 3200;
+// Toast timing — from showToast() adding the visible class to removing it,
+// after which the 200ms CSS fade out runs (see .pip-toast). 2150ms
+// (2026-10-26): the 150ms fade in, then about 2s fully shown.
+const TOAST_VISIBLE_MS = 2150;
 
 // Custom row-action tooltip (2026-08-20) hover delay — the approved
 // ~200-300ms range, replacing reliance on the browser's own native
@@ -800,6 +796,7 @@ export function createMezzoSession({
   // visible (a sibling of every .pip-screen, not owned by any one of them).
   let toastEl = null;
   let toastCardEl = null;
+  let toastTextEl = null;
   let toastHideTimer = null;
 
   // Custom row-action tooltip (2026-08-20) — a single shared element (same
@@ -2487,56 +2484,54 @@ export function createMezzoSession({
       }
       .pip-name-input:focus-visible { outline: 2px solid var(--border-outline); outline-offset: 1px; }
 
-      /* ── Toast — transient save/replace/discard confirmation, shared by
-         every message that uses it (no per-message positioning rules). A
-         child of .pip-layout (sibling to every .pip-screen), not any one
-         screen, so it can float above whichever screen is visible without
-         being duplicated per screen. Positioned near the top edge, not the
-         bottom (manual verification found a bottom-pinned toast, sitting
-         below the privacy disclaimer, too easy to miss: after a
-         Ready-bound action, attention is up near the heading and the
-         restored selection, not the very bottom edge). 16px top inset is
-         comfortably clear of Ready's own H1 — confirmed against the real
-         382x512 Companion size, where the heading's own top edge sits well
-         over 100px lower. Never shifts surrounding layout
-         (position:absolute, taken out of flow) and never intercepts
-         pointer/keyboard input (pointer-events:none — it has no
-         interactive content of its own), so it can never cover essential
-         controls in any functional sense even though it visually floats
-         above them.
-         Surface: --color-bg-raised with soft cream text and the elevation
-         shadow — reads as a notification over the screen, never as the
-         selector's menu surface. A 10px rounded rectangle, never a pill.
-         No border: separation comes from the surface and the shadow. */
+      /* ── Toast — transient save/update/discard confirmation, shared by
+         every message that uses it. A child of .pip-layout (sibling to
+         every .pip-screen), so it floats above whichever screen is visible.
+         Centered, 12px below the top of the window (in Monitoring, 8px
+         below the profile name instead, so it never covers it: see
+         placeToast()). Never shifts layout and never takes input
+         (pointer-events: none).
+         Look (2026-10-26): a fully rounded chip on a surface lighter than
+         the window, a thin cream edge, cream text at regular weight, and
+         a small sage check. Fully rounded on purpose: buttons are 3px, so
+         the shape says it isn't clickable. No cream fill, no chartreuse.
+         Motion: fades in over 150ms, holds about 2s, fades out over 200ms;
+         with reduced motion it simply appears and disappears. */
       .pip-toast {
         position: absolute;
-        left: 20px;
-        right: 20px;
-        top: 16px;
+        left: 0;
+        right: 0;
+        top: var(--space-3);
         z-index: 40;
         display: flex;
         justify-content: center;
         pointer-events: none;
         opacity: 0;
-        transform: translateY(-4px);
-        transition: opacity 0.2s ease, transform 0.2s ease;
+        transition: opacity 0.2s ease; /* the fade out */
       }
-      .pip-toast.pip-toast-visible { opacity: 1; transform: translateY(0); }
+      .pip-toast.pip-toast-visible { opacity: 1; transition: opacity 0.15s ease; /* the fade in */ }
       @media (prefers-reduced-motion: reduce) {
-        .pip-toast { transition: opacity 0.2s ease; transform: none; }
-        .pip-toast.pip-toast-visible { transform: none; }
+        .pip-toast, .pip-toast.pip-toast-visible { transition: none; }
       }
       .pip-toast-card {
-        max-width: 100%;
-        background: var(--color-bg-raised);
-        border-radius: 10px;
-        padding: 9px 18px;
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        max-width: calc(100% - 2 * var(--space-3));
+        box-sizing: border-box;
+        padding: 6px 14px 6px 10px;
+        background: #4A4B4F;
+        border: 1px solid rgba(243, 235, 222, 0.18);
+        border-radius: 999px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
         font-family: var(--font-body);
-        font-size: 12px;
-        color: color-mix(in srgb, var(--color-text-soft) 85%, transparent);
-        text-align: center;
-        box-shadow: 0 8px 24px color-mix(in srgb, var(--color-shadow) 45%, transparent);
+        font-size: 13px;
+        font-weight: var(--weight-regular);
+        line-height: 18px;
+        color: #F3EBDE;
+        text-align: left;
       }
+      .pip-toast-icon { flex-shrink: 0; width: 12px; height: 12px; color: #CEE2C4; }
 
       /* ── Row-action tooltip (2026-08-20) — the compact, dark-surface
          treatment for the selector panel's own Recalibrate/Delete icon
@@ -4005,10 +4000,20 @@ export function createMezzoSession({
     toast.setAttribute('aria-live', 'polite');
     const toastCard = pipDoc.createElement('div');
     toastCard.className = 'pip-toast-card';
+    toastCard.innerHTML = '<svg class="pip-toast-icon" viewBox="0 0 12 12" fill="none" aria-hidden="true" focusable="false"><path d="M2.5 6.3l2.3 2.2 4.7-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    const toastText = pipDoc.createElement('span');
+    toastText.className = 'pip-toast-text';
+    toastCard.appendChild(toastText);
     toast.appendChild(toastCard);
     layout.appendChild(toast);
     toastEl = toast;
     toastCardEl = toastCard;
+    toastTextEl = toastText;
+    // A toast that's showing keeps clear of the profile name and controls
+    // when the window is resized (placeToast()).
+    pipDoc.defaultView?.addEventListener('resize', () => {
+      if (toastEl?.classList.contains('pip-toast-visible')) placeToast();
+    });
 
     // ── Row-action tooltip (2026-08-20) — a single shared element, same
     //    sibling-of-every-screen pattern as the toast just above (see
@@ -4197,6 +4202,8 @@ export function createMezzoSession({
 
   function enterPipMonitoringMode() {
     if (!pipWindow) return;
+    // A toast still showing moves below the profile name (placeToast()).
+    if (toastEl?.classList.contains('pip-toast-visible')) requestAnimationFrame(placeToast);
     if (monitoringProfileNameEl) {
       monitoringProfileNameEl.textContent = profileMetaText(activeProfile);
     }
@@ -6142,14 +6149,33 @@ export function createMezzoSession({
    *  instead. One shared positioning rule for every message that uses this
    *  — see .pip-toast's own CSS comment for where and why. */
   function showToast(message) {
-    if (!toastEl || !toastCardEl) return;
-    toastCardEl.textContent = message;
+    if (!toastEl || !toastTextEl) return;
+    toastTextEl.textContent = message;
+    placeToast();
     toastEl.classList.add('pip-toast-visible');
     if (toastHideTimer) clearTimeout(toastHideTimer);
     toastHideTimer = setTimeout(() => {
       toastEl?.classList.remove('pip-toast-visible');
       toastHideTimer = null;
     }, TOAST_VISIBLE_MS);
+  }
+
+  /** 12px below the top of the window. In Monitoring, if that would cover
+   *  the profile name or a top-corner control (Compact, Expand), 8px below
+   *  the lowest of them instead. */
+  function placeToast() {
+    if (!toastEl) return;
+    let top = 12;
+    const monitoringShown = monitoringScreenEl && !monitoringScreenEl.classList.contains('hidden');
+    if (monitoringShown) {
+      const toastHeight = toastCardEl?.offsetHeight || 32;
+      const inTheWay = [monitoringProfileNameEl, ...monitoringScreenEl.querySelectorAll('.pip-control-btn')]
+        .filter((el) => el && el.offsetParent !== null)
+        .map((el) => el.getBoundingClientRect())
+        .filter((r) => r.height > 0 && r.top < top + toastHeight);
+      for (const r of inTheWay) top = Math.max(top, Math.round(r.bottom + 8));
+    }
+    toastEl.style.top = `${top}px`;
   }
 
   /** Positions the shared tooltip against a specific target button, using
@@ -6321,6 +6347,7 @@ export function createMezzoSession({
     if (toastHideTimer) { clearTimeout(toastHideTimer); toastHideTimer = null; }
     toastEl = null;
     toastCardEl = null;
+    toastTextEl = null;
     if (tooltipShowTimer) { clearTimeout(tooltipShowTimer); tooltipShowTimer = null; }
     tooltipEl = null;
     tooltipTargetEl = null;
