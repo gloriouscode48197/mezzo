@@ -43,11 +43,25 @@
   }
   .mono { font-family: var(--font-mono); }
 
-  .site-bar { display: flex; align-items: center; padding: 18px 20px 0; }
-  .site-bar a { font-family: var(--font-display); font-weight: 600; font-size: 22px; letter-spacing: var(--tracking-heading); color: var(--color-text); text-decoration: none; }
-  .intro { padding: 10px 20px 4px; max-width: 760px; }
+  /* 32px from the top edge (the rhythm scale's screen-edge spacing). */
+  .intro { padding: 32px 20px 4px; max-width: 760px; }
   .intro h1 { font-family: var(--font-display); font-weight: 500; font-size: 28px; letter-spacing: var(--tracking-heading); margin: 0 0 6px; }
   .intro p { margin: 0; color: var(--color-text-muted); font-size: 15px; text-wrap: pretty; }
+  /* The site's inline link: sage, underlined on hover and focus, with a
+     24px-tall hit area starting 12px below the intro. */
+  .intro-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    margin-top: 12px;
+    color: var(--color-link);
+    font-size: 15px;
+    text-decoration: none;
+    text-underline-offset: 3px;
+  }
+  .intro-link:hover,
+  .intro-link:focus-visible { text-decoration: underline; }
+  .intro-link:focus-visible { outline: 2px solid var(--color-link); outline-offset: 2px; border-radius: 2px; }
 
   /* Blocked microphone: the same guidance as the Home page's denied state. */
   .blocked { margin: 12px 20px 0; padding: 20px; max-width: 560px; border-radius: 6px; background: var(--color-bg-slate, #38393C); }
@@ -153,10 +167,10 @@
 </style>
 </head>
 <body>
-<div class="site-bar"><a href="/" aria-label="Mezzo home">mezzo</a></div>
 <section class="intro">
   <h1>Mezzo Range Ring playground</h1>
   <p>Calibrate with your voice, then adjust the sliders to see how Mezzo decides when to nudge. Nothing is recorded or sent anywhere.</p>
+  <a class="intro-link" href="/">Use Mezzo in your meetings</a>
 </section>
 <section id="blocked" class="blocked" hidden aria-labelledby="blocked-heading">
   <h2 id="blocked-heading" tabindex="-1">Your browser has blocked microphone access</h2>

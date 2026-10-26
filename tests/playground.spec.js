@@ -90,7 +90,7 @@ test.describe('Range Ring playground', () => {
     expect(await copied()).toEqual(PLAYGROUND_DEFAULTS);
   });
 
-  test('never requests the microphone on load, hides the numbers by default, and links home', async ({ page }) => {
+  test('never requests the microphone on load, hides the numbers by default, and links to the tool under the intro (no wordmark)', async ({ page }) => {
     await countMicRequests(page);
     await page.goto('/playground/');
     await expect(page.locator('.mezzo-ring')).toHaveCount(1);
@@ -99,7 +99,20 @@ test.describe('Range Ring playground', () => {
     await expect(page.locator('#toggle-readout')).not.toBeChecked();
     await expect(page.locator('#readout')).toBeHidden();
     await expect(page.locator('label:has(#toggle-readout)')).toHaveText('Show numbers');
-    await expect(page.locator('.site-bar a')).toHaveAttribute('href', '/');
+    // No wordmark bar; a link to the tool under the intro instead.
+    await expect(page.locator('.site-bar')).toHaveCount(0);
+    await expect(page.getByText('mezzo', { exact: true })).toHaveCount(0);
+    const link = page.locator('.intro-link');
+    await expect(link).toHaveText('Use Mezzo in your meetings');
+    await expect(link).toHaveAttribute('href', '/');
+    await expect(link).toHaveCSS('text-decoration-line', 'none');
+    await expect(link).toHaveCSS('color', 'rgb(206, 226, 196)');
+    const [p, a, h1] = await Promise.all([page.locator('.intro p').boundingBox(), link.boundingBox(), page.locator('.intro h1').boundingBox()]);
+    expect(Math.round(a.y - (p.y + p.height))).toBe(12);
+    expect(a.height).toBeGreaterThanOrEqual(24);
+    expect(Math.round(h1.y)).toBe(32);
+    await link.hover();
+    await expect(link).toHaveCSS('text-decoration-line', 'underline');
     await expect(page.locator('#blocked')).toBeHidden();
   });
 
