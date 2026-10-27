@@ -8,8 +8,10 @@
  *   Welcome -> Step 1 prep -> Step 1 listening (3s) -> Step 2 prep ->
  *   Step 2 listening (6s) -> result
  *
- * Recalibrate takes the same steps, with "Recalibrating {name}" above
- * "Step 1 of 2". Microphone calls are counted with a getUserMedia wrapper
+ * Recalibrating a saved profile takes the same steps, under one
+ * "Recalibrating {name}" header bar on every screen of the flow (canvas
+ * board "v3-explore-Recalibration · one header bar on every screen").
+ * First-time setup has no bar. Microphone calls are counted with a getUserMedia wrapper
  * (the first call is Home's own permission probe).
  */
 
@@ -73,7 +75,7 @@ test.describe('Calibration steps: first-time setup', () => {
     const roomPrep = pip.locator('.pip-screen-prep-room');
     await expect(roomPrep).toBeVisible();
     await expect(pip.locator('.pip-screen-c1')).toHaveCount(0);
-    await expect(roomPrep.locator('.pip-prep-recalibrating')).toBeHidden();
+    await expect(roomPrep.locator('.pip-recalibration-bar')).toBeHidden();
     await expect(roomPrep.locator('.pip-prep-step')).toHaveText('Step 1 of 2');
     await expect(roomPrep.locator('h1')).toHaveText("First, let's hear the room");
     await expect(roomPrep.locator('.pip-prep-body')).toHaveText('For 3 seconds, Mezzo measures the background noise without your voice, so it can tell the two apart.');
@@ -266,34 +268,112 @@ test.describe('Calibration steps: Cancel returns to where calibration started', 
 });
 
 test.describe('Calibration steps: recalibration', () => {
-  test('Recalibrate -> Step 1 prep with "Recalibrating Kitchen" 8px above "Step 1 of 2" -> both steps -> "New calibration ready"', async ({ page, context }) => {
+  test('Recalibrate -> one "Recalibrating Kitchen" header bar on all six screens (both preps, both listening screens, processing, the result), with each screen\'s own layout centered under it', async ({ page, context }) => {
     test.setTimeout(45000);
     await page.addInitScript((p) => localStorage.setItem('mezzoProfiles', JSON.stringify(p)), KITCHEN);
     const pip = await openCompanion(page, context);
     await pip.setViewportSize({ width: 380, height: 364 });
+
+    /** The Decision bar: 44px at the very top, slate, a bottom border,
+     *  a Geist Mono 11px uppercase label. The screen below it keeps its
+     *  own background. */
+    const readBar = (screen) => screen.evaluate((el) => {
+      const bar = [...el.querySelectorAll('.pip-decision-bar')].find((b) => b.offsetParent !== null);
+      const label = bar?.querySelector('.pip-decision-bar-title');
+      const r = el.getBoundingClientRect();
+      const b = bar?.getBoundingClientRect();
+      const cs = bar && getComputedStyle(bar);
+      return {
+        text: label?.textContent, top: b && b.top - r.top, height: b?.height, width: b?.width, screenWidth: r.width,
+        background: cs?.backgroundColor, borderBottom: cs?.borderBottomWidth,
+        font: label && getComputedStyle(label).fontFamily, size: label && getComputedStyle(label).fontSize,
+        transform: label && getComputedStyle(label).textTransform,
+        screenBackground: getComputedStyle(el).backgroundColor,
+      };
+    });
+    const expectBar = async (screen) => {
+      const bar = await readBar(screen);
+      expect(bar.text).toBe('Recalibrating Kitchen');
+      expect(bar.top).toBe(0);
+      expect(bar.height).toBe(44);
+      expect(bar.width).toBe(bar.screenWidth);
+      expect(bar.borderBottom).toBe('1px');
+      expect(bar.font).toContain('Geist Mono');
+      expect(bar.size).toBe('11px');
+      expect(bar.transform).toBe('uppercase');
+      return bar;
+    };
+    /** The screen's own content (everything but the bar and Cancel, which
+     *  is pinned to the bottom) is centered in the space under the bar. */
+    const centeredUnderBar = (screen) => screen.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      const kids = [...el.children].filter((k) => !k.matches('.pip-decision-bar, .pip-calibrating-announce, .pip-creating-announce') && k.offsetParent !== null);
+      const top = Math.min(...kids.map((k) => k.getBoundingClientRect().top)) - r.top;
+      const bottom = r.bottom - Math.max(...kids.map((k) => k.getBoundingClientRect().bottom));
+      return { aboveContent: Math.round(top - 44), belowContent: Math.round(bottom) };
+    });
+
     await recalibrateFromSelector(pip, 'Kitchen', { throughSteps: false });
+
+    // 1. Step 1 prep: the bar, and no stacked eyebrow above "Step 1 of 2".
     const roomPrep = pip.locator('.pip-screen-prep-room');
     await expect(roomPrep).toBeVisible();
-    await expect(roomPrep.locator('.pip-prep-recalibrating')).toHaveText('Recalibrating Kitchen');
+    const prepBar = await expectBar(roomPrep);
+    expect(prepBar.background).not.toBe(prepBar.screenBackground); // slate bar over the charcoal step
+    await expect(roomPrep.locator('.pip-prep-recalibrating')).toHaveCount(0);
     await expect(roomPrep.locator('.pip-prep-step')).toHaveText('Step 1 of 2');
-    const gap = await roomPrep.evaluate((el) => Math.round(el.querySelector('.pip-prep-step').getBoundingClientRect().top - el.querySelector('.pip-prep-recalibrating').getBoundingClientRect().bottom));
-    expect(gap).toBe(8);
     await expect(roomPrep.locator('h1')).toHaveText("First, let's hear the room");
     await expect(roomPrep.locator('h1')).toBeFocused();
+    const prepSpace = await centeredUnderBar(roomPrep);
+    expect(Math.abs(prepSpace.aboveContent - prepSpace.belowContent)).toBeLessThanOrEqual(1);
 
+    // 2. Step 1 listening.
     await roomPrep.locator('.pip-intro-primary-btn').click();
     const listening = pip.locator('.pip-screen-calibrating');
     await expect(listening.locator('.pip-calibrating-subheading')).toHaveText('Listening to background noise');
-    expect(await visibleText(listening)).not.toContain('KITCHEN'); // no other text on the listening screen
+    await expectBar(listening);
+    expect(await visibleText(listening)).toMatch(/^RECALIBRATING KITCHEN LISTENING TO BACKGROUND NOISE (\d )?Cancel$/);
+
+    // 3. Step 2 prep.
     const voicePrep = pip.locator('.pip-screen-prep-voice');
     await expect(voicePrep).toBeVisible({ timeout: 8000 });
+    await expectBar(voicePrep);
     await expect(voicePrep.locator('.pip-prep-step')).toHaveText('Step 2 of 2');
+
+    // 4. Step 2 listening.
     await voicePrep.locator('.pip-intro-primary-btn').click();
     await expect(listening.locator('.pip-calibrating-subheading')).toHaveText('Listening to your voice');
+    await expectBar(listening);
 
+    // 5. Processing: the bar carries the name, so no eyebrow repeats it.
+    const processing = pip.locator('.pip-screen-creating');
+    await expect(processing).toBeVisible({ timeout: 12000 });
+    await expectBar(processing);
+    await expect(processing.locator('.pip-creating-text')).toHaveText('Saving your calibration…');
+    expect(await visibleText(processing)).toBe('RECALIBRATING KITCHEN Saving your calibration…'); // one name, in the bar
+
+    // 6. The result: the same label, on the slate decision screen.
     const m1 = pip.locator('.pip-screen-m1');
     await expect(m1).toBeVisible({ timeout: 15000 });
+    const m1Bar = await expectBar(m1);
+    expect(m1Bar.screenBackground).toBe(prepBar.background); // the same slate as the bar on the steps
     await expect(m1).toContainText('New calibration ready');
+  });
+
+  test('first-time setup has no header bar on any calibration screen', async ({ page, context }) => {
+    test.setTimeout(45000);
+    const pip = await openCompanion(page, context);
+    await pip.locator('.pip-screen-welcome button:has-text("Create speaking profile")').click();
+    await expect(pip.locator('.pip-screen-prep-room')).toBeVisible();
+    await expect(pip.locator('.pip-recalibration-bar:visible')).toHaveCount(0);
+    await pip.locator('.pip-screen-prep-room .pip-intro-primary-btn').click();
+    await expect(pip.locator('.pip-screen-calibrating')).toBeVisible();
+    await expect(pip.locator('.pip-recalibration-bar:visible')).toHaveCount(0);
+    await expect(pip.locator('.pip-screen-prep-voice')).toBeVisible({ timeout: 8000 });
+    await expect(pip.locator('.pip-recalibration-bar:visible')).toHaveCount(0);
+    await pip.locator('.pip-screen-prep-voice .pip-intro-primary-btn').click();
+    await expect(pip.locator('.pip-screen-creating')).toBeVisible({ timeout: 12000 });
+    await expect(pip.locator('.pip-recalibration-bar:visible')).toHaveCount(0);
   });
 });
 

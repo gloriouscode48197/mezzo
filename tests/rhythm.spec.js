@@ -215,27 +215,32 @@ test.describe('Rhythm', () => {
     await expect(pip.locator('.pip-ready-selector-panel').getByRole('button', { name: 'Delete Room 1 profile' })).toBeVisible();
   });
 
-  test('Processing (Sequence): the eyebrow sits exactly where listening\'s does, the heading 8 below it; no Cancel', async ({ page, context }) => {
-    await seed(page, [{ id: 'old', name: 'Home Office', speakingDb: -30, spreadDb: 4, calibratedTs: 1 }]);
-    const pip = await openCompanion(page, context);
-    await pip.setViewportSize({ width: 380, height: 364 });
-    await installLevelDriver(page, { speakingDb: 0 });
-    await setLevelDb(page, -40);
-    await pip.locator('.pip-ready-recalibrate-note .pip-inline-link').click();
-    await completeCalibrationSteps(pip);
-    const cal = pip.locator('.pip-screen-calibrating');
-    await expect(cal).toHaveAttribute('data-phase', 'voice', { timeout: 8000 });
-    const listenEyebrow = await box(cal.locator('.pip-calibrating-subheading'));
-    const creating = pip.locator('.pip-screen-creating');
-    await expect(creating).toBeVisible({ timeout: 15000 });
-    const heading = creating.locator('.pip-calibrating-heading');
-    await expect(heading).toHaveText('Saving your calibration…');
-    await expect(creating.locator('.pip-calibrating-subheading')).toHaveText('Recalibrating Home Office');
-    // The eyebrow stays where listening's was; the heading follows it.
-    expect((await box(creating.locator('.pip-calibrating-subheading'))).top).toBe(listenEyebrow.top);
-    expect(gap(await box(creating.locator('.pip-calibrating-subheading')), await box(heading))).toBe(8);
-    await expect(creating.locator('button')).toHaveCount(0);
-  });
+  for (const flow of ['recalibration', 'first-time']) {
+    test(`Processing (Sequence), ${flow}: its eyebrow line sits exactly where listening's eyebrow does, the heading 8 below it; no Cancel`, async ({ page, context }) => {
+      if (flow === 'recalibration') await seed(page, [{ id: 'old', name: 'Home Office', speakingDb: -30, spreadDb: 4, calibratedTs: 1 }]);
+      const pip = await openCompanion(page, context);
+      await pip.setViewportSize({ width: 380, height: 364 });
+      await installLevelDriver(page, { speakingDb: 0 });
+      await setLevelDb(page, -40);
+      if (flow === 'recalibration') await pip.locator('.pip-ready-recalibrate-note .pip-inline-link').click();
+      else await pip.locator('button:has-text("Create speaking profile")').click();
+      await completeCalibrationSteps(pip);
+      const cal = pip.locator('.pip-screen-calibrating');
+      await expect(cal).toHaveAttribute('data-phase', 'voice', { timeout: 8000 });
+      const listenEyebrow = await box(cal.locator('.pip-calibrating-subheading'));
+      // Under the "Recalibrating {name}" bar the whole layout is 44px lower.
+      expect(Math.round(listenEyebrow.top)).toBe(flow === 'recalibration' ? 44 + 32 : 32);
+      const creating = pip.locator('.pip-screen-creating');
+      await expect(creating).toBeVisible({ timeout: 15000 });
+      const heading = creating.locator('.pip-calibrating-heading');
+      await expect(heading).toHaveText(flow === 'recalibration' ? 'Saving your calibration…' : 'Creating your speaking profile…');
+      const eyebrowLine = await box(creating.locator('.pip-calibrating-subheading'));
+      expect(eyebrowLine.top).toBe(listenEyebrow.top);
+      expect(Math.round(eyebrowLine.height)).toBe(Math.round(listenEyebrow.height));
+      expect(gap(eyebrowLine, await box(heading))).toBe(8);
+      await expect(creating.locator('button')).toHaveCount(0);
+    });
+  }
 
   test('Extension popup, all four states: 16px padding; heading → 8 → body → 16 → button; links 20px from the bottom; hit areas', async ({ browser }) => {
     const STATES = {
@@ -291,14 +296,22 @@ test.describe('Rhythm', () => {
     await expectHitAreas(pip, '.pip-screen-m2');
   });
 
-  test('Hit areas on the recalibration result and in Compact monitoring', async ({ page, context }) => {
+  test('Hit areas on the recalibration steps (under the bar), the recalibration result and in Compact monitoring', async ({ page, context }) => {
     await seed(page, [{ id: 'old', name: 'Home Office', speakingDb: -30, spreadDb: 4, calibratedTs: 1 }]);
     const pip = await openCompanion(page, context);
     await pip.setViewportSize({ width: 380, height: 364 });
     await installLevelDriver(page, { speakingDb: 0 });
     await setLevelDb(page, -40);
     await pip.locator('.pip-ready-recalibrate-note .pip-inline-link').click();
-    await completeCalibrationSteps(pip);
+    // The steps, under the "Recalibrating Home Office" bar.
+    await expect(pip.locator('.pip-screen-prep-room .pip-recalibration-bar')).toBeVisible();
+    await expectHitAreas(pip, '.pip-screen-prep-room');
+    await pip.locator('.pip-screen-prep-room .pip-intro-primary-btn').click();
+    await expect(pip.locator('.pip-screen-calibrating')).toBeVisible();
+    await expectHitAreas(pip, '.pip-screen-calibrating');
+    await expect(pip.locator('.pip-screen-prep-voice')).toBeVisible({ timeout: 8000 });
+    await expectHitAreas(pip, '.pip-screen-prep-voice');
+    await pip.locator('.pip-screen-prep-voice .pip-intro-primary-btn').click();
     const m1 = pip.locator('.pip-screen-m1');
     await expect(m1).toBeVisible({ timeout: 20000 });
     await expectHitAreas(pip, '.pip-screen-m1');

@@ -268,7 +268,8 @@ Every calibration is two steps, and each step has a prep screen and a listening 
 
 * **First-time setup**: Welcome's **Create speaking profile** → Step 1 prep → Step 1 listening (3s) → Step 2 prep → Step 2 listening (6s) → the result screen.
 * **Create new profile**, from Ready's selector: the same steps.
-* **Recalibrate**, on a saved or the temporary profile: the same steps, with "Recalibrating {name}" (or "Recalibrating Temporary profile") above "Step 1 of 2" on Step 1's prep screen, ending on the recalibration result ("New calibration ready") for a saved profile.
+* **Recalibrate**, on a saved profile: the same steps, ending on the recalibration result ("New calibration ready"). Every screen of the flow (both prep screens, both listening screens, the processing screen and the result) has the same header bar, "Recalibrating {name}": 44px, slate, a bottom border, a mono 11px uppercase label. Each screen's own layout is unchanged below it, centered in the space under the bar; the steps keep their charcoal background and the result its slate one.
+* **Recalibrate**, on the temporary profile: it's a new calibration, so it takes the first-time steps with no header bar and ends on the new-profile result. First-time setup and Create new profile have no bar either.
 
 There is no separate introduction screen any more: the old "Create speaking profile" screen with its "I'm ready" (C1) is retired, since each step's prep screen does its job.
 
@@ -303,7 +304,7 @@ A brief processing moment — "Saving your calibration…" when recalibrating a 
 
 **Recalibrate, on a saved profile**, does not touch that profile yet. It shows "New calibration ready" / "Save it to “{name}”?", with:
 
-* **Update “{name}”** — overwrites the saved profile's calibration in place, keeping its name and identity, and returns to Ready with it selected
+* **Update “{name}”** — overwrites the saved profile's calibration in place, keeping its name and identity, and returns to Ready with it selected, where a toast confirms: `Profile “{name}” updated`
 * **Keep temporarily** — leaves the saved profile completely untouched, and keeps the new calibration as the temporary profile instead, selected on return
 * **Discard** — leaves everything as it was
 
@@ -656,7 +657,7 @@ With the temporary profile selected, Ready offers **Save profile** (the result s
 * A name that matches an existing saved profile's name instead — trimmed, case-insensitive; a saved profile's own stored display name and casing are never changed by this comparison — shows a warning (`A profile named “{Name}” already exists.`) and changes the button from Save to Update. Updating overwrites that profile's calibration in place, exactly as Recalibrate's own Update would, removes the unsaved profile, and selects the updated profile. A toast confirms instead: `Profile “{Name}” updated`.
 * **Cancel** returns to Ready, leaving the unsaved profile exactly as it was.
 
-Both Save and Update show a brief processing state on their own button, and guard against a duplicate submission, before the toast appears. The toast is transient (a 150ms fade in, about 2 seconds shown, a 200ms fade out; no fading with reduced motion), announces itself politely to assistive tech, and never shifts Ready's layout or takes focus. It's a fully rounded chip, lighter than the window, with a thin cream edge, cream text and a small sage check, so it can't be mistaken for a 3px button. It sits centered 12px below the top of the window; in Monitoring it moves below the profile name and corner controls instead of covering them. Every Companion toast uses it: "Speaking profile saved", Profile “{name}” updated, "Available until you close the Companion", and "New profile discarded".
+Both Save and Update show a brief processing state on their own button, and guard against a duplicate submission, before the toast appears. The toast is transient (a 150ms fade in, about 2 seconds shown, a 200ms fade out; no fading with reduced motion), announces itself politely to assistive tech, and never shifts Ready's layout or takes focus. It's a fully rounded chip, lighter than the window, with a thin cream edge, cream text and a small sage check, so it can't be mistaken for a 3px button. It sits centered 12px below the top of the window; in Monitoring it moves below the profile name and corner controls instead of covering them. Every Companion toast uses it: "Speaking profile saved", Profile “{name}” updated (after Update here or after a recalibration's Update), Profile “{name}” deleted, "Available until you close the Companion", and "New profile discarded".
 
 Recalibrate remains the primary, deliberate way to intentionally update a known profile. The naming screen's own name-matching path is an equivalent, explicit alternative for the moment an unsaved profile turns out to belong to a profile the user already has — not a second, looser way to overwrite something by accident.
 
@@ -670,7 +671,7 @@ Discard, from the selector's own row-level control, removes the unsaved profile 
 
 ## Deleting a Saved Profile
 
-Deleting a saved profile uses a dedicated, full-screen confirmation — never a small floating dialog or a browser-native confirmation — with **Delete** as an outline button (a destructive action isn't the bright default) and Cancel in the bar, asking plainly whether to permanently remove it. Canceling changes nothing. Confirming shows a brief processing state on Delete, with Cancel disabled for that same moment, before actually removing it — then, if it was the selected profile, falls back in order: the unsaved profile, if one exists; otherwise the most recently used remaining saved profile; otherwise Welcome, if nothing usable is left at all. If removal doesn't succeed, both actions become available again, the profile stays in the library exactly as it was, the current selection is untouched, and a brief, calm message explains it didn't work — the screen never remains stuck on its processing state.
+Deleting a saved profile uses a dedicated, full-screen confirmation — never a small floating dialog or a browser-native confirmation — with **Delete** as an outline button (a destructive action isn't the bright default) and Cancel in the bar, asking plainly whether to permanently remove it. Canceling changes nothing. Confirming shows a brief processing state on Delete, with Cancel disabled for that same moment, before actually removing it — then, if it was the selected profile, falls back in order: the unsaved profile, if one exists; otherwise the most recently used remaining saved profile; otherwise Welcome, if nothing usable is left at all. A toast then confirms: `Profile “{name}” deleted`. If removal doesn't succeed, no toast appears: both actions become available again, the profile stays in the library exactly as it was, the current selection is untouched, and a brief, calm message explains it didn't work — the screen never remains stuck on its processing state.
 
 Renaming a saved profile does not exist as a feature yet. If it's ever built, it belongs here too, alongside delete.
 

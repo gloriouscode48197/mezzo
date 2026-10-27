@@ -693,7 +693,12 @@ export function createMezzoSession({
   // docs/prd/ready-screen-speaking-profiles-mvp.md's §12 State Transitions).
   // The two calibration prep screens (Step 1, the room; Step 2, the voice).
   let prepScreenEls = { 1: null, 2: null };
-  let prepRecalibratingEl = null; // Step 1's "Recalibrating {name}" eyebrow
+  // The "Recalibrating {name}" header bar on the screens of a saved
+  // profile's recalibration that aren't decision screens (both prep
+  // screens, the listening screen, the processing screen): [{ screen, label }].
+  // See applyRecalibrationBar().
+  let recalibrationBars = [];
+  let m1BarTitleEl = null; // the result screen's own bar, same label
   let prepHeadingEls = { 1: null, 2: null };
 
   // What the current calibration is, and where it started: set when Step
@@ -852,7 +857,6 @@ export function createMezzoSession({
   let levelMeter = null; // MezzoLevelMeter: six segments following the live level (3-2-1 mic check, then capture)
   let calibratingHintEl = null; // empty in Step 1, CALIBRATING_HINT_LISTENING in Step 2
   let calibratingCountEl = null; // the large countdown: 3 to 1, then 6 to 1
-  let creatingEyebrowEl = null; // the same "Recalibrating {name}" eyebrow as Calibrating
   let creatingTextEl = null; // "Saving your calibration…" (a saved profile) or "Creating your speaking profile…"
   let micCheckTimer = null; // reads the mic level during the 3-2-1 so the circle can react before capture — see startMicCheck()
   let calibratingCountdownTimer = null;
@@ -2920,12 +2924,10 @@ export function createMezzoSession({
       .pip-screen-ready > * { margin: 0; flex-shrink: 0; }
       /* Heading → 8 → its subtext (one group). */
       .pip-screen-welcome > .pip-intro-body { margin-top: var(--space-2); }
-      /* Prep screens: [Recalibrating {name} → 8 →] Step N of 2 → 8 →
+      /* Prep screens: Step N of 2 → 8 →
          heading → 8 → body → 24 → I'm ready → Cancel (16 clear between the
          two hit areas: the tap-target floor, as on every screen). */
       .pip-prep-eyebrow { line-height: 1.4; text-align: center; }
-      .pip-prep-recalibrating:empty { display: none; }
-      .pip-prep-recalibrating:not(:empty) + .pip-prep-step { margin-top: var(--space-2); }
       .pip-screen-prep > .pip-prep-heading {
         margin-top: var(--space-2);
         font-size: 22px;
@@ -3028,6 +3030,25 @@ export function createMezzoSession({
 
       /* ── C. Decision ── */
       .pip-decision-bar { padding: 0 var(--space-4); }
+
+      /* Recalibrating a saved profile: the Decision bar, "Recalibrating
+         {name}", on every screen of the flow. On the prep, listening and
+         processing screens it sits over the screen (slate, like the result
+         screen it leads to) and the screen's own layout re-centers in the
+         space under it, keeping its 32px edge below the bar. */
+      .pip-recalibration-bar {
+        display: none;
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 44px;
+        background: var(--color-bg-decision);
+      }
+      .pip-has-recalibration-bar > .pip-recalibration-bar { display: flex; }
+      .pip-screen-prep.pip-has-recalibration-bar,
+      .pip-screen-calibrating.pip-has-recalibration-bar,
+      .pip-screen-creating.pip-has-recalibration-bar { padding-top: calc(44px + var(--space-6)); }
       .pip-screen-decision > .pip-decision-content,
       .pip-decision-form > .pip-decision-content {
         flex: 0 0 auto;
@@ -3131,20 +3152,25 @@ export function createMezzoSession({
 
     // ── Calibration prep screens (the Single choice template): one per
     //    step. Each says which step this is, what to do and for how long,
-    //    then waits: nothing is measured until "I'm ready". Step 1 adds a
-    //    "Recalibrating {name}" eyebrow above "Step 1 of 2" when
-    //    recalibrating. See PREP_COPY. ──
+    //    then waits: nothing is measured until "I'm ready". Recalibrating a
+    //    saved profile adds the "Recalibrating {name}" header bar. See
+    //    PREP_COPY. ──
+    const addRecalibrationBar = (screen) => {
+      const bar = pipDoc.createElement('div');
+      bar.className = 'pip-decision-bar pip-recalibration-bar';
+      const label = pipDoc.createElement('p');
+      label.className = 'pip-decision-bar-title';
+      bar.appendChild(label);
+      screen.appendChild(bar);
+      recalibrationBars.push({ screen, label });
+    };
+
     for (const step of [1, 2]) {
       const copy = PREP_COPY[step];
       const prepScreen = pipDoc.createElement('div');
       prepScreen.className = `pip-screen pip-screen-prep pip-screen-prep-${step === 1 ? 'room' : 'voice'} hidden`;
 
-      if (step === 1) {
-        const recalibrating = pipDoc.createElement('p');
-        recalibrating.className = 'pip-prep-eyebrow pip-prep-recalibrating';
-        prepScreen.appendChild(recalibrating);
-        prepRecalibratingEl = recalibrating;
-      }
+      addRecalibrationBar(prepScreen);
       const eyebrow = pipDoc.createElement('p');
       eyebrow.className = 'pip-prep-eyebrow pip-prep-step';
       eyebrow.textContent = copy.eyebrow;
@@ -3370,6 +3396,7 @@ export function createMezzoSession({
     // ── Calibrating (C2) ── (see "Calibration" in docs/product-experience.md)
     const calibratingScreen = pipDoc.createElement('div');
     calibratingScreen.className = 'pip-screen pip-screen-calibrating hidden';
+    addRecalibrationBar(calibratingScreen);
 
     // The Sequence template: the eyebrow ("Listening to background noise" /
     // "Listening to your voice") sits at a fixed top position
@@ -3492,14 +3519,19 @@ export function createMezzoSession({
     // Cancel: there's nothing left to cancel.
     const creatingScreen = pipDoc.createElement('div');
     creatingScreen.className = 'pip-screen pip-screen-creating pip-screen-sequence hidden';
+    addRecalibrationBar(creatingScreen);
 
     const creatingTop = pipDoc.createElement('div');
     creatingTop.className = 'pip-calibrating-top';
     creatingScreen.appendChild(creatingTop);
+    // An invisible eyebrow line, so the heading sits one line below where
+    // listening's eyebrow is, in every flow. A recalibration's profile name
+    // is in the header bar instead.
     const creatingEyebrow = pipDoc.createElement('div');
-    creatingEyebrow.className = 'pip-calibrating-subheading';
+    creatingEyebrow.className = 'pip-calibrating-subheading pip-sequence-spacer';
+    creatingEyebrow.setAttribute('aria-hidden', 'true');
+    creatingEyebrow.textContent = '\u00a0';
     creatingTop.appendChild(creatingEyebrow);
-    creatingEyebrowEl = creatingEyebrow;
     const creatingText = pipDoc.createElement('p');
     creatingText.className = 'pip-h1 pip-calibrating-heading pip-creating-text';
     creatingText.textContent = 'Creating your speaking profile…';
@@ -3604,7 +3636,9 @@ export function createMezzoSession({
 
     // Content block between the header bar and the bottom-pinned actions
     // (the 2026-08-17 inset modal card is retired — PRD §7).
-    m1Screen.appendChild(buildDecisionBar('Recalibration'));
+    const m1Bar = buildDecisionBar('Recalibrating');
+    m1BarTitleEl = m1Bar.firstChild; // "Recalibrating {name}", set in showM1Screen()
+    m1Screen.appendChild(m1Bar);
     const m1Card = pipDoc.createElement('div');
     m1Card.className = 'pip-decision-content';
     m1Screen.appendChild(m1Card);
@@ -4406,6 +4440,25 @@ function ringLayout() {
       creatingTransitionTimer = null;
     }
     if (screenEl !== readyScreenEl) closeSelectorPanel();
+    applyRecalibrationBar();
+  }
+
+  /** The "Recalibrating {name}" header bar: shown on the prep, listening
+   *  and processing screens only while a saved profile is being
+   *  recalibrated (the result screen, M1, has its own). First-time setup,
+   *  Create new profile and recalibrating the Temporary profile are
+   *  session-mode calibrations and get no bar. */
+  function applyRecalibrationBar() {
+    let name = null;
+    if (calibrationIntent?.mode === 'recalibrate') {
+      name = calibrationIntent.recalibratingName
+        ?? getSavedProfiles().find((p) => p.id === calibrationIntent.targetProfileId)?.name
+        ?? null;
+    }
+    for (const { screen, label } of recalibrationBars) {
+      screen.classList.toggle('pip-has-recalibration-bar', name !== null);
+      label.textContent = name !== null ? `Recalibrating ${name}` : '';
+    }
   }
 
   /** Reached exactly once per Companion lifetime — the very first open with
@@ -4447,10 +4500,6 @@ function ringLayout() {
     if (pipDocument?.body) pipDocument.body.setAttribute('data-layout', LAYOUT_MODES.EXPANDED);
     resizeCompanionToContent(MEZZO_COMPANION_READY_SIZE);
     activeCircle = null;
-    if (step === 1 && prepRecalibratingEl) {
-      const name = calibrationIntent?.recalibratingName;
-      prepRecalibratingEl.textContent = name ? `Recalibrating ${name}` : '';
-    }
     showOnlyScreen(prepScreenEls[step]);
     sessionState.set(step === 1 ? SESSION_STATES.COMPANION_READY : SESSION_STATES.COMPANION_CALIBRATING);
     prepHeadingEls[step]?.focus();
@@ -5211,6 +5260,7 @@ function ringLayout() {
   function handleDeleteConfirm() {
     if (!pendingDeleteProfileId) return;
     const deletedId = pendingDeleteProfileId;
+    const deletedName = getSavedProfiles().find((p) => p.id === deletedId)?.name;
     if (deleteCancelBtn) deleteCancelBtn.disabled = true;
 
     // The one, complete recovery routine for both failure paths below —
@@ -5262,6 +5312,8 @@ function ringLayout() {
       } else {
         showReadyScreen();
       }
+      // Only here, after the profile is really gone: never on a failure.
+      if (deletedName) showToast(`Profile “${deletedName}” deleted`);
       restoreDecisionFocus();
     }, () => showDeleteFailure());
   }
@@ -5702,13 +5754,9 @@ function ringLayout() {
     resizeCompanionToContent(MEZZO_COMPANION_READY_SIZE);
     activeCircle = null;
     // Recalibrating a saved profile saves a calibration; everything else
-    // creates a speaking profile. The eyebrow carries over from Calibrating.
+    // creates a speaking profile. The profile's name is in the header bar.
     const savingCalibration = state?.mode === 'recalibrate';
     if (creatingTextEl) creatingTextEl.textContent = savingCalibration ? 'Saving your calibration…' : 'Creating your speaking profile…';
-    if (creatingEyebrowEl) {
-      const name = calibrationIntent?.mode === 'recalibrate' ? calibrationIntent.recalibratingName : null;
-      creatingEyebrowEl.textContent = name ? `Recalibrating ${name}` : '';
-    }
     showOnlyScreen(creatingScreenEl);
     sessionState.set(SESSION_STATES.COMPANION_READY);
     // Announced once, immediately, independent of the paint-confirmation
@@ -5917,6 +5965,7 @@ function ringLayout() {
     const targetName = calibrationController.getTargetSnapshot()?.name;
     if (m1ReplaceBtn) m1ReplaceBtn.textContent = replaceButtonLabel(targetName);
     if (m1BodyEl) m1BodyEl.textContent = recalibrationQuestion(targetName);
+    if (m1BarTitleEl) m1BarTitleEl.textContent = `Recalibrating ${targetName ?? ''}`.trim();
     layoutMode = LAYOUT_MODES.EXPANDED;
     if (pipDocument?.body) pipDocument.body.setAttribute('data-layout', LAYOUT_MODES.EXPANDED);
     resizeCompanionToContent(MEZZO_COMPANION_READY_SIZE);
@@ -5944,6 +5993,8 @@ function ringLayout() {
         setSelectedProfile(updated);
       }
       showReadyScreen();
+      // The same wording as the naming screen's own Update.
+      if (updated) showToast(`Profile “${updated.name}” updated`);
       restoreDecisionFocus();
     });
   }
@@ -6375,7 +6426,8 @@ function ringLayout() {
     pipDocument = null;
     welcomeScreenEl = null;
     prepScreenEls = { 1: null, 2: null };
-    prepRecalibratingEl = null;
+    recalibrationBars = [];
+    m1BarTitleEl = null;
     prepHeadingEls = { 1: null, 2: null };
     calibrationIntent = null;
     roomStepDone = false;
@@ -6446,7 +6498,6 @@ function ringLayout() {
     levelMeter = null;
     calibratingHintEl = null;
     calibratingCountEl = null;
-    creatingEyebrowEl = null;
     creatingTextEl = null;
     stopCalibratingCountdown();
     stopPreparationCountdown();

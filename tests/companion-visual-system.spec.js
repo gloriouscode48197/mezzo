@@ -1028,7 +1028,7 @@ test.describe('Companion: row-action tooltips (2026-08-20)', () => {
     await expect(pipPage.locator('.pip-screen-prep-room')).toBeVisible(); // Recalibrate opens Step 1's prep screen
     // Recalibrating Home Office, not the initially-selected Kitchen —
     // confirms the click still targets the row it was clicked on.
-    await expect(pipPage.locator('.pip-prep-recalibrating')).toHaveText('Recalibrating Home Office');
+    await expect(pipPage.locator('.pip-screen-prep-room .pip-recalibration-bar')).toHaveText('Recalibrating Home Office');
     await completeCalibrationSteps(pipPage);
     await waitForCapture(pipPage);
     const m1Screen = pipPage.locator('.pip-screen-m1');

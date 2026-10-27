@@ -1001,7 +1001,7 @@ test.describe('Accessibility, H1 consistency, and sizing — both result variant
     await waitForCapture(pipPage);
     const m1Screen = pipPage.locator('.pip-screen-m1');
     await expect(m1Screen).toBeVisible({ timeout: 15000 });
-    await checkDecisionLayer(m1Screen, 'Recalibration');
+    await checkDecisionLayer(m1Screen, 'Recalibrating Kitchen');
     await checkContainment(m1Screen);
     await m1Screen.locator('.pip-decision-discard-btn').click();
 

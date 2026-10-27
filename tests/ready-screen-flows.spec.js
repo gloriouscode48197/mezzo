@@ -249,6 +249,10 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
 
     await expect(readyScreen).toBeVisible({ timeout: 3000 });
     await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Home Office');
+    // The same floating chip as "Speaking profile saved", announced by its role="status".
+    await expect(pipPage.locator('.pip-toast')).toHaveClass(/pip-toast-visible/);
+    await expect(pipPage.locator('.pip-toast-card')).toHaveText('Profile “Kitchen” deleted');
+    await expect(pipPage.locator('.pip-toast')).toHaveAttribute('role', 'status');
     await readyScreen.locator('.pip-ready-selector-trigger').click();
     await expect(panel.locator('.pip-ready-selector-row')).toHaveCount(1);
   });
@@ -465,6 +469,9 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
     await expect(errorEl).toBeVisible({ timeout: 3000 });
     await expect(errorEl).toHaveText("We couldn't delete this profile. Try again.");
     await expect(errorEl).toHaveAttribute('aria-live', 'polite');
+    // Nothing was deleted, so no "deleted" toast.
+    await expect(pipPage.locator('.pip-toast')).not.toHaveClass(/pip-toast-visible/);
+    await expect(pipPage.locator('.pip-toast-card')).not.toHaveText(/deleted/);
     await expect(confirmBtn).toBeEnabled();
     await expect(confirmBtn).toHaveText('Delete');
     await expect(cancelBtn).toBeEnabled();
@@ -527,6 +534,7 @@ test.describe('Companion: Ready-screen selector and decision states', () => {
     await expect(cancelBtn).toBeEnabled();
     const errorEl = deleteScreen.locator('#delete-error');
     await expect(errorEl).toBeVisible();
+    await expect(pipPage.locator('.pip-toast')).not.toHaveClass(/pip-toast-visible/);
 
     // Still fully recoverable from here — profile and selection untouched.
     await cancelBtn.click();
@@ -1050,6 +1058,9 @@ test.describe('Migration: profiles saved before the speech-band filter (2026-10-
 
     await expect(readyScreen).toBeVisible({ timeout: 5000 });
     await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Old office');
+    // The same toast as updating by name from the naming screen.
+    await expect(pipPage.locator('.pip-toast')).toHaveClass(/pip-toast-visible/);
+    await expect(pipPage.locator('.pip-toast-card')).toHaveText('Profile “Old office” updated');
     await expect(note).toHaveCount(0);
     const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('mezzoProfiles')));
     expect(stored).toHaveLength(1);
@@ -1073,6 +1084,6 @@ test.describe('Migration: profiles saved before the speech-band filter (2026-10-
     await readyScreen.locator('.pip-ready-recalibrate-note .pip-inline-link').click();
     const roomPrep = pipPage.locator('.pip-screen-prep-room');
     await expect(roomPrep).toBeVisible();
-    await expect(roomPrep.locator('.pip-prep-recalibrating')).toHaveText('Recalibrating Old office');
+    await expect(roomPrep.locator('.pip-recalibration-bar')).toHaveText('Recalibrating Old office');
   });
 });
