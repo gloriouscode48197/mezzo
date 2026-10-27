@@ -141,6 +141,8 @@ The status line collapses the Companion's states to one distinction: Welcome, Re
 
 **Reopen Companion.** Chrome allows one picture-in-picture window at a time, and the newest wins: Meet's mini window (opened manually, or automatically on a tab switch or screen share) closes the Companion. When the Companion closes in any way other than this page's Close Companion link — which includes its own native ✕, since the two look the same from inside — the page stays on the cream surface with "The Companion closed", a **Reopen Companion** button and a **Done** link. Reopen opens it again from that click with the same profile (an unsaved one included, still in memory only), and resumes monitoring if it was running. Done returns to the granted page. That page keeps the privacy line, "Mezzo only measures volume. Nothing you say is recorded."
 
+**Meet in the same window.** If Mezzo and Meet are tabs in the same window and the user switches to the Mezzo tab during a call, Meet opens its mini window, the Companion closes, and the page shows "The Companion closed" with Reopen. With Mezzo in its own window, switching to it isn't a tab switch, and the Companion stays open (confirmed in a real Meet call, 2026-10-26). This is why the extension opens Mezzo in its own window.
+
 The Mezzo Companion, not the Dock, is meant to stay available across an entire meeting-filled day — monitoring starts and stops independently inside it, session by session, without the Companion needing to reopen.
 
 User-facing copy never names this page — it says things like "Your Companion is open in its own window."
@@ -269,7 +271,7 @@ Every calibration is two steps, and each step has a prep screen and a listening 
 * **First-time setup**: Welcome's **Create speaking profile** → Step 1 prep → Step 1 listening (3s) → Step 2 prep → Step 2 listening (6s) → the result screen.
 * **Create new profile**, from Ready's selector: the same steps.
 * **Recalibrate**, on a saved profile: the same steps, ending on the recalibration result ("New calibration ready"). Every screen of the flow (both prep screens, both listening screens, the processing screen and the result) has the same header bar, "Recalibrating {name}": 44px, slate, a bottom border, a mono 11px uppercase label. Each screen's own layout is unchanged below it, centered in the space under the bar; the steps keep their charcoal background and the result its slate one.
-* **Recalibrate**, on the temporary profile: it's a new calibration, so it takes the first-time steps with no header bar and ends on the new-profile result. First-time setup and Create new profile have no bar either.
+* **Recalibrate**, on the temporary profile: by design, it's a new calibration, so it takes the first-time steps with no header bar, processes as "Creating your speaking profile…" and ends on the new-profile result. First-time setup and Create new profile have no bar either.
 
 There is no separate introduction screen any more: the old "Create speaking profile" screen with its "I'm ready" (C1) is retired, since each step's prep screen does its job.
 
@@ -415,7 +417,7 @@ The toolbar popup says plainly what is open, the Mezzo tab (the page) or the Com
 * **The Companion is open, not monitoring** — a sage "COMPANION OPEN" chip with an outline dot, "Your Companion is open, but not monitoring. It floats above your other windows.", and an outline **Go to Mezzo tab** button.
 * **Monitoring** — a sage "MONITORING" chip with a solid dot, "Mezzo is monitoring. The Companion floats above your other windows.", and an outline **Go to Mezzo tab** button.
 
-Every state keeps the Privacy and Settings links. **Go to Mezzo tab** focuses the existing Mezzo tab and its window (restoring it if minimized); it never opens a new tab and never navigates or reloads the page. The popup never tries to open or focus the Companion: Chrome only opens one from a click inside the page, extensions can't focus it, and it already floats above other windows.
+Every state keeps the Privacy and Settings links. **Go to Mezzo tab** focuses the existing Mezzo tab and its window (restoring it if minimized); it never opens a new tab and never navigates or reloads the page. The popup only sends `FOCUS_MEZZO_TAB` to the background and closes; the background finds the Mezzo tab, activates it, then focuses its window (or opens Mezzo if the tab closed meanwhile). Focusing a window closes the popup, so the popup can't finish the switch itself. The popup never tries to open or focus the Companion: Chrome only opens one from a click inside the page, extensions can't focus it, and it already floats above other windows.
 
 The popup learns the state from the Mezzo tab itself, from the same session state as the running page's "Monitoring is active / not active" line, so the two never disagree. It asks when it opens and updates live while it's open; if the tab doesn't answer within about 300ms, it shows "TAB OPEN". It never shows a profile name or anything about volume. In a locally loaded (developer) copy only, Settings has a Mezzo address field, so the extension can open a preview deployment instead of the live site. The toolbar badge marks a detected meeting with a cream dot on charcoal.
 
@@ -707,7 +709,7 @@ The visualization behaves like a natural system. Changes should feel like change
 * **Silence and room noise don't move it.** A speech-band filter keeps fan rumble and hiss out of the level, and the circle stays at rest unless the voice is clearly above the room's measured noise.
 * **Color reinforces state; it is not the primary channel.** Grey-taupe for the voice, sage for approaching, chartreuse only over range. With reduced motion, the circle still follows the voice, and the band appears at a fixed thickness instead of growing.
 
-Tuned values live in the ring, zone and audio settings objects (`src/range-ring.js`, `src/engine.js`, `src/audio.js`); the public playground at `/playground/` drives a frozen copy of them live.
+Tuned values live in the ring, zone and audio settings objects (`src/range-ring.js`, `src/engine.js`, `src/audio.js`); the public playground at `/playground/` drives a frozen copy of them live. The playground has no wordmark or site bar; its intro starts 32px from the top and ends with a "Use Mezzo in your meetings" link to `/`.
 
 ---
 
