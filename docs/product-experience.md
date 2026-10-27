@@ -643,7 +643,7 @@ Calibration, recalibration, profile selection, saving, replacing, discarding, an
 
 ## Selecting a Profile
 
-Ready's selector shows whichever profile is currently active, and opens a panel listing every available one. When both a temporary and one or more saved profiles exist, the panel groups them — a "Temporary" section first, with the note "Disappears when you close Mezzo", then a "Saved profiles" section. Selecting a row updates the current selection and closes the panel; it never starts monitoring, and never deletes or discards anything else. Every row has a Recalibrate icon action; each saved profile's row also has Delete, and the temporary profile's row has Discard. **Create new profile** is the panel's footer action.
+Ready's selector shows whichever profile is currently active, and opens a panel listing every available one. When both a temporary and one or more saved profiles exist, the panel groups them — a "Temporary" section first, with the note "Disappears when you close Mezzo", then a "Saved profiles" section. Selecting a row updates the current selection and closes the panel; it never starts monitoring, and never deletes or discards anything else. Every row has a Recalibrate icon action, a circular arrow ("do it again"; a pencil would suggest edit or rename, which Mezzo doesn't offer); each saved profile's row also has Delete, and the temporary profile's row has Discard, a trash can. Both icons share one size, stroke, color and set of hover, pressed and focus states. **Create new profile** is the panel's footer action.
 
 ## Saved-Profile Actions
 

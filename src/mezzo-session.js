@@ -298,12 +298,14 @@ export function isTemporaryProfile(profile) {
 // aria-label is always the real accessible name.
 const CHEVRON_ICON_SVG = '<span class="pip-ready-selector-chevron" aria-hidden="true"><svg viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
 const TRASH_ICON_SVG = '<svg width="13" height="14" viewBox="0 0 13 14" fill="none" aria-hidden="true"><path d="M1 3.5h11M4.5 3.5V2h4v1.5M5.5 6.5v4M7.5 6.5v4M2 3.5l.8 8.5h7.4l.8-8.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-// A clean pencil/edit glyph — visual shorthand for "modify this speaking
-// profile" on the Ready selector's per-row Recalibrate action (2026-08-17).
-// Matched to TRASH_ICON_SVG's own size (13x14 viewBox) and stroke-width
-// (1.3), decorative only (aria-hidden — the button's own aria-label, set
-// per row in buildSelectorRow(), is the real accessible name).
-const PENCIL_ICON_SVG = '<svg width="13" height="14" viewBox="0 0 13 14" fill="none" aria-hidden="true"><path d="M9.3 1.8l2 2-6.7 6.7-2.8.6.6-2.8 6.9-6.5z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M8.1 3l2 2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+// A circular arrow, "do it again", on the Ready selector's per-row
+// Recalibrate action (2026-10-27; it was a pencil, which reads as edit or
+// rename, neither of which Mezzo offers). Drawn at the same 1:1 scale,
+// stroke width (1.3), caps and joins as TRASH_ICON_SVG, in currentColor,
+// so it takes the row action's own color and states. Decorative only
+// (aria-hidden: the button's aria-label, set per row in
+// buildSelectorRow(), is the real accessible name).
+const RECALIBRATE_ICON_SVG = '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M11.5 7a4.5 4.5 0 1 1-1.3-3.2M11.5 2v2.5H9" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 // Microphone blocked (PRD §9a): a solid circle with a slash. The body copy
 // says where to restore access; the icon only marks the state.
 const C0_BLOCKED_ICON_SVG = '<svg width="44" height="44" viewBox="0 0 44 44" fill="none" aria-hidden="true"><circle cx="22" cy="22" r="20" style="fill: var(--color-text-muted)"/><path d="M10.5 10.5l23 23" style="stroke: var(--color-bg-decision)" stroke-width="3.5" stroke-linecap="round"/></svg>';
@@ -5087,7 +5089,7 @@ function ringLayout() {
     recalibrateBtn.type = 'button';
     recalibrateBtn.className = 'pip-ready-selector-row-action';
     recalibrateBtn.setAttribute('aria-label', recalibrateLabel);
-    recalibrateBtn.innerHTML = PENCIL_ICON_SVG;
+    recalibrateBtn.innerHTML = RECALIBRATE_ICON_SVG;
     attachRowTooltip(recalibrateBtn, 'Recalibrate');
     recalibrateBtn.addEventListener('click', (event) => {
       event.stopPropagation();
