@@ -89,7 +89,8 @@ test.describe('Calibration steps: first-time setup', () => {
     expect(await micCalls(page)).toBe(homeProbe);
     await expect(pip.locator('.pip-screen-calibrating')).toBeHidden();
 
-    // Step 1 listening: eyebrow, a large 3-to-1 countdown, the sage meter.
+    // Step 1 listening: the step, the instruction as the heading, a 3-to-1
+    // countdown, the sage meter and the helper.
     await roomPrep.locator('.pip-intro-primary-btn').click();
     const listening = pip.locator('.pip-screen-calibrating');
     const count = listening.locator('.pip-calibrating-count');
@@ -97,11 +98,14 @@ test.describe('Calibration steps: first-time setup', () => {
     await expect(count).toHaveText('3', { timeout: 3000 });
     const roomStarted = Date.now();
     expect(await micCalls(page)).toBe(homeProbe + 1);
-    await expect(listening.locator('.pip-calibrating-subheading')).toHaveText('Listening to background noise');
-    await expect(listening.locator('.pip-calibrating-announce')).toHaveText('Listening to background noise, 3 seconds');
+    await expect(listening.locator('.pip-calibrating-subheading')).toHaveText('Step 1 of 2');
+    await expect(listening.locator('.pip-listening-heading')).toHaveText('Background noise only(no talking)');
+    // "(no talking)" always on its own line.
+    expect(await listening.locator('.pip-listening-heading').evaluate((el) => el.innerText)).toBe('Background noise only\n(no talking)');
+    await expect(listening.locator('.pip-calibrating-announce')).toHaveText('Step 1 of 2. Background noise only (no talking). 3 seconds.');
     await expect(count).toHaveAttribute('aria-hidden', 'true');
-    await expect(listening.locator('.pip-calibrating-hint')).toHaveText('');
-    expect(await visibleText(listening)).toBe('LISTENING TO BACKGROUND NOISE 3 Cancel');
+    await expect(listening.locator('.pip-calibrating-hint')).toHaveText('Mezzo is listening to the room.');
+    expect(await visibleText(listening)).toBe('STEP 1 OF 2 Background noise only (no talking) 3 Mezzo is listening to the room. Cancel');
     await expect.poll(() => litSegmentColors(listening)).not.toEqual([]); // the fake mic's tone lights the meter
     for (const c of await litSegmentColors(listening)) expect(c).toBe(SAGE);
     await expect(count).toHaveText('2', { timeout: 1500 });
@@ -123,14 +127,15 @@ test.describe('Calibration steps: first-time setup', () => {
     await expect(voicePrep).toBeVisible();
     await expect(listening).toBeHidden();
 
-    // Step 2 listening: the same layout, its eyebrow, 6-to-1, and the helper.
+    // Step 2 listening: the same layout, its step and instruction, 6-to-1, and the helper.
     await voicePrep.locator('.pip-intro-primary-btn').click();
     await expect(count).toHaveText('6', { timeout: 3000 });
     const voiceStarted = Date.now();
-    await expect(listening.locator('.pip-calibrating-subheading')).toHaveText('Listening to your voice');
-    await expect(listening.locator('.pip-calibrating-announce')).toHaveText('Listening to your voice, 6 seconds');
-    await expect(listening.locator('.pip-calibrating-hint')).toHaveText('Keep talking until the timer ends.');
-    expect(await visibleText(listening)).toBe('LISTENING TO YOUR VOICE 6 Keep talking until the timer ends. Cancel');
+    await expect(listening.locator('.pip-calibrating-subheading')).toHaveText('Step 2 of 2');
+    await expect(listening.locator('.pip-listening-heading')).toHaveText('Keep talking until the timer ends');
+    await expect(listening.locator('.pip-calibrating-announce')).toHaveText('Step 2 of 2. Keep talking until the timer ends. 6 seconds.');
+    await expect(listening.locator('.pip-calibrating-hint')).toHaveText("At a level that won't carry to people nearby.");
+    expect(await visibleText(listening)).toBe("STEP 2 OF 2 Keep talking until the timer ends 6 At a level that won't carry to people nearby. Cancel");
     await expect.poll(() => litSegmentColors(listening)).not.toEqual([]);
     for (const c of await litSegmentColors(listening)) expect(c).toBe(SAGE);
     await expect(count).toHaveText('5', { timeout: 1500 });
@@ -144,7 +149,7 @@ test.describe('Calibration steps: first-time setup', () => {
     expect(await liveTracks(page)).toBe(0);
   });
 
-  test('both listening screens share one layout: the countdown in Geist Mono 72px cream, the meter 24px below, Step 2\'s helper 8px below the meter', async ({ page, context }) => {
+  test('both listening screens share one layout: mono 11px step → 8 → a 20px/500 heading that reserves two lines (280px at most); the countdown in Geist Mono 48px cream, the meter 16px below, the helper 8px below the meter', async ({ page, context }) => {
     const pip = await openCompanion(page, context);
     await pip.setViewportSize({ width: 380, height: 364 });
     await pip.locator('button:has-text("Create speaking profile")').click();
@@ -159,18 +164,33 @@ test.describe('Calibration steps: first-time setup', () => {
       const meter = r('.mezzo-level-meter');
       const hint = r('.pip-calibrating-hint');
       const cs = getComputedStyle(el.querySelector('.pip-calibrating-count'));
+      const eyebrow = el.querySelector('.pip-calibrating-subheading');
+      const heading = el.querySelector('.pip-listening-heading');
+      const ecs = getComputedStyle(eyebrow);
+      const hcs = getComputedStyle(heading);
       return {
         font: cs.fontFamily, size: cs.fontSize, color: cs.color,
         countToMeter: Math.round(meter.top - slot.bottom), meterToHint: Math.round(hint.top - meter.bottom),
-        meterTop: Math.round(meter.top), eyebrowTop: Math.round(r('.pip-calibrating-subheading').top),
+        meterTop: Math.round(meter.top), slotTop: Math.round(slot.top), eyebrowTop: Math.round(eyebrow.getBoundingClientRect().top),
+        eyebrowFont: ecs.fontFamily, eyebrowSize: ecs.fontSize,
+        eyebrowToHeading: Math.round(heading.getBoundingClientRect().top - eyebrow.getBoundingClientRect().bottom),
+        headingSize: hcs.fontSize, headingWeight: hcs.fontWeight, headingMax: hcs.maxWidth,
+        headingHeight: Math.round(heading.getBoundingClientRect().height),
       };
     });
     const room = await measure();
     expect(room.font).toMatch(/Geist Mono/);
-    expect(room.size).toBe('72px');
+    expect(room.size).toBe('48px');
     expect(room.color).toBe(CREAM);
-    expect(room.countToMeter).toBe(24);
+    expect(room.countToMeter).toBe(16);
     expect(room.meterToHint).toBe(8);
+    expect(room.eyebrowFont).toMatch(/Geist Mono/);
+    expect(room.eyebrowSize).toBe('11px');
+    expect(room.eyebrowToHeading).toBe(8);
+    expect(room.headingSize).toBe('20px');
+    expect(room.headingWeight).toBe('500');
+    expect(room.headingMax).toBe('280px');
+    expect(room.headingHeight).toBe(50); // two lines of 20px × 1.25
 
     await expect(pip.locator('.pip-screen-prep-voice')).toBeVisible({ timeout: 6000 });
     await pip.locator('.pip-screen-prep-voice .pip-intro-primary-btn').click();
@@ -330,9 +350,9 @@ test.describe('Calibration steps: recalibration', () => {
     // 2. Step 1 listening.
     await roomPrep.locator('.pip-intro-primary-btn').click();
     const listening = pip.locator('.pip-screen-calibrating');
-    await expect(listening.locator('.pip-calibrating-subheading')).toHaveText('Listening to background noise');
+    await expect(listening.locator('.pip-calibrating-subheading')).toHaveText('Step 1 of 2');
     await expectBar(listening);
-    expect(await visibleText(listening)).toMatch(/^RECALIBRATING KITCHEN LISTENING TO BACKGROUND NOISE (\d )?Cancel$/);
+    expect(await visibleText(listening)).toMatch(/^RECALIBRATING KITCHEN STEP 1 OF 2 Background noise only \(no talking\) (\d )?Mezzo is listening to the room\. Cancel$/);
 
     // 3. Step 2 prep.
     const voicePrep = pip.locator('.pip-screen-prep-voice');
@@ -342,7 +362,7 @@ test.describe('Calibration steps: recalibration', () => {
 
     // 4. Step 2 listening.
     await voicePrep.locator('.pip-intro-primary-btn').click();
-    await expect(listening.locator('.pip-calibrating-subheading')).toHaveText('Listening to your voice');
+    await expect(listening.locator('.pip-calibrating-subheading')).toHaveText('Step 2 of 2');
     await expectBar(listening);
 
     // 5. Processing: the bar carries the name, so no eyebrow repeats it.
@@ -402,7 +422,7 @@ test.describe('Calibration steps: Try again', () => {
     await voicePrep.locator('.pip-intro-primary-btn').click();
     const listening = pip.locator('.pip-screen-calibrating');
     // Straight to the voice: 6, never 3.
-    await expect(listening.locator('.pip-calibrating-subheading')).toHaveText('Listening to your voice');
+    await expect(listening.locator('.pip-calibrating-subheading')).toHaveText('Step 2 of 2');
     await expect(listening.locator('.pip-calibrating-count')).toHaveText('6', { timeout: 3000 });
     await expect(pip.locator('.pip-screen-result')).toBeVisible({ timeout: 15000 });
     await setLevelDb(page, null);

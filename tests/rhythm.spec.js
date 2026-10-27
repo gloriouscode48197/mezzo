@@ -119,7 +119,7 @@ test.describe('Rhythm', () => {
     });
   }
 
-  test('Listening (Sequence): the eyebrow 32px from the top in both steps; the countdown slot → 24 → meter → 8 → helper; nothing moves between steps; Cancel 20px from the bottom', async ({ page, context }) => {
+  test('Listening (Sequence): the eyebrow 32px from the top in both steps → 8 → the heading; the countdown slot → 16 → meter → 8 → helper; nothing moves between steps; Cancel 20px from the bottom', async ({ page, context }) => {
     const pip = await openCompanion(page, context);
     await pip.setViewportSize({ width: 380, height: 364 });
     await installLevelDriver(page, { speakingDb: 0 });
@@ -130,6 +130,7 @@ test.describe('Rhythm', () => {
     await expect(screen.locator('.pip-calibrating-count')).toHaveText('2', { timeout: 6000 });
     const measure = async () => ({
       eyebrow: await box(screen.locator('.pip-calibrating-subheading')),
+      heading: await box(screen.locator('.pip-listening-heading')),
       count: await box(screen.locator('.pip-calibrating-count')),
       slot: await box(screen.locator('.pip-calibrating-slot')),
       meter: await box(screen.locator('.mezzo-level-meter')),
@@ -147,7 +148,8 @@ test.describe('Rhythm', () => {
     expect(vertical(voice)).toEqual(vertical(room));
     const mid = room.slot.top + room.slot.height / 2;
     expect(Math.abs(room.count.top + room.count.height / 2 - mid)).toBeLessThanOrEqual(1);
-    expect(gap(room.slot, room.meter)).toBe(24);
+    expect(gap(room.eyebrow, room.heading)).toBe(8);
+    expect(gap(room.slot, room.meter)).toBe(16);
     expect(gap(room.meter, room.hint)).toBe(8);
     expect(Math.round(364 - room.cancel.bottom)).toBe(20);
   });
@@ -216,7 +218,7 @@ test.describe('Rhythm', () => {
   });
 
   for (const flow of ['recalibration', 'first-time']) {
-    test(`Processing (Sequence), ${flow}: its eyebrow line sits exactly where listening's eyebrow does, the heading 8 below it; no Cancel`, async ({ page, context }) => {
+    test(`Processing (Sequence), ${flow}: its eyebrow line, heading and countdown slot sit exactly where listening's do; no Cancel`, async ({ page, context }) => {
       if (flow === 'recalibration') await seed(page, [{ id: 'old', name: 'Home Office', speakingDb: -30, spreadDb: 4, calibratedTs: 1 }]);
       const pip = await openCompanion(page, context);
       await pip.setViewportSize({ width: 380, height: 364 });
@@ -228,6 +230,8 @@ test.describe('Rhythm', () => {
       const cal = pip.locator('.pip-screen-calibrating');
       await expect(cal).toHaveAttribute('data-phase', 'voice', { timeout: 8000 });
       const listenEyebrow = await box(cal.locator('.pip-calibrating-subheading'));
+      const listenHeading = await box(cal.locator('.pip-listening-heading'));
+      const listenSlot = await box(cal.locator('.pip-calibrating-slot'));
       // Under the "Recalibrating {name}" bar the whole layout is 44px lower.
       expect(Math.round(listenEyebrow.top)).toBe(flow === 'recalibration' ? 44 + 32 : 32);
       const creating = pip.locator('.pip-screen-creating');
@@ -238,6 +242,10 @@ test.describe('Rhythm', () => {
       expect(eyebrowLine.top).toBe(listenEyebrow.top);
       expect(Math.round(eyebrowLine.height)).toBe(Math.round(listenEyebrow.height));
       expect(gap(eyebrowLine, await box(heading))).toBe(8);
+      // The heading sits where listening's does, and the slot (the spinner
+      // here, the countdown there) lines up too.
+      expect((await box(heading)).top).toBe(listenHeading.top);
+      expect(await box(creating.locator('.pip-calibrating-slot'))).toEqual(listenSlot);
       await expect(creating.locator('button')).toHaveCount(0);
     });
   }

@@ -338,12 +338,27 @@ const PREP_COPY = Object.freeze({
     body: "Talk for 6 seconds at a level that won't carry to people nearby.",
   }),
 });
-const LISTENING_EYEBROW = Object.freeze({
-  room: 'Listening to background noise',
-  voice: 'Listening to your voice',
+// The listening screens lead with the instruction (2026-10-27): after a
+// few runs people skim the prep screens and only read the countdown
+// screen, the one they can't leave. The step, the instruction as the
+// heading (each entry of `heading` is a line of its own), and a helper
+// under the meter. The announcement reads the step and the heading.
+const LISTENING_COPY = Object.freeze({
+  room: Object.freeze({
+    eyebrow: 'Step 1 of 2',
+    heading: Object.freeze(['Background noise only', '(no talking)']),
+    helper: 'Mezzo is listening to the room.',
+  }),
+  voice: Object.freeze({
+    eyebrow: 'Step 2 of 2',
+    heading: Object.freeze(['Keep talking until the timer ends']),
+    helper: "At a level that won't carry to people nearby.",
+  }),
 });
-// Step 2's listening screen only, under the meter.
-const CALIBRATING_HINT_LISTENING = 'Keep talking until the timer ends.';
+const listeningAnnouncement = (phase, seconds) => {
+  const copy = LISTENING_COPY[phase];
+  return `${copy.eyebrow}. ${copy.heading.join(' ')}. ${seconds} seconds.`;
+};
 // How often the 3-2-1 mic check reads the level — audio.js's own sampling
 // interval during capture, so the circle moves the same way before and after.
 const MIC_CHECK_INTERVAL_MS = 50;
@@ -651,7 +666,7 @@ export function createMezzoSession({
       if (calibratingStatusEl) calibratingStatusEl.textContent = '';
       setCalibratingPhase('voice');
       levelMeter?.start();
-      if (calibratingAnnounceEl) calibratingAnnounceEl.textContent = `${LISTENING_EYEBROW.voice}, ${CALIBRATION_COUNTDOWN_SECONDS} seconds`;
+      if (calibratingAnnounceEl) calibratingAnnounceEl.textContent = listeningAnnouncement('voice', CALIBRATION_COUNTDOWN_SECONDS);
       startCalibratingCountdown();
     }
   });
@@ -857,7 +872,8 @@ export function createMezzoSession({
   let calibratingStatusEl = null; // aria-hidden visible text: blank, then (if shown) "Preparing microphone…", blank during the 3-2-1 (calibratingCountEl shows the number), then a live "Listening… {n}s" countdown
   let calibratingAnnounceEl = null; // visually-hidden aria-live region — exactly two one-time announcements, see its own construction comment above
   let levelMeter = null; // MezzoLevelMeter: six segments following the live level (3-2-1 mic check, then capture)
-  let calibratingHintEl = null; // empty in Step 1, CALIBRATING_HINT_LISTENING in Step 2
+  let calibratingHintEl = null; // the helper under the meter (LISTENING_COPY)
+  let calibratingHeadingEl = null; // the instruction (LISTENING_COPY)
   let calibratingCountEl = null; // the large countdown: 3 to 1, then 6 to 1
   let creatingTextEl = null; // "Saving your calibration…" (a saved profile) or "Creating your speaking profile…"
   let micCheckTimer = null; // reads the mic level during the 3-2-1 so the circle can react before capture — see startMicCheck()
@@ -3010,20 +3026,26 @@ export function createMezzoSession({
       .pip-calibrating-count { top: 50%; }
       .pip-calibrating-visual { margin: var(--space-3) 0 0; }
       .pip-calibrating-hint { margin-top: var(--space-3); text-align: center; }
-      /* The listening screens (both steps, one layout): the eyebrow, then,
-         centered in the middle, a large countdown → 24 → the sage meter →
-         8 → (Step 2 only) "Keep talking until the timer ends." The helper
-         keeps its line in Step 1, empty, so nothing moves between steps. */
-      .pip-screen-calibrating .pip-calibrating-slot { height: 72px; }
+      /* The Sequence screens (both listening steps and processing, one
+         layout): "Step N of 2" → 8 → the heading, which always reserves two
+         lines; then, centered in the middle, the slot (the 48px countdown,
+         or the spinner) → 16 → the sage meter → 8 → the helper. Processing
+         keeps invisible meter and helper rows, so its slot lines up too. */
+      .pip-screen-calibrating p.pip-h1.pip-calibrating-heading,
+      .pip-screen-creating p.pip-h1.pip-calibrating-heading { min-height: calc(2 * 1.25em); }
+      .pip-screen-calibrating .pip-calibrating-slot,
+      .pip-screen-creating .pip-calibrating-slot { height: 48px; }
       .pip-screen-calibrating .pip-calibrating-count {
         font-family: var(--font-mono);
-        font-size: 72px;
+        font-size: 48px;
         font-weight: var(--weight-regular);
         line-height: 1;
         color: #F3EBDE;
       }
-      .pip-screen-calibrating .pip-calibrating-visual { margin-top: var(--space-5); }
-      .pip-screen-calibrating .pip-calibrating-hint {
+      .pip-screen-calibrating .pip-calibrating-visual,
+      .pip-screen-creating .pip-calibrating-visual { margin-top: var(--space-4); }
+      .pip-screen-calibrating .pip-calibrating-hint,
+      .pip-screen-creating .pip-calibrating-hint {
         margin-top: var(--space-2);
         min-height: calc(12px * 1.45);
         color: #B0AB9E;
@@ -3410,13 +3432,18 @@ export function createMezzoSession({
     calibratingTop.className = 'pip-calibrating-top';
     calibratingScreen.appendChild(calibratingTop);
 
-    // aria-hidden: the one-time announcement (calibratingAnnounceEl) says
-    // the step and its length instead.
+    // aria-hidden, both: the one-time announcement (calibratingAnnounceEl)
+    // reads the step, the instruction and the length instead.
     const calibratingSubheading = pipDoc.createElement('div');
     calibratingSubheading.className = 'pip-calibrating-subheading pip-listening-eyebrow';
     calibratingSubheading.setAttribute('aria-hidden', 'true');
     calibratingTop.appendChild(calibratingSubheading);
     calibratingSubheadingEl = calibratingSubheading;
+    const calibratingHeading = pipDoc.createElement('p');
+    calibratingHeading.className = 'pip-h1 pip-calibrating-heading pip-listening-heading';
+    calibratingHeading.setAttribute('aria-hidden', 'true');
+    calibratingTop.appendChild(calibratingHeading);
+    calibratingHeadingEl = calibratingHeading;
 
     const calibratingMiddle = pipDoc.createElement('div');
     calibratingMiddle.className = 'pip-calibrating-middle';
@@ -5586,7 +5613,7 @@ function ringLayout() {
    *  the live room level feeds both the meter and the room reading. */
   function beginRoomStep() {
     if (calibratingStatusEl) calibratingStatusEl.textContent = '';
-    if (calibratingAnnounceEl) calibratingAnnounceEl.textContent = `${LISTENING_EYEBROW.room}, ${PREPARATION_COUNTDOWN_SECONDS} seconds`;
+    if (calibratingAnnounceEl) calibratingAnnounceEl.textContent = listeningAnnouncement('room', PREPARATION_COUNTDOWN_SECONDS);
     calibrationController.beginCountdown();
     startPreparationCountdown();
     levelMeter?.start();
@@ -5612,12 +5639,21 @@ function ringLayout() {
     if (micCheckTimer) { clearInterval(micCheckTimer); micCheckTimer = null; }
   }
 
-  /** 'room' (Step 1) | 'voice' (Step 2): sets the eyebrow and the helper
-   *  line (Step 2 only), and clears the countdown. CSS keys off data-phase. */
+  /** 'room' (Step 1) | 'voice' (Step 2): sets the eyebrow, the heading
+   *  and the helper (LISTENING_COPY), and clears the countdown. CSS keys
+   *  off data-phase. */
   function setCalibratingPhase(phase) {
+    const copy = LISTENING_COPY[phase];
     if (calibratingScreenEl) calibratingScreenEl.dataset.phase = phase;
-    if (calibratingSubheadingEl) calibratingSubheadingEl.textContent = LISTENING_EYEBROW[phase] ?? '';
-    if (calibratingHintEl) calibratingHintEl.textContent = phase === 'voice' ? CALIBRATING_HINT_LISTENING : '';
+    if (calibratingSubheadingEl) calibratingSubheadingEl.textContent = copy?.eyebrow ?? '';
+    if (calibratingHeadingEl) {
+      calibratingHeadingEl.replaceChildren();
+      (copy?.heading ?? []).forEach((line, i) => {
+        if (i > 0) calibratingHeadingEl.appendChild(calibratingHeadingEl.ownerDocument.createElement('br'));
+        calibratingHeadingEl.appendChild(calibratingHeadingEl.ownerDocument.createTextNode(line));
+      });
+    }
+    if (calibratingHintEl) calibratingHintEl.textContent = copy?.helper ?? '';
     if (calibratingCountEl) calibratingCountEl.textContent = '';
   }
 
@@ -6499,6 +6535,7 @@ function ringLayout() {
     levelMeter?.destroy();
     levelMeter = null;
     calibratingHintEl = null;
+    calibratingHeadingEl = null;
     calibratingCountEl = null;
     creatingTextEl = null;
     stopCalibratingCountdown();

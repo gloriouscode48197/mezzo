@@ -244,22 +244,24 @@ Revised 2026-10-26: two steps, "say it once, then count" (canvas board "v3-explo
 - Step 1: "Step 1 of 2" / "First, stay quiet for a moment" / "Mezzo will listen to the room for 3 seconds."
 - Step 2: "Step 2 of 2" / "Now speak at the level you want to maintain" / "Talk for 6 seconds at a level that won't carry to people nearby."
 
-**Listening screens** (Sequence template, one layout for both steps):
-- **Eyebrow** at the top: "Listening to background noise" (Step 1) or "Listening to your voice" (Step 2). Mono, uppercase via CSS.
-- **Countdown**, centered in the middle: Geist Mono, 72px, cream (#F3EBDE), whole seconds, 3 to 1 then 6 to 1. `aria-hidden`.
-- **Level meter**, 24px below, in both steps:
+**Listening screens** (Sequence template, one layout for both steps; revised 2026-10-27 to lead with the instruction, since after a few runs people skim the prep screens and only read the screen they can't leave):
+- **Eyebrow** at the top: "Step 1 of 2" or "Step 2 of 2". Mono 11px, uppercase via CSS, as on the prep screens.
+- **Heading**, 8px below: the instruction. Step 1: "Background noise only" with "(no talking)" always on its own line; Step 2: "Keep talking until the timer ends". 20px/500, at most 280px wide, always reserving two lines so nothing below moves between steps.
+- **Countdown**, centered in the middle: Geist Mono, 48px, cream (#F3EBDE), whole seconds, 3 to 1 then 6 to 1. `aria-hidden`.
+- **Level meter**, 16px below, in both steps:
   - Six segments, 34×14px, 6px gaps, 2px corners. Lit segments are sage (#CEE2C4); unlit ones are cream at 12%.
   - The lit count follows the live level, eased like the Range Ring (150ms rise, 400ms fall), on the -55 to -30 dB scale.
   - `role="meter"`, `aria-label` "Your voice level", `aria-valuenow` 0–6.
-- **Helper**, Step 2 only, 8px below the meter: "Keep talking until the timer ends." 12px, muted. In Step 1 its line stays empty, so nothing moves between steps.
+- **Helper**, 8px below the meter, 12px, muted: "Mezzo is listening to the room." (Step 1); "At a level that won't carry to people nearby." (Step 2).
+- The processing screen that follows keeps the same heading position and countdown slot (the spinner sits in it), so nothing jumps.
 - **Cancel**, a sage text link pinned to the bottom.
-- No other text. If acquiring the microphone is slow, "Preparing microphone…" shows in the countdown's place until the step starts.
+- If acquiring the microphone is slow, "Preparing microphone…" shows in the countdown's place until the step starts.
 
 **Measurement.** Room noise is measured during Step 1's 3 seconds (the median raw level, §5.6); the controller accepts room readings only then (`recordRoomSample()`). The voice is captured during Step 2's 6 seconds, as before. Between the steps the microphone stays open but nothing is measured; the controller waits for `beginVoiceCapture()`. The speech filter, room-noise gate and calibration math are unchanged.
 
 **Cancel and Try again.** Cancel at any point stops calibration, discards what it measured, and returns to where it started (Welcome for first-time setup, Ready otherwise). Try again after "Didn't catch enough clear speech" (any voice failure) returns to Step 2 prep, keeping the room reading (`retryVoice()`); a failure before the room was measured returns to Step 1 prep.
 
-**Accessibility.** One polite announcement per listening screen ("Listening to background noise, 3 seconds"; "Listening to your voice, 6 seconds"), never every second. Screens switch without animation, so reduced motion needs nothing extra; the meter follows the level without easing under reduced motion.
+**Accessibility.** One polite announcement per listening screen, reading the step and the heading ("Step 1 of 2. Background noise only (no talking). 3 seconds."; "Step 2 of 2. Keep talking until the timer ends. 6 seconds."), never every second. Screens switch without animation, so reduced motion needs nothing extra; the meter follows the level without easing under reduced motion.
 
 *History: 2026-10-22 replaced the progress ring with the level meter, with a "Get ready" 3-2-1 (measuring the room, meter hidden) running straight into "Speak at your meeting volume" / "Listening… Ns". People couldn't tell what each part was for or how long it took, so the 2026-10-26 two-step flow replaced it.*
 
