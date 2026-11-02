@@ -574,7 +574,7 @@ Explains what happened and how to fix it, alongside a schematic illustration poi
 
 Purpose: ambient awareness.
 
-Monitoring opens in **Compact** (220×220), the peripheral default; **Expand** resizes it to Expanded (382×512, the same size as Ready, so going from Ready to Expanded never changes the window's size). Both are `applyLayoutMode()`'s targets for an explicit action — manual resizing is otherwise freeform, at any aspect ratio, and never snaps back.
+Monitoring opens in **Compact** (220×220 requested; Chrome won't make the window narrower than 240, so it shows at about 240×186 inside), the peripheral default; **Expand** resizes it to Expanded (382×512, the same size as Ready, so going from Ready to Expanded never changes the window's size). Both are `applyLayoutMode()`'s targets for an explicit action — manual resizing is otherwise freeform, at any aspect ratio, and never snaps back.
 
 What the window shows depends on its **size band**, keyed off its short side and recomputed on every resize (never on the layout mode): **Mini** under 160px, **Compact** 160 to 299px, **Expanded** 300px and up. Controls sit 8, 12, or 16px from the edges respectively.
 
