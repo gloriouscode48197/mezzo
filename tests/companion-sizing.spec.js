@@ -569,6 +569,40 @@ test.describe('Companion: resizeCompanionToContent() delta-adjusted correction (
     expect(callsAfterTransition).toBe(callsAfterOpen);
   });
 
+  test('Expand sizes the content to 382×512, like Ready, so Stop from Expanded never resizes the window (2026-11-02)', async ({ page, context }) => {
+    await recordDeltaAdjustedResize(page, { startInnerWidth: 300, startInnerHeight: 400, chromeW: 20, chromeH: 30 });
+    await page.addInitScript(() => {
+      localStorage.setItem('mezzoProfiles', JSON.stringify([
+        { id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 300 },
+      ]));
+    });
+    const pipPage = await openCompanion(page, context);
+    const readyScreen = pipPage.locator('.pip-screen-ready');
+    await expect(readyScreen).toBeVisible();
+    await readyScreen.locator('.pip-ready-start-btn').click();
+    const monitoringScreen = pipPage.locator('.pip-screen-monitoring');
+    await expect(monitoringScreen).toBeVisible({ timeout: 5000 });
+    await expect(pipPage.locator('body')).toHaveAttribute('data-layout', 'compact');
+
+    // Playwright's real viewport stays 1280×720; show Expand at a Compact size.
+    await pipPage.setViewportSize({ width: 220, height: 220 });
+    await monitoringScreen.locator('.pip-control-btn-expand').click();
+    await expect(pipPage.locator('body')).toHaveAttribute('data-layout', 'expanded');
+
+    // Expanded asks for the content target plus the 20×30 chrome: the same
+    // outer size Ready asked for, not the bare 382×512.
+    const calls = await page.evaluate(() => window.__resizeToCalls);
+    expect(calls[0]).toEqual({ width: 402, height: 542 });
+    expect(calls[calls.length - 1]).toEqual({ width: 402, height: 542 });
+
+    // Stop returns to Ready, whose content is already 382×512: no resize.
+    const before = calls.length;
+    await pipPage.setViewportSize({ width: 382, height: 512 });
+    await monitoringScreen.locator('.pip-control-btn-stop').click();
+    await expect(readyScreen).toBeVisible();
+    expect(await page.evaluate(() => window.__resizeToCalls.length)).toBe(before);
+  });
+
   test('never calls resizeTo() when the window\'s own measurements are unusable — no blind fallback resize, and no thrown error', async ({ page, context }) => {
     const errors = [];
     page.on('pageerror', (err) => errors.push(err));

@@ -519,47 +519,6 @@ export const MEZZO_COMPANION_EXPANDED_SIZE = { width: 382, height: 512 };
 // Stop/Expand corner-overlay controls remain.
 export const MEZZO_COMPANION_COMPACT_SIZE = { width: 220, height: 220 };
 
-// Opening at the right size (2026-11-02). Chrome appears to count its own
-// title bar inside requestWindow()'s height, so the content area opens
-// shorter than asked. The first screen can't correct that: resizeTo() on a
-// Document PiP window needs a click inside it, and opening isn't one. The
-// first in-window click (often starting calibration) then corrected it,
-// and the window visibly grew. Instead, each open measures how much the
-// window chrome took (requested size minus the content size it got) and
-// saves it; the next open asks for the target plus that much. Only these
-// two numbers are stored. The very first open on a browser can still come
-// up short, until that first click.
-const COMPANION_CHROME_INSET_KEY = 'mezzoCompanionChromeInset';
-const MAX_CHROME_INSET_PX = 120; // anything larger isn't a title bar; don't store it
-
-/** The size to ask requestWindow() for: the content target plus a saved
- *  chrome inset, if there is a sensible one. */
-export function companionWindowRequest(target, inset) {
-  const ok = (n) => Number.isFinite(n) && n >= 0 && n <= MAX_CHROME_INSET_PX;
-  if (!inset || !ok(inset.width) || !ok(inset.height)) return { ...target };
-  return { width: target.width + inset.width, height: target.height + inset.height };
-}
-
-/** How much of the requested size the window chrome took, from what was
- *  requested and the content size the window opened with; null if the
- *  numbers don't look like a title bar. */
-export function measureChromeInset(requested, inner) {
-  const width = requested.width - inner.width;
-  const height = requested.height - inner.height;
-  const ok = (n) => Number.isFinite(n) && n >= 0 && n <= MAX_CHROME_INSET_PX;
-  return ok(width) && ok(height) ? { width, height } : null;
-}
-
-function readChromeInset() {
-  try { return JSON.parse(localStorage.getItem(COMPANION_CHROME_INSET_KEY)); } catch { return null; }
-}
-
-function saveChromeInset(inset) {
-  try {
-    if (inset) localStorage.setItem(COMPANION_CHROME_INSET_KEY, JSON.stringify(inset));
-  } catch { /* storage unavailable: the next open just asks for the plain target */ }
-}
-
 const LAYOUT_MODES = Object.freeze({ EXPANDED: 'expanded', COMPACT: 'compact' });
 
 const OUTSIDE_ZONE = 3; // "Outside Range" — there's no higher volume tier
@@ -1255,7 +1214,11 @@ export function createMezzoSession({
   function applyLayoutMode(mode) {
     layoutMode = mode;
     if (pipDocument?.body) pipDocument.body.setAttribute('data-layout', mode);
-    resizeCompanionTo(mode === LAYOUT_MODES.COMPACT ? MEZZO_COMPANION_COMPACT_SIZE : MEZZO_COMPANION_EXPANDED_SIZE);
+    // Expanded sizes the content area, like Ready (resizeCompanionToContent),
+    // so the two match exactly and Stop from Expanded doesn't grow the
+    // window by the title bar. Compact keeps its outer 220×220.
+    if (mode === LAYOUT_MODES.COMPACT) resizeCompanionTo(MEZZO_COMPANION_COMPACT_SIZE);
+    else resizeCompanionToContent(MEZZO_COMPANION_EXPANDED_SIZE);
     pipCircle?.relayout(); // the ring's preferred edge depends on the mode
   }
 
@@ -1366,14 +1329,10 @@ export function createMezzoSession({
       // so a manual resize made mid-session, on a different screen, still
       // gets corrected on the next real user-initiated transition, under
       // that click's own valid activation, not a deferred timer's).
-      // Ready's size plus the saved chrome inset — see
-      // companionWindowRequest() — so the content opens at 382×512.
-      const requested = companionWindowRequest(MEZZO_COMPANION_READY_SIZE, readChromeInset());
       pipWindow = await documentPictureInPicture.requestWindow({
-        ...requested,
+        ...MEZZO_COMPANION_READY_SIZE,
         preferInitialWindowPlacement: true,
       });
-      saveChromeInset(measureChromeInset(requested, { width: pipWindow.innerWidth, height: pipWindow.innerHeight }));
     } catch (err) {
       console.error('[Session] Failed to open the Mezzo Companion:', err.message);
       return false;
