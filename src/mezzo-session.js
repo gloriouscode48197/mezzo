@@ -32,9 +32,9 @@
  * (MEZZO_COMPANION_READY_WIDTH × MEZZO_COMPANION_READY_BASE_HEIGHT) and is
  * always Expanded — there is no Compact variant for any of them. Monitoring
  * is the only screen with two layouts:
- *   - Expanded (MEZZO_COMPANION_EXPANDED_SIZE, 382×480 — 2026-08-18
- *     redesign, was 290×420; 382 now matches every other screen's own
- *     width instead of being narrower): the live awareness-state label
+ *   - Expanded (MEZZO_COMPANION_EXPANDED_SIZE, 382×512 — the same size as
+ *     every other screen since 2026-11-02; was 382×480, and 290×420
+ *     before the 2026-08-18 redesign): the live awareness-state label
  *     (Listening / Within range / Approaching end of range / Outside
  *     range — the most prominent text on the screen, centered on the same
  *     axis Ready's own heading occupies), quiet profile-name text beneath
@@ -45,13 +45,13 @@
  *     title bar — the real Document Picture-in-Picture window chrome is
  *     the only title bar (see `pipDoc.title` below); every other state
  *     uses the same real window chrome too, with no in-page title bar of
- *     its own. Below 382×480, purely presentational CSS thresholds
+ *     its own. Below 382×512, purely presentational CSS thresholds
  *     progressively drop the profile name, then turn the Stop pill into a
  *     bottom-left icon, then drop the status text — never touching
  *     `layoutMode` itself; see the Monitoring CSS's own comment for the
  *     exact breakpoints. Manual resizing is left freeform (no aspect-
  *     ratio lock, no resizeTo() call in response to a resize event) —
- *     382×480 is `applyLayoutMode()`'s own Expand target, not an enforced
+ *     382×512 is `applyLayoutMode()`'s own Expand target, not an enforced
  *     ratio.
  *   - Compact (MEZZO_COMPANION_COMPACT_SIZE, 220×220): peripheral
  *     awareness, but with the same Stop reachable as Expanded — not
@@ -503,14 +503,14 @@ export function computeReadyContentHeight() {
 // is a directly testable fact (see src/mezzo-session.test.js) rather than
 // something only provable by reading source.
 //
-// 382×480 (2026-08-18 redesign, was 290×420): 382 intentionally matches
-// Batch 2's own 382-wide pre-monitoring content-viewport target
-// (resizeCompanionToContent's 382×512), so Monitoring's Expanded width no
-// longer stands alone as narrower than every other screen. 480 keeps a
-// near-4:5 proportion at that width — a starting point Expand snaps to,
-// not a ratio enforced during manual resize (manual resizing stays
-// freeform; see the Monitoring CSS's own responsive-breakpoint comment).
-export const MEZZO_COMPANION_EXPANDED_SIZE = { width: 382, height: 480 };
+// 382×512 (2026-11-02; was 382×480, and 290×420 before 2026-08-18): the
+// same size as every pre-monitoring screen, so the window doesn't change
+// size between Ready and Expanded Monitoring. Compact is the only other
+// size. Still its own constant, since it's applyLayoutMode()'s Expand
+// target — a starting point Expand snaps to, not a ratio enforced during
+// manual resize (manual resizing stays freeform; see the Monitoring CSS's
+// own responsive-breakpoint comment).
+export const MEZZO_COMPANION_EXPANDED_SIZE = { width: 382, height: 512 };
 // 220×220 — the intentional Compact footprint: a small, square window built
 // for peripheral awareness, not a shrunk-down Expanded window (was
 // 220×260 — matched against the approved design direction and updated).
@@ -518,6 +518,47 @@ export const MEZZO_COMPANION_EXPANDED_SIZE = { width: 382, height: 480 };
 // wordmark/status text/profile metadata; only the visualization and the
 // Stop/Expand corner-overlay controls remain.
 export const MEZZO_COMPANION_COMPACT_SIZE = { width: 220, height: 220 };
+
+// Opening at the right size (2026-11-02). Chrome appears to count its own
+// title bar inside requestWindow()'s height, so the content area opens
+// shorter than asked. The first screen can't correct that: resizeTo() on a
+// Document PiP window needs a click inside it, and opening isn't one. The
+// first in-window click (often starting calibration) then corrected it,
+// and the window visibly grew. Instead, each open measures how much the
+// window chrome took (requested size minus the content size it got) and
+// saves it; the next open asks for the target plus that much. Only these
+// two numbers are stored. The very first open on a browser can still come
+// up short, until that first click.
+const COMPANION_CHROME_INSET_KEY = 'mezzoCompanionChromeInset';
+const MAX_CHROME_INSET_PX = 120; // anything larger isn't a title bar; don't store it
+
+/** The size to ask requestWindow() for: the content target plus a saved
+ *  chrome inset, if there is a sensible one. */
+export function companionWindowRequest(target, inset) {
+  const ok = (n) => Number.isFinite(n) && n >= 0 && n <= MAX_CHROME_INSET_PX;
+  if (!inset || !ok(inset.width) || !ok(inset.height)) return { ...target };
+  return { width: target.width + inset.width, height: target.height + inset.height };
+}
+
+/** How much of the requested size the window chrome took, from what was
+ *  requested and the content size the window opened with; null if the
+ *  numbers don't look like a title bar. */
+export function measureChromeInset(requested, inner) {
+  const width = requested.width - inner.width;
+  const height = requested.height - inner.height;
+  const ok = (n) => Number.isFinite(n) && n >= 0 && n <= MAX_CHROME_INSET_PX;
+  return ok(width) && ok(height) ? { width, height } : null;
+}
+
+function readChromeInset() {
+  try { return JSON.parse(localStorage.getItem(COMPANION_CHROME_INSET_KEY)); } catch { return null; }
+}
+
+function saveChromeInset(inset) {
+  try {
+    if (inset) localStorage.setItem(COMPANION_CHROME_INSET_KEY, JSON.stringify(inset));
+  } catch { /* storage unavailable: the next open just asks for the plain target */ }
+}
 
 const LAYOUT_MODES = Object.freeze({ EXPANDED: 'expanded', COMPACT: 'compact' });
 
@@ -1325,10 +1366,14 @@ export function createMezzoSession({
       // so a manual resize made mid-session, on a different screen, still
       // gets corrected on the next real user-initiated transition, under
       // that click's own valid activation, not a deferred timer's).
+      // Ready's size plus the saved chrome inset — see
+      // companionWindowRequest() — so the content opens at 382×512.
+      const requested = companionWindowRequest(MEZZO_COMPANION_READY_SIZE, readChromeInset());
       pipWindow = await documentPictureInPicture.requestWindow({
-        ...MEZZO_COMPANION_READY_SIZE,
+        ...requested,
         preferInitialWindowPlacement: true,
       });
+      saveChromeInset(measureChromeInset(requested, { width: pipWindow.innerWidth, height: pipWindow.innerHeight }));
     } catch (err) {
       console.error('[Session] Failed to open the Mezzo Companion:', err.message);
       return false;

@@ -2,7 +2,7 @@
  * Regression coverage — Monitoring screen presentation, sizing, and
  * responsive behavior (2026-08-18 redesign, `mezzo-monitoring (1).html` as
  * the accepted design source). Covers everything the read-only inspection
- * and supplemental inspection identified as in scope: the 382×480 Expanded
+ * and supplemental inspection identified as in scope: the 382×512 Expanded
  * target (was 290×420), the four-tier progressive responsive degradation,
  * Compact's hover/keyboard-focus-revealed corner controls, the relocated
  * Compact toggle (top-right, its own control) and Expand corner (top-right
@@ -37,8 +37,8 @@ const LONG_NAME = 'The Kitchen And Dining Room Combined Open-Plan Space';
 const LONG_PROFILE = [{ id: 'p-long', name: LONG_NAME, speakingDb: -30, spreadDb: 4, calibratedTs: 100 }];
 
 const CHARTREUSE = 'rgb(222, 222, 101)'; // --color-accent
-// The ring at 382×480: the area between the name row and Stop leaves room
-// for a 253px edge, but the glow is kept inside the 382px window width,
+// The ring at 382×512: the area between the name row and Stop leaves room
+// for a larger edge, but the glow is kept inside the 382px window width,
 // which limits the edge to about 238px.
 const EXPANDED_EDGE = edgeForExtent(382);
 // Compact caps the band at 0.1 of the edge (Expanded and Mini: 0.18).
@@ -51,7 +51,7 @@ const expectedEdge = (boxes) => Math.min(
 );
 const ICON = 'rgb(176, 171, 158)';       // #B0AB9E
 const CREAM = 'rgb(243, 235, 222)';      // #F3EBDE
-const SIZES = { mini: { width: 280, height: 110 }, compact: { width: 220, height: 220 }, expanded: { width: 382, height: 480 } };
+const SIZES = { mini: { width: 280, height: 110 }, compact: { width: 220, height: 220 }, expanded: { width: 382, height: 512 } };
 const SAGE = 'rgb(206, 226, 196)';       // --color-link
 
 /**
@@ -134,7 +134,7 @@ async function assertNoOverflow(pipPage) {
 
 test.describe('Monitoring presentation: the Range Ring', () => {
   test('all four states, driven through the real engine: attention rises in steps of size and brightness, and the band appears only Over range', async ({ page, context }) => {
-    const { pipPage } = await reachMonitoring(page, context, { size: { width: 382, height: 480 }, driven: true });
+    const { pipPage } = await reachMonitoring(page, context, { size: { width: 382, height: 512 }, driven: true });
     const b = await rangeBoundsDb(page, SAVED_PROFILE[0].spreadDb);
 
     await settleAt(page, pipPage, b.silenceDb - 8);
@@ -177,7 +177,7 @@ test.describe('Monitoring presentation: the Range Ring', () => {
   });
 
   test('the band grows with how far over the end of range, and band plus glow stay inside the window width at its maximum', async ({ page, context }) => {
-    const { pipPage } = await reachMonitoring(page, context, { size: { width: 382, height: 480 }, driven: true });
+    const { pipPage } = await reachMonitoring(page, context, { size: { width: 382, height: 512 }, driven: true });
     const b = await rangeBoundsDb(page, SAVED_PROFILE[0].spreadDb);
     await settleAt(page, pipPage, b.endDb + 0.5, 1600);
     const justOver = await readRing(pipPage);
@@ -206,7 +206,7 @@ test.describe('Monitoring presentation: the Range Ring', () => {
   });
 
   test('a single 150ms loud syllable within normal speech never shows the band', async ({ page, context }) => {
-    const { pipPage } = await reachMonitoring(page, context, { size: { width: 382, height: 480 }, driven: true });
+    const { pipPage } = await reachMonitoring(page, context, { size: { width: 382, height: 512 }, driven: true });
     const b = await rangeBoundsDb(page, SAVED_PROFILE[0].spreadDb);
     await settleAt(page, pipPage, 0, 1500); // fill the zone window with normal speech
     await setLevelDb(page, b.endDb + 6);
@@ -230,7 +230,7 @@ test.describe('Monitoring presentation: the Range Ring', () => {
   });
 
   test('no visible text changes while talking — the profile name and Stop are the only text, in every state', async ({ page, context }) => {
-    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 382, height: 480 }, driven: true });
+    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 382, height: 512 }, driven: true });
     const b = await rangeBoundsDb(page, SAVED_PROFILE[0].spreadDb);
     const texts = new Set();
     for (const db of [b.silenceDb - 8, 0, b.endDb - 1, b.endDb + 2]) {
@@ -251,7 +251,7 @@ test.describe('Monitoring presentation: the Range Ring', () => {
   });
 
   test('a visually hidden live region announces only changes into and out of Outside range, after about a second', async ({ page, context }) => {
-    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 382, height: 480 }, driven: true });
+    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 382, height: 512 }, driven: true });
     const b = await rangeBoundsDb(page, SAVED_PROFILE[0].spreadDb);
     const live = monitoringScreen.locator('.pip-zone-live');
     await expect(live).toHaveAttribute('aria-live', 'polite');
@@ -277,7 +277,7 @@ test.describe('Monitoring presentation: the Range Ring', () => {
   });
 
   test('chartreuse appears only in the over-range band', async ({ page, context }) => {
-    const { pipPage } = await reachMonitoring(page, context, { size: { width: 382, height: 480 }, driven: true });
+    const { pipPage } = await reachMonitoring(page, context, { size: { width: 382, height: 512 }, driven: true });
     const b = await rangeBoundsDb(page, SAVED_PROFILE[0].spreadDb);
     await settleAt(page, pipPage, b.endDb + 2, 1600);
     const offenders = await pipPage.evaluate((accent) => {
@@ -296,7 +296,7 @@ test.describe('Monitoring presentation: the Range Ring', () => {
   });
 
   test('respects prefers-reduced-motion: the band stays a fixed thickness instead of growing with the level', async ({ page, context }) => {
-    const { pipPage } = await reachMonitoring(page, context, { size: { width: 382, height: 480 }, driven: true });
+    const { pipPage } = await reachMonitoring(page, context, { size: { width: 382, height: 512 }, driven: true });
     await pipPage.emulateMedia({ reducedMotion: 'reduce' });
     const b = await rangeBoundsDb(page, SAVED_PROFILE[0].spreadDb);
     await settleAt(page, pipPage, b.endDb + 0.5, 1600);
@@ -320,7 +320,7 @@ test.describe('Monitoring presentation: profile name', () => {
   test('a long profile name does not overflow, wrap into the status text, or break the layout', async ({ page, context }) => {
     const { pipPage, monitoringScreen } = await reachMonitoring(page, context, {
       profiles: LONG_PROFILE,
-      size: { width: 382, height: 480 },
+      size: { width: 382, height: 512 },
     });
     await expect(monitoringScreen.locator('.pip-profile-info')).toHaveText(LONG_NAME);
     await assertNoOverflow(pipPage);
@@ -537,7 +537,7 @@ test.describe('Monitoring presentation: controls by size band', () => {
     expect([s.x, 220 - (s.y + s.height), 220 - (e.x + e.width), e.y].map(Math.round)).toEqual([12, 12, 12, 12]);
   });
 
-  test('Expanded (382×480): name, a labeled Stop button bottom left, Compact view top right; 16px from the edges', async ({ page, context }) => {
+  test('Expanded (382×512): name, a labeled Stop button bottom left, Compact view top right; 16px from the edges', async ({ page, context }) => {
     const { monitoringScreen } = await reachMonitoring(page, context, { size: SIZES.expanded });
     await expect(monitoringScreen.locator('.pip-profile-info')).toBeVisible();
     const stop = monitoringScreen.locator('.pip-control-btn-stop');
@@ -557,7 +557,7 @@ test.describe('Monitoring presentation: controls by size band', () => {
     const s = await stop.boundingBox(); const c = await compactBtn.boundingBox();
     expect(s.height).toBeGreaterThanOrEqual(32);
     expect([c.width, c.height].map(Math.round)).toEqual([32, 32]);
-    expect([s.x, 480 - (s.y + s.height), 382 - (c.x + c.width), c.y].map(Math.round)).toEqual([16, 16, 16, 16]);
+    expect([s.x, 512 - (s.y + s.height), 382 - (c.x + c.width), c.y].map(Math.round)).toEqual([16, 16, 16, 16]);
   });
 
   test('Mini (280×110): ring only at rest; pointer entry reveals Stop and Expand over soft scrims, hidden again 2s after it leaves', async ({ page, context }) => {

@@ -90,7 +90,7 @@ describe('bandFraction — overshoot to band thickness', () => {
 });
 
 describe('ringGeometry — fit to the window', () => {
-  it('Expanded (382×480): keeps the 236px edge; band plus glow stay inside the window', () => {
+  it('Expanded (382 wide): keeps the 236px edge; band plus glow stay inside the window', () => {
     const g = ringGeometry(236, 382);
     assert.equal(g.edge, 236);
     assert.ok(g.bandMax > BAND_MIN_FRACTION && g.bandMax <= BAND_MAX_FRACTION);

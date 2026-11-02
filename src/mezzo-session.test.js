@@ -51,6 +51,8 @@ const {
   MEZZO_COMPANION_READY_BASE_HEIGHT,
   MEZZO_COMPANION_EXPANDED_SIZE,
   MEZZO_COMPANION_COMPACT_SIZE,
+  companionWindowRequest,
+  measureChromeInset,
 } = await import('./mezzo-session.js');
 
 // =============================================================================
@@ -415,27 +417,55 @@ describe('MEZZO_COMPANION_READY_WIDTH / MEZZO_COMPANION_READY_BASE_HEIGHT', () =
 });
 
 // =============================================================================
-// Monitoring sizes — Expanded is a separate object from the Ready/
-// pre-monitoring constants above, even though the 2026-08-18 redesign gave
-// it the same 382 width (deliberately, so Monitoring no longer stands alone
-// as narrower than every other screen) — the two constants still aren't
-// merged into one, and their heights (480 vs. 512) still differ. Compact is
-// untouched by any of this, still its own separate 220×220 constant.
+// Monitoring sizes — Expanded is the same size as the Ready/pre-monitoring
+// screens (382×512, 2026-11-02), so the window doesn't change size between
+// them, but it stays its own constant (applyLayoutMode()'s Expand target).
+// Compact is the only other size, its own separate 220×220 constant.
 // =============================================================================
 
+describe('Opening at 382×512: the saved window-chrome inset', () => {
+  const target = { width: 382, height: 512 };
+
+  it('asks for the plain target when nothing is saved', () => {
+    assert.deepStrictEqual(companionWindowRequest(target, null), target);
+  });
+
+  it('adds a saved inset, so the content area opens at the target', () => {
+    assert.deepStrictEqual(companionWindowRequest(target, { width: 0, height: 28 }), { width: 382, height: 540 });
+  });
+
+  it('ignores an inset that is not a title bar (negative, too large, or not a number)', () => {
+    for (const inset of [{ width: 0, height: -10 }, { width: 0, height: 500 }, { width: 'x', height: 28 }, {}]) {
+      assert.deepStrictEqual(companionWindowRequest(target, inset), target);
+    }
+  });
+
+  it('measures the inset as requested minus the content size it got', () => {
+    assert.deepStrictEqual(measureChromeInset(target, { width: 382, height: 484 }), { width: 0, height: 28 });
+  });
+
+  it('self-corrects: a compensated request that lands on the target measures the same inset', () => {
+    const requested = companionWindowRequest(target, { width: 0, height: 28 });
+    assert.deepStrictEqual(measureChromeInset(requested, target), { width: 0, height: 28 });
+  });
+
+  it('returns null when the window ignored the requested size (e.g. a much larger viewport)', () => {
+    assert.strictEqual(measureChromeInset(target, { width: 1280, height: 720 }), null);
+  });
+});
+
 describe('Monitoring sizes', () => {
-  it('Expanded is 382×480 (2026-08-18 redesign, was 290×420)', () => {
-    assert.deepStrictEqual(MEZZO_COMPANION_EXPANDED_SIZE, { width: 382, height: 480 });
+  it('Expanded is 382×512 (2026-11-02; was 382×480)', () => {
+    assert.deepStrictEqual(MEZZO_COMPANION_EXPANDED_SIZE, { width: 382, height: 512 });
   });
 
   it('Compact is still 220×220', () => {
     assert.deepStrictEqual(MEZZO_COMPANION_COMPACT_SIZE, { width: 220, height: 220 });
   });
 
-  it('Expanded shares its width with the Ready/pre-monitoring constant (382) but is still a distinct object, not merged — heights differ (480 vs. 512)', () => {
+  it('Expanded matches the Ready/pre-monitoring size (382×512), so Ready → Expanded never resizes the window', () => {
     assert.strictEqual(MEZZO_COMPANION_EXPANDED_SIZE.width, MEZZO_COMPANION_READY_WIDTH);
-    assert.notStrictEqual(MEZZO_COMPANION_EXPANDED_SIZE.height, MEZZO_COMPANION_READY_BASE_HEIGHT);
-    assert.notDeepStrictEqual(MEZZO_COMPANION_EXPANDED_SIZE, { width: MEZZO_COMPANION_READY_WIDTH, height: MEZZO_COMPANION_READY_BASE_HEIGHT });
+    assert.strictEqual(MEZZO_COMPANION_EXPANDED_SIZE.height, MEZZO_COMPANION_READY_BASE_HEIGHT);
   });
 
   it('Compact does not equal the Ready/pre-monitoring size', () => {
