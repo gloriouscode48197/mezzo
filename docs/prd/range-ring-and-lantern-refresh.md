@@ -265,7 +265,7 @@ Revised 2026-10-26: two steps, "say it once, then count" (canvas board "v3-explo
 
 *History: 2026-10-22 replaced the progress ring with the level meter, with a "Get ready" 3-2-1 (measuring the room, meter hidden) running straight into "Speak at your meeting volume" / "Listening… Ns". People couldn't tell what each part was for or how long it took, so the 2026-10-26 two-step flow replaced it.*
 
-**Sizes.** The prep and listening screens always run at the 380×364 pre-monitoring size; they can't be reached in Compact.
+**Sizes.** The prep and listening screens always run at the 382×512 pre-monitoring size; they can't be reached in Compact.
 
 ---
 

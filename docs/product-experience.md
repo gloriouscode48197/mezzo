@@ -599,7 +599,7 @@ Stopping monitoring ends the session, releases the microphone, and returns direc
 
 ## Companion Sizing
 
-Welcome, the calibration prep and listening screens, Microphone Access Blocked, Ready, and every profile save/replace/delete decision screen (see "Profile Model") all share one fixed size, regardless of how many profiles are saved. Ready used to grow taller as more profiles were saved, each shown as an always-visible row; the current selector instead expands as an overlay panel that scrolls internally within the existing card, so the surrounding window never needs to resize as the profile library grows. Monitoring keeps its own two sizes, Expanded and Compact, unrelated to profile count. See `CLAUDE.md`'s Non-Negotiable Decisions for the exact pixel values.
+Welcome, the calibration prep and listening screens, Microphone Access Blocked, Ready, and every profile save/replace/delete decision screen (see "Profile Model") all share one fixed size, 382×512, regardless of how many profiles are saved. Ready used to grow taller as more profiles were saved, each shown as an always-visible row; the current selector instead expands as an overlay panel that scrolls internally within the existing card, so the surrounding window never needs to resize as the profile library grows. Monitoring keeps its own two sizes, Expanded and Compact, unrelated to profile count. Monitoring's pixel values are under "Compact Companion."
 
 ---
 
