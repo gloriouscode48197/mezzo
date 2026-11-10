@@ -250,26 +250,40 @@ test.describe('"Creating your speaking profile…" completion transition', () =>
 
   test('stays visible for approximately its minimum budget, not an instant flash and not a full extra artificial second', async ({ page, context }) => {
     const pipPage = await openCompanion(page, context);
+
+    // Timed inside the Companion, not from Playwright's side: a
+    // toBeVisible() wait only notices the screen on its next poll, which
+    // can be hundreds of ms after it appeared, so a stopwatch started
+    // there under-measures. A MutationObserver records the moment each
+    // screen's `hidden` class actually changes (showOnlyScreen() toggles it).
+    await pipPage.evaluate(() => {
+      const creating = document.querySelector('.pip-screen-creating');
+      const result = document.querySelector('.pip-screen-result');
+      window.__creatingTiming = {};
+      const t = window.__creatingTiming;
+      new MutationObserver(() => {
+        const now = performance.now();
+        if (t.shownAt === undefined && !creating.classList.contains('hidden')) t.shownAt = now;
+        if (t.shownAt !== undefined && t.resultAt === undefined && !result.classList.contains('hidden')) t.resultAt = now;
+      }).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'] });
+    });
+
     await pipPage.locator('button:has-text("Create speaking profile")').click();
     await completeCalibrationSteps(pipPage);
+    await expect(pipPage.locator('.pip-screen-creating')).toBeVisible({ timeout: 12000 });
+    await expect(pipPage.locator('.pip-screen-result')).toBeVisible({ timeout: 3000 });
 
-    const creatingScreen = pipPage.locator('.pip-screen-creating');
-    await expect(creatingScreen).toBeVisible({ timeout: 12000 });
-    const observedAt = Date.now();
+    const { shownAt, resultAt } = await pipPage.evaluate(() => window.__creatingTiming);
+    expect(shownAt).toBeDefined();
+    expect(resultAt).toBeDefined();
+    const elapsedMs = resultAt - shownAt;
 
-    const resultScreen = pipPage.locator('.pip-screen-result');
-    await expect(resultScreen).toBeVisible({ timeout: 2000 });
-    const elapsedMs = Date.now() - observedAt;
-
-    // Generous bounds around the requested 600–800ms range — this shared
-    // Document PiP realm is susceptible to background-tab timer throttling
-    // and general test-process overhead (see CLAUDE.md's
-    // monitoring-runtime-investigation notes), so this suite follows its
-    // own established precedent of generous timeouts for real-timing-
-    // dependent waits rather than asserting a tight window. The meaningful
-    // assertions are the two ends: not near-instant (proves a real minimum
-    // is enforced), and nowhere near a full extra artificial second on top.
-    expect(elapsedMs).toBeGreaterThanOrEqual(400);
+    // The screen is held for CREATING_TRANSITION_MIN_MS (700) after a short
+    // paint wait, and setTimeout never fires early, so anything under ~700
+    // means the minimum isn't enforced (650 leaves room for clock rounding).
+    // The upper bound stays generous for timer throttling in this shared
+    // Document PiP realm: it only rules out a full extra artificial second.
+    expect(elapsedMs).toBeGreaterThanOrEqual(650);
     expect(elapsedMs).toBeLessThan(1800);
   });
 
