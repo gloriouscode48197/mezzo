@@ -121,6 +121,18 @@ import { createCalibrationController } from './calibration-controller.js';
 import { createCalibrationLock } from './calibration-lock.js';
 import { trackMonitoringStarted, trackMonitoringSession, trackCalibrationCompleted } from './analytics.js';
 import { markClassification, markPipUpdate } from './_timing-debug.js';
+import {
+  createGlowCounter,
+  saveLastSession,
+  getLastSession,
+  getTesterCode,
+  getBrowserId,
+  shouldShowCheckInCard,
+  checkInExpiresAt,
+  markCheckInHandled,
+  buildCheckInUrl,
+} from './study.js';
+import { STUDY_CONFIG } from './study-config.js';
 import { SESSION_STATES, createSessionState } from './session-state.js';
 import {
   getSavedProfiles,
@@ -943,6 +955,18 @@ export function createMezzoSession({
   let monitoringStartTime = null;
   let sessionAlertTriggered = false;
 
+  // Round 4 study mode (src/study.js). The glow counter runs for every
+  // session but only reads the zone the engine already committed; its
+  // result is kept, and the check-in card shown, only while a tester code
+  // is saved. studyResume carries the interrupted session into Reopen
+  // Companion's resumed monitoring, so one call stays one session.
+  const glowCounter = createGlowCounter({ outsideZone: OUTSIDE_ZONE });
+  let studyResume = null;
+  let studyCardEl = null;
+  let studyCardOpenEl = null;
+  let studyCardSession = null;
+  let studyCardTimer = null;
+
   function clearSustained() {
     if (sustainedTimer) { clearTimeout(sustainedTimer); sustainedTimer = null; }
     isSustained = false;
@@ -974,6 +998,7 @@ export function createMezzoSession({
 
       updateHeading(zone);
       currentZone = zone;
+      glowCounter.onZone(zone);
 
       if (nowOutside && !wasOutside) {
         sustainedTimer = setTimeout(() => {
@@ -1051,6 +1076,9 @@ export function createMezzoSession({
     isMonitoringActive = true;
     monitoringStartTime = Date.now();
     sessionAlertTriggered = false;
+    glowCounter.start(studyResume);
+    studyResume = null;
+    hideStudyCard();
     trackMonitoringStarted();
     // One-way — see the Ready-screen PRD's first-conversation rule
     // (§2 in the implementation spec): only ever set here, the one place
@@ -1063,6 +1091,7 @@ export function createMezzoSession({
   /** Stops audio/engine/analytics — the shared "actual stop" work behind both
    *  a normal Stop Monitoring click and the Companion closing mid-session. */
   function teardownMonitoringEngine() {
+    finishStudySession();
     if (monitoringStartTime) {
       const durationSeconds = Math.round((Date.now() - monitoringStartTime) / 1000);
       trackMonitoringSession({
@@ -1080,6 +1109,81 @@ export function createMezzoSession({
 
     clearSustained();
     currentZone = 0;
+  }
+
+  /** Ends the study session (if one is running) and keeps it as the last
+   *  session when a tester code is saved. Runs on every way monitoring ends:
+   *  Stop, the Companion closing, and this page closing. */
+  function finishStudySession() {
+    const session = glowCounter.stop();
+    if (session) saveLastSession(session);
+    return session;
+  }
+
+  /** Round 4 study check-in card, at the foot of Ready. Shown only with a
+   *  saved tester code, for a session of at least 5 minutes that ended
+   *  under 2 hours ago and wasn't already opened or skipped (src/study.js's
+   *  shouldShowCheckInCard()). Read from storage, so it also appears the
+   *  next time the Companion opens after a session ended by closing it. */
+  function renderStudyCard() {
+    if (!studyCardEl || !studyCardOpenEl) return;
+    clearStudyCardTimer();
+    const testerCode = getTesterCode();
+    // While Reopen Companion is about to resume the interrupted session,
+    // that session isn't over: no card for it.
+    const session = studyResume ? null : getLastSession();
+    const now = Date.now();
+    if (!shouldShowCheckInCard({ testerCode, session, now })) {
+      hideStudyCard();
+      return;
+    }
+    studyCardSession = session;
+    studyCardOpenEl.href = studyCheckInUrl(testerCode, session, now);
+    studyCardEl.classList.remove('hidden');
+    // Leaves on its own once the 2-hour window closes.
+    studyCardTimer = pipWindow?.setTimeout(renderStudyCard, Math.max(0, checkInExpiresAt(session) - now) + 50) ?? null;
+  }
+
+  function studyCheckInUrl(testerCode, session, now) {
+    return buildCheckInUrl({
+      testerCode,
+      browserId: getBrowserId(),
+      source: STUDY_CONFIG.sources.companion,
+      session,
+      now,
+    });
+  }
+
+  function clearStudyCardTimer() {
+    if (studyCardTimer !== null) {
+      try { pipWindow?.clearTimeout(studyCardTimer); } catch { /* window already gone */ }
+      studyCardTimer = null;
+    }
+  }
+
+  function hideStudyCard() {
+    clearStudyCardTimer();
+    studyCardSession = null;
+    studyCardEl?.classList.add('hidden');
+    studyCardOpenEl?.removeAttribute('href');
+  }
+
+  function handleStudyCardOpen() {
+    const session = studyCardSession;
+    if (!session) return;
+    // Fresh "minutes since the session ended" at the moment of the click.
+    const testerCode = getTesterCode();
+    if (testerCode) studyCardOpenEl.href = studyCheckInUrl(testerCode, session, Date.now());
+    markCheckInHandled(session.id, 'opened');
+    // Hide after the new tab has its URL; removing href now would cancel it.
+    pipWindow?.setTimeout(hideStudyCard, 0);
+  }
+
+  function handleStudyCardSkip() {
+    const session = studyCardSession;
+    if (session) markCheckInHandled(session.id, 'skipped');
+    hideStudyCard();
+    readyStartBtn?.focus();
   }
 
   function stopMonitoring() {
@@ -2991,6 +3095,68 @@ export function createMezzoSession({
       /* The sound-filter note: one line at the 280px column, centered;
          it wraps only in a manually narrowed window. */
       .pip-ready-recalibrate-note { text-align: center; }
+      /* Round 4 study check-in card (renderStudyCard()): a quiet,
+         bordered group after the disclaimer, one group gap below it.
+         Open check-in is an outlined control so Start monitoring stays the
+         one filled button; no chartreuse. */
+      .pip-screen-ready > .pip-study-card { margin-top: var(--space-5); }
+      .pip-study-card.hidden { display: none; }
+      .pip-study-card {
+        width: 100%;
+        max-width: var(--col-width);
+        box-sizing: border-box;
+        padding: var(--space-3) var(--space-4);
+        border: 1px solid color-mix(in srgb, var(--color-text) 16%, transparent);
+        border-radius: var(--radius-control);
+        background: color-mix(in srgb, var(--color-text) 4%, transparent);
+        text-align: center;
+      }
+      .pip-study-card-title {
+        margin: 0;
+        font-family: var(--font-body);
+        font-size: 14px;
+        font-weight: var(--weight-medium);
+        line-height: 1.4;
+        color: var(--color-text);
+      }
+      .pip-study-card-sub {
+        margin: 2px 0 0;
+        font-family: var(--font-body);
+        font-size: 12px;
+        line-height: 1.4;
+        color: var(--color-text-muted);
+      }
+      .pip-study-card-actions {
+        margin-top: var(--space-3);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: var(--space-4);
+      }
+      .pip-study-card-open {
+        display: inline-flex;
+        align-items: center;
+        min-height: 32px;
+        box-sizing: border-box;
+        padding: 0 var(--space-3);
+        border: 1px solid var(--color-btn-secondary-border);
+        border-radius: var(--radius-control);
+        font-family: var(--font-body);
+        font-size: 13px;
+        font-weight: var(--weight-medium);
+        color: var(--color-text);
+        text-decoration: none;
+        cursor: pointer;
+      }
+      .pip-study-card-open:hover {
+        background: color-mix(in srgb, var(--color-text) 6%, transparent);
+        border-color: color-mix(in srgb, var(--color-text) 55%, transparent);
+      }
+      .pip-study-card-open:focus-visible {
+        outline: 2px solid var(--color-link);
+        outline-offset: 2px;
+      }
+      .pip-study-card-skip { min-height: 24px; }
 
       /* ── A. Sequence ── */
       .pip-screen-calibrating,
@@ -3417,6 +3583,39 @@ export function createMezzoSession({
     readyDisclaimer.textContent = 'Mezzo only measures volume. Nothing you say is recorded.';
     readyScreen.appendChild(readyDisclaimer);
     readyDisclaimerEl = readyDisclaimer;
+
+    // Round 4 study check-in card (renderStudyCard()). After the
+    // disclaimer, so Ready's own order is unchanged and the card can never
+    // cover Start monitoring; hidden unless a tester code is saved.
+    const studyCard = pipDoc.createElement('div');
+    studyCard.className = 'pip-study-card hidden';
+    studyCard.setAttribute('role', 'group');
+    studyCard.setAttribute('aria-labelledby', 'pip-study-card-title');
+    const studyCardTitle = pipDoc.createElement('p');
+    studyCardTitle.id = 'pip-study-card-title';
+    studyCardTitle.className = 'pip-study-card-title';
+    studyCardTitle.textContent = 'How did that call go?';
+    const studyCardSub = pipDoc.createElement('p');
+    studyCardSub.className = 'pip-study-card-sub';
+    studyCardSub.textContent = '1-minute check-in';
+    const studyCardActions = pipDoc.createElement('div');
+    studyCardActions.className = 'pip-study-card-actions';
+    const studyCardOpen = pipDoc.createElement('a');
+    studyCardOpen.className = 'pip-study-card-open';
+    studyCardOpen.textContent = 'Open check-in';
+    studyCardOpen.target = '_blank';
+    studyCardOpen.rel = 'noopener noreferrer';
+    studyCardOpen.addEventListener('click', handleStudyCardOpen);
+    const studyCardSkip = pipDoc.createElement('button');
+    studyCardSkip.type = 'button';
+    studyCardSkip.className = 'pip-text-btn pip-study-card-skip';
+    studyCardSkip.textContent = 'Skip this one';
+    studyCardSkip.addEventListener('click', handleStudyCardSkip);
+    studyCardActions.append(studyCardOpen, studyCardSkip);
+    studyCard.append(studyCardTitle, studyCardSub, studyCardActions);
+    readyScreen.appendChild(studyCard);
+    studyCardEl = studyCard;
+    studyCardOpenEl = studyCardOpen;
 
     layout.appendChild(readyScreen);
     readyScreenEl = readyScreen;
@@ -4175,12 +4374,19 @@ export function createMezzoSession({
       // Reopen: the same profile as before the close, the unsaved one too.
       unsavedProfile = restore.unsaved ?? null;
       activeProfile = restore.profile ?? activeProfile;
+      if (restore.resumeMonitoring) studyResume = restore.studySession ?? null;
     }
     enterPipReadyMode();
     // Reopen after an involuntary close picks up where it left off: if
     // monitoring was running, it starts again with the same profile. A
     // fresh open from Home always stops at Welcome or Ready.
     if (restore?.resumeMonitoring && activeProfile) await resumeMonitoringFromPipReady();
+    if (studyResume) {
+      // Monitoring didn't resume (no profile, or no microphone): the
+      // interrupted session stays ended, and Ready can offer its check-in.
+      studyResume = null;
+      renderStudyCard();
+    }
 
     return true;
   }
@@ -4689,6 +4895,7 @@ function ringLayout() {
     renderSelectorTrigger();
     renderContextualActions();
     if (readyStartBtn) readyStartBtn.disabled = !activeProfile;
+    renderStudyCard();
   }
 
   function renderSelectorTrigger() {
@@ -6441,7 +6648,13 @@ function ringLayout() {
     const onPurpose = closingOnPurpose;
     closingOnPurpose = false;
     if (!onPurpose && !isPageUnloading) {
-      reopenOffer = { profile: activeProfile, unsaved: unsavedProfile, resumeMonitoring: wasActive };
+      reopenOffer = {
+        profile: activeProfile,
+        unsaved: unsavedProfile,
+        resumeMonitoring: wasActive,
+        // The call this close interrupted, so a resumed session continues it.
+        studySession: wasActive && glowCounter.running ? { startedAt: glowCounter.startedAt, glows: glowCounter.glows } : null,
+      };
     }
 
     // Covers every state the Companion could have been in when it closed —
@@ -6485,6 +6698,10 @@ function ringLayout() {
     readyContextualActionsEl = null;
     readyStartBtn = null;
     readyDisclaimerEl = null;
+    clearStudyCardTimer();
+    studyCardEl = null;
+    studyCardOpenEl = null;
+    studyCardSession = null;
     selectorExpanded = false;
     m1ScreenEl = null;
     m1HeadingEl = null;
@@ -6608,6 +6825,7 @@ function ringLayout() {
 
     window.addEventListener('pagehide', () => {
       isPageUnloading = true;
+      finishStudySession(); // keeps the session for the next open's check-in card
       clearSustained();
       calibrationController.cancel(); // safe from any status — covers the page closing mid-calibration
       if (pipWindow) {

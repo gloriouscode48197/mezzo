@@ -343,6 +343,16 @@ Monitoring should never begin automatically on its own, without this explicit ac
 
 "Ready for your first conversation" appears only right after first setup: monitoring has never started (a one-way, persisted condition that survives Companion restarts) and no profile has been saved yet. Every other time — any saved profile, or once monitoring has started — Ready reads "Ready when you are." The "Speaking profile" eyebrow above the selector has no colon.
 
+## Study Check-In (Round 4)
+
+Only for study testers; without a tester code none of this shows and nothing is stored. Settings: `src/study-config.js`. Logic: `src/study.js`.
+
+* **Tester code.** Opening Mezzo (Home or `/study`) with `?study=CODE` saves the code in this browser; `?study=clear` removes it and the last session. The parameter then leaves the address bar.
+* **Session data.** Each monitoring session's length (Start to Stop) and glow count (one per move into Outside range, from the zone the engine already committed) are kept as "the last session" while a code is saved. Stop, closing the Companion and closing the page all end it. Reopen Companion after an involuntary close continues the same session.
+* **Card.** On Ready, below the privacy line: "How did that call go?", "1-minute check-in", **Open check-in** (opens the check-in form in a new tab, pre-filled) and **Skip this one**. It shows for a session of at least 5 minutes, until it's opened or skipped, or 2 hours after the session ended, whichever comes first, and once per session. Because it reads the stored last session, a session ended by closing the window gets its card the next time the Companion opens to Ready. It never covers or disables Start monitoring.
+* **`/study` page.** Not linked anywhere. Without a code: "This page is for study participants." With one: **Check in after a call** (the check-in form; the last session's data rides along if it ended within 2 hours) and **Wrap up the study** (the end-of-study form, tester code only), plus a link to the privacy section.
+* **What's sent.** Nothing by Mezzo. The form link carries the tester code, the existing anonymous ID, the source (Companion or study page), and for a recent session its date, minutes, glow count and minutes since it ended; the form records them only if the tester submits it.
+
 ## Deferred: Post-Session Acknowledgment
 
 A rotating, varied acknowledgment message on returning to Ready after a session (something warmer than the plain heading alone) is approved conceptually, but is not part of the current experience. It has not been designed, and no layout space is reserved for it. Treat it as a future Ready-state enhancement, not a gap in what's described above.
@@ -808,6 +818,8 @@ Core promises should remain simple and verifiable:
 * audio is never transmitted as part of the core experience
 * speech is never transcribed
 * conversation content is never analyzed
+
+Study testers see one extra disclosure: the check-in form link carries their study code, anonymous ID and session numbers, and the form records them only if submitted (Privacy page, "Research participants"; see "Study Check-In" above).
 
 Speaking Profile data is the one thing Mezzo does persist, and only locally — see `CLAUDE.md`'s Non-Negotiable Decisions and the Privacy page for the exact claim.
 

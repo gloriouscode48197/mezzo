@@ -47,6 +47,7 @@
  */
 
 import { createMezzoSession } from './mezzo-session.js';
+import { applyStudyFromLocation } from './study.js';
 
 const FADE_OUT_MS = 300;
 const FADE_IN_MS = 350;
@@ -134,6 +135,9 @@ export function initHomeDock({
   runningLiveEl,
   baseUrl,
 }) {
+  // Round 4 study mode: ?study=CODE saves a tester code, ?study=clear
+  // removes it; either way the parameter leaves the address bar.
+  applyStudyFromLocation();
   const allStates = { home: stateHome, unsupported: stateUnsupported, dock: stateDock };
 
   // =============================================================================

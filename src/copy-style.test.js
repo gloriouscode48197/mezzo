@@ -16,7 +16,7 @@ import { readFileSync } from 'node:fs';
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
-const HTML_PAGES = ['index.html', 'privacy.html', 'extension/popup/popup.html'];
+const HTML_PAGES = ['index.html', 'privacy.html', 'study/index.html', 'extension/popup/popup.html'];
 const COPY_MODULES = [
   'src/mezzo-session.js',
   'src/home-dock.js',
