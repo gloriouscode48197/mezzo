@@ -177,3 +177,15 @@
   .outline-summary { display: none; }
   .outline-list { border-left: 1px solid var(--border); }
 }
+
+/* Links in the policy text (e.g. to "Research participants"). */
+.privacy-content p a {
+  color: var(--color-link);
+  text-underline-offset: 2px;
+}
+.privacy-content p a:hover { color: var(--color-text); }
+.privacy-content p a:focus-visible {
+  outline: 2px solid var(--color-link);
+  outline-offset: 2px;
+  border-radius: 2px;
+}

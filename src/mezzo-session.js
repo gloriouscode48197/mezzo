@@ -126,6 +126,8 @@ import {
   saveLastSession,
   getLastSession,
   getTesterCode,
+  getFirstSessionAt,
+  wrapUpOpensAt,
   getBrowserId,
   shouldShowCheckInCard,
   checkInExpiresAt,
@@ -1132,16 +1134,19 @@ export function createMezzoSession({
     // While Reopen Companion is about to resume the interrupted session,
     // that session isn't over: no card for it.
     const session = studyResume ? null : getLastSession();
+    const firstSessionAt = getFirstSessionAt();
     const now = Date.now();
-    if (!shouldShowCheckInCard({ testerCode, session, now })) {
+    // After the study's 14 days the card stops (the tester code stays).
+    if (!shouldShowCheckInCard({ testerCode, session, now, firstSessionAt })) {
       hideStudyCard();
       return;
     }
     studyCardSession = session;
     studyCardOpenEl.href = studyCheckInUrl(testerCode, session, now);
     studyCardEl.classList.remove('hidden');
-    // Leaves on its own once the 2-hour window closes.
-    studyCardTimer = pipWindow?.setTimeout(renderStudyCard, Math.max(0, checkInExpiresAt(session) - now) + 50) ?? null;
+    // Leaves on its own once the 2-hour window closes or the study ends.
+    const leavesAt = Math.min(checkInExpiresAt(session), wrapUpOpensAt(firstSessionAt) ?? Infinity);
+    studyCardTimer = pipWindow?.setTimeout(renderStudyCard, Math.max(0, leavesAt - now) + 50) ?? null;
   }
 
   function studyCheckInUrl(testerCode, session, now) {

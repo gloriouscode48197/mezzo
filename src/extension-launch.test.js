@@ -120,6 +120,21 @@ describe('extension: no second Mezzo', () => {
     assert.ok(manifest.host_permissions.includes('https://mezzo-one.vercel.app/*'));
   });
 
+  it('asks for host access to the Mezzo site only; the meeting sites are reached by the content script alone', () => {
+    const manifest = JSON.parse(readFileSync(new URL('../extension/manifest.json', import.meta.url), 'utf8'));
+    assert.deepEqual(manifest.host_permissions, ['https://mezzo-one.vercel.app/*']);
+    assert.deepEqual(manifest.permissions, ['storage']);
+    // Detection still runs on all three platforms, in every frame (unchanged).
+    const detect = manifest.content_scripts.find((c) => c.js.includes('content-scripts/meeting-detect.js'));
+    assert.deepEqual(detect.matches, [
+      'https://meet.google.com/*',
+      'https://*.zoom.us/*',
+      'https://teams.microsoft.com/*',
+      'https://teams.live.com/*',
+    ]);
+    assert.equal(detect.all_frames, true);
+  });
+
   it('prefers the Mezzo tab in the focused window, then an active one', async () => {
     const tabs = [
       { id: 1, windowId: 3, active: true, url: `${LIVE}/` },

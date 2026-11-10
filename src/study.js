@@ -36,12 +36,13 @@ export function getTesterCode(storage = defaultStorage(), config = STUDY_CONFIG)
   try { return normalizeTesterCode(storage?.getItem(config.storageKeys.testerCode) ?? null); } catch { return null; }
 }
 
-/** Removes the tester code and the last session. The anonymous browser ID
- *  belongs to analytics, so it stays. */
+/** Removes the tester code, the last session and the first-session date.
+ *  The anonymous browser ID belongs to analytics, so it stays. */
 export function clearStudy(storage = defaultStorage(), config = STUDY_CONFIG) {
   try {
     storage?.removeItem(config.storageKeys.testerCode);
     storage?.removeItem(config.storageKeys.lastSession);
+    storage?.removeItem(config.storageKeys.firstSession);
   } catch { /* storage unavailable */ }
 }
 
@@ -136,13 +137,62 @@ export function createGlowCounter({ outsideZone = 3, now = () => Date.now() } = 
 // ── The last session ─────────────────────────────────────────────────────
 
 /** Keeps the session as "the last session", only while a tester code is
- *  saved. A new session replaces the previous one.
+ *  saved. A new session replaces the previous one. The first one also
+ *  records the first-session date, which moves /study to the Mezzo stage.
  *  @returns {object|null} the stored record */
 export function saveLastSession(session, storage = defaultStorage(), config = STUDY_CONFIG) {
   if (!session || !getTesterCode(storage, config)) return null;
   const record = { id: session.id, startedAt: session.startedAt, endedAt: session.endedAt, glows: session.glows };
-  try { storage?.setItem(config.storageKeys.lastSession, JSON.stringify(record)); } catch { return null; }
+  try {
+    storage?.setItem(config.storageKeys.lastSession, JSON.stringify(record));
+    if (getFirstSessionAt(storage, config) === null) {
+      storage?.setItem(config.storageKeys.firstSession, String(session.startedAt));
+    }
+  } catch { return null; }
   return record;
+}
+
+/** When the first monitoring session with a tester code started, or null
+ *  if there hasn't been one in this browser. */
+export function getFirstSessionAt(storage = defaultStorage(), config = STUDY_CONFIG) {
+  try {
+    const raw = storage?.getItem(config.storageKeys.firstSession);
+    if (raw === null || raw === undefined || raw === '') return null;
+    const ms = Number(raw);
+    return Number.isFinite(ms) && ms > 0 ? ms : null;
+  } catch {
+    return null;
+  }
+}
+
+// ── Study stages ─────────────────────────────────────────────────────────
+
+/**
+ * Which /study stage applies:
+ * 'none' without a tester code; 'baseline' with a code but no monitoring
+ * session yet in this browser; 'mezzo' after the first one.
+ */
+export function studyStage({ testerCode, firstSessionAt }) {
+  if (!testerCode) return 'none';
+  return firstSessionAt === null || firstSessionAt === undefined ? 'baseline' : 'mezzo';
+}
+
+/** The start of the local day `studyDays` after the first session's date:
+ *  the wrap-up opens then, and the check-in card stops. */
+export function wrapUpOpensAt(firstSessionAt, config = STUDY_CONFIG) {
+  if (!Number.isFinite(firstSessionAt)) return null;
+  const d = new Date(firstSessionAt);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + config.studyDays).getTime();
+}
+
+export function isWrapUpOpen(firstSessionAt, now, config = STUDY_CONFIG) {
+  const opensAt = wrapUpOpensAt(firstSessionAt, config);
+  return opensAt !== null && now >= opensAt;
+}
+
+/** "November 23, 2026" */
+export function formatLongDate(ms) {
+  return new Date(ms).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 }
 
 export function getLastSession(storage = defaultStorage(), config = STUDY_CONFIG) {
@@ -180,9 +230,11 @@ export function isWithinCheckInWindow(session, now, config = STUDY_CONFIG) {
 }
 
 /** The Companion card: a tester code, a session of at least the minimum
- *  length, inside the window, not yet opened or skipped. */
-export function shouldShowCheckInCard({ testerCode, session, now }, config = STUDY_CONFIG) {
+ *  length, inside the window, not yet opened or skipped, and the study's
+ *  14 days not over (the tester code stays saved either way). */
+export function shouldShowCheckInCard({ testerCode, session, now, firstSessionAt = null }, config = STUDY_CONFIG) {
   return Boolean(testerCode)
+    && !isWrapUpOpen(firstSessionAt, now, config)
     && Boolean(session)
     && !session.handled
     && sessionDurationMs(session) >= config.minSessionMs
@@ -228,6 +280,21 @@ export function buildCheckInUrl({ testerCode, browserId, source, session = null,
     url.searchParams.set(p.glows, String(session.glows));
     url.searchParams.set(p.minutesAfter, String(Math.max(0, Math.round((now - session.endedAt) / 60000))));
   }
+  return url.toString();
+}
+
+/** A form URL is usable once its placeholder ID has been replaced. */
+export function isFormUrlReady(formUrl) {
+  if (typeof formUrl !== 'string' || !formUrl || /[[\]]/.test(formUrl)) return false;
+  try { return new URL(formUrl).protocol === 'https:'; } catch { return false; }
+}
+
+/** The baseline-stage form link, with the tester code only. Null until the
+ *  baseline form's ID is in the config. */
+export function buildBaselineUrl({ testerCode }, config = STUDY_CONFIG) {
+  if (!testerCode || !isFormUrlReady(config.baselineFormUrl)) return null;
+  const url = new URL(config.baselineFormUrl);
+  url.searchParams.set(config.params.tester, testerCode);
   return url.toString();
 }
 

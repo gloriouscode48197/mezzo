@@ -49,6 +49,8 @@
     .study-step .btn-primary,
     .study-step .btn-outline { margin-top: var(--space-2); text-decoration: none; }
     .study-main .study-privacy { margin-top: var(--space-6); }
+    .study-main .study-note { margin-top: var(--space-4); }
+    [hidden] { display: none !important; }
     .study-main a:not(.btn-primary):not(.btn-outline) {
       color: var(--color-link);
       text-underline-offset: 2px;
@@ -61,10 +63,12 @@
 </head>
 <body data-surface="dark">
 
+  <!-- No links into the app during the baseline stage: the wordmark isn't
+       a link here, and Home shows only outside that stage. -->
   <nav class="nav">
-    <a href="/index.html" class="type-nav-wordmark">mezzo</a>
+    <span class="type-nav-wordmark">mezzo</span>
     <div class="nav-links">
-      <a href="/index.html" class="nav-link nav-link-quiet">Home</a>
+      <a href="/index.html" class="nav-link nav-link-quiet" id="study-nav-home" hidden>Home</a>
       <a href="/privacy.html" class="nav-link nav-link-quiet">Privacy</a>
     </div>
   </nav>
@@ -73,19 +77,31 @@
     <!-- With a saved tester code. -->
     <section id="study-participant" hidden>
       <p class="type-tag study-eyebrow">Mezzo study</p>
-      <h1 class="study-title">Thanks for testing Mezzo</h1>
+      <h1 class="study-title">Thanks for joining the Mezzo study</h1>
       <p class="type-body">Your study code: <span class="study-code" id="study-code"></span></p>
 
-      <div class="study-step">
+      <!-- Baseline stage: a code, but no monitoring session yet. -->
+      <div class="study-step" id="study-baseline" hidden>
         <h2>After a call</h2>
-        <p class="type-body">A 1-minute check-in. If you monitored in the last 2 hours, it includes that session’s length and glow count.</p>
-        <a class="btn-primary" id="study-check-in" target="_blank" rel="noopener noreferrer">Check in after a call</a>
+        <p class="type-body">A 1-minute check-in about a call you just had.</p>
+        <a class="btn-primary" id="study-baseline-check-in" target="_blank" rel="noopener noreferrer">Check in after a call (before Mezzo)</a>
+        <p class="type-body study-note">Please don’t try Mezzo yet. I’ll send it once your 2 check-ins are in.</p>
       </div>
 
-      <div class="study-step">
-        <h2>At the end of the study</h2>
-        <p class="type-body">A few questions about the whole study. Fill it in once.</p>
-        <a class="btn-outline" id="study-wrap-up" target="_blank" rel="noopener noreferrer">Wrap up the study</a>
+      <!-- Mezzo stage: after the first monitoring session. -->
+      <div id="study-mezzo" hidden>
+        <div class="study-step">
+          <h2>After a call</h2>
+          <p class="type-body">A 1-minute check-in. If you monitored in the last 2 hours, it includes that session’s length and glow count.</p>
+          <a class="btn-primary" id="study-check-in" target="_blank" rel="noopener noreferrer">Check in after a call</a>
+        </div>
+
+        <div class="study-step">
+          <h2>At the end of the study</h2>
+          <p class="type-body">A few questions about the whole study. Fill it in once.</p>
+          <a class="btn-outline" id="study-wrap-up" target="_blank" rel="noopener noreferrer" hidden>Wrap up the study</a>
+          <p class="type-body" id="study-wrap-up-later" hidden></p>
+        </div>
       </div>
 
       <p class="type-body study-privacy"><a href="/privacy.html#research-participants">How study data is handled</a></p>
@@ -105,25 +121,51 @@
       getTesterCode,
       getBrowserId,
       getLastSession,
+      getFirstSessionAt,
+      studyStage,
       isWithinCheckInWindow,
+      isWrapUpOpen,
+      wrapUpOpensAt,
+      formatLongDate,
       markCheckInHandled,
       buildCheckInUrl,
+      buildBaselineUrl,
       buildWrapUpUrl,
     } from '/src/study.js';
     import { STUDY_CONFIG } from '/src/study-config.js';
 
     applyStudyFromLocation();
     const testerCode = getTesterCode();
+    const firstSessionAt = getFirstSessionAt();
+    const stage = studyStage({ testerCode, firstSessionAt });
+    const $ = (id) => document.getElementById(id);
 
-    if (!testerCode) {
-      document.getElementById('study-not-participant').hidden = false;
+    // The stage, for tests and for checking by hand.
+    document.body.dataset.studyStage = stage;
+
+    if (stage === 'none') {
+      $('study-not-participant').hidden = false;
+      $('study-nav-home').hidden = false;
     } else {
-      document.getElementById('study-participant').hidden = false;
-      document.getElementById('study-code').textContent = testerCode;
+      $('study-participant').hidden = false;
+      $('study-code').textContent = testerCode;
+    }
 
-      const checkIn = document.getElementById('study-check-in');
-      const wrapUp = document.getElementById('study-wrap-up');
+    if (stage === 'baseline') {
+      // Baseline: one check-in form, tester code only. The button waits for
+      // the baseline form's ID in src/study-config.js.
+      $('study-baseline').hidden = false;
+      const href = buildBaselineUrl({ testerCode });
+      const button = $('study-baseline-check-in');
+      if (href) button.href = href;
+      else button.hidden = true;
+    }
 
+    if (stage === 'mezzo') {
+      $('study-mezzo').hidden = false;
+      $('study-nav-home').hidden = false;
+
+      const checkIn = $('study-check-in');
       // The last session's data rides along only if it ended within the
       // 2-hour window; otherwise just the tester code and browser ID.
       function recentSession(now) {
@@ -139,7 +181,6 @@
           now,
         });
       }
-
       checkIn.href = checkInUrl(Date.now());
       checkIn.addEventListener('click', () => {
         // Fresh at the moment of the click (minutes since the session ended).
@@ -150,7 +191,17 @@
         // offer it again.
         if (session) markCheckInHandled(session.id, 'opened');
       });
-      wrapUp.href = buildWrapUpUrl({ testerCode });
+
+      // The wrap-up opens 14 days after the first session.
+      if (isWrapUpOpen(firstSessionAt, Date.now())) {
+        const wrapUp = $('study-wrap-up');
+        wrapUp.href = buildWrapUpUrl({ testerCode });
+        wrapUp.hidden = false;
+      } else {
+        const later = $('study-wrap-up-later');
+        later.textContent = `The wrap-up opens on ${formatLongDate(wrapUpOpensAt(firstSessionAt))}.`;
+        later.hidden = false;
+      }
     }
   </script>
 </body>

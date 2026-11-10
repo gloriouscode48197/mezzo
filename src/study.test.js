@@ -4,6 +4,7 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { STUDY_CONFIG } from './study-config.js';
 import {
   applyStudyParam,
@@ -20,6 +21,13 @@ import {
   buildWrapUpUrl,
   formatSessionDate,
   sessionMinutes,
+  getFirstSessionAt,
+  studyStage,
+  wrapUpOpensAt,
+  isWrapUpOpen,
+  formatLongDate,
+  isFormUrlReady,
+  buildBaselineUrl,
 } from './study.js';
 
 const MIN = 60 * 1000;
@@ -271,5 +279,101 @@ describe('form links', () => {
     assert.equal(formatSessionDate(new Date(2026, 0, 5, 23, 59)), '2026-01-05');
     assert.equal(sessionMinutes(40 * 1000), 0.7);
     assert.equal(sessionMinutes(0), 0);
+  });
+});
+
+describe('study stages', () => {
+  it('no code: none; a code without a session: baseline; after the first session: mezzo', () => {
+    assert.equal(studyStage({ testerCode: null, firstSessionAt: null }), 'none');
+    assert.equal(studyStage({ testerCode: 'R4-01', firstSessionAt: null }), 'baseline');
+    assert.equal(studyStage({ testerCode: 'R4-01', firstSessionAt: Date.now() }), 'mezzo');
+  });
+
+  it('the first session with a code saves its date, once; later sessions keep it', () => {
+    const storage = withCode();
+    assert.equal(getFirstSessionAt(storage), null);
+    const first = session({ startedAt: Date.UTC(2026, 10, 9, 15) });
+    saveLastSession(first, storage);
+    assert.equal(getFirstSessionAt(storage), first.startedAt);
+    saveLastSession(session({ startedAt: Date.UTC(2026, 10, 12, 15) }), storage);
+    assert.equal(getFirstSessionAt(storage), first.startedAt);
+  });
+
+  it('no code, no first-session date', () => {
+    const storage = memoryStorage();
+    saveLastSession(session(), storage);
+    assert.equal(getFirstSessionAt(storage), null);
+  });
+
+  it('?study=clear removes the first-session date too', () => {
+    const storage = withCode();
+    saveLastSession(session(), storage);
+    applyStudyParam('?study=clear', storage);
+    assert.equal(getFirstSessionAt(storage), null);
+  });
+});
+
+describe('end of study', () => {
+  const first = new Date(2026, 10, 9, 15, 30).getTime(); // Nov 9, local
+
+  it('the wrap-up opens at the start of the local day 14 days after the first session', () => {
+    assert.equal(wrapUpOpensAt(first), new Date(2026, 10, 23).getTime());
+    assert.equal(formatLongDate(wrapUpOpensAt(first)), 'November 23, 2026');
+    assert.equal(isWrapUpOpen(first, new Date(2026, 10, 22, 23, 59).getTime()), false);
+    assert.equal(isWrapUpOpen(first, new Date(2026, 10, 23, 0, 0).getTime()), true);
+    assert.equal(isWrapUpOpen(null, Date.now()), false);
+  });
+
+  it('after 14 days the check-in card stops, even for a fresh long session', () => {
+    const late = session({ startedAt: new Date(2026, 10, 23, 10).getTime(), minutes: 30 });
+    assert.equal(shouldShowCheckInCard({ testerCode: 'R4-01', session: late, now: late.endedAt, firstSessionAt: first }), false);
+    const inside = session({ startedAt: new Date(2026, 10, 22, 10).getTime(), minutes: 30 });
+    assert.equal(shouldShowCheckInCard({ testerCode: 'R4-01', session: inside, now: inside.endedAt, firstSessionAt: first }), true);
+  });
+
+  it('the tester code stays saved after the 14 days', () => {
+    const storage = withCode();
+    saveLastSession(session({ startedAt: first }), storage);
+    assert.equal(isWrapUpOpen(getFirstSessionAt(storage), first + 30 * 24 * HOUR), true);
+    assert.equal(getTesterCode(storage), 'R4-01');
+  });
+});
+
+describe('baseline form', () => {
+  it('is in the config, and its link carries only the tester code', () => {
+    assert.match(STUDY_CONFIG.baselineFormUrl, /^https:\/\/tally\.so\/r\//);
+    const config = { ...STUDY_CONFIG, baselineFormUrl: 'https://tally.so/r/base01' };
+    const url = new URL(buildBaselineUrl({ testerCode: 'R4-01' }, config));
+    assert.equal(url.origin + url.pathname, 'https://tally.so/r/base01');
+    assert.deepEqual(Object.fromEntries(url.searchParams), { mezzo_tester: 'R4-01' });
+  });
+
+  it('no link while the ID is still the placeholder, or without a code', () => {
+    assert.equal(isFormUrlReady('https://tally.so/r/[BASELINE ID]'), false);
+    assert.equal(isFormUrlReady('https://tally.so/r/base01'), true);
+    const placeholder = { ...STUDY_CONFIG, baselineFormUrl: 'https://tally.so/r/[BASELINE ID]' };
+    assert.equal(buildBaselineUrl({ testerCode: 'R4-01' }, placeholder), null);
+    assert.equal(buildBaselineUrl({ testerCode: null }, { ...STUDY_CONFIG, baselineFormUrl: 'https://tally.so/r/base01' }), null);
+  });
+});
+
+describe('privacy page', () => {
+  const html = readFileSync(new URL('../privacy.html', import.meta.url), 'utf8');
+  const text = html.replace(/<[^>]+>/g, '');
+
+  it('the anonymous ID is not shared with other websites, except a submitted study check-in, linked to Research participants', () => {
+    assert.doesNotMatch(text, /not shared across websites/);
+    assert.match(text, /is not shared with other websites, except in a study check-in you choose to submit/);
+    assert.match(html, /<a href="#research-participants">Research participants<\/a>/);
+  });
+
+  it('no sale of data; third parties only for submitted check-ins through Tally', () => {
+    assert.doesNotMatch(text, /No sale or sharing of data with third parties/);
+    assert.match(text, /No sale of data\. Data is never shared with third parties, except study check-ins you choose to submit through the survey tool, Tally\./);
+  });
+
+  it('Research participants says check-ins are collected through Tally', () => {
+    const section = html.slice(html.indexOf('id="research-participants"'), html.indexOf('id="what-mezzo-does-not-do"'));
+    assert.match(section, /Check-ins are collected through Tally/);
   });
 });
