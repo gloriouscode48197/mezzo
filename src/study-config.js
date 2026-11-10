@@ -11,9 +11,9 @@ export const STUDY_CONFIG = {
   /** Opened once, at the end of the study, from the /study page. */
   wrapUpFormUrl: 'https://tally.so/r/q5alaO',
   /** Baseline stage: check-ins after calls before the tester has Mezzo.
-   *  Paste the form's ID in place of [BASELINE ID]. Until then, /study
-   *  shows the baseline note without the button (isFormUrlReady()). */
-  baselineFormUrl: 'https://tally.so/r/[BASELINE ID]',
+   *  Tester code only. A placeholder URL here hides the button
+   *  (isFormUrlReady()). */
+  baselineFormUrl: 'https://tally.so/r/zEN6jg',
 
   /** The check-in is offered for this long after a session ends. */
   checkInWindowMs: 2 * 60 * 60 * 1000,

@@ -230,16 +230,6 @@ test.describe('Study mode: the Companion check-in card', () => {
   });
 });
 
-/** Serves the config with a real baseline form ID, for /study only (the
- *  Companion's own tests never route requests). */
-async function withBaselineForm(page) {
-  await page.route('**/src/study-config.js', async (route) => {
-    const res = await route.fetch();
-    const body = (await res.text()).replace('tally.so/r/[BASELINE ID]', 'tally.so/r/base01');
-    await route.fulfill({ response: res, body });
-  });
-}
-
 const link = (page, name) => page.getByRole('link', { name, exact: true });
 
 test.describe('Study mode: the /study page', () => {
@@ -252,7 +242,6 @@ test.describe('Study mode: the /study page', () => {
   });
 
   test('baseline stage (a code, no session yet): one baseline button, the note, no links into the app', async ({ page }) => {
-    await withBaselineForm(page);
     await seed(page, { code: 'R4-01' });
     await page.goto('/study');
     await expect(page.locator('body')).toHaveAttribute('data-study-stage', 'baseline');
@@ -261,7 +250,7 @@ test.describe('Study mode: the /study page', () => {
     const baseline = link(page, 'Check in after a call (before Mezzo)');
     await expect(baseline).toBeVisible();
     const url = new URL(await baseline.getAttribute('href'));
-    expect(url.origin + url.pathname).toBe('https://tally.so/r/base01');
+    expect(url.origin + url.pathname).toBe('https://tally.so/r/zEN6jg');
     expect(Object.fromEntries(url.searchParams)).toEqual({ mezzo_tester: 'R4-01' });
     await expect(page.getByText('Please don’t try Mezzo yet. I’ll send it once your 2 check-ins are in.')).toBeVisible();
 
@@ -273,7 +262,13 @@ test.describe('Study mode: the /study page', () => {
     for (const href of hrefs) expect(href === '/privacy.html' || href.startsWith('/r/')).toBe(true);
   });
 
-  test('baseline stage before the form ID is filled in: the note, no broken button', async ({ page }) => {
+  test('baseline stage with a placeholder form ID: the note, no broken button', async ({ page }) => {
+    // Serves the config with the placeholder back in place of the real ID.
+    await page.route('**/src/study-config.js', async (route) => {
+      const res = await route.fetch();
+      const body = (await res.text()).replace('tally.so/r/zEN6jg', 'tally.so/r/[BASELINE ID]');
+      await route.fulfill({ response: res, body });
+    });
     await seed(page, { code: 'R4-01' });
     await page.goto('/study');
     await expect(page.locator('body')).toHaveAttribute('data-study-stage', 'baseline');
