@@ -296,7 +296,7 @@ If microphone access is blocked or denied at this point — access must have bee
 
 ### On Completion
 
-A brief processing moment — "Saving your calibration…" when recalibrating a saved profile, otherwise "Creating your speaking profile…", with a spinner where the countdown was and no Cancel — then a decision screen whose actions depend on why calibration was run. If speech sat less than 12 dB above the room's own noise, either screen also says: "Your room is a bit noisy for how softly you speak. Try moving a little closer to your mic."
+A brief processing moment — "Saving your calibration…" when recalibrating a saved profile, otherwise "Creating your speaking profile…", with a spinner where the countdown was and no Cancel — then a decision screen whose actions depend on why calibration was run. If speech sat less than 10 dB above the room's own noise, either screen also says: "Your room is a bit noisy for how softly you speak. Try moving a little closer to your mic."
 
 **A new profile** (Create speaking profile, Create new profile, or Recalibrate on the temporary profile) shows "Your new speaking profile is ready" / "What would you like to do with it?":
 

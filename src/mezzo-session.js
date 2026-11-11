@@ -3833,8 +3833,8 @@ export function createMezzoSession({
     //    necessary. DOM order matches visual and keyboard-focus order
     //    exactly. ──
     // The noisy-room tip (2026-10-22): shown on a result screen when the
-    // calibration's speech sat less than 12 dB above the room noise
-    // measured during its 3-2-1 (engine.js's isNoisyRoom()).
+    // calibration's speech sat less than 10 dB above the room noise
+    // measured during Step 1 (engine.js's isNoisyRoom(), NOISY_ROOM_GAP_DB).
     const buildNoisyRoomTip = () => {
       const tip = pipDoc.createElement('p');
       tip.className = 'pip-decision-tip hidden';

@@ -1311,10 +1311,13 @@ describe('room noise and the noisy-room rule', () => {
     assert.strictEqual(measureRoomNoiseDb([0, NaN]), null);
   });
 
-  it('a room is noisy when speech is less than 12 dB above it', () => {
-    assert.strictEqual(NOISY_ROOM_GAP_DB, 12);
-    assert.strictEqual(isNoisyRoom(-39.2, -48.9), true);  // 9.7 dB
-    assert.strictEqual(isNoisyRoom(-40, -52), false);     // exactly 12 dB: not noisy
+  it('a room is noisy when speech is less than 10 dB above it', () => {
+    assert.strictEqual(NOISY_ROOM_GAP_DB, 10);
+    assert.strictEqual(isNoisyRoom(-38.1, -46.4), true);  // 8.3 dB: a genuinely noisy room
+    assert.strictEqual(isNoisyRoom(-41.4, -46.9), true);  // 5.5 dB
+    assert.strictEqual(isNoisyRoom(-40, -50), false);     // exactly 10 dB: not noisy
+    assert.strictEqual(isNoisyRoom(-45.0, -55.7), false); // 10.8 dB: a fan, measured fine
+    assert.strictEqual(isNoisyRoom(-47.0, -58.7), false); // 11.7 dB: a quiet office, the lowest of six takes
     assert.strictEqual(isNoisyRoom(-39.2, null), false);  // not measured
   });
 });

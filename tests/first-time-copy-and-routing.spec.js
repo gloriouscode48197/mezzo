@@ -633,7 +633,7 @@ test.describe('Room noise and the noisy-room tip (2026-10-22)', () => {
   }
   const TIP = 'Your room is a bit noisy for how softly you speak. Try moving a little closer to your mic.';
 
-  test('speech less than 12 dB above the room shows the tip on the result screen, and the room noise and peak are saved with the profile', async ({ page, context }) => {
+  test('speech less than 10 dB above the room shows the tip on the result screen, and the room noise and peak are saved with the profile', async ({ page, context }) => {
     const { pipPage, result } = await calibrateWith(page, context, { roomDb: -46, speechDb: -38 });
     await expect(result.locator('.pip-decision-tip')).toBeVisible();
     await expect(result.locator('.pip-decision-tip')).toHaveText(TIP);
@@ -645,6 +645,11 @@ test.describe('Room noise and the noisy-room tip (2026-10-22)', () => {
     const [saved] = await page.evaluate(() => JSON.parse(localStorage.getItem('mezzoProfiles')));
     expect(saved.roomNoiseDb).toBeCloseTo(-46, 0);
     expect(Number.isFinite(saved.peakDb)).toBe(true);
+  });
+
+  test('speech 11 dB above the room shows no tip (the cutoff is 10 dB since 2026-11-10)', async ({ page, context }) => {
+    const { result } = await calibrateWith(page, context, { roomDb: -49, speechDb: -38 });
+    await expect(result.locator('.pip-decision-tip')).toBeHidden();
   });
 
   test('a quiet room shows no tip', async ({ page, context }) => {

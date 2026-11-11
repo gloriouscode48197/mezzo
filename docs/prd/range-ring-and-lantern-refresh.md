@@ -184,7 +184,7 @@ Attention rises in three steps, each using brightness and size, which work in pe
 - **Speech-band filter, on:** a 120 Hz high-pass then a 3400 Hz low-pass (the telephone speech band) before the level is measured, for both the circle and the zones. This keeps fan rumble and hiss from moving either. Browser noise suppression stays off, and automatic gain stays off.
 - **Silence floor −25 dB:** below 25 dB under the speaking level, the circle rests, with 1.5 dB hysteresis.
 - **Room noise:** measured during calibration's Step 1 (3s, §8) as the median raw level, and saved with the profile as `roomNoiseDb`. In monitoring, the circle rests unless the level is 4 dB above it.
-- **Noisy rooms:** where speech sits less than 12 dB above the room, the margin drops to 2 dB so a soft voice still moves the circle. The result screen then says: "Your room is a bit noisy for how softly you speak. Try moving a little closer to your mic."
+- **Noisy rooms:** where speech sits less than 12 dB above the room, the margin drops to 2 dB so a soft voice still moves the circle. Where it sits less than 10 dB above, the result screen also says: "Your room is a bit noisy for how softly you speak. Try moving a little closer to your mic." (Revised 2026-11-10 from 12 dB: quiet-office calibrations measured 11.7 to 14.2 dB, so 12 showed the tip in about a third of them; genuinely noisy rooms measured 5.5 and 8.3.)
 
 ### 5.7 Sizes and the default window
 

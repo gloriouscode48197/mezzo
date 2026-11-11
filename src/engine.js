@@ -106,10 +106,14 @@ export function measureRoomNoiseDb(rmsSamples) {
   return 20 * Math.log10(usable[Math.floor(usable.length / 2)]);
 }
 
-/** Speech less than this far above the room makes it a noisy room: the
- *  circle's room margin drops, and the result screen suggests moving
- *  closer to the mic. */
-export const NOISY_ROOM_GAP_DB = 12;
+/** Speech less than this far above the room shows the noisy-room tip on
+ *  the result screens (suggesting moving closer to the mic). Message only:
+ *  the circle has its own, wider threshold for dropping its room margin
+ *  (range-ring.js's gate.noisyGapDb, 12 dB). 10 dB since 2026-11-10: in a
+ *  quiet office, six calibrations measured 11.7 to 14.2 dB and a fan 10.8,
+ *  so 12 showed the tip about one time in three; genuinely noisy rooms
+ *  measured 5.5 and 8.3. */
+export const NOISY_ROOM_GAP_DB = 10;
 
 /** @returns {boolean} whether this calibration was made in a noisy room */
 export function isNoisyRoom(speakingDb, roomNoiseDb) {

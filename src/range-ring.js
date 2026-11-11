@@ -51,7 +51,7 @@ export const DEFAULT_RING_SETTINGS = Object.freeze({
   // room-noise level, measured during the calibration countdown, raises it
   // to 4 dB above the room (2 dB in a noisy room, where speech sits less
   // than 12 dB above it, so a soft voice isn't gated out).
-  gate: Object.freeze({ floorDb: -25, hysteresisDb: 1.5, roomMarginDb: 4, noisyGapDb: 12, noisyMarginDb: 2 }), // noisyGapDb matches engine.js's NOISY_ROOM_GAP_DB
+  gate: Object.freeze({ floorDb: -25, hysteresisDb: 1.5, roomMarginDb: 4, noisyGapDb: 12, noisyMarginDb: 2 }), // noisyGapDb is the circle's own; the noisy-room tip uses engine.js's NOISY_ROOM_GAP_DB (10)
   voice: Object.freeze({
     sizeRest: 0.2,
     restBelowSilenceDb: 6,   // how far below the silence boundary the circle reaches its rest size
