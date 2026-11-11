@@ -634,11 +634,11 @@ test.describe('Study mode: the /study page', () => {
           text: rgba(cs('.study-title').color),
           // Every visible run of text on the page body (not the band).
           bodyText: visible.filter((el) => !el.closest('nav') && [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()))
-            .map((el) => ({ text: el.textContent.trim().slice(0, 40), color: rgba(getComputedStyle(el).color), button: !!el.closest('.btn-primary') })),
+            .map((el) => ({ text: el.textContent.trim().slice(0, 40), color: rgba(getComputedStyle(el).color), button: !!el.closest('.btn-primary, .study-step-num') })),
           band: rgba(cs('nav').backgroundColor),
           bandWidth: nav.width,
           label: rgba(cs('.study-nav-label').color),
-          navLink: rgba(cs('#study-nav-home').color),
+          navLink: rgba(cs('nav a[href="/privacy.html"]').color),
           openBg: rgba(cs('#study-open-mezzo').backgroundColor),
           openText: rgba(cs('#study-open-mezzo').color),
           outlineBorder: rgba(cs('#study-check-in').borderTopColor),
@@ -661,7 +661,8 @@ test.describe('Study mode: the /study page', () => {
 
       expect(near(look.bg, WHITE)).toBe(true);
       expect(contrast(look.text, look.bg)).toBeGreaterThan(7);
-      // All body text reads on white (buttons are checked against their fill).
+      // All body text reads on white (buttons and step numbers are checked
+      // against their own fill).
       for (const t of look.bodyText.filter((x) => !x.button)) {
         expect(contrast(t.color, look.bg), t.text).toBeGreaterThan(4.5);
       }
@@ -693,6 +694,70 @@ test.describe('Study mode: the /study page', () => {
       await expect(page.getByRole('heading', { level: 1 })).toHaveText('Thanks for joining the Mezzo study');
     });
   }
+
+  test('layout: the header is short, scrolls away with the page, and has only Privacy', async ({ page }) => {
+    await page.setViewportSize({ width: 1200, height: 500 });
+    await seed(page, { code: 'R4-01', firstSessionAgo: DAY });
+    await page.goto('/study');
+    const nav = page.locator('nav');
+    const box = await nav.boundingBox();
+    expect(box.height).toBeLessThanOrEqual(60);
+    expect(box.width).toBe(1200);
+    await expect(nav.getByRole('link')).toHaveText(['Privacy']);
+    await expect(page.getByRole('link', { name: 'Home', exact: true })).toHaveCount(0);
+    expect(await nav.evaluate((el) => getComputedStyle(el).position)).toBe('static');
+    await page.evaluate(() => window.scrollTo(0, 300));
+    await expect.poll(async () => (await nav.boundingBox()).y).toBeLessThan(-200);
+  });
+
+  test('layout, wide screen: With Mezzo\'s two numbered steps sit side by side as equal columns, tops and buttons aligned; Wrap-up full width below, unnumbered', async ({ page }) => {
+    await page.setViewportSize({ width: 1200, height: 900 });
+    await seed(page, { code: 'R4-01', firstSessionAgo: DAY });
+    await page.goto('/study');
+    const steps = page.locator('ol.study-steps > li');
+    await expect(steps).toHaveCount(2);
+    await expect(steps.locator('.study-step-num')).toHaveText(['1', '2']);
+    await expect(steps.locator('h3')).toHaveText(['Use Mezzo on your calls', 'Check in after your call']);
+    const [one, two] = [await steps.nth(0).boundingBox(), await steps.nth(1).boundingBox()];
+    expect(Math.abs(one.y - two.y)).toBeLessThanOrEqual(1);          // same top edge
+    expect(Math.abs(one.width - two.width)).toBeLessThanOrEqual(1);  // equal columns
+    expect(two.x).toBeGreaterThan(one.x + one.width);                // side by side
+    const [b1, b2] = [await page.locator('#study-open-mezzo').boundingBox(), await page.locator('#study-check-in').boundingBox()];
+    expect(Math.abs(b1.y - b2.y)).toBeLessThanOrEqual(1);            // buttons on one line
+    // The number marker: a small slate circle with a white number.
+    const num = await steps.nth(0).locator('.study-step-num').evaluate((el) => {
+      const st = getComputedStyle(el);
+      return { w: el.getBoundingClientRect().width, bg: st.backgroundColor, color: st.color };
+    });
+    expect(num.w).toBeLessThanOrEqual(28);
+    expect(num.bg).toBe('rgb(68, 96, 122)');
+    expect(num.color).toBe('rgb(255, 255, 255)');
+    // Wrap-up: below both columns, spanning them, with no number.
+    const wrapUp = page.locator('section[aria-labelledby="study-wrap-up-heading"]');
+    const w = await wrapUp.boundingBox();
+    expect(w.y).toBeGreaterThan(Math.max(one.y + one.height, two.y + two.height));
+    expect(w.width).toBeGreaterThanOrEqual(two.x + two.width - one.x - 1);
+    await expect(wrapUp.locator('.study-step-num')).toHaveCount(0);
+  });
+
+  test('layout, phone width: the steps stack, step 1 first, with no sideways scroll', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await seed(page, { code: 'R4-01', firstSessionAgo: DAY });
+    await page.goto('/study');
+    const steps = page.locator('ol.study-steps > li');
+    const [one, two] = [await steps.nth(0).boundingBox(), await steps.nth(1).boundingBox()];
+    expect(two.y).toBeGreaterThan(one.y + one.height - 1);
+    expect(Math.abs(one.x - two.x)).toBeLessThanOrEqual(1);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  });
+
+  test('layout: "Your usual calls" stays one 560px column with no step numbers', async ({ page }) => {
+    await page.setViewportSize({ width: 1200, height: 900 });
+    await seed(page, { code: 'R4-01' });
+    await page.goto('/study');
+    await expect(page.locator('#study-baseline .study-step-num')).toHaveCount(0);
+    expect((await page.locator('.study-main').boundingBox()).width).toBe(560);
+  });
 
   test('?study=CODE on /study saves the code; ?study=clear removes it', async ({ page }) => {
     await page.goto('/study?study=R4-02');

@@ -54,6 +54,8 @@
     .study-page ::selection { background: var(--study-band); color: #FFFFFF; }
     /* The header: a full-width band, "Mezzo study" in white. */
     .study-page .nav {
+      position: static;                 /* scrolls away with the page */
+      height: 56px;
       background: var(--study-band);
       border-bottom: none;
     }
@@ -99,6 +101,53 @@
       color: var(--color-text);
     }
     .study-item { margin-top: var(--space-5); }
+    /* With Mezzo's numbered steps. */
+    .study-steps { list-style: none; margin: 0; padding: 0; }
+    .study-item-head {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      margin: 0 0 var(--space-2);
+    }
+    .study-step-num {
+      flex: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: var(--study-band);
+      color: #FFFFFF;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: var(--weight-medium);
+      line-height: 1;
+    }
+    .study-item-head h3 { margin: 0; }
+    /* Wider screens: the With Mezzo stage widens so its two steps sit side
+       by side as equal columns, tops aligned and buttons on one line; Wrap-up
+       stays full width below. Your usual calls keeps the 560px column. */
+    @media (min-width: 760px) {
+      body[data-study-stage="mezzo"] .study-main { max-width: 760px; }
+      /* Shared rows (subgrid): the headings, the text and the buttons each
+         line up across the two columns, buttons by their top edge. */
+      .study-steps {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: auto 1fr auto;
+        column-gap: var(--space-6);
+        margin-top: var(--space-5);
+      }
+      .study-steps .study-item {
+        margin-top: 0;
+        display: grid;
+        grid-row: span 3;
+        grid-template-rows: subgrid;
+        justify-items: start;
+        align-items: start;
+      }
+    }
     .study-item h3 {
       margin: 0 0 var(--space-2);
       font-family: var(--font-display);
@@ -135,7 +184,6 @@
   <nav class="nav" aria-label="Mezzo study">
     <span class="study-nav-label">Mezzo study</span>
     <div class="nav-links">
-      <a href="/index.html" class="nav-link nav-link-quiet" id="study-nav-home" hidden>Home</a>
       <a href="/privacy.html" class="nav-link nav-link-quiet">Privacy</a>
     </div>
   </nav>
@@ -164,16 +212,27 @@
       <div id="study-mezzo" hidden>
         <section class="study-phase" aria-labelledby="study-mezzo-heading">
           <h2 id="study-mezzo-heading">With Mezzo</h2>
-          <div class="study-item">
-            <h3>Use Mezzo on your calls</h3>
-            <p class="type-body">When you take a call where you’ll speak, with headphones and people nearby, open Mezzo and start monitoring. If you’ve installed the extension, Mezzo also offers to start when a Google Meet call begins.</p>
-            <a class="btn-primary" id="study-open-mezzo" href="/index.html">Open Mezzo</a>
-          </div>
-          <div class="study-item">
-            <h3>Check in after your call</h3>
-            <p class="type-body">When you stop monitoring, Mezzo asks how your call went. It takes about a minute. Missed it? Check in here.</p>
-            <a class="btn-outline" id="study-check-in" target="_blank" rel="noopener noreferrer">Check in after a call</a>
-          </div>
+          <!-- Two numbered steps: side by side on wide screens, stacked on a
+               phone. An ordered list, so the order is announced too; the
+               number marker itself is decorative. -->
+          <ol class="study-steps">
+            <li class="study-item" id="study-step-use">
+              <div class="study-item-head">
+                <span class="study-step-num" aria-hidden="true">1</span>
+                <h3>Use Mezzo on your calls</h3>
+              </div>
+              <p class="type-body">When you take a call where you’ll speak, with headphones and people nearby, open Mezzo and start monitoring. If you’ve installed the extension, Mezzo also offers to start when a Google Meet call begins.</p>
+              <a class="btn-primary" id="study-open-mezzo" href="/index.html">Open Mezzo</a>
+            </li>
+            <li class="study-item" id="study-step-check-in">
+              <div class="study-item-head">
+                <span class="study-step-num" aria-hidden="true">2</span>
+                <h3>Check in after your call</h3>
+              </div>
+              <p class="type-body">When you stop monitoring, Mezzo asks how your call went. It takes about a minute. Missed it? Check in here.</p>
+              <a class="btn-outline" id="study-check-in" target="_blank" rel="noopener noreferrer">Check in after a call</a>
+            </li>
+          </ol>
         </section>
 
         <section class="study-phase" aria-labelledby="study-wrap-up-heading">
@@ -226,7 +285,6 @@
 
     if (stage === 'none') {
       $('study-not-participant').hidden = false;
-      $('study-nav-home').hidden = false;
     } else {
       $('study-participant').hidden = false;
       $('study-code').textContent = testerCode;
@@ -243,7 +301,6 @@
 
     if (stage === 'mezzo') {
       $('study-mezzo').hidden = false;
-      $('study-nav-home').hidden = false;
 
       // Open Mezzo: through the extension when it's installed (its own
       // window, or the open Mezzo brought forward), otherwise a window of
