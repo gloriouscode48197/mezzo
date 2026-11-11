@@ -7,6 +7,9 @@
        their personal study link. Every URL below is absolute, so it works
        as /study and /study/. Settings: src/study-config.js. -->
   <meta name="robots" content="noindex">
+  <!-- Its own look, apart from the app: always cream, in light and dark
+       system themes alike. -->
+  <meta name="color-scheme" content="light">
   <title>Mezzo: Study</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -14,6 +17,35 @@
   <link rel="stylesheet" href="/design-tokens/mezzo-tokens.css?v=16">
   <link rel="icon" type="image/svg+xml" sizes="64x64" href="/icons/icon-64.svg?v=2">
   <style>
+    /* The study page's own look (2026-11-11): the cream surface the
+       "Companion closed" page uses (data-surface="cream" in the tokens),
+       charcoal buttons, and no chartreuse anywhere. The tokens' button and
+       hairline colors are computed at :root from the dark theme, so they're
+       set again here for cream. */
+    body.study-page {
+      --color-accent: #2D2E31;                   /* nothing on this page is chartreuse */
+      --color-btn-primary-bg: #2D2E31;
+      --color-btn-primary-text: #F3EBDE;
+      --color-btn-secondary-border: color-mix(in srgb, #2D2E31 35%, transparent);
+      --border: color-mix(in srgb, #2D2E31 14%, transparent);
+      color-scheme: light;
+    }
+    .study-page .btn-primary:hover { background: color-mix(in srgb, #2D2E31 86%, #F3EBDE); }
+    .study-page ::selection { background: #2D2E31; color: #F3EBDE; }
+    /* "Mezzo study" in the header, in place of the app's wordmark. */
+    .study-nav-label {
+      display: inline-flex;
+      align-items: center;
+      padding: 5px 10px;
+      border: 1px solid #2D2E31;
+      border-radius: var(--radius-control);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: var(--weight-medium);
+      letter-spacing: var(--tracking-label);
+      text-transform: uppercase;
+      color: var(--color-text);
+    }
     body { margin: 0; min-height: 100vh; background: var(--color-bg); }
     .study-main {
       max-width: 560px;
@@ -21,7 +53,6 @@
       padding: var(--space-section, 64px) 24px;
       box-sizing: border-box;
     }
-    .study-eyebrow { margin: 0 0 var(--space-3); }
     .study-title {
       margin: 0 0 var(--space-3);
       font-family: var(--font-display);
@@ -76,12 +107,12 @@
     }
   </style>
 </head>
-<body data-surface="dark">
+<body data-surface="cream" class="study-page">
 
-  <!-- No links into the app during the baseline stage: the wordmark isn't
-       a link here, and Home shows only outside that stage. -->
-  <nav class="nav">
-    <span class="type-nav-wordmark">mezzo</span>
+  <!-- No links into the app during the baseline stage: the label isn't a
+       link, and Home shows only outside that stage. -->
+  <nav class="nav" aria-label="Mezzo study">
+    <span class="study-nav-label">Mezzo study</span>
     <div class="nav-links">
       <a href="/index.html" class="nav-link nav-link-quiet" id="study-nav-home" hidden>Home</a>
       <a href="/privacy.html" class="nav-link nav-link-quiet">Privacy</a>
@@ -91,7 +122,6 @@
   <main class="study-main">
     <!-- With a saved tester code. -->
     <section id="study-participant" hidden>
-      <p class="type-tag study-eyebrow">Mezzo study</p>
       <h1 class="study-title">Thanks for joining the Mezzo study</h1>
       <p class="type-body">Your study code: <span class="study-code" id="study-code"></span></p>
 

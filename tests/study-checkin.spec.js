@@ -616,6 +616,58 @@ test.describe('Study mode: the /study page', () => {
     expect(new URL(page.url()).pathname).toMatch(/^\/study\/?$/);
   });
 
+  for (const colorScheme of ['light', 'dark']) {
+    test(`its own look (${colorScheme} system theme): cream page, charcoal text and buttons, "Mezzo study" in the header, no chartreuse anywhere`, async ({ page }) => {
+      await page.emulateMedia({ colorScheme });
+      await seed(page, { code: 'R4-01', firstSessionAgo: 15 * DAY });
+      await page.goto('/study');
+      await expect(page.locator('body')).toHaveAttribute('data-study-stage', 'mezzo');
+      const look = await page.evaluate(() => {
+        // Any CSS color (color-mix() included) as [r, g, b, a], 0-255.
+        const ctx = Object.assign(document.createElement('canvas'), { width: 1, height: 1 }).getContext('2d', { willReadFrequently: true });
+        const rgba = (c) => { ctx.clearRect(0, 0, 1, 1); ctx.fillStyle = c; ctx.fillRect(0, 0, 1, 1); return [...ctx.getImageData(0, 0, 1, 1).data]; };
+        const cs = (sel) => getComputedStyle(document.querySelector(sel));
+        const visible = [...document.querySelectorAll('body, body *')].filter((el) => el.getClientRects().length);
+        return {
+          bg: rgba(cs('body').backgroundColor),
+          text: rgba(cs('.study-title').color),
+          openBg: rgba(cs('#study-open-mezzo').backgroundColor),
+          openText: rgba(cs('#study-open-mezzo').color),
+          outlineBorder: rgba(cs('#study-check-in').borderTopColor),
+          outlineText: rgba(cs('#study-check-in').color),
+          wrapUpText: rgba(cs('#study-wrap-up').color),
+          colors: visible.flatMap((el) => {
+            const st = getComputedStyle(el);
+            return [st.color, st.backgroundColor, st.borderTopColor, st.borderBottomColor, st.outlineColor].map(rgba);
+          }),
+        };
+      });
+      const CREAM = [243, 235, 222];
+      const CHARCOAL = [45, 46, 49];
+      const near = (c, target, tol = 3) => c.slice(0, 3).every((v, i) => Math.abs(v - target[i]) <= tol);
+      expect(near(look.bg, CREAM)).toBe(true);
+      expect(near(look.text, CHARCOAL)).toBe(true);
+      // Primary: charcoal with cream text. Secondary: charcoal text, a
+      // visible charcoal border (not the dark theme's cream hairline).
+      expect(near(look.openBg, CHARCOAL)).toBe(true);
+      expect(look.openBg[3]).toBe(255);
+      expect(near(look.openText, CREAM)).toBe(true);
+      expect(near(look.outlineText, CHARCOAL)).toBe(true);
+      expect(near(look.wrapUpText, CHARCOAL)).toBe(true);
+      expect(near(look.outlineBorder, CHARCOAL)).toBe(true);
+      expect(look.outlineBorder[3]).toBeGreaterThan(40);
+      // No chartreuse (#DEDE65) on anything visible.
+      for (const c of look.colors) expect(c[3] > 0 && near(c, [222, 222, 101], 8)).toBe(false);
+
+      // "Mezzo study" labels the header; the app's wordmark isn't there.
+      const nav = page.getByRole('navigation', { name: 'Mezzo study' });
+      await expect(nav.locator('.study-nav-label')).toHaveText('Mezzo study');
+      await expect(nav.locator('.type-nav-wordmark')).toHaveCount(0);
+      // The same text everywhere else.
+      await expect(page.getByRole('heading', { level: 1 })).toHaveText('Thanks for joining the Mezzo study');
+    });
+  }
+
   test('?study=CODE on /study saves the code; ?study=clear removes it', async ({ page }) => {
     await page.goto('/study?study=R4-02');
     await expect(page.getByText('R4-02')).toBeVisible();
