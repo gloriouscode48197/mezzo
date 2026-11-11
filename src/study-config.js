@@ -1,9 +1,9 @@
 /**
  * Round 4 study mode: every setting in one place (src/study.js uses it).
  *
- * Not frozen on purpose: tests/study-checkin.spec.js shortens
- * minSessionMs and minSpeechMs in the page so a browser test doesn't need a real
- * 5-minute session. Nothing in the app writes to it.
+ * Not frozen on purpose: tests/study-checkin.spec.js shortens minSpeechMs
+ * in the page so a browser test doesn't need a real minute of speech.
+ * Nothing in the app writes to it.
  */
 export const STUDY_CONFIG = {
   /** Opened after a call, from the Companion card or the /study page. */
@@ -17,10 +17,9 @@ export const STUDY_CONFIG = {
 
   /** The check-in is offered for this long after a session ends. */
   checkInWindowMs: 2 * 60 * 60 * 1000,
-  /** Shorter sessions don't get a check-in card. */
-  minSessionMs: 5 * 60 * 1000,
-  /** Nor do sessions with less speech than this: the time the circle's
-   *  noise gate counted as voice (study.js's createGlowCounter()). */
+  /** A session qualifies for a check-in with at least this much speech: the
+   *  time the circle's noise gate counted as voice (study.js's
+   *  createGlowCounter()). There is no minimum session length (2026-11-11). */
   minSpeechMs: 60 * 1000,
   /** Days after the first session (counted from its local date) when the
    *  wrap-up opens and the Companion stops showing the check-in card. */
@@ -65,5 +64,9 @@ export const STUDY_CONFIG = {
     companion: 'companion',
     studyPage: 'study_page',
     companionClosed: 'companion_closed',
+    /** The main tab's "Your Companion is open" page. */
+    companionOpen: 'companion_open',
+    /** The page the tab returns to after Done or Close Companion. */
+    home: 'home',
   },
 };

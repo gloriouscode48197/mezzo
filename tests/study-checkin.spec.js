@@ -2,9 +2,8 @@
  * Round 4 study mode in a real browser: the Companion's check-in card
  * (src/mezzo-session.js's renderStudyCard()) and the /study page.
  *
- * A real 5-minute session (with a minute of speech) is too slow for a
- * test, so the "after Stop" tests shorten STUDY_CONFIG.minSessionMs and
- * minSpeechMs in the page (the same module instance
+ * A real minute of speech is too slow for a test, so the "after Stop"
+ * tests shorten STUDY_CONFIG.minSpeechMs in the page (the same module instance
  * the Companion reads; routing requests instead stalls the Companion's
  * stylesheet load under Playwright). The 2-hour window and the "session
  * ended by closing the window" case use a stored session with real
@@ -46,14 +45,13 @@ async function seed(page, { code = null, lastSession = null, firstSessionAgo = n
   }, { profiles: PROFILE, code, lastSession, firstSessionAgo });
 }
 
-/** Shortens the minimum session length, and the minimum speaking time, in
- *  the live config. */
-async function setMinSession(page, ms, speechMs = 300) {
-  await page.evaluate(async ([value, speech]) => {
+/** Shortens the minimum speaking time in the live config (there is no
+ *  minimum session length). */
+async function setMinSpeech(page, speechMs = 300) {
+  await page.evaluate(async (speech) => {
     const { STUDY_CONFIG } = await import('/src/study-config.js');
-    STUDY_CONFIG.minSessionMs = value;
     STUDY_CONFIG.minSpeechMs = speech;
-  }, [ms, speechMs]);
+  }, speechMs);
 }
 
 async function openReady(page, context, { search = '' } = {}) {
@@ -95,7 +93,7 @@ test.describe('Study mode: the Companion check-in card', () => {
   test('no tester code: no card after a long enough session, and nothing stored', async ({ page, context }) => {
     await seed(page);
     const pipPage = await openReady(page, context);
-    await setMinSession(page, 300);
+    await setMinSpeech(page, 300);
     await startMonitoring(pipPage);
     await pipPage.waitForTimeout(600);
     await stopMonitoring(pipPage);
@@ -103,7 +101,7 @@ test.describe('Study mode: the Companion check-in card', () => {
     expect(await page.evaluate(() => localStorage.getItem('mezzoStudyLastSession:' + localStorage.getItem('mezzoStudyTesterCode')))).toBe(null);
   });
 
-  test('with a code: shows after a long enough session, with the glow count; not after a shorter one', async ({ page, context }) => {
+  test('with a code: shows after a session with enough speech, with the glow count; not after one without', async ({ page, context }) => {
     await seed(page);
     const pipPage = await openReady(page, context, { search: '?study=R4-01' });
     // The code is saved and dropped from the address bar.
@@ -113,7 +111,7 @@ test.describe('Study mode: the Companion check-in card', () => {
     expect(await page.evaluate(() => localStorage.getItem('mezzoStudyFirstSession:' + localStorage.getItem('mezzoStudyTesterCode')))).toBe(null);
 
     const b = await rangeBoundsDb(page, PROFILE[0].spreadDb);
-    await setMinSession(page, 1500, 1000);
+    await setMinSpeech(page, 1000);
 
     // A session at least the minimum length, with two glows, speaking at
     // the calibrated level throughout (the gate counts it as speech).
@@ -152,7 +150,7 @@ test.describe('Study mode: the Companion check-in card', () => {
     const cardBox = await card(pipPage).boundingBox();
     expect(cardBox.y).toBeGreaterThan(startBox.y + startBox.height);
 
-    // A shorter session: no card, and the glow count starts over.
+    // A session too short to have the minimum speech: no card, and the glow count starts over.
     await startMonitoring(pipPage);
     await stopMonitoring(pipPage);
     await expect(card(pipPage)).toBeHidden();
@@ -160,12 +158,12 @@ test.describe('Study mode: the Companion check-in card', () => {
     expect(last.glows).toBe(0);
   });
 
-  test('long enough, but under the speech minimum: no card; the speaking time only counts what the gate heard as voice', async ({ page, context }) => {
+  test('under the speech minimum: no card; the speaking time only counts what the gate heard as voice', async ({ page, context }) => {
     await seed(page, { code: 'R4-01' });
     const pipPage = await openReady(page, context);
     // Speech counts from the gate, which stays open for about a second
     // after a phrase while the circle eases down: that tail counts too.
-    await setMinSession(page, 1000, 3000);
+    await setMinSpeech(page, 3000);
     await setLevelDb(page, -60);  // silent from the start
     await startMonitoring(pipPage);
     await pipPage.waitForTimeout(800);
@@ -261,7 +259,7 @@ test.describe('Study mode: the Companion check-in card', () => {
     await seed(page, { code: 'R4-01' });
     let pipPage = await openReady(page, context);
     const b = await rangeBoundsDb(page, PROFILE[0].spreadDb);
-    await setMinSession(page, 1000);
+    await setMinSpeech(page, 300);
     await startMonitoring(pipPage);
     await glowOnce(page, pipPage, b.endDb);
 
@@ -316,7 +314,7 @@ test.describe('Study mode: the check-in on the "Companion closed" page', () => {
    *  something else (Meet's mini window). */
   async function monitorThenClose(page, context, { speak = true } = {}) {
     const pipPage = await openReady(page, context);
-    await setMinSession(page, 1000, 600);
+    await setMinSpeech(page, 600);
     await startMonitoring(pipPage);
     await setLevelDb(page, speak ? 0 : -60);
     await pipPage.waitForTimeout(1500);
@@ -403,10 +401,14 @@ test.describe('Study mode: the check-in on the "Companion closed" page', () => {
     const first = await lastSession(page);
     const pipPage = await reopen(page, context);
     await expect(pipPage.locator('.pip-screen-monitoring')).toBeVisible({ timeout: 8000 });
-    await expect(closedCard(page)).toBeHidden();
+    await expect(closedCard(page)).toBeHidden(); // the call continues
     await pipPage.waitForTimeout(300);
     await stopMonitoring(pipPage);
     await expect(card(pipPage)).toBeVisible();
+    // And on the "Your Companion is open" page, for the same session.
+    await expect(page.locator('#state-dock')).toHaveAttribute('data-variant', 'open');
+    await expect(closedCard(page)).toBeVisible();
+    expect((await closedParams(page)).mezzo_source).toBe('companion_open');
     expect((await lastSession(page)).id).toBe(first.id);
   });
 
@@ -415,6 +417,119 @@ test.describe('Study mode: the check-in on the "Companion closed" page', () => {
     await monitorThenClose(page, context, { speak: false });
     await expect(page.locator('#btn-reopen-companion')).toBeVisible();
     await expect(closedCard(page)).toBeHidden();
+  });
+});
+
+test.describe('Study mode: one pending check-in, in every view (2026-11-11)', () => {
+  const runningCard = (page) => page.locator('#running-checkin');
+  const homeCard = (page) => page.locator('#home-checkin');
+  const paramsOf = async (locator) => Object.fromEntries(new URL(await locator.getByRole('link', { name: 'Open check-in' }).getAttribute('href')).searchParams);
+  const lastSession = (page) => page.evaluate(() => JSON.parse(localStorage.getItem('mezzoStudyLastSession:' + localStorage.getItem('mezzoStudyTesterCode'))));
+
+  /** A short session with enough speech, then Stop. There's no minimum
+   *  length; the speech minimum is shortened for the test. */
+  async function talkThenStop(page, context) {
+    const pipPage = await openReady(page, context);
+    await setMinSpeech(page, 600);
+    await startMonitoring(pipPage);
+    await setLevelDb(page, 0);
+    await pipPage.waitForTimeout(1200);
+    await stopMonitoring(pipPage);
+    return pipPage;
+  }
+
+  test('after Stop: the Companion card and the "Your Companion is open" card, below Close Companion; the page card hides while monitoring', async ({ page, context }) => {
+    await seed(page, { code: 'R4-01' });
+    const pipPage = await talkThenStop(page, context);
+    await expect(card(pipPage)).toBeVisible();
+    await expect(page.locator('#state-dock')).toHaveAttribute('data-variant', 'open');
+    await expect(runningCard(page)).toBeVisible();
+    await expect(runningCard(page)).toContainText('Call over? How did your call go?');
+    const close = await page.locator('#btn-close-companion').boundingBox();
+    expect((await runningCard(page).boundingBox()).y).toBeGreaterThan(close.y + close.height);
+    expect((await paramsOf(runningCard(page))).mezzo_source).toBe('companion_open');
+    // A short session qualifies: it's the speech that counts.
+    const last = await lastSession(page);
+    expect(last.endedAt - last.startedAt).toBeLessThan(60 * 1000);
+
+    // Monitoring again: no "Call over?" on the page mid-call.
+    await startMonitoring(pipPage);
+    await expect(runningCard(page)).toBeHidden();
+  });
+
+  test('skipped on the page, it clears in the Companion; opened in the Companion, it clears on the page', async ({ page, context }) => {
+    await seed(page, { code: 'R4-01' });
+    let pipPage = await talkThenStop(page, context);
+    await expect(runningCard(page)).toBeVisible();
+    await runningCard(page).getByRole('button', { name: 'Skip this one' }).click();
+    await expect(runningCard(page)).toBeHidden();
+    await expect(card(pipPage)).toBeHidden();
+    expect((await lastSession(page)).handled).toBe('skipped');
+
+    // A second session: opened in the Companion this time.
+    await setLevelDb(page, 0);
+    await startMonitoring(pipPage);
+    await pipPage.waitForTimeout(1200);
+    await stopMonitoring(pipPage);
+    await expect(card(pipPage)).toBeVisible();
+    await expect(runningCard(page)).toBeVisible();
+    await pipPage.evaluate(() => {
+      document.addEventListener('click', (e) => { if (e.target.closest('a.pip-study-card-open')) e.preventDefault(); });
+    });
+    await openLink(pipPage).click();
+    await expect(card(pipPage)).toBeHidden();
+    await expect(runningCard(page)).toBeHidden();
+    expect((await lastSession(page)).handled).toBe('opened');
+  });
+
+  test('after Close Companion, the page the tab returns to shows it (source home); answering it there clears it', async ({ page, context }) => {
+    await seed(page, { code: 'R4-01' });
+    await talkThenStop(page, context);
+    await page.locator('#btn-close-companion').click();
+    await expect(page.locator('#mic-granted')).toBeVisible({ timeout: 5000 });
+    await expect(homeCard(page)).toBeVisible();
+    // Below the Open Mezzo Companion button.
+    const open = await page.locator('#btn-open-companion').boundingBox();
+    expect((await homeCard(page).boundingBox()).y).toBeGreaterThan(open.y + open.height);
+    expect((await paramsOf(homeCard(page))).mezzo_source).toBe('home');
+    await homeCard(page).getByRole('button', { name: 'Skip this one' }).click();
+    await expect(homeCard(page)).toBeHidden();
+    await page.reload();
+    await expect(page.locator('#mic-granted')).toBeVisible({ timeout: 5000 });
+    await expect(homeCard(page)).toBeHidden();
+  });
+
+  test('after Done on the "Companion closed" page, the page the tab returns to shows it', async ({ page, context }) => {
+    await seed(page, { code: 'R4-01' });
+    const pipPage = await openReady(page, context);
+    await setMinSpeech(page, 600);
+    await startMonitoring(pipPage);
+    await setLevelDb(page, 0);
+    await pipPage.waitForTimeout(1200);
+    await pipPage.close(); // Meet's mini window, say
+    await expect(runningCard(page)).toBeVisible();
+    await page.locator('#btn-reopen-done').click();
+    await expect(page.locator('#mic-granted')).toBeVisible({ timeout: 5000 });
+    await expect(homeCard(page)).toBeVisible();
+    await expect(runningCard(page)).toBeHidden();
+  });
+
+  test('a later visit to Mezzo (microphone already allowed) shows a check-in still pending', async ({ page, context }) => {
+    await context.grantPermissions(['microphone']);
+    await seed(page, { code: 'R4-01', lastSession: { length: 3 * MIN, endedAgo: 20 * MIN } });
+    await page.goto('/index.html');
+    await expect(page.locator('#mic-granted')).toBeVisible({ timeout: 5000 });
+    await expect(homeCard(page)).toBeVisible();
+    expect((await paramsOf(homeCard(page))).mezzo_minutes_after).toBe('20');
+  });
+
+  test('without a tester code, no view shows a card', async ({ page, context }) => {
+    await seed(page);
+    await talkThenStop(page, context);
+    await expect(runningCard(page)).toBeHidden();
+    await page.locator('#btn-close-companion').click();
+    await expect(page.locator('#mic-granted')).toBeVisible({ timeout: 5000 });
+    await expect(homeCard(page)).toBeHidden();
   });
 });
 
@@ -536,7 +651,7 @@ test.describe('Study mode: the /study page', () => {
     await expect(page.getByRole('heading', { level: 2 })).toHaveText(['With Mezzo', 'Wrap-up']);
     await expect(page.getByRole('heading', { level: 3 })).toHaveText(['Use Mezzo on your calls', 'Check in after your call']);
     await expect(page.getByText('When you take a call where you’ll speak, with headphones and people nearby, open Mezzo and start monitoring. If you’ve installed the extension, Mezzo also offers to start when a Google Meet call begins.')).toBeVisible();
-    await expect(page.getByText('When you stop monitoring, Mezzo asks how your call went. It takes about a minute. Missed it? Check in here.')).toBeVisible();
+    await expect(page.getByText('When you stop monitoring, Mezzo asks how your call went. Missed it? Check in here, ideally within 2 hours of your call.')).toBeVisible();
     await expect(page.getByText('Mezzo comes later.', { exact: false })).toBeHidden();
 
     // Open Mezzo is the primary button, the check-in the secondary one.

@@ -223,6 +223,7 @@ export function saveLastSession(session, storage = defaultStorage(), config = ST
       storage?.setItem(codeBoundKey('firstSession', storage, config), String(session.startedAt));
     }
   } catch { return null; }
+  notifyCheckInChange();
   return record;
 }
 
@@ -313,13 +314,34 @@ export function getLastSession(storage = defaultStorage(), config = STUDY_CONFIG
   }
 }
 
+// ── Keeping every view in step ───────────────────────────────────────────
+
+const checkInListeners = new Set();
+
+/** Calls fn whenever the pending check-in may have changed in this tab: a
+ *  session was saved, or a check-in was opened or skipped. Other tabs see
+ *  it through the storage event. @returns {() => void} unsubscribe */
+export function onCheckInChange(fn) {
+  checkInListeners.add(fn);
+  return () => checkInListeners.delete(fn);
+}
+
+/** On the next task, not now: a card's Open check-in link must open before
+ *  any card is hidden (removing its href in the click would cancel it). */
+function notifyCheckInChange() {
+  const run = () => { for (const fn of [...checkInListeners]) { try { fn(); } catch { /* one view's failure isn't another's */ } } };
+  if (typeof globalThis.setTimeout === 'function') globalThis.setTimeout(run, 0);
+  else run();
+}
+
 /** Records that the check-in for this session was opened or skipped, so the
- *  card shows once per session. */
+ *  card shows once per session, and clears it from every view. */
 export function markCheckInHandled(sessionId, how, storage = defaultStorage(), config = STUDY_CONFIG) {
   const record = getLastSession(storage, config);
   if (!record || record.id !== sessionId) return false;
   record.handled = how;
   try { storage?.setItem(codeBoundKey('lastSession', storage, config), JSON.stringify(record)); } catch { return false; }
+  notifyCheckInChange();
   return true;
 }
 
@@ -339,16 +361,15 @@ export function sessionSpeechMs(session) {
   return Number.isFinite(session?.speechMs) ? session.speechMs : 0;
 }
 
-/** The Companion card: a tester code, a session of at least the minimum
- *  length and with at least the minimum speaking time, inside the window,
- *  not yet opened or skipped, and the study's 14 days not over (the tester
- *  code stays saved either way). */
+/** A pending check-in (the cards, in every view): a tester code, a session
+ *  with at least the minimum speaking time (there is no minimum length),
+ *  ended inside the 2-hour window, not yet opened or skipped, and the
+ *  study's 14 days not over (the tester code stays saved either way). */
 export function shouldShowCheckInCard({ testerCode, session, now, mezzoStageStartAt = null }, config = STUDY_CONFIG) {
   return Boolean(testerCode)
     && !isWrapUpOpen(mezzoStageStartAt, now, config)
     && Boolean(session)
     && !session.handled
-    && sessionDurationMs(session) >= config.minSessionMs
     && sessionSpeechMs(session) >= config.minSpeechMs
     && isWithinCheckInWindow(session, now, config);
 }

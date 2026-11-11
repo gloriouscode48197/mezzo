@@ -10,6 +10,7 @@ import {
   applyStudyParam,
   applyStartParam,
   clearStudy,
+  onCheckInChange,
   codeBoundKey,
   getMezzoStageUnlockedAt,
   getMezzoStageStartAt,
@@ -65,11 +66,10 @@ function session({ startedAt = Date.UTC(2026, 10, 9, 15), minutes = 30, glows = 
 }
 
 describe('config', () => {
-  it('holds the forms, the window, the minimums and every parameter name', () => {
+  it('holds the forms, the window, the speech minimum and every parameter name', () => {
     assert.equal(STUDY_CONFIG.checkInFormUrl, 'https://tally.so/r/gber54');
     assert.equal(STUDY_CONFIG.wrapUpFormUrl, 'https://tally.so/r/q5alaO');
     assert.equal(STUDY_CONFIG.checkInWindowMs, 2 * HOUR);
-    assert.equal(STUDY_CONFIG.minSessionMs, 5 * MIN);
     assert.equal(STUDY_CONFIG.minSpeechMs, 1 * MIN);
     assert.equal(STUDY_CONFIG.startParam, 'start');
     assert.equal(STUDY_CONFIG.startValue, '1');
@@ -83,7 +83,9 @@ describe('config', () => {
       glows: 'mezzo_glows',
       minutesAfter: 'mezzo_minutes_after',
     });
-    assert.deepEqual(STUDY_CONFIG.sources, { companion: 'companion', studyPage: 'study_page', companionClosed: 'companion_closed' });
+    assert.deepEqual(STUDY_CONFIG.sources, {
+      companion: 'companion', studyPage: 'study_page', companionClosed: 'companion_closed', companionOpen: 'companion_open', home: 'home',
+    });
   });
 
   it('the browser ID is the existing analytics ID', () => {
@@ -263,15 +265,11 @@ describe('check-in card', () => {
     assert.equal(shouldShowCheckInCard({ testerCode: null, session: s, now: s.endedAt + MIN }), false);
   });
 
-  it('shows after a session of 5 minutes or more', () => {
-    const fiveMin = session({ minutes: 5 });
+  it('no minimum length: a short session with a minute of speech qualifies (2026-11-11)', () => {
+    assert.equal(STUDY_CONFIG.minSessionMs, undefined);
+    const short = session({ minutes: 1.5, speechMinutes: 1 });
+    assert.equal(shouldShowCheckInCard({ testerCode: 'R4-01', session: short, now: short.endedAt }), true);
     assert.equal(shouldShowCheckInCard({ testerCode: 'R4-01', session: s, now: s.endedAt }), true);
-    assert.equal(shouldShowCheckInCard({ testerCode: 'R4-01', session: fiveMin, now: fiveMin.endedAt }), true);
-  });
-
-  it('not after a shorter session', () => {
-    const short = session({ minutes: 4.9 });
-    assert.equal(shouldShowCheckInCard({ testerCode: 'R4-01', session: short, now: short.endedAt }), false);
   });
 
   it('not with under 1 minute of speech, however long the session', () => {
@@ -373,6 +371,26 @@ describe('form links', () => {
     assert.equal(formatSessionDate(new Date(2026, 0, 5, 23, 59)), '2026-01-05');
     assert.equal(sessionMinutes(40 * 1000), 0.7);
     assert.equal(sessionMinutes(0), 0);
+  });
+});
+
+describe('keeping every view in step', () => {
+  it('a saved session, and opening or skipping its check-in, notify every listener on the next task, so a link opens first', async () => {
+    await new Promise((r) => setTimeout(r, 10)); // earlier tests' notices settle first
+    const storage = withCode();
+    let calls = 0;
+    const off = onCheckInChange(() => { calls += 1; });
+    saveLastSession(session(), storage);
+    assert.equal(calls, 0); // not during the click
+    await new Promise((r) => setTimeout(r, 5));
+    assert.equal(calls, 1);
+    markCheckInHandled(session().id, 'skipped', storage);
+    await new Promise((r) => setTimeout(r, 5));
+    assert.equal(calls, 2);
+    off();
+    markCheckInHandled(session().id, 'opened', storage);
+    await new Promise((r) => setTimeout(r, 5));
+    assert.equal(calls, 2);
   });
 });
 

@@ -125,6 +125,7 @@ import {
   createGlowCounter,
   saveLastSession,
   getLastSession,
+  onCheckInChange,
   getTesterCode,
   getMezzoStageStartAt,
   wrapUpOpensAt,
@@ -972,6 +973,10 @@ export function createMezzoSession({
   let studyCardOpenEl = null;
   let studyCardSession = null;
   let studyCardTimer = null;
+  // Opening or skipping the check-in in any view (or a session ending)
+  // re-renders the card here too; renderStudyCard() is a no-op until the
+  // Companion has built it.
+  onCheckInChange(() => renderStudyCard());
 
   function clearSustained() {
     if (sustainedTimer) { clearTimeout(sustainedTimer); sustainedTimer = null; }
@@ -4423,6 +4428,13 @@ export function createMezzoSession({
 
   /** Whether the Companion closed in a way Home should offer to undo (see
    *  reopenOffer). */
+  /** True while Reopen Companion is about to continue an interrupted call
+   *  (or just has, before monitoring restarts): that call isn't over, so
+   *  no view offers its check-in yet. */
+  function isResumingCall() {
+    return Boolean(pendingRestore?.resumeMonitoring) || Boolean(studyResume);
+  }
+
   function hasReopenOffer() {
     return reopenOffer !== null;
   }
@@ -6949,5 +6961,6 @@ function ringLayout() {
     reopenCompanion,
     dismissReopenOffer,
     endInterruptedSession,
+    isResumingCall,
   };
 }

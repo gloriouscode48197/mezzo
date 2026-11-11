@@ -479,12 +479,14 @@ describe('Home — per-sub-state heading, copy, and focus', () => {
     const { document } = await setupPage({ permissionState: 'granted' });
     const state = document.getElementById('mic-granted');
     assert.strictEqual(state.querySelector('h1').textContent, "You're ready to use Mezzo");
-    const lines = [...state.querySelectorAll('p')].map((p) => p.textContent);
+    // The study check-in card (hidden without a tester code) isn't part of it.
+    const lines = [...state.querySelectorAll('p')].filter((p) => !p.closest('.page-checkin')).map((p) => p.textContent);
     assert.deepStrictEqual(lines, [
       'Microphone access is on. Open the Companion to pick a speaking profile and start monitoring.',
       'Mezzo only measures volume. Nothing you say is recorded.',
     ]);
     assert.strictEqual(state.querySelector('button').id, 'btn-open-companion');
+    assert.strictEqual(state.querySelector('.page-checkin').hidden, true);
   });
 
   it('mic-denied has its own accurate heading, generic (not browser-specific) recovery copy, and a caption — never a Try again/Reload button', async () => {

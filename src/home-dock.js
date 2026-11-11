@@ -58,6 +58,7 @@ import {
   wrapUpOpensAt,
   markCheckInHandled,
   buildCheckInUrl,
+  onCheckInChange,
 } from './study.js';
 import { STUDY_CONFIG } from './study-config.js';
 
@@ -409,18 +410,17 @@ export function initHomeDock({
       // cream page and offer to reopen it.
       if (session.hasReopenOffer?.()) {
         showRunningVariant('closed');
-        renderClosedCheckIn();
+        setCheckInView('closed');
         if (runningLiveEl) runningLiveEl.textContent = 'The Companion closed.';
         return;
       }
-      hideClosedCheckIn();
       if (runningLiveEl) runningLiveEl.textContent = '';
       goHome();
       return;
     }
-    hideClosedCheckIn();
     transitionToState('dock');
     showRunningVariant('open');
+    setCheckInView('open', { monitoring: state === session.SESSION_STATES.MONITORING_ACTIVE });
     running = true;
     const status = dockStatusCopy(state, session.SESSION_STATES);
     stateDock?.querySelector('.running-label-text')?.replaceChildren(status);
@@ -432,6 +432,7 @@ export function initHomeDock({
 
   function goHome() {
     transitionToState('home');
+    setCheckInView('home');
     if (pipSupported) refreshMicState();
   }
 
@@ -467,74 +468,108 @@ export function initHomeDock({
     if (privacy) privacy.hidden = variant !== 'closed';
   }
 
-  // ── Round 4 study check-in on the closed variant (2026-11-10). The same
-  //    rules as the Companion card (study.js's shouldShowCheckInCard()):
-  //    a tester code, 5+ minutes, 1+ minute of speech, within 2 hours, not
-  //    yet opened or skipped. The interrupted session was saved when the
-  //    Companion closed; Reopen continues it, and then the card waits for
-  //    Stop in the Companion, as before. Without a tester code nothing here
-  //    shows. ──
-  const checkInEl = stateDock?.querySelector('#running-checkin') ?? null;
-  const checkInOpenEl = stateDock?.querySelector('#running-checkin-open') ?? null;
-  const checkInSkipEl = stateDock?.querySelector('#running-checkin-skip') ?? null;
+  // ── Round 4 study check-in on the page (2026-11-10; every view
+  //    2026-11-11). The same pending check-in as the Companion card
+  //    (study.js's shouldShowCheckInCard(): a tester code, 1+ minute of
+  //    speech, within 2 hours, not yet opened or skipped), in whichever view
+  //    the page shows:
+  //    - 'closed': the "Companion closed" page, below Reopen and Done.
+  //      Open check-in ends the interrupted call there, like Stop.
+  //    - 'open': "Your Companion is open", below Close Companion, except
+  //      while monitoring runs or Reopen is about to continue the call (that
+  //      call isn't over yet).
+  //    - 'home': the page the tab returns to after Done or Close Companion.
+  //    Opening or skipping it anywhere clears it everywhere (onCheckInChange()
+  //    in this tab, the storage event in others). Without a tester code
+  //    nothing here shows. ──
+  const CHECK_IN_SPOTS = {
+    closed: { root: stateDock, source: STUDY_CONFIG.sources.companionClosed, focusAfterSkip: '#btn-reopen-companion' },
+    open: { root: stateDock, source: STUDY_CONFIG.sources.companionOpen, focusAfterSkip: '#btn-close-companion' },
+    home: { root: stateHome, source: STUDY_CONFIG.sources.home, focusAfterSkip: '#btn-open-companion' },
+  };
+  const cardIn = (root) => ({
+    el: root?.querySelector('.page-checkin') ?? null,
+    open: root?.querySelector('.page-checkin-open') ?? null,
+    skip: root?.querySelector('.page-checkin-skip') ?? null,
+  });
+  const pageCards = [cardIn(stateDock), cardIn(stateHome)];
+  let checkInView = 'home';
+  let companionMonitoring = false;
   let checkInSession = null;
   let checkInTimer = null;
 
-  function closedCheckInUrl(testerCode, sessionRecord, now) {
+  function pageCheckInUrl(testerCode, sessionRecord, now) {
     return buildCheckInUrl({
       testerCode,
       browserId: getBrowserId(),
-      source: STUDY_CONFIG.sources.companionClosed,
+      source: CHECK_IN_SPOTS[checkInView].source,
       session: sessionRecord,
       now,
     });
   }
 
-  function renderClosedCheckIn() {
-    if (!checkInEl || !checkInOpenEl) return;
-    hideClosedCheckIn();
+  function hidePageCheckIns() {
+    if (checkInTimer !== null) { clearTimeout(checkInTimer); checkInTimer = null; }
+    checkInSession = null;
+    for (const card of pageCards) {
+      if (card.el) card.el.hidden = true;
+      card.open?.removeAttribute('href');
+    }
+  }
+
+  function renderPageCheckIns() {
+    hidePageCheckIns();
+    const card = cardIn(CHECK_IN_SPOTS[checkInView].root);
+    if (!card.el || !card.open) return;
+    if (checkInView === 'open' && (companionMonitoring || session.isResumingCall?.())) return;
     const testerCode = getTesterCode();
     const sessionRecord = getLastSession();
     const mezzoStageStartAt = getMezzoStageStartAt();
     const now = Date.now();
     if (!shouldShowCheckInCard({ testerCode, session: sessionRecord, now, mezzoStageStartAt })) return;
     checkInSession = sessionRecord;
-    checkInOpenEl.href = closedCheckInUrl(testerCode, sessionRecord, now);
-    checkInEl.hidden = false;
+    card.open.href = pageCheckInUrl(testerCode, sessionRecord, now);
+    card.el.hidden = false;
     // Leaves on its own once the 2-hour window closes or the study ends.
     const leavesAt = Math.min(checkInExpiresAt(sessionRecord), wrapUpOpensAt(mezzoStageStartAt) ?? Infinity);
-    checkInTimer = setTimeout(renderClosedCheckIn, Math.max(0, leavesAt - now) + 50);
+    checkInTimer = setTimeout(renderPageCheckIns, Math.max(0, leavesAt - now) + 50);
   }
 
-  function hideClosedCheckIn() {
-    if (checkInTimer !== null) { clearTimeout(checkInTimer); checkInTimer = null; }
-    checkInSession = null;
-    if (checkInEl) checkInEl.hidden = true;
-    checkInOpenEl?.removeAttribute('href');
+  function setCheckInView(view, { monitoring = false } = {}) {
+    checkInView = view;
+    companionMonitoring = monitoring;
+    renderPageCheckIns();
   }
 
-  function handleClosedCheckInOpen() {
+  function handlePageCheckInOpen(event) {
     const sessionRecord = checkInSession;
     if (!sessionRecord) return;
     // The call is over, like Stop: Reopen won't resume it.
-    session.endInterruptedSession?.();
+    if (checkInView === 'closed') session.endInterruptedSession?.();
     // Fresh "minutes since the session ended" at the moment of the click.
     const testerCode = getTesterCode();
-    if (testerCode) checkInOpenEl.href = closedCheckInUrl(testerCode, sessionRecord, Date.now());
+    if (testerCode) event.currentTarget.href = pageCheckInUrl(testerCode, sessionRecord, Date.now());
+    // Clears it in every view on the next task (study.js), after the new
+    // tab has its URL; removing href now would cancel it.
     markCheckInHandled(sessionRecord.id, 'opened');
-    // Hide after the new tab has its URL; removing href now would cancel it.
-    setTimeout(hideClosedCheckIn, 0);
   }
 
-  function handleClosedCheckInSkip() {
+  function handlePageCheckInSkip() {
     const sessionRecord = checkInSession;
     if (sessionRecord) markCheckInHandled(sessionRecord.id, 'skipped');
-    hideClosedCheckIn();
-    stateDock?.querySelector('#btn-reopen-companion')?.focus();
+    hidePageCheckIns();
+    CHECK_IN_SPOTS[checkInView].root?.querySelector(CHECK_IN_SPOTS[checkInView].focusAfterSkip)?.focus();
   }
 
-  checkInOpenEl?.addEventListener('click', handleClosedCheckInOpen);
-  checkInSkipEl?.addEventListener('click', handleClosedCheckInSkip);
+  for (const card of pageCards) {
+    card.open?.addEventListener('click', handlePageCheckInOpen);
+    card.skip?.addEventListener('click', handlePageCheckInSkip);
+  }
+  onCheckInChange(renderPageCheckIns);
+  // Another tab opened or skipped it, or ended a session.
+  globalThis.addEventListener?.('storage', (event) => {
+    if (event.key === null || event.key.startsWith(STUDY_CONFIG.storageKeys.lastSession)) renderPageCheckIns();
+  });
 
   async function handleReopenClick() {
     // A real click: Document PiP needs it to open the window.
@@ -542,7 +577,6 @@ export function initHomeDock({
   }
 
   function handleReopenDoneClick() {
-    hideClosedCheckIn();
     session.dismissReopenOffer();
     if (runningLiveEl) runningLiveEl.textContent = '';
     goHome();
@@ -558,6 +592,7 @@ export function initHomeDock({
   // at runtime — decided once, here, rather than re-checked per interaction.
   transitionToState(pipSupported ? 'home' : 'unsupported');
   if (pipSupported) refreshMicState();
+  if (pipSupported) renderPageCheckIns(); // a check-in still pending from an earlier visit
 
   return { session, isPipSupported: () => pipSupported };
 }

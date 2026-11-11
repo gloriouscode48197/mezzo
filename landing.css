@@ -456,12 +456,13 @@ body {
 .running-reopen-btn:hover { background: color-mix(in srgb, var(--color-text) 88%, var(--color-bg)); }
 .running-reopen .running-done { margin-top: 0; }
 
-/* Round 4 study check-in on the closed variant (2026-11-10): a card a
-   little darker than the cream page, below the buttons. Open check-in is
-   filled with a translucent charcoal, lighter than Reopen Companion's
-   solid charcoal; Skip is the page's text link. No chartreuse. */
-.running-checkin[hidden] { display: none; }
-.running-checkin {
+/* Round 4 study check-in on the page (2026-11-10; every view 2026-11-11):
+   on the cream running page and the dark home page alike, from the
+   surface's own text color: a card just off the page's background, Open
+   check-in filled with a translucent text color (lighter than the page's
+   main button), Skip the page's text link. No chartreuse. */
+.page-checkin[hidden] { display: none; }
+.page-checkin {
   max-width: 320px;
   margin: var(--space-6) auto 0;
   padding: var(--space-4);
@@ -470,7 +471,7 @@ body {
   border-radius: var(--radius-control);
   background: color-mix(in srgb, var(--color-text) 5%, var(--color-bg));
 }
-.running-checkin-title {
+.page-checkin-title {
   margin: 0;
   font-family: var(--font-body);
   font-size: 15px;
@@ -479,14 +480,14 @@ body {
   color: var(--color-text);
   text-wrap: balance;
 }
-.running-checkin-actions {
+.page-checkin-actions {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: var(--space-4);
   margin-top: var(--space-3);
 }
-.running-checkin-open {
+.page-checkin-open {
   display: inline-flex;
   align-items: center;
   min-height: 36px;
@@ -501,9 +502,10 @@ body {
   text-decoration: none;
   cursor: pointer;
 }
-.running-checkin-open:hover { background: color-mix(in srgb, var(--color-text) 22%, transparent); }
-.running-checkin-open:focus-visible { outline: 2px solid var(--color-text); outline-offset: 2px; }
-.running-checkin .running-checkin-skip { margin-top: 0; }
+.page-checkin-open:hover { background: color-mix(in srgb, var(--color-text) 22%, transparent); }
+.page-checkin-open:focus-visible { outline: 2px solid var(--color-text); outline-offset: 2px; }
+.page-checkin .page-checkin-skip { margin-top: 0; }
+.hero-inner .page-checkin { margin-top: var(--space-5); text-align: center; }
 
 .running-live {
   position: absolute;
