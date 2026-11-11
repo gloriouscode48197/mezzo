@@ -30,7 +30,7 @@ async function seed(page, { code = null, lastSession = null, firstSessionAgo = n
     sessionStorage.setItem('studySeeded', '1');
     localStorage.setItem('mezzoProfiles', JSON.stringify(profiles));
     if (code) localStorage.setItem('mezzoStudyTesterCode', code);
-    if (firstSessionAgo !== null) localStorage.setItem('mezzoStudyFirstSession', String(Date.now() - firstSessionAgo));
+    if (firstSessionAgo !== null) localStorage.setItem(`mezzoStudyFirstSession:${code}`, String(Date.now() - firstSessionAgo));
     if (lastSession) {
       const now = Date.now();
       const record = {
@@ -41,7 +41,7 @@ async function seed(page, { code = null, lastSession = null, firstSessionAgo = n
       };
       const speech = lastSession.speech === undefined ? 2 * 60 * 1000 : lastSession.speech;
       if (speech !== null) record.speechMs = speech;
-      localStorage.setItem('mezzoStudyLastSession', JSON.stringify(record));
+      localStorage.setItem(`mezzoStudyLastSession:${code}`, JSON.stringify(record));
     }
   }, { profiles: PROFILE, code, lastSession, firstSessionAgo });
 }
@@ -100,7 +100,7 @@ test.describe('Study mode: the Companion check-in card', () => {
     await pipPage.waitForTimeout(600);
     await stopMonitoring(pipPage);
     await expect(card(pipPage)).toBeHidden();
-    expect(await page.evaluate(() => localStorage.getItem('mezzoStudyLastSession'))).toBe(null);
+    expect(await page.evaluate(() => localStorage.getItem('mezzoStudyLastSession:' + localStorage.getItem('mezzoStudyTesterCode')))).toBe(null);
   });
 
   test('with a code: shows after a long enough session, with the glow count; not after a shorter one', async ({ page, context }) => {
@@ -110,7 +110,7 @@ test.describe('Study mode: the Companion check-in card', () => {
     expect(await page.evaluate(() => localStorage.getItem('mezzoStudyTesterCode'))).toBe('R4-01');
     expect(new URL(page.url()).searchParams.has('study')).toBe(false);
     await expect(card(pipPage)).toBeHidden(); // nothing before a session
-    expect(await page.evaluate(() => localStorage.getItem('mezzoStudyFirstSession'))).toBe(null);
+    expect(await page.evaluate(() => localStorage.getItem('mezzoStudyFirstSession:' + localStorage.getItem('mezzoStudyTesterCode')))).toBe(null);
 
     const b = await rangeBoundsDb(page, PROFILE[0].spreadDb);
     await setMinSession(page, 1500, 1000);
@@ -125,7 +125,7 @@ test.describe('Study mode: the Companion check-in card', () => {
 
     await expect(card(pipPage)).toBeVisible();
     // The first session saved its date: /study moves to the Mezzo stage.
-    const firstAt = Number(await page.evaluate(() => localStorage.getItem('mezzoStudyFirstSession')));
+    const firstAt = Number(await page.evaluate(() => localStorage.getItem('mezzoStudyFirstSession:' + localStorage.getItem('mezzoStudyTesterCode'))));
     expect(firstAt).toBeGreaterThan(Date.now() - 60 * 1000);
     await expect(card(pipPage)).toContainText('How did your call go?');
     await expect(card(pipPage)).toContainText('1-minute check-in');
@@ -139,7 +139,7 @@ test.describe('Study mode: the Companion check-in card', () => {
     expect(Number(params.mezzo_session_minutes)).toBeGreaterThan(0);
     // Speaking time, one decimal: the whole session was speech here.
     expect(params.mezzo_speech_minutes).toMatch(/^\d+(\.\d)?$/);
-    const stored = JSON.parse(await page.evaluate(() => localStorage.getItem('mezzoStudyLastSession')));
+    const stored = JSON.parse(await page.evaluate(() => localStorage.getItem('mezzoStudyLastSession:' + localStorage.getItem('mezzoStudyTesterCode'))));
     expect(stored.speechMs).toBeGreaterThan(1000);
     expect(stored.speechMs).toBeLessThanOrEqual(stored.endedAt - stored.startedAt);
     expect(params.mezzo_glows).toBe('2');
@@ -156,7 +156,7 @@ test.describe('Study mode: the Companion check-in card', () => {
     await startMonitoring(pipPage);
     await stopMonitoring(pipPage);
     await expect(card(pipPage)).toBeHidden();
-    const last = JSON.parse(await page.evaluate(() => localStorage.getItem('mezzoStudyLastSession')));
+    const last = JSON.parse(await page.evaluate(() => localStorage.getItem('mezzoStudyLastSession:' + localStorage.getItem('mezzoStudyTesterCode'))));
     expect(last.glows).toBe(0);
   });
 
@@ -175,7 +175,7 @@ test.describe('Study mode: the Companion check-in card', () => {
     await pipPage.waitForTimeout(2500);
     await stopMonitoring(pipPage);
     await expect(card(pipPage)).toBeHidden();
-    const last = JSON.parse(await page.evaluate(() => localStorage.getItem('mezzoStudyLastSession')));
+    const last = JSON.parse(await page.evaluate(() => localStorage.getItem('mezzoStudyLastSession:' + localStorage.getItem('mezzoStudyTesterCode'))));
     expect(last.endedAt - last.startedAt).toBeGreaterThan(3500);
     expect(last.speechMs).toBeGreaterThan(300);
     expect(last.speechMs).toBeLessThan(3000);
@@ -253,7 +253,7 @@ test.describe('Study mode: the Companion check-in card', () => {
     await openLink(pipPage).click();
     await expect(card(pipPage)).toBeHidden();
     expect(await pipPage.evaluate(() => window.__openedHref)).toContain('https://tally.so/r/gber54?mezzo_tester=R4-01');
-    const last = JSON.parse(await page.evaluate(() => localStorage.getItem('mezzoStudyLastSession')));
+    const last = JSON.parse(await page.evaluate(() => localStorage.getItem('mezzoStudyLastSession:' + localStorage.getItem('mezzoStudyTesterCode'))));
     expect(last.handled).toBe('opened');
   });
 
@@ -267,7 +267,7 @@ test.describe('Study mode: the Companion check-in card', () => {
 
     // Another mini window (Meet's) closes the Companion mid-call.
     await pipPage.close();
-    const first = JSON.parse(await page.evaluate(() => localStorage.getItem('mezzoStudyLastSession')));
+    const first = JSON.parse(await page.evaluate(() => localStorage.getItem('mezzoStudyLastSession:' + localStorage.getItem('mezzoStudyTesterCode'))));
     expect(first.glows).toBe(1);
 
     const pipPromise = context.waitForEvent('page');
@@ -278,7 +278,7 @@ test.describe('Study mode: the Companion check-in card', () => {
     await pipPage.waitForTimeout(1000);
     await stopMonitoring(pipPage);
 
-    const last = JSON.parse(await page.evaluate(() => localStorage.getItem('mezzoStudyLastSession')));
+    const last = JSON.parse(await page.evaluate(() => localStorage.getItem('mezzoStudyLastSession:' + localStorage.getItem('mezzoStudyTesterCode'))));
     expect(last.id).toBe(first.id);       // one call, one session
     expect(last.startedAt).toBe(first.startedAt);
     expect(last.glows).toBe(2);           // glows from both halves
@@ -310,7 +310,7 @@ test.describe('Study mode: the check-in on the "Companion closed" page', () => {
   const closedCard = (page) => page.locator('#running-checkin');
   const closedOpen = (page) => closedCard(page).getByRole('link', { name: 'Open check-in' });
   const closedParams = async (page) => Object.fromEntries(new URL(await closedOpen(page).getAttribute('href')).searchParams);
-  const lastSession = (page) => page.evaluate(() => JSON.parse(localStorage.getItem('mezzoStudyLastSession')));
+  const lastSession = (page) => page.evaluate(() => JSON.parse(localStorage.getItem('mezzoStudyLastSession:' + localStorage.getItem('mezzoStudyTesterCode'))));
 
   /** A session long enough, with speech, then the Companion closed by
    *  something else (Meet's mini window). */
@@ -429,21 +429,34 @@ test.describe('Study mode: the /study page', () => {
     await expect(link(page, 'Wrap up the study')).toBeHidden();
   });
 
-  test('baseline stage (a code, no session yet): "Your usual calls", one check-in button, the note, no way into Mezzo', async ({ page }) => {
+  test('baseline stage (a code, no session yet): "Your usual calls", the copy and list, one check-in button, no way into Mezzo', async ({ page }) => {
     await seed(page, { code: 'R4-01' });
     await page.goto('/study');
     await expect(page.locator('body')).toHaveAttribute('data-study-stage', 'baseline');
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Thanks for joining the Mezzo study');
     await expect(page.getByText('Your study code: R4-01')).toBeVisible();
     await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Your usual calls']);
-    await expect(page.getByText('After your next 2 calls where you speak, with headphones and people nearby, fill out a 1-minute check-in.')).toBeVisible();
+    const baselineSection = page.locator('#study-baseline');
+    await expect(baselineSection.locator('p')).toHaveText([
+      'Mezzo comes later. I’ll send it once your 2 check-ins are in.',
+      'For now, take your next 2 calls as you normally would. After each one, fill out a 1-minute check-in.',
+      'Count calls where:',
+    ]);
+    await expect(baselineSection.getByRole('list', { name: 'Count calls where:' }).getByRole('listitem'))
+      .toHaveText(['you’re wearing headphones', 'people are nearby', 'you speak, even a little']);
+    // The button comes after the list, and nothing follows it (the old
+    // "Please don’t try Mezzo yet…" note is gone).
+    expect(await baselineSection.evaluate((el) => el.lastElementChild.id)).toBe('study-baseline-check-in');
+    const listBox = await baselineSection.locator('ul').boundingBox();
+    const buttonBox = await baselineSection.locator('#study-baseline-check-in').boundingBox();
+    expect(buttonBox.y).toBeGreaterThan(listBox.y + listBox.height);
 
     const baseline = link(page, 'Check in after a call');
     await expect(baseline).toBeVisible();
     const url = new URL(await baseline.getAttribute('href'));
     expect(url.origin + url.pathname).toBe('https://tally.so/r/zEN6jg');
     expect(Object.fromEntries(url.searchParams)).toEqual({ mezzo_tester: 'R4-01' });
-    await expect(page.getByText('Please don’t try Mezzo yet. I’ll send it once your 2 check-ins are in.')).toBeVisible();
+    await expect(page.getByText('Please don’t try Mezzo yet', { exact: false })).toHaveCount(0);
 
     // Nothing from the With Mezzo stage, and no visible link into the app:
     // only the form and the privacy page.
@@ -454,7 +467,7 @@ test.describe('Study mode: the /study page', () => {
     await expect(page.getByRole('link', { name: 'How study data is handled' })).toBeVisible();
   });
 
-  test('baseline stage with a placeholder form ID: the note, no broken button', async ({ page }) => {
+  test('baseline stage with a placeholder form ID: the text, no broken button', async ({ page }) => {
     // Serves the config with the placeholder back in place of the real ID.
     await page.route('**/src/study-config.js', async (route) => {
       const res = await route.fetch();
@@ -465,7 +478,7 @@ test.describe('Study mode: the /study page', () => {
     await page.goto('/study');
     await expect(page.locator('body')).toHaveAttribute('data-study-stage', 'baseline');
     await expect(link(page, 'Check in after a call')).toBeHidden();
-    await expect(page.getByText('Please don’t try Mezzo yet.', { exact: false })).toBeVisible();
+    await expect(page.getByText('Mezzo comes later.', { exact: false })).toBeVisible();
   });
 
   test('?start=1 with a code unlocks With Mezzo before any session, remembers it, and leaves the address bar', async ({ page }) => {
@@ -474,15 +487,15 @@ test.describe('Study mode: the /study page', () => {
     const url = new URL(page.url());
     expect(url.searchParams.has('study')).toBe(false);
     expect(url.searchParams.has('start')).toBe(false);
-    const unlockedAt = Number(await page.evaluate(() => localStorage.getItem('mezzoStudyMezzoStage')));
+    const unlockedAt = Number(await page.evaluate(() => localStorage.getItem('mezzoStudyMezzoStage:' + localStorage.getItem('mezzoStudyTesterCode'))));
     expect(unlockedAt).toBeGreaterThan(Date.now() - 60 * 1000);
-    expect(await page.evaluate(() => localStorage.getItem('mezzoStudyFirstSession'))).toBe(null);
+    expect(await page.evaluate(() => localStorage.getItem('mezzoStudyFirstSession:' + localStorage.getItem('mezzoStudyTesterCode')))).toBe(null);
     // Remembered: a plain /study stays in With Mezzo.
     await page.goto('/study');
     await expect(page.locator('body')).toHaveAttribute('data-study-stage', 'mezzo');
     // The wrap-up counts 14 days from the unlock.
     const expected = await page.evaluate(() => {
-      const d = new Date(Number(localStorage.getItem('mezzoStudyMezzoStage')));
+      const d = new Date(Number(localStorage.getItem('mezzoStudyMezzoStage:' + localStorage.getItem('mezzoStudyTesterCode'))));
       return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 14)
         .toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
     });
@@ -492,7 +505,27 @@ test.describe('Study mode: the /study page', () => {
   test('?start=1 without a code does nothing', async ({ page }) => {
     await page.goto('/study?start=1');
     await expect(page.locator('body')).toHaveAttribute('data-study-stage', 'none');
-    expect(await page.evaluate(() => localStorage.getItem('mezzoStudyMezzoStage'))).toBe(null);
+    expect(await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('mezzoStudy')))).toEqual([]);
+  });
+
+  test('the stage belongs to the tester code: a new code starts at "Your usual calls"; the first code keeps its stage; ?study=clear resets every code', async ({ page }) => {
+    const stage = () => page.locator('body').getAttribute('data-study-stage');
+    await page.goto('/study?study=TEST-01&start=1');
+    expect(await stage()).toBe('mezzo');
+
+    await page.goto('/study?study=TEST-02');
+    expect(await stage()).toBe('baseline');
+    await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Your usual calls']);
+    await expect(page.getByText('Your study code: TEST-02')).toBeVisible();
+
+    await page.goto('/study?study=TEST-01');
+    expect(await stage()).toBe('mezzo');
+
+    await page.goto('/study?study=clear');
+    expect(await stage()).toBe('none');
+    expect(await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('mezzoStudy')))).toEqual([]);
+    await page.goto('/study?study=TEST-01');
+    expect(await stage()).toBe('baseline');
   });
 
   test('With Mezzo stage: phase headings, the copy, Open Mezzo and the check-in, then Wrap-up; the check-in carries the recent session', async ({ page }) => {
@@ -504,7 +537,7 @@ test.describe('Study mode: the /study page', () => {
     await expect(page.getByRole('heading', { level: 3 })).toHaveText(['Use Mezzo on your calls', 'Check in after your call']);
     await expect(page.getByText('When you take a call where you’ll speak, with headphones and people nearby, open Mezzo and start monitoring. If you’ve installed the extension, Mezzo also offers to start when a Google Meet call begins.')).toBeVisible();
     await expect(page.getByText('When you stop monitoring, Mezzo asks how your call went. It takes about a minute. Missed it? Check in here.')).toBeVisible();
-    await expect(page.getByText('Please don’t try Mezzo yet.', { exact: false })).toBeHidden();
+    await expect(page.getByText('Mezzo comes later.', { exact: false })).toBeHidden();
 
     // Open Mezzo is the primary button, the check-in the secondary one.
     await expect(link(page, 'Open Mezzo')).toHaveClass(/btn-primary/);
@@ -524,7 +557,7 @@ test.describe('Study mode: the /study page', () => {
     // Wrap-up: not yet. The date is the first session's local date + 14 days.
     await expect(link(page, 'Wrap up the study')).toBeHidden();
     const expected = await page.evaluate(() => {
-      const d = new Date(Number(localStorage.getItem('mezzoStudyFirstSession')));
+      const d = new Date(Number(localStorage.getItem('mezzoStudyFirstSession:' + localStorage.getItem('mezzoStudyTesterCode'))));
       return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 14)
         .toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
     });
@@ -541,8 +574,8 @@ test.describe('Study mode: the /study page', () => {
       await seed(page, { code: 'R4-01', firstSessionAgo: 2 * DAY, lastSession });
       if (lastSession.handled) {
         await page.addInitScript((how) => {
-          const r = JSON.parse(localStorage.getItem('mezzoStudyLastSession'));
-          if (r && !r.handled) { r.handled = how; localStorage.setItem('mezzoStudyLastSession', JSON.stringify(r)); }
+          const r = JSON.parse(localStorage.getItem('mezzoStudyLastSession:' + localStorage.getItem('mezzoStudyTesterCode')));
+          if (r && !r.handled) { r.handled = how; localStorage.setItem('mezzoStudyLastSession:' + localStorage.getItem('mezzoStudyTesterCode'), JSON.stringify(r)); }
         }, lastSession.handled);
       }
       await page.goto('/study');
@@ -591,6 +624,7 @@ test.describe('Study mode: the /study page', () => {
     await page.goto('/study?study=clear');
     await expect(page.getByRole('heading', { name: 'This page is for study participants' })).toBeVisible();
     expect(await page.evaluate(() => localStorage.getItem('mezzoStudyTesterCode'))).toBe(null);
-    expect(await page.evaluate(() => localStorage.getItem('mezzoStudyMezzoStage'))).toBe(null);
+    // No study data left under any code.
+    expect(await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('mezzoStudy')))).toEqual([]);
   });
 });

@@ -58,7 +58,13 @@
     .study-phase .btn-primary,
     .study-phase .btn-outline { margin-top: var(--space-2); text-decoration: none; }
     .study-main .study-privacy { margin-top: var(--space-6); }
-    .study-main .study-note { margin-top: var(--space-4); }
+    .study-main .study-list-intro { margin-bottom: var(--space-2); }
+    .study-list {
+      margin: 0 0 var(--space-3);
+      padding-left: 1.25em;
+      color: var(--color-text);
+    }
+    .study-list li + li { margin-top: var(--space-1); }
     [hidden] { display: none !important; }
     .study-main a:not(.btn-primary):not(.btn-outline) {
       color: var(--color-link);
@@ -92,9 +98,15 @@
       <!-- Baseline stage: a code, before the With Mezzo stage. -->
       <section class="study-phase" id="study-baseline" hidden aria-labelledby="study-baseline-heading">
         <h2 id="study-baseline-heading">Your usual calls</h2>
-        <p class="type-body">After your next 2 calls where you speak, with headphones and people nearby, fill out a 1-minute check-in.</p>
+        <p class="type-body">Mezzo comes later. I’ll send it once your 2 check-ins are in.</p>
+        <p class="type-body">For now, take your next 2 calls as you normally would. After each one, fill out a 1-minute check-in.</p>
+        <p class="type-body study-list-intro" id="study-baseline-count">Count calls where:</p>
+        <ul class="type-body study-list" aria-labelledby="study-baseline-count">
+          <li>you’re wearing headphones</li>
+          <li>people are nearby</li>
+          <li>you speak, even a little</li>
+        </ul>
         <a class="btn-primary" id="study-baseline-check-in" target="_blank" rel="noopener noreferrer">Check in after a call</a>
-        <p class="type-body study-note">Please don’t try Mezzo yet. I’ll send it once your 2 check-ins are in.</p>
       </section>
 
       <!-- With Mezzo stage: after ?start=1 or the first monitoring session. -->

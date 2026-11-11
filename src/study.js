@@ -36,15 +36,43 @@ export function getTesterCode(storage = defaultStorage(), config = STUDY_CONFIG)
   try { return normalizeTesterCode(storage?.getItem(config.storageKeys.testerCode) ?? null); } catch { return null; }
 }
 
-/** Removes the tester code, the last session, the first-session date and
- *  the With Mezzo unlock.
+// ── Data tied to the tester code ─────────────────────────────────────────
+
+/** The study data kept per tester code: the last session, the first-session
+ *  date and the With Mezzo unlock. Each is stored under `${key}:${code}`,
+ *  so a new code starts at "Your usual calls" and a code switched back to
+ *  finds its own. The tester code itself and the browser ID are not. */
+export const CODE_BOUND_KEYS = Object.freeze(['lastSession', 'firstSession', 'mezzoStage']);
+
+/** The storage key for `name` under the saved tester code, or null
+ *  without one. */
+export function codeBoundKey(name, storage = defaultStorage(), config = STUDY_CONFIG) {
+  const code = getTesterCode(storage, config);
+  return code ? `${config.storageKeys[name]}:${code}` : null;
+}
+
+function storageKeysOf(storage) {
+  try {
+    if (typeof storage?.length !== 'number' || typeof storage.key !== 'function') return [];
+    const keys = [];
+    for (let i = 0; i < storage.length; i += 1) keys.push(storage.key(i));
+    return keys;
+  } catch {
+    return [];
+  }
+}
+
+/** Removes the tester code and every code's study data (the last session,
+ *  the first-session date and the With Mezzo unlock), including copies
+ *  saved before the data was tied to the code.
  *  The anonymous browser ID belongs to analytics, so it stays. */
 export function clearStudy(storage = defaultStorage(), config = STUDY_CONFIG) {
   try {
+    const bases = CODE_BOUND_KEYS.map((name) => config.storageKeys[name]);
+    const current = CODE_BOUND_KEYS.map((name) => codeBoundKey(name, storage, config)).filter(Boolean);
+    const all = storageKeysOf(storage).filter((key) => bases.some((base) => key === base || key.startsWith(`${base}:`)));
+    for (const key of new Set([...bases, ...current, ...all])) storage?.removeItem(key);
     storage?.removeItem(config.storageKeys.testerCode);
-    storage?.removeItem(config.storageKeys.lastSession);
-    storage?.removeItem(config.storageKeys.firstSession);
-    storage?.removeItem(config.storageKeys.mezzoStage);
   } catch { /* storage unavailable */ }
 }
 
@@ -79,7 +107,7 @@ export function applyStartParam(search, storage = defaultStorage(), config = STU
   if (value === null || value.trim() !== config.startValue) return 'none';
   if (!getTesterCode(storage, config)) return 'no-code';
   if (getMezzoStageUnlockedAt(storage, config) !== null) return 'already';
-  try { storage?.setItem(config.storageKeys.mezzoStage, String(now)); } catch { return 'none'; }
+  try { storage?.setItem(codeBoundKey('mezzoStage', storage, config), String(now)); } catch { return 'none'; }
   return 'started';
 }
 
@@ -190,9 +218,9 @@ export function saveLastSession(session, storage = defaultStorage(), config = ST
   const previous = getLastSession(storage, config);
   if (previous?.id === record.id && previous.handled) record.handled = previous.handled;
   try {
-    storage?.setItem(config.storageKeys.lastSession, JSON.stringify(record));
+    storage?.setItem(codeBoundKey('lastSession', storage, config), JSON.stringify(record));
     if (getFirstSessionAt(storage, config) === null) {
-      storage?.setItem(config.storageKeys.firstSession, String(session.startedAt));
+      storage?.setItem(codeBoundKey('firstSession', storage, config), String(session.startedAt));
     }
   } catch { return null; }
   return record;
@@ -202,7 +230,9 @@ export function saveLastSession(session, storage = defaultStorage(), config = ST
  *  if there hasn't been one in this browser. */
 export function getFirstSessionAt(storage = defaultStorage(), config = STUDY_CONFIG) {
   try {
-    const raw = storage?.getItem(config.storageKeys.firstSession);
+    const key = codeBoundKey('firstSession', storage, config);
+    if (!key) return null;
+    const raw = storage?.getItem(key);
     if (raw === null || raw === undefined || raw === '') return null;
     const ms = Number(raw);
     return Number.isFinite(ms) && ms > 0 ? ms : null;
@@ -214,7 +244,9 @@ export function getFirstSessionAt(storage = defaultStorage(), config = STUDY_CON
 /** When ?start=1 unlocked the With Mezzo stage, or null. */
 export function getMezzoStageUnlockedAt(storage = defaultStorage(), config = STUDY_CONFIG) {
   try {
-    const raw = storage?.getItem(config.storageKeys.mezzoStage);
+    const key = codeBoundKey('mezzoStage', storage, config);
+    if (!key) return null;
+    const raw = storage?.getItem(key);
     if (raw === null || raw === undefined || raw === '') return null;
     const ms = Number(raw);
     return Number.isFinite(ms) && ms > 0 ? ms : null;
@@ -265,7 +297,9 @@ export function formatLongDate(ms) {
 
 export function getLastSession(storage = defaultStorage(), config = STUDY_CONFIG) {
   try {
-    const raw = storage?.getItem(config.storageKeys.lastSession);
+    const key = codeBoundKey('lastSession', storage, config);
+    if (!key) return null;
+    const raw = storage?.getItem(key);
     if (!raw) return null;
     const r = JSON.parse(raw);
     if (!r || typeof r.id !== 'string' || !Number.isFinite(r.startedAt) || !Number.isFinite(r.endedAt)
@@ -285,7 +319,7 @@ export function markCheckInHandled(sessionId, how, storage = defaultStorage(), c
   const record = getLastSession(storage, config);
   if (!record || record.id !== sessionId) return false;
   record.handled = how;
-  try { storage?.setItem(config.storageKeys.lastSession, JSON.stringify(record)); } catch { return false; }
+  try { storage?.setItem(codeBoundKey('lastSession', storage, config), JSON.stringify(record)); } catch { return false; }
   return true;
 }
 

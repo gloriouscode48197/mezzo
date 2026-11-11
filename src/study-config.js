@@ -34,6 +34,8 @@ export const STUDY_CONFIG = {
   startParam: 'start',
   startValue: '1',
 
+  /** lastSession, firstSession and mezzoStage are stored per tester code,
+   *  as `${key}:${code}` (study.js's codeBoundKey()). */
   storageKeys: {
     testerCode: 'mezzoStudyTesterCode',
     lastSession: 'mezzoStudyLastSession',

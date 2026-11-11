@@ -10,6 +10,7 @@ import {
   applyStudyParam,
   applyStartParam,
   clearStudy,
+  codeBoundKey,
   getMezzoStageUnlockedAt,
   getMezzoStageStartAt,
   sessionSpeechMs,
@@ -46,6 +47,8 @@ function memoryStorage() {
     getItem: (k) => (map.has(k) ? map.get(k) : null),
     setItem: (k, v) => map.set(k, String(v)),
     removeItem: (k) => map.delete(k),
+    get length() { return map.size; },
+    key: (i) => [...map.keys()][i] ?? null,
   };
 }
 
@@ -246,8 +249,9 @@ describe('last session', () => {
   it('rejects a stored speaking time that is not a number', () => {
     const storage = withCode();
     saveLastSession(session(), storage);
-    const raw = JSON.parse(storage.getItem(KEYS.lastSession));
-    storage.setItem(KEYS.lastSession, JSON.stringify({ ...raw, speechMs: 'lots' }));
+    const key = codeBoundKey('lastSession', storage);
+    const raw = JSON.parse(storage.getItem(key));
+    storage.setItem(key, JSON.stringify({ ...raw, speechMs: 'lots' }));
     assert.equal(getLastSession(storage), null);
   });
 });
@@ -407,6 +411,55 @@ describe('study stages', () => {
     applyStartParam('?start=1', later, STUDY_CONFIG, 9000);
     saveLastSession(session({ startedAt: 12000 }), later);
     assert.equal(getMezzoStageStartAt(later), 9000);
+  });
+
+  it('the stage, first-session date and last session belong to the tester code: a new code starts at the baseline, and an earlier code finds its own again', () => {
+    const storage = withCode('TEST-01');
+    applyStartParam('?start=1', storage, STUDY_CONFIG, 3000);
+    saveLastSession(session({ startedAt: 8000 }), storage);
+    assert.equal(studyStage({ testerCode: getTesterCode(storage), mezzoStageStartAt: getMezzoStageStartAt(storage) }), 'mezzo');
+    assert.equal(storage.getItem(`${KEYS.mezzoStage}:TEST-01`), '3000');
+
+    applyStudyParam('?study=TEST-02', storage);
+    assert.equal(getMezzoStageStartAt(storage), null);
+    assert.equal(getFirstSessionAt(storage), null);
+    assert.equal(getLastSession(storage), null);
+    assert.equal(studyStage({ testerCode: getTesterCode(storage), mezzoStageStartAt: getMezzoStageStartAt(storage) }), 'baseline');
+
+    // TEST-02's first session is its own, and doesn't touch TEST-01's.
+    saveLastSession(session({ startedAt: 20000, glows: 7 }), storage);
+    assert.equal(getFirstSessionAt(storage), 20000);
+
+    applyStudyParam('?study=TEST-01', storage);
+    assert.equal(getMezzoStageStartAt(storage), 3000);
+    assert.equal(getFirstSessionAt(storage), 8000);
+    assert.equal(getLastSession(storage).startedAt, 8000);
+  });
+
+  it('data saved before it was tied to the code (no code in its key) is ignored', () => {
+    const storage = withCode('TEST-02');
+    storage.setItem(KEYS.firstSession, '5000');
+    storage.setItem(KEYS.mezzoStage, '5000');
+    storage.setItem(KEYS.lastSession, JSON.stringify(session()));
+    assert.equal(getMezzoStageStartAt(storage), null);
+    assert.equal(getLastSession(storage), null);
+  });
+
+  it('?study=clear removes the code and every code\'s stage, first-session date and last session, old unkeyed copies too; the browser ID stays', () => {
+    const storage = withCode('TEST-01');
+    applyStartParam('?start=1', storage);
+    saveLastSession(session(), storage);
+    applyStudyParam('?study=TEST-02', storage);
+    saveLastSession(session({ startedAt: 9000 }), storage);
+    storage.setItem(KEYS.firstSession, '5000'); // an old, unkeyed copy
+    storage.setItem(KEYS.browserId, 'browser-1');
+    assert.equal(applyStudyParam('?study=clear', storage), 'cleared');
+    const left = [...Array(storage.length).keys()].map((i) => storage.key(i));
+    assert.deepEqual(left, [KEYS.browserId]);
+    // Back with an old code: it starts over.
+    applyStudyParam('?study=TEST-01', storage);
+    assert.equal(getMezzoStageStartAt(storage), null);
+    assert.equal(getLastSession(storage), null);
   });
 
   it('?study=clear removes the unlock too', () => {
