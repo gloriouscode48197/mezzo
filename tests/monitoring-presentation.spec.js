@@ -44,11 +44,26 @@ const EXPANDED_EDGE = edgeForExtent(382);
 // Compact caps the band at 0.1 of the edge (Expanded and Mini: 0.18).
 const BAND_CAP = { mini: 0.18, compact: 0.1, expanded: 0.18 };
 const bandFor = (sizeBand) => scaledBand(DEFAULT_RING_SETTINGS.band, BAND_CAP[sizeBand] / DEFAULT_RING_SETTINGS.band.maxFraction);
-/** The edge the ring should have for a layout (see ringEdge() in the app). */
-const expectedEdge = (boxes) => Math.min(
-  edgeForBandExtent(boxes.ringMax.bottom - boxes.ringMax.top, bandFor(boxes.band)),
-  edgeForExtent(boxes.width, bandFor(boxes.band)),
-);
+/** Distance from a point to the nearest point of a rect (0 inside). */
+const distanceToRect = (x, y, r) => Math.hypot(Math.max(r.left - x, 0, x - r.right), Math.max(r.top - y, 0, y - r.bottom));
+/** The edge the ring should have for a layout (see ringEdge() in the app).
+ *  Expanded: its solid band fills the area between the name and Stop.
+ *  Compact and Mini (2026-11-11): centered in the whole window, its
+ *  far-over extent (edge, widest band, glow reach) inside the window and
+ *  clear of every corner control, less a 2px margin; at most 80% of the
+ *  short side. */
+const expectedEdge = (boxes) => {
+  const band = bandFor(boxes.band);
+  if (boxes.band === 'expanded') {
+    return Math.min(edgeForBandExtent(boxes.ringMax.bottom - boxes.ringMax.top, band), edgeForExtent(boxes.width, band));
+  }
+  let clear = Math.min(boxes.width, boxes.height) / 2;
+  for (const c of boxes.controls) clear = Math.min(clear, distanceToRect(boxes.width / 2, boxes.height / 2, c));
+  return Math.min(edgeForExtent(2 * (clear - 2), band), 0.8 * Math.min(boxes.width, boxes.height));
+};
+/** The glow's visible reach past the band (outer spread plus half its
+ *  blur, scaled with the edge), as the app counts it (ringExtent()). */
+const glowReach = (r) => (10 + 38 / 2) * r.glowScale;
 const ICON = 'rgb(176, 171, 158)';       // #B0AB9E
 const CREAM = 'rgb(243, 235, 222)';      // #F3EBDE
 const SIZES = { mini: { width: 280, height: 110 }, compact: { width: 220, height: 220 }, expanded: { width: 382, height: 512 } };
@@ -190,7 +205,7 @@ test.describe('Monitoring presentation: the Range Ring', () => {
     expect(reach).toBeLessThanOrEqual(382 / 2 + 0.5);
   });
 
-  test('Compact (220×220): a 90px edge; the capped band grows visibly with how far over, from about 3px to 9px', async ({ page, context }) => {
+  test('Compact (220×220): the ring is the largest thing in the window (over half its side); the capped band still grows with how far over, to a tenth of the edge', async ({ page, context }) => {
     const { pipPage } = await reachMonitoring(page, context, { size: SIZES.compact, layout: 'compact', driven: true });
     const b = await rangeBoundsDb(page, SAVED_PROFILE[0].spreadDb);
     await settleAt(page, pipPage, b.endDb + 0.05, 1600);
@@ -198,11 +213,11 @@ test.describe('Monitoring presentation: the Range Ring', () => {
     await settleAt(page, pipPage, b.endDb + 6);
     const farOver = await readRing(pipPage);
     expect(justOver.zone).toBe(3);
-    expect(farOver.edgePx).toBeCloseTo(90, 0);
-    expect(justOver.bandPx).toBeGreaterThanOrEqual(2.5);
-    expect(justOver.bandPx).toBeLessThan(4.5);
-    expect(farOver.bandPx).toBeGreaterThanOrEqual(8);
-    expect(farOver.bandPx).toBeLessThanOrEqual(9.5);
+    expect(farOver.edgePx).toBeCloseTo(expectedEdge(await layoutBoxes(pipPage)), 0);
+    expect(farOver.edgePx).toBeGreaterThan(0.55 * 220); // was 90px (41%) with the name row
+    expect(justOver.bandPx).toBeGreaterThan(0.02 * farOver.edgePx);
+    expect(justOver.bandPx).toBeLessThan(0.05 * farOver.edgePx);
+    expect(farOver.bandPx).toBeCloseTo(0.1 * farOver.edgePx, 0);
   });
 
   test('a single 150ms loud syllable within normal speech never shows the band', async ({ page, context }) => {
@@ -359,6 +374,10 @@ async function layoutBoxes(pipPage) {
       band,
       name: rect(document.querySelector('.pip-profile-info')),
       stop: rect(document.querySelector('.pip-control-btn-stop')),
+      // Every control with a box, revealed or not (Mini hides them by opacity).
+      controls: [...screen.querySelectorAll('.pip-control-btn')].filter((el) => el.offsetParent !== null)
+        .map((el) => el.getBoundingClientRect()).filter((r) => r.width && r.height)
+        .map((r) => ({ left: r.left, top: r.top, right: r.right, bottom: r.bottom })),
       ringMax: { left: cx - extent / 2, right: cx + extent / 2, top: cy - extent / 2, bottom: cy + extent / 2 },
       height: innerHeight,
       width: innerWidth,
@@ -410,67 +429,98 @@ function contrast(fg, bg) {
 }
 
 test.describe('Monitoring presentation: the ring is sized for full Outside', () => {
-  for (const [bandName, size] of Object.entries(SIZES)) {
-    test(`${size.width}×${size.height} (${bandName}): at full Outside, the band clears the name and Stop with equal gaps, the glow never reaches a control, and the name stays readable`, async ({ page, context }) => {
-      const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size, driven: true, layout: bandName === 'expanded' ? 'expanded' : 'compact' });
+  test(`${SIZES.expanded.width}×${SIZES.expanded.height} (expanded): at full Outside, the band clears the name and Stop with equal gaps, the glow never reaches a control, and the name stays readable`, async ({ page, context }) => {
+    const bandName = 'expanded';
+    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: SIZES.expanded, driven: true, layout: 'expanded' });
+    await expect(monitoringScreen).toHaveAttribute('data-size-band', bandName);
+    const b = await rangeBoundsDb(page, SAVED_PROFILE[0].spreadDb);
+    await settleAt(page, pipPage, b.endDb + 8, 1800);
+    const r = await readRing(pipPage);
+    expect(r.zone).toBe(3);
+
+    const ringBox = await monitoringScreen.locator('.mezzo-ring').boundingBox();
+    const cx = ringBox.x + ringBox.width / 2;
+    const cy = ringBox.y + ringBox.height / 2;
+    const half = r.edgePx / 2 + r.bandPx; // the solid band, no glow
+    const ring = { top: cy - half, bottom: cy + half };
+    const boxes = await layoutBoxes(pipPage);
+
+    expect(r.bandPx).toBeCloseTo(BAND_CAP[bandName] * r.edgePx, 0);
+    expect(r.edgePx).toBeCloseTo(expectedEdge(boxes), 0);
+    expect(2 * half).toBeLessThanOrEqual(boxes.ringMax.bottom - boxes.ringMax.top + 1);
+    expect(half + glowReach(r)).toBeLessThanOrEqual(boxes.width / 2 + 0.5);
+
+    const above = ring.top - boxes.name.bottom;
+    const below = boxes.stop.top - ring.bottom;
+    expect(above).toBeGreaterThanOrEqual(GAP[bandName] - 1);
+    expect(below).toBeGreaterThanOrEqual(GAP[bandName] - 1);
+    expect(Math.abs(above - below)).toBeLessThanOrEqual(1);
+
+    const glowRadius = half + glowReach(r);
+    for (const c of await controlRects(pipPage)) {
+      expect(distanceToRect(cx, cy, c), `glow clear of ${c.name}`).toBeGreaterThan(glowRadius);
+    }
+
+    // The name stays readable in every ring state.
+    await expect(monitoringScreen.locator('.pip-profile-info')).toBeVisible();
+    await expect(monitoringScreen.locator('.pip-monitoring-header')).toHaveCSS('opacity', '1');
+    const bg = await brightestBehind(page, pipPage, monitoringScreen.locator('.pip-profile-info'));
+    expect(contrast(ICON, bg), `name contrast over ${bg}`).toBeGreaterThanOrEqual(4.5);
+    await assertNoOverflow(pipPage);
+  });
+
+  // Compact and Mini (2026-11-11): no name, the ring centered in the whole
+  // window and as large as the far-over glow allows. 240×186 is Compact's
+  // real content size in Chrome; the others are what a person can resize to.
+  for (const size of [
+    { width: 240, height: 186 }, SIZES.compact, { width: 299, height: 299 }, { width: 170, height: 170 },
+    { width: 290, height: 165 }, SIZES.mini, { width: 140, height: 140 }, { width: 150, height: 300 },
+  ]) {
+    test(`${size.width}×${size.height}: far over, the ring is the largest thing in the window and its glow is never clipped or over a control`, async ({ page, context }) => {
+      const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size, driven: true, layout: 'compact' });
+      const short = Math.min(size.width, size.height);
+      const bandName = short < 160 ? 'mini' : 'compact';
       await expect(monitoringScreen).toHaveAttribute('data-size-band', bandName);
+      await expect(monitoringScreen.locator('.pip-profile-info')).toBeHidden();
       const b = await rangeBoundsDb(page, SAVED_PROFILE[0].spreadDb);
       await settleAt(page, pipPage, b.endDb + 8, 1800);
       const r = await readRing(pipPage);
       expect(r.zone).toBe(3);
+      expect(r.bandPx).toBeCloseTo(BAND_CAP[bandName] * r.edgePx, 0); // the widest band ("far over")
 
+      const boxes = await layoutBoxes(pipPage);
+      expect(r.edgePx).toBeCloseTo(expectedEdge(boxes), 0);
+      expect(r.edgePx).toBeLessThanOrEqual(0.8 * short + 0.5);
+
+      // Centered in the window.
       const ringBox = await monitoringScreen.locator('.mezzo-ring').boundingBox();
       const cx = ringBox.x + ringBox.width / 2;
       const cy = ringBox.y + ringBox.height / 2;
-      const half = r.edgePx / 2 + r.bandPx; // the solid band, no glow
-      const ring = { top: cy - half, bottom: cy + half };
-      const boxes = await layoutBoxes(pipPage);
+      expect(Math.abs(cx - size.width / 2)).toBeLessThanOrEqual(1);
+      expect(Math.abs(cy - size.height / 2)).toBeLessThanOrEqual(1);
 
-      // The band is at its widest for this size band, and the ring has the
-      // edge the sizing rule gives: it fills the area less the gap, unless
-      // the glow would pass the window's sides (Expanded).
-      expect(r.bandPx).toBeCloseTo(BAND_CAP[bandName] * r.edgePx, 0);
-      expect(r.edgePx).toBeCloseTo(expectedEdge(boxes), 0);
-      expect(2 * half).toBeLessThanOrEqual(boxes.ringMax.bottom - boxes.ringMax.top + 1);
-      if (bandName !== 'expanded') expect(2 * half).toBeCloseTo(boxes.ringMax.bottom - boxes.ringMax.top, 0);
-      expect(r.edgePx / 2 + r.bandPx + (10 + 38 / 2) * r.glowScale).toBeLessThanOrEqual(boxes.width / 2 + 0.5);
-      if (bandName === 'compact') {
-        expect(r.edgePx).toBeCloseTo(90, 0);
-        expect(r.bandPx).toBeGreaterThanOrEqual(8);
-        expect(r.bandPx).toBeLessThanOrEqual(9.5);
-      }
-
-      const topEdge = bandName === 'mini' ? 0 : boxes.name.bottom;
-      const bottomEdge = bandName === 'mini' ? boxes.height : boxes.stop.top;
-      const above = ring.top - topEdge;
-      const below = bottomEdge - ring.bottom;
-      expect(above).toBeGreaterThanOrEqual(GAP[bandName] - 1);
-      expect(below).toBeGreaterThanOrEqual(GAP[bandName] - 1);
-      expect(Math.abs(above - below)).toBeLessThanOrEqual(1);
-
-      // The glow (outer spread plus half its blur) never reaches a control.
-      const glowRadius = half + (10 + 38 / 2) * r.glowScale;
+      // The far-over glow stays inside the window on every side, and clear
+      // of every control (revealed or not).
+      const glowRadius = r.edgePx / 2 + r.bandPx + glowReach(r);
+      expect(glowRadius).toBeLessThanOrEqual(short / 2);
       for (const c of await controlRects(pipPage)) {
-        const dx = Math.max(c.left - cx, 0, cx - c.right);
-        const dy = Math.max(c.top - cy, 0, cy - c.bottom);
-        expect(Math.hypot(dx, dy), `glow clear of ${c.name}`).toBeGreaterThan(glowRadius);
+        expect(distanceToRect(cx, cy, c), `glow clear of ${c.name}`).toBeGreaterThan(glowRadius);
       }
-
-      if (bandName === 'mini') {
-        await expect(monitoringScreen.locator('.pip-profile-info')).toBeHidden();
-      } else {
-        // The name stays readable in every ring state.
-        await expect(monitoringScreen.locator('.pip-profile-info')).toBeVisible();
-        await expect(monitoringScreen.locator('.pip-monitoring-header')).toHaveCSS('opacity', '1');
-        // Readable over the glow: 4.5:1 against the brightest pixel behind it.
-        const bg = await brightestBehind(page, pipPage, monitoringScreen.locator('.pip-profile-info'));
-        expect(contrast(ICON, bg), `name contrast over ${bg}`).toBeGreaterThanOrEqual(4.5);
-      }
+      // The ring is the largest element. (In a small square window the
+      // corner controls bound it: about 36% of the side at 140×140.)
+      for (const c of await controlRects(pipPage)) expect(r.edgePx).toBeGreaterThan(c.right - c.left);
       await assertNoOverflow(pipPage);
     });
   }
 
-  for (const [bandName, size] of [['compact', SIZES.compact], ['expanded', SIZES.expanded]]) {
+  test('Compact\'s real size (240×186): the ring is about two thirds of the short side', async ({ page, context }) => {
+    const { pipPage } = await reachMonitoring(page, context, { size: { width: 240, height: 186 }, layout: 'compact' });
+    const r = await readRing(pipPage);
+    expect(r.edgePx / 186).toBeGreaterThan(0.62);
+    expect(r.edgePx / 186).toBeLessThan(0.7);
+  });
+
+  for (const [bandName, size] of [['expanded', SIZES.expanded]]) {
     test(`${size.width}×${size.height} at rest: nothing is drawn behind the name; the pixels around it match the window background`, async ({ page, context }) => {
       const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size, driven: true, layout: bandName === 'expanded' ? 'expanded' : 'compact' });
       await settleAt(page, pipPage, 0, 900); // Within range
@@ -513,9 +563,9 @@ test.describe('Monitoring presentation: the ring is sized for full Outside', () 
 });
 
 test.describe('Monitoring presentation: controls by size band', () => {
-  test('Compact (220×220): name, icon-only Stop bottom left, Expand top right; 32×32, #B0AB9E at full opacity, 12px from the edges', async ({ page, context }) => {
+  test('Compact (220×220): no name (Expanded still shows it), icon-only Stop bottom left, Expand top right; 32×32, #B0AB9E at full opacity, 12px from the edges', async ({ page, context }) => {
     const { monitoringScreen } = await reachMonitoring(page, context, { size: SIZES.compact, layout: 'compact' });
-    await expect(monitoringScreen.locator('.pip-profile-info')).toBeVisible();
+    await expect(monitoringScreen.locator('.pip-profile-info')).toBeHidden();
     const stop = monitoringScreen.locator('.pip-control-btn-stop');
     const expandBtn = monitoringScreen.locator('.pip-control-btn-expand');
     await expect(monitoringScreen.locator('.pip-control-btn-compact')).toBeHidden();
@@ -721,8 +771,6 @@ test.describe('Monitoring presentation: tooltips', () => {
   }
 
   for (const c of [
-    { band: 'compact', sel: '.pip-control-btn-stop', label: 'Stop monitoring' },
-    { band: 'compact', sel: '.pip-control-btn-expand', label: 'Expand' },
     { band: 'expanded', sel: '.pip-control-btn-compact', label: 'Compact view' },
   ]) {
     test(`${c.label} (${c.band}): a tooltip after about 500ms of hover, beside the control and clear of the ring; gone on leave`, async ({ page, context }) => {
@@ -760,6 +808,19 @@ test.describe('Monitoring presentation: tooltips', () => {
     await pipPage.waitForTimeout(800);
     await expect(tip).toBeHidden();
   });
+
+  for (const size of [SIZES.compact, { width: 240, height: 186 }]) {
+    test(`Compact (${size.width}×${size.height}): with the ring filling the window, Stop's and Expand's tooltips stay hidden rather than cover it`, async ({ page, context }) => {
+      const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size, layout: 'compact' });
+      const tip = monitoringScreen.locator('.pip-control-tooltip');
+      for (const sel of ['.pip-control-btn-stop', '.pip-control-btn-expand']) {
+        await hoverCenter(pipPage, monitoringScreen.locator(sel));
+        await pipPage.waitForTimeout(800);
+        await expect(tip).toBeHidden();
+        await pipPage.mouse.move(-10, -10);
+      }
+    });
+  }
 
   test('Mini: once revealed, a tooltip never covers the ring (shown elsewhere, or not at all)', async ({ page, context }) => {
     const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: SIZES.mini, layout: 'compact' });

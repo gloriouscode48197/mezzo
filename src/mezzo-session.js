@@ -114,7 +114,7 @@
 
 import { AudioProcessor } from './audio.js?v=2';
 import { MezzoEngine, DEFAULT_ZONE_SETTINGS, isNoisyRoom } from './engine.js?v=5';
-import { MezzoRangeRing, edgeForBandExtent, edgeForExtent, ringExtent, scaledBand, DEFAULT_RING_SETTINGS } from './range-ring.js';
+import { MezzoRangeRing, edgeForBandExtent, edgeForExtent, ringExtent, bandExtent, scaledBand, DEFAULT_RING_SETTINGS } from './range-ring.js';
 import { MezzoLevelMeter } from './level-meter.js';
 import { createZoneAnnouncer, ZONE_LABELS } from './zone-announcer.js';
 import { createCalibrationController } from './calibration-controller.js';
@@ -2786,7 +2786,8 @@ export function createMezzoSession({
            bottom scrim, when the pointer enters or a control has focus
            (see setUpMiniReveal()).
          The profile name sits in the top row, centered between the
-         corners, in one style at every size; it's hidden in Mini. */
+         corners, in Expanded only (2026-11-11: hidden in Compact and Mini,
+         where the ring takes the whole window, see ringEdge()). */
       .pip-screen-monitoring { --edge: 12px; }
       .pip-screen-monitoring[data-size-band="mini"] { --edge: 8px; }
       .pip-screen-monitoring[data-size-band="expanded"] { --edge: 16px; }
@@ -2798,7 +2799,8 @@ export function createMezzoSession({
         z-index: 1;
         display: block;
       }
-      .pip-screen-monitoring[data-size-band="mini"] .pip-monitoring-header { display: none; }
+      .pip-screen-monitoring[data-size-band="mini"] .pip-monitoring-header,
+      .pip-screen-monitoring[data-size-band="compact"] .pip-monitoring-header { display: none; }
       .pip-monitoring-header { text-align: center; }
       /* The glow may reach under the name (the ring is sized by its solid
          band), so while the ring is Outside range, and only then, a soft
@@ -4501,7 +4503,8 @@ export function createMezzoSession({
   // Icon-only controls get a short tooltip naming the action, after about
 // 500ms of hover: beside the control (to the inside of its corner), in the
 // control's own row, so it never sits over the ring. If even that would
-// touch the ring (Mini, where the ring has the whole window), it tries
+// touch the ring (Compact and Mini, where the ring has the whole window:
+// the ring there is a circle, its edge plus its widest band), it tries
 // above or below the control instead, and otherwise stays hidden: the
 // aria-label already names the control. Hidden on pointer leave and on
 // press; never shown for keyboard focus. Expanded's Stop has a visible
@@ -4533,11 +4536,19 @@ function setUpControlTooltips(screen) {
       { x: besideX, y: by + (b.height - h) / 2 },
       { x: alignX, y: onTop ? by + b.height + 6 : by - 6 - h },
     ];
-    const { extent, top, bottom } = ringLayout();
-    const ring = { left: (s.width - extent) / 2, top: (top + bottom - extent) / 2 };
-    ring.right = ring.left + extent; ring.bottom = ring.top + extent;
-    const fits = ({ x, y }) => x >= 0 && y >= 0 && x + w <= s.width && y + h <= s.height &&
-      (x + w <= ring.left || x >= ring.right || y + h <= ring.top || y >= ring.bottom);
+    const layout = ringLayout();
+    const inWindow = ({ x, y }) => x >= 0 && y >= 0 && x + w <= s.width && y + h <= s.height;
+    let clearOfRing;
+    if (layout.band === 'expanded') {
+      const { extent, top, bottom } = layout;
+      const ring = { left: (s.width - extent) / 2, top: (top + bottom - extent) / 2 };
+      ring.right = ring.left + extent; ring.bottom = ring.top + extent;
+      clearOfRing = ({ x, y }) => x + w <= ring.left || x >= ring.right || y + h <= ring.top || y >= ring.bottom;
+    } else {
+      const radius = bandExtent(ringEdge(), ringBand()) / 2;
+      clearOfRing = ({ x, y }) => distanceToRect(s.width / 2, s.height / 2, { left: x, top: y, right: x + w, bottom: y + h }) >= radius;
+    }
+    const fits = (spot) => inWindow(spot) && clearOfRing(spot);
     const spot = candidates.find(fits);
     if (!spot) { tip.hidden = true; return; }
     tip.style.left = `${Math.round(spot.x)}px`;
@@ -4598,14 +4609,36 @@ function ringBand() {
   return scaledBand(DEFAULT_RING_SETTINGS.band, ringBandScale());
 }
 
-// The ring's edge: the circle plus its widest band fills the ring area
-// less the gap (the glow isn't counted, so it may reach into the gap and
-// under the name), but the glow stays inside the window's width, where
-// the window's side would otherwise cut it off visibly (Expanded, 382 wide).
+// The ring's edge.
+// Expanded: the circle plus its widest band fills the ring area less the
+// gap (the glow isn't counted, so it may reach into the gap and under the
+// name), but the glow stays inside the window's width, where the window's
+// side would otherwise cut it off visibly (382 wide).
+// Compact and Mini (2026-11-11): the ring is the largest thing in the
+// window, centered in all of it, and sized by its far-over extent (the
+// circle, the widest band and the glow's visible reach, ringExtent()):
+// that extent stays inside the window and clear of the corner controls,
+// at any window size, and the edge is at most RING_MAX_FRACTION of the
+// short side. At Compact's real 240×186 the glow and the corner controls
+// are the limit: about 66% of the short side (a 122px edge).
+const RING_MAX_FRACTION = 0.8;
+const RING_GLOW_MARGIN_PX = 2;
 function ringEdge() {
-  const { extent, width } = ringLayout(); // sets the size band first
+  const layout = ringLayout(); // sets the size band first
   const band = ringBand();
-  return Math.min(edgeForBandExtent(extent, band), edgeForExtent(width, band));
+  if (layout.band === 'expanded') {
+    return Math.min(edgeForBandExtent(layout.extent, band), edgeForExtent(layout.width, band));
+  }
+  const radius = Math.max(0, layout.clearRadius - RING_GLOW_MARGIN_PX);
+  const short = Math.min(layout.width, layout.height);
+  return Math.min(edgeForExtent(2 * radius, band), RING_MAX_FRACTION * short);
+}
+
+/** Distance from a point to the nearest point of a rectangle (0 inside). */
+function distanceToRect(x, y, r) {
+  const dx = Math.max(r.left - x, 0, x - r.right);
+  const dy = Math.max(r.top - y, 0, y - r.bottom);
+  return Math.hypot(dx, dy);
 }
 
 function ringLayout() {
@@ -4617,7 +4650,24 @@ function ringLayout() {
     if (monitoringScreenEl) monitoringScreenEl.dataset.sizeBand = band;
     let top = 0;
     let bottom = height;
-    if (band !== 'mini' && monitoringScreenEl) {
+    // Compact and Mini: the ring is centered in the whole window; the
+    // largest circle it may fill (with its glow) stays inside the window and
+    // clear of every corner control, revealed or not (see ringEdge()).
+    if (band !== 'expanded') {
+      let clearRadius = Math.min(width, height) / 2;
+      for (const el of monitoringScreenEl?.querySelectorAll('.pip-control-btn') ?? []) {
+        if (el.offsetParent === null) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width === 0 || r.height === 0) continue;
+        clearRadius = Math.min(clearRadius, distanceToRect(width / 2, height / 2, r));
+      }
+      if (pipCircleWrapperEl) {
+        pipCircleWrapperEl.style.top = '0px';
+        pipCircleWrapperEl.style.height = `${height}px`;
+      }
+      return { band, gap, top: 0, bottom: height, width, height, clearRadius, extent: Math.max(0, Math.min(width, height) - 2 * gap) };
+    }
+    if (monitoringScreenEl) {
       const rows = [monitoringProfileNameEl, ...monitoringScreenEl.querySelectorAll('.pip-control-btn')];
       for (const el of rows) {
         if (!el || el.offsetParent === null) continue;
@@ -4631,7 +4681,7 @@ function ringLayout() {
       pipCircleWrapperEl.style.top = `${top}px`;
       pipCircleWrapperEl.style.height = `${Math.max(0, bottom - top)}px`;
     }
-    return { band, gap, top, bottom, width, extent: Math.max(0, Math.min(width, bottom - top) - 2 * gap) };
+    return { band, gap, top, bottom, width, height, extent: Math.max(0, Math.min(width, bottom - top) - 2 * gap) };
   }
 
   async function resumeMonitoringFromPipReady() {
