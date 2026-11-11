@@ -36,13 +36,15 @@ export function getTesterCode(storage = defaultStorage(), config = STUDY_CONFIG)
   try { return normalizeTesterCode(storage?.getItem(config.storageKeys.testerCode) ?? null); } catch { return null; }
 }
 
-/** Removes the tester code, the last session and the first-session date.
+/** Removes the tester code, the last session, the first-session date and
+ *  the With Mezzo unlock.
  *  The anonymous browser ID belongs to analytics, so it stays. */
 export function clearStudy(storage = defaultStorage(), config = STUDY_CONFIG) {
   try {
     storage?.removeItem(config.storageKeys.testerCode);
     storage?.removeItem(config.storageKeys.lastSession);
     storage?.removeItem(config.storageKeys.firstSession);
+    storage?.removeItem(config.storageKeys.mezzoStage);
   } catch { /* storage unavailable */ }
 }
 
@@ -65,15 +67,34 @@ export function applyStudyParam(search, storage = defaultStorage(), config = STU
   return 'saved';
 }
 
+/**
+ * Reads ?start=1: with a tester code saved, moves the tester to the With
+ * Mezzo stage now (the first monitoring session still does it otherwise).
+ * Run after applyStudyParam(), so ?study=CODE&start=1 works in one link.
+ * @returns {'started'|'already'|'no-code'|'none'}
+ */
+export function applyStartParam(search, storage = defaultStorage(), config = STUDY_CONFIG, now = Date.now()) {
+  let value;
+  try { value = new URLSearchParams(search).get(config.startParam); } catch { return 'none'; }
+  if (value === null || value.trim() !== config.startValue) return 'none';
+  if (!getTesterCode(storage, config)) return 'no-code';
+  if (getMezzoStageUnlockedAt(storage, config) !== null) return 'already';
+  try { storage?.setItem(config.storageKeys.mezzoStage, String(now)); } catch { return 'none'; }
+  return 'started';
+}
+
 /** Applies ?study= on a page and then removes it from the address bar, so a
- *  bookmark or a shared link doesn't carry the code. */
-export function applyStudyFromLocation(win = globalThis.window, storage = defaultStorage(), config = STUDY_CONFIG) {
+ *  bookmark or a shared link doesn't carry the code. With `start: true`
+ *  (the /study page), ?start=1 too. */
+export function applyStudyFromLocation(win = globalThis.window, storage = defaultStorage(), config = STUDY_CONFIG, { start = false } = {}) {
   if (!win?.location) return 'none';
   const result = applyStudyParam(win.location.search, storage, config);
-  if (result !== 'none') {
+  const startResult = start ? applyStartParam(win.location.search, storage, config) : 'none';
+  if (result !== 'none' || startResult !== 'none') {
     try {
       const url = new URL(win.location.href);
       url.searchParams.delete(config.urlParam);
+      if (start) url.searchParams.delete(config.startParam);
       win.history?.replaceState(win.history.state, '', url.pathname + url.search + url.hash);
     } catch { /* leave the address bar as it is */ }
   }
@@ -94,42 +115,61 @@ export function getBrowserId(storage = defaultStorage(), makeId = () => globalTh
   }
 }
 
-// ── Glow count and session length ────────────────────────────────────────
+// ── Glow count, speaking time and session length ─────────────────────────
+
+/** A frame never counts for more than this much speaking time, so a long
+ *  pause in the audio loop (a sleeping laptop) isn't counted as speech.
+ *  Generous enough for a background tab's 1-second timer throttling. */
+export const MAX_SPEECH_FRAME_MS = 1000;
 
 /**
- * Counts glows in one monitoring session: one count each time the committed
- * zone moves into Outside range (the moment the glow turns on), never per
- * frame. start() begins a new session at zero; start({ startedAt, glows })
- * continues one (Reopen Companion after an involuntary close resumes the
- * same call). stop() returns the session, or null if none was running.
+ * Counts one monitoring session: glows, one each time the committed zone
+ * moves into Outside range (the moment the glow turns on), never per frame;
+ * and speaking time, the time between audio frames while the circle's
+ * noise gate counted the level as voice (onFrame()). start() begins a new
+ * session at zero; start({ startedAt, glows, speechMs }) continues one
+ * (Reopen Companion after an involuntary close resumes the same call).
+ * stop() returns the session, or null if none was running.
  */
 export function createGlowCounter({ outsideZone = 3, now = () => Date.now() } = {}) {
   let running = false;
   let startedAt = null;
   let lastZone = 0;
   let glows = 0;
+  let speechMs = 0;
+  let lastFrameAt = null;
 
   return {
     start(resume = null) {
       running = true;
       startedAt = Number.isFinite(resume?.startedAt) ? resume.startedAt : now();
       glows = Number.isFinite(resume?.glows) ? resume.glows : 0;
+      speechMs = Number.isFinite(resume?.speechMs) ? resume.speechMs : 0;
       lastZone = 0;
+      lastFrameAt = null;
     },
     onZone(zone) {
       if (!running) return;
       if (zone === outsideZone && lastZone !== outsideZone) glows += 1;
       lastZone = zone;
     },
+    /** One audio frame: `voiced` is the noise gate's verdict for it. The
+     *  time since the previous frame counts as speech when it is voiced. */
+    onFrame(voiced, atMs = now()) {
+      if (!running) return;
+      if (voiced && lastFrameAt !== null) speechMs += Math.min(Math.max(0, atMs - lastFrameAt), MAX_SPEECH_FRAME_MS);
+      lastFrameAt = atMs;
+    },
     get glows() { return glows; },
+    get speechMs() { return speechMs; },
     get startedAt() { return startedAt; },
     get running() { return running; },
-    /** @returns {{ id: string, startedAt: number, endedAt: number, glows: number } | null} */
+    /** @returns {{ id: string, startedAt: number, endedAt: number, glows: number, speechMs: number } | null} */
     stop() {
       if (!running) return null;
       running = false;
       const endedAt = Math.max(startedAt, now());
-      return { id: String(startedAt), startedAt, endedAt, glows };
+      return { id: String(startedAt), startedAt, endedAt, glows, speechMs };
     },
   };
 }
@@ -143,6 +183,12 @@ export function createGlowCounter({ outsideZone = 3, now = () => Date.now() } = 
 export function saveLastSession(session, storage = defaultStorage(), config = STUDY_CONFIG) {
   if (!session || !getTesterCode(storage, config)) return null;
   const record = { id: session.id, startedAt: session.startedAt, endedAt: session.endedAt, glows: session.glows };
+  if (Number.isFinite(session.speechMs)) record.speechMs = session.speechMs;
+  // The same session saved again (Reopen Companion continued it, then
+  // Stop): keep its check-in answer, so the card shows once per session
+  // wherever it was opened or skipped first.
+  const previous = getLastSession(storage, config);
+  if (previous?.id === record.id && previous.handled) record.handled = previous.handled;
   try {
     storage?.setItem(config.storageKeys.lastSession, JSON.stringify(record));
     if (getFirstSessionAt(storage, config) === null) {
@@ -165,28 +211,50 @@ export function getFirstSessionAt(storage = defaultStorage(), config = STUDY_CON
   }
 }
 
+/** When ?start=1 unlocked the With Mezzo stage, or null. */
+export function getMezzoStageUnlockedAt(storage = defaultStorage(), config = STUDY_CONFIG) {
+  try {
+    const raw = storage?.getItem(config.storageKeys.mezzoStage);
+    if (raw === null || raw === undefined || raw === '') return null;
+    const ms = Number(raw);
+    return Number.isFinite(ms) && ms > 0 ? ms : null;
+  } catch {
+    return null;
+  }
+}
+
+/** When the With Mezzo stage began: the earlier of the ?start=1 unlock and
+ *  the first monitoring session, or null before either. The study's 14
+ *  days (the wrap-up date, and the end of the check-in card) count from it. */
+export function getMezzoStageStartAt(storage = defaultStorage(), config = STUDY_CONFIG) {
+  const times = [getMezzoStageUnlockedAt(storage, config), getFirstSessionAt(storage, config)].filter((t) => t !== null);
+  return times.length ? Math.min(...times) : null;
+}
+
 // ── Study stages ─────────────────────────────────────────────────────────
 
 /**
  * Which /study stage applies:
- * 'none' without a tester code; 'baseline' with a code but no monitoring
- * session yet in this browser; 'mezzo' after the first one.
+ * 'none' without a tester code; 'baseline' with a code before the With
+ * Mezzo stage began; 'mezzo' once it has (getMezzoStageStartAt(): the
+ * ?start=1 unlock or the first monitoring session).
  */
-export function studyStage({ testerCode, firstSessionAt }) {
+export function studyStage({ testerCode, mezzoStageStartAt }) {
   if (!testerCode) return 'none';
-  return firstSessionAt === null || firstSessionAt === undefined ? 'baseline' : 'mezzo';
+  return mezzoStageStartAt === null || mezzoStageStartAt === undefined ? 'baseline' : 'mezzo';
 }
 
-/** The start of the local day `studyDays` after the first session's date:
- *  the wrap-up opens then, and the check-in card stops. */
-export function wrapUpOpensAt(firstSessionAt, config = STUDY_CONFIG) {
-  if (!Number.isFinite(firstSessionAt)) return null;
-  const d = new Date(firstSessionAt);
+/** The start of the local day `studyDays` after the With Mezzo stage began
+ *  (getMezzoStageStartAt()): the wrap-up opens then, and the check-in card
+ *  stops. */
+export function wrapUpOpensAt(mezzoStageStartAt, config = STUDY_CONFIG) {
+  if (!Number.isFinite(mezzoStageStartAt)) return null;
+  const d = new Date(mezzoStageStartAt);
   return new Date(d.getFullYear(), d.getMonth(), d.getDate() + config.studyDays).getTime();
 }
 
-export function isWrapUpOpen(firstSessionAt, now, config = STUDY_CONFIG) {
-  const opensAt = wrapUpOpensAt(firstSessionAt, config);
+export function isWrapUpOpen(mezzoStageStartAt, now, config = STUDY_CONFIG) {
+  const opensAt = wrapUpOpensAt(mezzoStageStartAt, config);
   return opensAt !== null && now >= opensAt;
 }
 
@@ -202,6 +270,9 @@ export function getLastSession(storage = defaultStorage(), config = STUDY_CONFIG
     const r = JSON.parse(raw);
     if (!r || typeof r.id !== 'string' || !Number.isFinite(r.startedAt) || !Number.isFinite(r.endedAt)
       || !Number.isFinite(r.glows) || r.endedAt < r.startedAt) return null;
+    // speechMs is optional: sessions saved before speaking time was tracked
+    // have none (and so never meet the speech minimum).
+    if (r.speechMs !== undefined && !(Number.isFinite(r.speechMs) && r.speechMs >= 0)) return null;
     return r;
   } catch {
     return null;
@@ -229,15 +300,22 @@ export function isWithinCheckInWindow(session, now, config = STUDY_CONFIG) {
   return since >= 0 && since < config.checkInWindowMs;
 }
 
+/** Speaking time in the session; 0 when it wasn't recorded. */
+export function sessionSpeechMs(session) {
+  return Number.isFinite(session?.speechMs) ? session.speechMs : 0;
+}
+
 /** The Companion card: a tester code, a session of at least the minimum
- *  length, inside the window, not yet opened or skipped, and the study's
- *  14 days not over (the tester code stays saved either way). */
-export function shouldShowCheckInCard({ testerCode, session, now, firstSessionAt = null }, config = STUDY_CONFIG) {
+ *  length and with at least the minimum speaking time, inside the window,
+ *  not yet opened or skipped, and the study's 14 days not over (the tester
+ *  code stays saved either way). */
+export function shouldShowCheckInCard({ testerCode, session, now, mezzoStageStartAt = null }, config = STUDY_CONFIG) {
   return Boolean(testerCode)
-    && !isWrapUpOpen(firstSessionAt, now, config)
+    && !isWrapUpOpen(mezzoStageStartAt, now, config)
     && Boolean(session)
     && !session.handled
     && sessionDurationMs(session) >= config.minSessionMs
+    && sessionSpeechMs(session) >= config.minSpeechMs
     && isWithinCheckInWindow(session, now, config);
 }
 
@@ -262,8 +340,8 @@ export function sessionMinutes(durationMs) {
 
 /**
  * The check-in form link. With a session, it carries that session's date
- * (the day it started), length, glow count and whole minutes since it
- * ended; without one, only the tester code and browser ID (and the source).
+ * (the day it started), length, speaking time (when recorded), glow count
+ * and whole minutes since it ended; without one, only the tester code and browser ID (and the source).
  * Values are URL-encoded by URLSearchParams.
  * @returns {string|null} null without a tester code
  */
@@ -277,6 +355,7 @@ export function buildCheckInUrl({ testerCode, browserId, source, session = null,
   if (session) {
     url.searchParams.set(p.sessionDate, formatSessionDate(new Date(session.startedAt)));
     url.searchParams.set(p.sessionMinutes, String(sessionMinutes(sessionDurationMs(session))));
+    if (Number.isFinite(session.speechMs)) url.searchParams.set(p.speechMinutes, String(sessionMinutes(session.speechMs)));
     url.searchParams.set(p.glows, String(session.glows));
     url.searchParams.set(p.minutesAfter, String(Math.max(0, Math.round((now - session.endedAt) / 60000))));
   }

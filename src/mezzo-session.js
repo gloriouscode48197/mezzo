@@ -126,7 +126,7 @@ import {
   saveLastSession,
   getLastSession,
   getTesterCode,
-  getFirstSessionAt,
+  getMezzoStageStartAt,
   wrapUpOpensAt,
   getBrowserId,
   shouldShowCheckInCard,
@@ -993,7 +993,11 @@ export function createMezzoSession({
     // add 50-150ms on top of the zone window), and only frames the circle's
     // own gate counts as voice go into that window (voicedOnly).
     const zoneInput = DEFAULT_ZONE_SETTINGS.zoneInputRaw && Number.isFinite(rawRms) ? rawRms : rms;
-    engine.processFrame(zoneInput, performance.now(), activeCircle ? activeCircle.gateOpen : true);
+    const voiced = activeCircle ? activeCircle.gateOpen : true;
+    const frameAt = performance.now();
+    engine.processFrame(zoneInput, frameAt, voiced);
+    // Study speaking time: the same gate verdict, only read (study.js).
+    glowCounter.onFrame(voiced, frameAt);
     markClassification(); // TEMPORARY — see docs/monitoring-runtime-investigation.md
 
     const zone = engine.getZone();
@@ -1138,8 +1142,8 @@ export function createMezzoSession({
   }
 
   /** Round 4 study check-in card, at the foot of Ready. Shown only with a
-   *  saved tester code, for a session of at least 5 minutes that ended
-   *  under 2 hours ago and wasn't already opened or skipped (src/study.js's
+   *  saved tester code, for a session of at least 5 minutes, with at least
+   *  1 minute of speech, that ended under 2 hours ago and wasn't already opened or skipped (src/study.js's
    *  shouldShowCheckInCard()). Read from storage, so it also appears the
    *  next time the Companion opens after a session ended by closing it. */
   function renderStudyCard() {
@@ -1149,10 +1153,10 @@ export function createMezzoSession({
     // While Reopen Companion is about to resume the interrupted session,
     // that session isn't over: no card for it.
     const session = studyResume ? null : getLastSession();
-    const firstSessionAt = getFirstSessionAt();
+    const mezzoStageStartAt = getMezzoStageStartAt();
     const now = Date.now();
     // After the study's 14 days the card stops (the tester code stays).
-    if (!shouldShowCheckInCard({ testerCode, session, now, firstSessionAt })) {
+    if (!shouldShowCheckInCard({ testerCode, session, now, mezzoStageStartAt })) {
       hideStudyCard();
       return;
     }
@@ -1160,7 +1164,7 @@ export function createMezzoSession({
     studyCardOpenEl.href = studyCheckInUrl(testerCode, session, now);
     studyCardEl.classList.remove('hidden');
     // Leaves on its own once the 2-hour window closes or the study ends.
-    const leavesAt = Math.min(checkInExpiresAt(session), wrapUpOpensAt(firstSessionAt) ?? Infinity);
+    const leavesAt = Math.min(checkInExpiresAt(session), wrapUpOpensAt(mezzoStageStartAt) ?? Infinity);
     studyCardTimer = pipWindow?.setTimeout(renderStudyCard, Math.max(0, leavesAt - now) + 50) ?? null;
   }
 
@@ -3115,10 +3119,11 @@ export function createMezzoSession({
       /* The sound-filter note: one line at the 280px column, centered;
          it wraps only in a manually narrowed window. */
       .pip-ready-recalibrate-note { text-align: center; }
-      /* Round 4 study check-in card (renderStudyCard()): a quiet,
-         bordered group after the disclaimer, one group gap below it.
-         Open check-in is an outlined control so Start monitoring stays the
-         one filled button; no chartreuse. */
+      /* Round 4 study check-in card (renderStudyCard()): a bordered group
+         after the disclaimer, one group gap below it, a little lighter than
+         the window so it stands out (2026-11-10). Open check-in is filled
+         with a translucent cream, lighter than Start monitoring's solid
+         cream so the two don't compete. No chartreuse. */
       .pip-screen-ready > .pip-study-card { margin-top: var(--space-5); }
       .pip-study-card.hidden { display: none; }
       .pip-study-card {
@@ -3128,7 +3133,7 @@ export function createMezzoSession({
         padding: var(--space-3) var(--space-4);
         border: 1px solid color-mix(in srgb, var(--color-text) 16%, transparent);
         border-radius: var(--radius-control);
-        background: color-mix(in srgb, var(--color-text) 4%, transparent);
+        background: color-mix(in srgb, var(--color-text) 8%, var(--color-bg));
         text-align: center;
       }
       .pip-study-card-title {
@@ -3159,8 +3164,9 @@ export function createMezzoSession({
         min-height: 32px;
         box-sizing: border-box;
         padding: 0 var(--space-3);
-        border: 1px solid var(--color-btn-secondary-border);
+        border: 1px solid transparent;
         border-radius: var(--radius-control);
+        background: color-mix(in srgb, var(--color-text) 22%, transparent);
         font-family: var(--font-body);
         font-size: 13px;
         font-weight: var(--weight-medium);
@@ -3169,8 +3175,10 @@ export function createMezzoSession({
         cursor: pointer;
       }
       .pip-study-card-open:hover {
-        background: color-mix(in srgb, var(--color-text) 6%, transparent);
-        border-color: color-mix(in srgb, var(--color-text) 55%, transparent);
+        background: color-mix(in srgb, var(--color-text) 30%, transparent);
+      }
+      .pip-study-card-open:active {
+        background: color-mix(in srgb, var(--color-text) 36%, transparent);
       }
       .pip-study-card-open:focus-visible {
         outline: 2px solid var(--color-link);
@@ -3614,7 +3622,7 @@ export function createMezzoSession({
     const studyCardTitle = pipDoc.createElement('p');
     studyCardTitle.id = 'pip-study-card-title';
     studyCardTitle.className = 'pip-study-card-title';
-    studyCardTitle.textContent = 'How did that call go?';
+    studyCardTitle.textContent = 'How did your call go?';
     const studyCardSub = pipDoc.createElement('p');
     studyCardSub.className = 'pip-study-card-sub';
     studyCardSub.textContent = '1-minute check-in';
@@ -4431,6 +4439,15 @@ export function createMezzoSession({
   /** Done: the person doesn't want the Companion back. */
   function dismissReopenOffer() {
     reopenOffer = null;
+  }
+
+  /** The "Companion closed" page's Open check-in: the interrupted call is
+   *  over, like Stop. Its study session was already saved when the
+   *  Companion closed (finishStudySession()); Reopen now opens to Ready
+   *  instead of resuming monitoring and continuing that session. */
+  function endInterruptedSession() {
+    if (!reopenOffer) return;
+    reopenOffer = { ...reopenOffer, resumeMonitoring: false, studySession: null };
   }
 
   /** Full teardown: stop monitoring, release the mic, close the Companion. */
@@ -6674,7 +6691,7 @@ function ringLayout() {
         unsaved: unsavedProfile,
         resumeMonitoring: wasActive || wasStarting,
         // The call this close interrupted, so a resumed session continues it.
-        studySession: wasActive && glowCounter.running ? { startedAt: glowCounter.startedAt, glows: glowCounter.glows } : null,
+        studySession: wasActive && glowCounter.running ? { startedAt: glowCounter.startedAt, glows: glowCounter.glows, speechMs: glowCounter.speechMs } : null,
       };
     }
 
@@ -6881,5 +6898,6 @@ function ringLayout() {
     hasReopenOffer,
     reopenCompanion,
     dismissReopenOffer,
+    endInterruptedSession,
   };
 }

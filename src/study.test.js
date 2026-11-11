@@ -8,6 +8,12 @@ import { readFileSync } from 'node:fs';
 import { STUDY_CONFIG } from './study-config.js';
 import {
   applyStudyParam,
+  applyStartParam,
+  clearStudy,
+  getMezzoStageUnlockedAt,
+  getMezzoStageStartAt,
+  sessionSpeechMs,
+  MAX_SPEECH_FRAME_MS,
   getTesterCode,
   getBrowserId,
   createGlowCounter,
@@ -49,26 +55,32 @@ function withCode(code = 'R4-01') {
   return storage;
 }
 
-function session({ startedAt = Date.UTC(2026, 10, 9, 15), minutes = 30, glows = 2 } = {}) {
-  return { id: String(startedAt), startedAt, endedAt: startedAt + minutes * MIN, glows };
+function session({ startedAt = Date.UTC(2026, 10, 9, 15), minutes = 30, glows = 2, speechMinutes = 5 } = {}) {
+  const s = { id: String(startedAt), startedAt, endedAt: startedAt + minutes * MIN, glows };
+  if (speechMinutes !== null) s.speechMs = speechMinutes * MIN;
+  return s;
 }
 
 describe('config', () => {
-  it('holds both forms, the window, the minimum and every parameter name', () => {
+  it('holds the forms, the window, the minimums and every parameter name', () => {
     assert.equal(STUDY_CONFIG.checkInFormUrl, 'https://tally.so/r/gber54');
     assert.equal(STUDY_CONFIG.wrapUpFormUrl, 'https://tally.so/r/q5alaO');
     assert.equal(STUDY_CONFIG.checkInWindowMs, 2 * HOUR);
     assert.equal(STUDY_CONFIG.minSessionMs, 5 * MIN);
+    assert.equal(STUDY_CONFIG.minSpeechMs, 1 * MIN);
+    assert.equal(STUDY_CONFIG.startParam, 'start');
+    assert.equal(STUDY_CONFIG.startValue, '1');
     assert.deepEqual(STUDY_CONFIG.params, {
       tester: 'mezzo_tester',
       browserId: 'mezzo_browser_id',
       source: 'mezzo_source',
       sessionDate: 'mezzo_session_date',
       sessionMinutes: 'mezzo_session_minutes',
+      speechMinutes: 'mezzo_speech_minutes',
       glows: 'mezzo_glows',
       minutesAfter: 'mezzo_minutes_after',
     });
-    assert.deepEqual(STUDY_CONFIG.sources, { companion: 'companion', studyPage: 'study_page' });
+    assert.deepEqual(STUDY_CONFIG.sources, { companion: 'companion', studyPage: 'study_page', companionClosed: 'companion_closed' });
   });
 
   it('the browser ID is the existing analytics ID', () => {
@@ -137,7 +149,7 @@ describe('glow counter', () => {
     c.start();
     c.onZone(3); c.onZone(2); c.onZone(3);
     t.advance(6 * MIN);
-    assert.deepEqual(c.stop(), { id: '1000', startedAt: 1000, endedAt: 1000 + 6 * MIN, glows: 2 });
+    assert.deepEqual(c.stop(), { id: '1000', startedAt: 1000, endedAt: 1000 + 6 * MIN, glows: 2, speechMs: 0 });
 
     c.start();
     assert.equal(c.glows, 0);
@@ -148,10 +160,43 @@ describe('glow counter', () => {
   it('continues an interrupted session when resumed', () => {
     const t = clock(5000);
     const c = createGlowCounter({ now: t.now });
-    c.start({ startedAt: 1000, glows: 2 });
+    c.start({ startedAt: 1000, glows: 2, speechMs: 90 * 1000 });
     c.onZone(3);
+    c.onFrame(true, 0);
+    c.onFrame(true, 50);
     t.advance(MIN);
-    assert.deepEqual(c.stop(), { id: '1000', startedAt: 1000, endedAt: 5000 + MIN, glows: 3 });
+    assert.deepEqual(c.stop(), { id: '1000', startedAt: 1000, endedAt: 5000 + MIN, glows: 3, speechMs: 90 * 1000 + 50 });
+  });
+
+  it('speaking time: the time between frames the gate counted as voice', () => {
+    const c = createGlowCounter();
+    c.start();
+    // 50ms frames: 3 voiced intervals, then 2 silent ones, then 1 voiced.
+    const frames = [[0, true], [50, true], [100, true], [150, true], [200, false], [250, false], [300, true]];
+    for (const [at, voiced] of frames) c.onFrame(voiced, at);
+    assert.equal(c.speechMs, 200); // 50→150 (3 × 50) + 300 (50)
+  });
+
+  it('speaking time: a long pause between frames counts at most a second', () => {
+    const c = createGlowCounter();
+    c.start();
+    c.onFrame(true, 0);
+    c.onFrame(true, 60 * 1000); // a sleeping laptop
+    assert.equal(c.speechMs, MAX_SPEECH_FRAME_MS);
+    c.onFrame(true, 60 * 1000 + 1000); // a background tab's 1s timer
+    assert.equal(c.speechMs, 2 * MAX_SPEECH_FRAME_MS);
+  });
+
+  it('speaking time: a new session starts at zero, and frames outside a session are ignored', () => {
+    const c = createGlowCounter();
+    c.onFrame(true, 0);
+    c.onFrame(true, 50);
+    c.start();
+    assert.equal(c.speechMs, 0);
+    c.onFrame(true, 100); // the first frame of a session has no interval yet
+    assert.equal(c.speechMs, 0);
+    c.onFrame(true, 150);
+    assert.equal(c.speechMs, 50);
   });
 
   it('ignores zones outside a session; stop() without start() is null', () => {
@@ -179,6 +224,32 @@ describe('last session', () => {
     saveLastSession(session({ startedAt: Date.UTC(2026, 10, 9, 17), glows: 4 }), storage);
     assert.equal(getLastSession(storage).glows, 4);
   });
+
+  it('keeps the speaking time', () => {
+    const storage = withCode();
+    saveLastSession(session({ speechMinutes: 2.5 }), storage);
+    assert.equal(getLastSession(storage).speechMs, 2.5 * MIN);
+  });
+
+  it('the same session saved again (Reopen, then Stop) keeps its check-in answer; a new session does not', () => {
+    const storage = withCode();
+    const s = session({ minutes: 10 });
+    saveLastSession(s, storage);
+    markCheckInHandled(s.id, 'skipped', storage);
+    saveLastSession({ ...s, endedAt: s.endedAt + 5 * MIN, glows: 5 }, storage);
+    assert.equal(getLastSession(storage).handled, 'skipped');
+    assert.equal(getLastSession(storage).glows, 5);
+    saveLastSession(session({ startedAt: s.startedAt + HOUR }), storage);
+    assert.equal(getLastSession(storage).handled, undefined);
+  });
+
+  it('rejects a stored speaking time that is not a number', () => {
+    const storage = withCode();
+    saveLastSession(session(), storage);
+    const raw = JSON.parse(storage.getItem(KEYS.lastSession));
+    storage.setItem(KEYS.lastSession, JSON.stringify({ ...raw, speechMs: 'lots' }));
+    assert.equal(getLastSession(storage), null);
+  });
 });
 
 describe('check-in card', () => {
@@ -197,6 +268,17 @@ describe('check-in card', () => {
   it('not after a shorter session', () => {
     const short = session({ minutes: 4.9 });
     assert.equal(shouldShowCheckInCard({ testerCode: 'R4-01', session: short, now: short.endedAt }), false);
+  });
+
+  it('not with under 1 minute of speech, however long the session', () => {
+    const quiet = session({ minutes: 45, speechMinutes: 0.99 });
+    assert.equal(shouldShowCheckInCard({ testerCode: 'R4-01', session: quiet, now: quiet.endedAt }), false);
+    const enough = session({ minutes: 45, speechMinutes: 1 });
+    assert.equal(shouldShowCheckInCard({ testerCode: 'R4-01', session: enough, now: enough.endedAt }), true);
+    // Saved before speaking time was tracked: no speech on record.
+    const old = session({ minutes: 45, speechMinutes: null });
+    assert.equal(sessionSpeechMs(old), 0);
+    assert.equal(shouldShowCheckInCard({ testerCode: 'R4-01', session: old, now: old.endedAt }), false);
   });
 
   it('not once 2 hours have passed since the session ended', () => {
@@ -231,7 +313,7 @@ describe('check-in card', () => {
 
 describe('form links', () => {
   it('the Companion check-in carries every parameter, encoded', () => {
-    const s = session({ minutes: 12.5, glows: 3 });
+    const s = { ...session({ minutes: 12.5, glows: 3 }), speechMs: 4 * MIN + 20 * 1000 };
     const href = buildCheckInUrl({
       testerCode: 'R4-01',
       browserId: 'id with space&amp',
@@ -243,7 +325,7 @@ describe('form links', () => {
     assert.equal(url.origin + url.pathname, 'https://tally.so/r/gber54');
     assert.deepEqual([...url.searchParams.keys()], [
       'mezzo_tester', 'mezzo_browser_id', 'mezzo_source',
-      'mezzo_session_date', 'mezzo_session_minutes', 'mezzo_glows', 'mezzo_minutes_after',
+      'mezzo_session_date', 'mezzo_session_minutes', 'mezzo_speech_minutes', 'mezzo_glows', 'mezzo_minutes_after',
     ]);
     assert.equal(url.searchParams.get('mezzo_tester'), 'R4-01');
     assert.equal(url.searchParams.get('mezzo_browser_id'), 'id with space&amp');
@@ -251,8 +333,16 @@ describe('form links', () => {
     assert.equal(url.searchParams.get('mezzo_source'), 'companion');
     assert.equal(url.searchParams.get('mezzo_session_date'), formatSessionDate(new Date(s.startedAt)));
     assert.equal(url.searchParams.get('mezzo_session_minutes'), '12.5');
+    assert.equal(url.searchParams.get('mezzo_speech_minutes'), '4.3'); // one decimal
     assert.equal(url.searchParams.get('mezzo_glows'), '3');
     assert.equal(url.searchParams.get('mezzo_minutes_after'), '17');
+  });
+
+  it('a session saved before speaking time was tracked has no mezzo_speech_minutes', () => {
+    const s = session({ speechMinutes: null });
+    const url = new URL(buildCheckInUrl({ testerCode: 'R4-01', browserId: 'b', source: 'companion', session: s, now: s.endedAt }));
+    assert.equal(url.searchParams.has('mezzo_speech_minutes'), false);
+    assert.equal(url.searchParams.get('mezzo_session_minutes'), '30');
   });
 
   it('without a recent session, only the tester code and browser ID (and source)', () => {
@@ -283,10 +373,47 @@ describe('form links', () => {
 });
 
 describe('study stages', () => {
-  it('no code: none; a code without a session: baseline; after the first session: mezzo', () => {
-    assert.equal(studyStage({ testerCode: null, firstSessionAt: null }), 'none');
-    assert.equal(studyStage({ testerCode: 'R4-01', firstSessionAt: null }), 'baseline');
-    assert.equal(studyStage({ testerCode: 'R4-01', firstSessionAt: Date.now() }), 'mezzo');
+  it('no code: none; a code before the With Mezzo stage: baseline; after it began: mezzo', () => {
+    assert.equal(studyStage({ testerCode: null, mezzoStageStartAt: null }), 'none');
+    assert.equal(studyStage({ testerCode: 'R4-01', mezzoStageStartAt: null }), 'baseline');
+    assert.equal(studyStage({ testerCode: 'R4-01', mezzoStageStartAt: Date.now() }), 'mezzo');
+  });
+
+  it('?start=1 with a code unlocks the With Mezzo stage once, before any session', () => {
+    const storage = withCode();
+    assert.equal(getMezzoStageStartAt(storage), null);
+    assert.equal(applyStartParam('?start=1', storage, STUDY_CONFIG, 5000), 'started');
+    assert.equal(getMezzoStageUnlockedAt(storage), 5000);
+    assert.equal(getMezzoStageStartAt(storage), 5000);
+    assert.equal(applyStartParam('?start=1', storage, STUDY_CONFIG, 9000), 'already');
+    assert.equal(getMezzoStageUnlockedAt(storage), 5000);
+  });
+
+  it('?start=1 needs a code; other values do nothing', () => {
+    assert.equal(applyStartParam('?start=1', memoryStorage()), 'no-code');
+    const storage = withCode();
+    assert.equal(applyStartParam('?start=0', storage), 'none');
+    assert.equal(applyStartParam('', storage), 'none');
+    assert.equal(getMezzoStageUnlockedAt(storage), null);
+  });
+
+  it('the With Mezzo stage begins at the earlier of the unlock and the first session', () => {
+    const storage = withCode();
+    saveLastSession(session({ startedAt: 8000 }), storage);
+    assert.equal(getMezzoStageStartAt(storage), 8000);
+    applyStartParam('?start=1', storage, STUDY_CONFIG, 3000);
+    assert.equal(getMezzoStageStartAt(storage), 3000);
+    const later = withCode();
+    applyStartParam('?start=1', later, STUDY_CONFIG, 9000);
+    saveLastSession(session({ startedAt: 12000 }), later);
+    assert.equal(getMezzoStageStartAt(later), 9000);
+  });
+
+  it('?study=clear removes the unlock too', () => {
+    const storage = withCode();
+    applyStartParam('?start=1', storage);
+    clearStudy(storage);
+    assert.equal(getMezzoStageUnlockedAt(storage), null);
   });
 
   it('the first session with a code saves its date, once; later sessions keep it', () => {
@@ -326,9 +453,9 @@ describe('end of study', () => {
 
   it('after 14 days the check-in card stops, even for a fresh long session', () => {
     const late = session({ startedAt: new Date(2026, 10, 23, 10).getTime(), minutes: 30 });
-    assert.equal(shouldShowCheckInCard({ testerCode: 'R4-01', session: late, now: late.endedAt, firstSessionAt: first }), false);
+    assert.equal(shouldShowCheckInCard({ testerCode: 'R4-01', session: late, now: late.endedAt, mezzoStageStartAt: first }), false);
     const inside = session({ startedAt: new Date(2026, 10, 22, 10).getTime(), minutes: 30 });
-    assert.equal(shouldShowCheckInCard({ testerCode: 'R4-01', session: inside, now: inside.endedAt, firstSessionAt: first }), true);
+    assert.equal(shouldShowCheckInCard({ testerCode: 'R4-01', session: inside, now: inside.endedAt, mezzoStageStartAt: first }), true);
   });
 
   it('the tester code stays saved after the 14 days', () => {

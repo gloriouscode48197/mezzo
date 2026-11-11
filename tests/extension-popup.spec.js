@@ -121,4 +121,35 @@ test.describe('Extension popup (real extension)', () => {
     expect(await page.evaluate(() => window.__mezzoMarker)).toBe('original'); // never reloaded
     await page.close();
   });
+
+  test('/study\'s Open Mezzo goes through the extension (1.0.6): the extension opens Mezzo in its own normal window; the page opens nothing itself', async () => {
+    const [worker] = context.serviceWorkers();
+    // This suite's browser is headless, and its small virtual screen makes
+    // Chrome refuse any 800×720 window beside another (the real launch is
+    // the meeting banner's, unchanged). Record what the extension asks
+    // Chrome for instead; extension-launch.test.js covers the placement.
+    await worker.evaluate(() => {
+      self.__created = [];
+      chrome.windows.create = async (options) => { self.__created.push(options); return { id: -1, ...options }; };
+    });
+    const study = await context.newPage();
+    await study.goto(`${LOCAL}/study?study=R4-01&start=1`);
+    await expect(study.locator('body')).toHaveAttribute('data-study-stage', 'mezzo');
+    const pagesBefore = context.pages().length;
+
+    await study.getByRole('link', { name: 'Open Mezzo', exact: true }).click();
+    await expect.poll(() => worker.evaluate(() => self.__created.length), { timeout: 5000 }).toBe(1);
+    const [created] = await worker.evaluate(() => self.__created);
+    expect(created.url).toBe(`${LOCAL}/index.html`);
+    expect(created.type).toBe('normal');
+    expect(created.width).toBeLessThanOrEqual(800);
+    expect(created.height).toBeLessThanOrEqual(720);
+    expect(created.focused).toBe(true);
+
+    // The page didn't open a window of its own (its fallback), and stayed.
+    await study.waitForTimeout(800);
+    expect(context.pages().length).toBe(pagesBefore);
+    expect(new URL(study.url()).pathname).toMatch(/^\/study\/?$/);
+    await study.close();
+  });
 });

@@ -45,8 +45,12 @@ const BADGE_TEXT_COLOR = '#F3EBDE';
  * clicked page's available screen area, used to keep the window on screen.
  */
 async function openMezzo({ senderTabId = null, screen = null } = {}) {
-  const url = `${await getBaseUrl()}/index.html`;
-  await MezzoWindowManager.openOrFocus({ url, focused: true, senderTabId, screen });
+  try {
+    const url = `${await getBaseUrl()}/index.html`;
+    await MezzoWindowManager.openOrFocus({ url, focused: true, senderTabId, screen });
+  } catch (err) {
+    console.error('[Mezzo] Could not open Mezzo:', err?.message ?? err);
+  }
 }
 
 function setBadge(tabId, active) {
@@ -70,7 +74,8 @@ chrome.runtime.onMessage.addListener((message, sender) => {
     // in the meantime.
     openMezzo({ screen: message.screen ?? null });
   } else if (message?.type === 'OPEN_MEZZO') {
-    // The meeting banner's and the popup's "Open Mezzo" button.
+    // "Open Mezzo" from the meeting banner, the popup, or /study (relayed by
+    // the page bridge, content-scripts/mezzo-page-bridge.js).
     openMezzo({
       senderTabId: sender?.tab?.id ?? null,
       screen: message.screen ?? null,

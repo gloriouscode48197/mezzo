@@ -2,7 +2,7 @@
  * Round 4 study mode: every setting in one place (src/study.js uses it).
  *
  * Not frozen on purpose: tests/study-checkin.spec.js shortens
- * minSessionMs in the page so a browser test doesn't need a real
+ * minSessionMs and minSpeechMs in the page so a browser test doesn't need a real
  * 5-minute session. Nothing in the app writes to it.
  */
 export const STUDY_CONFIG = {
@@ -19,6 +19,9 @@ export const STUDY_CONFIG = {
   checkInWindowMs: 2 * 60 * 60 * 1000,
   /** Shorter sessions don't get a check-in card. */
   minSessionMs: 5 * 60 * 1000,
+  /** Nor do sessions with less speech than this: the time the circle's
+   *  noise gate counted as voice (study.js's createGlowCounter()). */
+  minSpeechMs: 60 * 1000,
   /** Days after the first session (counted from its local date) when the
    *  wrap-up opens and the Companion stops showing the check-in card. */
   studyDays: 14,
@@ -26,6 +29,10 @@ export const STUDY_CONFIG = {
   /** ?study=CODE saves a tester code; ?study=clear removes it. */
   urlParam: 'study',
   clearValue: 'clear',
+  /** /study?start=1 (with a tester code) moves the tester to the With Mezzo
+   *  stage right away, before their first monitoring session. */
+  startParam: 'start',
+  startValue: '1',
 
   storageKeys: {
     testerCode: 'mezzoStudyTesterCode',
@@ -33,6 +40,8 @@ export const STUDY_CONFIG = {
     /** When the first monitoring session with a tester code started (ms).
      *  Switches /study from the baseline stage to the Mezzo stage. */
     firstSession: 'mezzoStudyFirstSession',
+    /** When ?start=1 moved the tester to the With Mezzo stage (ms). */
+    mezzoStage: 'mezzoStudyMezzoStage',
     /** The existing anonymous analytics ID (src/analytics.js's ANON_ID_KEY). */
     browserId: 'mezzo_anonymous_id',
   },
@@ -44,6 +53,7 @@ export const STUDY_CONFIG = {
     source: 'mezzo_source',
     sessionDate: 'mezzo_session_date',
     sessionMinutes: 'mezzo_session_minutes',
+    speechMinutes: 'mezzo_speech_minutes',
     glows: 'mezzo_glows',
     minutesAfter: 'mezzo_minutes_after',
   },
@@ -52,5 +62,6 @@ export const STUDY_CONFIG = {
   sources: {
     companion: 'companion',
     studyPage: 'study_page',
+    companionClosed: 'companion_closed',
   },
 };

@@ -33,12 +33,12 @@
     }
     .study-main p { margin: 0 0 var(--space-3); }
     .study-code { font-family: var(--font-mono); }
-    .study-step {
+    .study-phase {
       margin-top: var(--space-6);
       padding-top: var(--space-5);
       border-top: 1px solid color-mix(in srgb, var(--color-text) 14%, transparent);
     }
-    .study-step h2 {
+    .study-phase h2 {
       margin: 0 0 var(--space-2);
       font-family: var(--font-display);
       font-weight: var(--weight-medium);
@@ -46,8 +46,17 @@
       line-height: 1.3;
       color: var(--color-text);
     }
-    .study-step .btn-primary,
-    .study-step .btn-outline { margin-top: var(--space-2); text-decoration: none; }
+    .study-item { margin-top: var(--space-5); }
+    .study-item h3 {
+      margin: 0 0 var(--space-2);
+      font-family: var(--font-display);
+      font-weight: var(--weight-medium);
+      font-size: 16px;
+      line-height: 1.4;
+      color: var(--color-text);
+    }
+    .study-phase .btn-primary,
+    .study-phase .btn-outline { margin-top: var(--space-2); text-decoration: none; }
     .study-main .study-privacy { margin-top: var(--space-6); }
     .study-main .study-note { margin-top: var(--space-4); }
     [hidden] { display: none !important; }
@@ -80,28 +89,35 @@
       <h1 class="study-title">Thanks for joining the Mezzo study</h1>
       <p class="type-body">Your study code: <span class="study-code" id="study-code"></span></p>
 
-      <!-- Baseline stage: a code, but no monitoring session yet. -->
-      <div class="study-step" id="study-baseline" hidden>
-        <h2>After a call</h2>
-        <p class="type-body">A 1-minute check-in about a call you just had.</p>
-        <a class="btn-primary" id="study-baseline-check-in" target="_blank" rel="noopener noreferrer">Check in after a call (before Mezzo)</a>
+      <!-- Baseline stage: a code, before the With Mezzo stage. -->
+      <section class="study-phase" id="study-baseline" hidden aria-labelledby="study-baseline-heading">
+        <h2 id="study-baseline-heading">Your usual calls</h2>
+        <p class="type-body">After your next 2 calls where you speak, with headphones and people nearby, fill out a 1-minute check-in.</p>
+        <a class="btn-primary" id="study-baseline-check-in" target="_blank" rel="noopener noreferrer">Check in after a call</a>
         <p class="type-body study-note">Please don’t try Mezzo yet. I’ll send it once your 2 check-ins are in.</p>
-      </div>
+      </section>
 
-      <!-- Mezzo stage: after the first monitoring session. -->
+      <!-- With Mezzo stage: after ?start=1 or the first monitoring session. -->
       <div id="study-mezzo" hidden>
-        <div class="study-step">
-          <h2>After a call</h2>
-          <p class="type-body">A 1-minute check-in. If you monitored in the last 2 hours, it includes that session’s length and glow count.</p>
-          <a class="btn-primary" id="study-check-in" target="_blank" rel="noopener noreferrer">Check in after a call</a>
-        </div>
+        <section class="study-phase" aria-labelledby="study-mezzo-heading">
+          <h2 id="study-mezzo-heading">With Mezzo</h2>
+          <div class="study-item">
+            <h3>Use Mezzo on your calls</h3>
+            <p class="type-body">When you take a call where you’ll speak, with headphones and people nearby, open Mezzo and start monitoring. If you’ve installed the extension, Mezzo also offers to start when a Google Meet call begins.</p>
+            <a class="btn-primary" id="study-open-mezzo" href="/index.html">Open Mezzo</a>
+          </div>
+          <div class="study-item">
+            <h3>Check in after your call</h3>
+            <p class="type-body">When you stop monitoring, Mezzo asks how your call went. It takes about a minute. Missed it? Check in here.</p>
+            <a class="btn-outline" id="study-check-in" target="_blank" rel="noopener noreferrer">Check in after a call</a>
+          </div>
+        </section>
 
-        <div class="study-step">
-          <h2>At the end of the study</h2>
-          <p class="type-body">A few questions about the whole study. Fill it in once.</p>
+        <section class="study-phase" aria-labelledby="study-wrap-up-heading">
+          <h2 id="study-wrap-up-heading">Wrap-up</h2>
+          <p class="type-body" id="study-wrap-up-text">A few questions about your whole time with Mezzo.</p>
           <a class="btn-outline" id="study-wrap-up" target="_blank" rel="noopener noreferrer" hidden>Wrap up the study</a>
-          <p class="type-body" id="study-wrap-up-later" hidden></p>
-        </div>
+        </section>
       </div>
 
       <p class="type-body study-privacy"><a href="/privacy.html#research-participants">How study data is handled</a></p>
@@ -121,7 +137,7 @@
       getTesterCode,
       getBrowserId,
       getLastSession,
-      getFirstSessionAt,
+      getMezzoStageStartAt,
       studyStage,
       isWithinCheckInWindow,
       isWrapUpOpen,
@@ -133,11 +149,13 @@
       buildWrapUpUrl,
     } from '/src/study.js';
     import { STUDY_CONFIG } from '/src/study-config.js';
+    import { openMezzoWindow } from '/src/study-open-mezzo.js';
 
-    applyStudyFromLocation();
+    // ?study=CODE saves the code; ?start=1 (with a code) unlocks With Mezzo.
+    applyStudyFromLocation(window, undefined, undefined, { start: true });
     const testerCode = getTesterCode();
-    const firstSessionAt = getFirstSessionAt();
-    const stage = studyStage({ testerCode, firstSessionAt });
+    const mezzoStageStartAt = getMezzoStageStartAt();
+    const stage = studyStage({ testerCode, mezzoStageStartAt });
     const $ = (id) => document.getElementById(id);
 
     // The stage, for tests and for checking by hand.
@@ -152,8 +170,7 @@
     }
 
     if (stage === 'baseline') {
-      // Baseline: one check-in form, tester code only. The button waits for
-      // the baseline form's ID in src/study-config.js.
+      // Baseline: one check-in form, tester code only. No way into Mezzo.
       $('study-baseline').hidden = false;
       const href = buildBaselineUrl({ testerCode });
       const button = $('study-baseline-check-in');
@@ -165,10 +182,20 @@
       $('study-mezzo').hidden = false;
       $('study-nav-home').hidden = false;
 
+      // Open Mezzo: through the extension when it's installed (its own
+      // window, or the open Mezzo brought forward), otherwise a window of
+      // this page's own (src/study-open-mezzo.js).
+      $('study-open-mezzo').addEventListener('click', (event) => {
+        event.preventDefault();
+        openMezzoWindow();
+      });
+
       const checkIn = $('study-check-in');
-      // The last session's data rides along only if it ended within the
-      // 2-hour window; otherwise just the tester code and browser ID.
-      function recentSession(now) {
+      // The last session's data rides along whenever it ended within the
+      // 2-hour window, whatever its length or speaking time (the 5-minute
+      // and 1-minute-of-speech rules are only for the Companion's cards);
+      // otherwise just the tester code and browser ID.
+      function cardSession(now) {
         const session = getLastSession();
         return isWithinCheckInWindow(session, now) ? session : null;
       }
@@ -177,7 +204,7 @@
           testerCode,
           browserId: getBrowserId(),
           source: STUDY_CONFIG.sources.studyPage,
-          session: recentSession(now),
+          session: cardSession(now),
           now,
         });
       }
@@ -185,22 +212,21 @@
       checkIn.addEventListener('click', () => {
         // Fresh at the moment of the click (minutes since the session ended).
         const now = Date.now();
-        const session = recentSession(now);
+        const session = cardSession(now);
         checkIn.href = checkInUrl(now);
         // Checking in here counts for that session: the Companion won't
         // offer it again.
         if (session) markCheckInHandled(session.id, 'opened');
       });
 
-      // The wrap-up opens 14 days after the first session.
-      if (isWrapUpOpen(firstSessionAt, Date.now())) {
+      // The wrap-up opens 14 days after the With Mezzo stage began.
+      const wrapUpText = $('study-wrap-up-text');
+      if (isWrapUpOpen(mezzoStageStartAt, Date.now())) {
         const wrapUp = $('study-wrap-up');
         wrapUp.href = buildWrapUpUrl({ testerCode });
         wrapUp.hidden = false;
       } else {
-        const later = $('study-wrap-up-later');
-        later.textContent = `The wrap-up opens on ${formatLongDate(wrapUpOpensAt(firstSessionAt))}.`;
-        later.hidden = false;
+        wrapUpText.textContent = `A few questions about your whole time with Mezzo. Opens on ${formatLongDate(wrapUpOpensAt(mezzoStageStartAt))}.`;
       }
     }
   </script>

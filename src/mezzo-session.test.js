@@ -334,6 +334,7 @@ describe('createMezzoSession construction', () => {
       'SESSION_STATES', 'getSessionState', 'subscribe', 'isPipSupported',
       'init', 'requestMicrophoneAccess', 'startMonitoring', 'stopMonitoring', 'endSession',
       'hasReopenOffer', 'reopenCompanion', 'dismissReopenOffer', // Reopen Companion (2026-10-23)
+      'endInterruptedSession', // the "Companion closed" page's check-in (2026-11-10)
     ];
     assert.deepStrictEqual(Object.keys(session).sort(), expectedKeys.sort());
   });

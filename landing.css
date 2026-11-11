@@ -456,6 +456,55 @@ body {
 .running-reopen-btn:hover { background: color-mix(in srgb, var(--color-text) 88%, var(--color-bg)); }
 .running-reopen .running-done { margin-top: 0; }
 
+/* Round 4 study check-in on the closed variant (2026-11-10): a card a
+   little darker than the cream page, below the buttons. Open check-in is
+   filled with a translucent charcoal, lighter than Reopen Companion's
+   solid charcoal; Skip is the page's text link. No chartreuse. */
+.running-checkin[hidden] { display: none; }
+.running-checkin {
+  max-width: 320px;
+  margin: var(--space-6) auto 0;
+  padding: var(--space-4);
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, var(--color-text) 14%, transparent);
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--color-text) 5%, var(--color-bg));
+}
+.running-checkin-title {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: var(--weight-medium);
+  line-height: 1.4;
+  color: var(--color-text);
+  text-wrap: balance;
+}
+.running-checkin-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  margin-top: var(--space-3);
+}
+.running-checkin-open {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 var(--space-4);
+  box-sizing: border-box;
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--color-text) 14%, transparent);
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: var(--weight-medium);
+  color: var(--color-text);
+  text-decoration: none;
+  cursor: pointer;
+}
+.running-checkin-open:hover { background: color-mix(in srgb, var(--color-text) 22%, transparent); }
+.running-checkin-open:focus-visible { outline: 2px solid var(--color-text); outline-offset: 2px; }
+.running-checkin .running-checkin-skip { margin-top: 0; }
+
 .running-live {
   position: absolute;
   width: 1px;

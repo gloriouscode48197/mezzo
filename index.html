@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="design-tokens/mezzo-tokens.css?v=16">
-  <link rel="stylesheet" href="landing.css?v=23">
+  <link rel="stylesheet" href="landing.css?v=24">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" sizes="16x16" href="icons/icon-16.svg?v=2">
   <link rel="icon" type="image/svg+xml" sizes="32x32" href="icons/icon-32.svg?v=2">
@@ -255,6 +255,16 @@
           <button id="btn-reopen-done" type="button" class="running-close running-done">Done</button>
         </div>
         <button id="btn-close-companion" type="button" class="running-close">Close Companion</button>
+        <!-- Round 4 study check-in, closed variant only, with a tester code
+             and under the Companion card's rules (src/home-dock.js's
+             renderClosedCheckIn()). -->
+        <div class="running-checkin" id="running-checkin" role="group" aria-labelledby="running-checkin-title" hidden>
+          <p class="running-checkin-title" id="running-checkin-title">Call over? How did your call go?</p>
+          <div class="running-checkin-actions">
+            <a class="running-checkin-open" id="running-checkin-open" target="_blank" rel="noopener noreferrer">Open check-in</a>
+            <button type="button" class="running-close running-checkin-skip" id="running-checkin-skip">Skip this one</button>
+          </div>
+        </div>
         <p id="running-live" class="running-live" role="status" aria-live="polite"></p>
       </div>
     </main>

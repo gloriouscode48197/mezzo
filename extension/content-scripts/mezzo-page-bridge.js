@@ -10,6 +10,11 @@
  *
  * This script keeps the latest status to answer the popup at once
  * (MEZZO_GET_STATE), and forwards changes so an open popup can update.
+ *
+ * It also takes one request from the page: /study's "Open Mezzo"
+ * (src/study-open-mezzo.js) asks the extension to open Mezzo the way the
+ * meeting banner does (OPEN_MEZZO), and this script answers so the page
+ * knows not to open a window of its own. Only the screen area crosses.
  * Nothing else crosses: no profile, no level, no audio.
  */
 (() => {
@@ -19,7 +24,19 @@
   const waiting = [];
 
   window.addEventListener('message', (event) => {
-    if (event.source !== window || event.data?.source !== PAGE || event.data.type !== 'MEZZO_STATE') return;
+    if (event.source !== window || event.data?.source !== PAGE) return;
+    if (event.data.type === 'MEZZO_OPEN_REQUEST') {
+      const s = event.data.screen;
+      const screen = s && [s.left, s.top, s.width, s.height].every(Number.isFinite)
+        ? { left: s.left, top: s.top, width: s.width, height: s.height }
+        : null;
+      try {
+        chrome.runtime.sendMessage({ type: 'OPEN_MEZZO', screen });
+      } catch { return; } // extension reloaded: no answer, so the page opens its own window
+      window.postMessage({ source: EXTENSION, type: 'MEZZO_OPEN_ACK', id: event.data.id }, window.location.origin);
+      return;
+    }
+    if (event.data.type !== 'MEZZO_STATE') return;
     const { companionOpen, monitoring } = event.data.state ?? {};
     latest = { companionOpen: companionOpen === true, monitoring: monitoring === true };
     while (waiting.length) waiting.shift()(latest);
