@@ -562,11 +562,14 @@ describe('microphone acquisition timeout', () => {
     controller.startSessionCalibration();
     scheduler.flush(); // times out
     assert.strictEqual(controller.getState().failure.code, 'MIC_ACQUISITION_TIMEOUT');
-    assert.strictEqual(audio.calls.release, 0, 'nothing to release yet — acquire has not resolved');
+    // The timeout gives up on the request itself (2026-11-10): the real
+    // AudioProcessor then stops a late stream on arrival, and a retry asks
+    // afresh instead of joining the stalled request.
+    assert.strictEqual(audio.calls.release, 1, 'the timeout releases the stalled request');
 
-    audio.resolveAcquire(); // the late-arriving grant
+    audio.resolveAcquire(); // the late-arriving grant (this mock resolves anyway)
     await tick();
-    assert.strictEqual(audio.calls.release, 1, 'the late-arriving stream must be released, not left open');
+    assert.strictEqual(audio.calls.release, 2, 'the late-arriving stream must be released, not left open');
     assert.strictEqual(audio.calls.startMonitoring, 0, 'a timed-out attempt must never start sampling');
     assert.strictEqual(controller.getState().status, 'failed', 'the late resolution must not resurrect or change state');
     assert.strictEqual(controller.getState().failure.code, 'MIC_ACQUISITION_TIMEOUT');

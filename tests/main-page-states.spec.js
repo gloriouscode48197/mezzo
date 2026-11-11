@@ -432,6 +432,98 @@ test.describe('Main page: Reopen Companion (2026-10-23)', () => {
   });
 });
 
+test.describe('Main page: no listening while the Companion is closed (2026-11-10)', () => {
+  const PROFILE = [{ id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 100, peakDb: 2 }];
+
+  // Keeps every stream getUserMedia() returns, and can hold one back
+  // (window.__micDelayMs) to close the Companion while it's on its way.
+  test.beforeEach(async ({ page, context }) => {
+    await context.addInitScript(() => {
+      if (!navigator.mediaDevices) return;
+      window.__streams = [];
+      window.__micDelayMs = 0;
+      const real = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+      navigator.mediaDevices.getUserMedia = async (...args) => {
+        const stream = await real(...args);
+        if (window.__micDelayMs) await new Promise((r) => setTimeout(r, window.__micDelayMs));
+        window.__streams.push(stream);
+        return stream;
+      };
+    });
+    await page.addInitScript((p) => localStorage.setItem('mezzoProfiles', JSON.stringify(p)), PROFILE);
+  });
+  const liveTracks = (page) => page.evaluate(() => window.__streams.flatMap((s) => s.getTracks()).filter((t) => t.readyState === 'live').length);
+  /** Closed now, and still closed a while later (nothing reopens it). */
+  async function expectNoLiveTracks(page) {
+    await expect.poll(() => liveTracks(page), { timeout: 3000 }).toBe(0);
+    await page.waitForTimeout(2000);
+    expect(await liveTracks(page)).toBe(0);
+  }
+  async function reopen(page, context) {
+    const pipPromise = context.waitForEvent('page');
+    await page.locator('#btn-reopen-companion').click();
+    return pipPromise;
+  }
+
+  test('closed while monitoring: no live track until Reopen Companion, which takes the mic again', async ({ page, context }) => {
+    test.setTimeout(30000);
+    let pip = await openCompanion(page, context);
+    await pip.locator('.pip-ready-start-btn').click();
+    await expect(pip.locator('.pip-screen-monitoring')).toBeVisible({ timeout: 5000 });
+    expect(await liveTracks(page)).toBe(1);
+    await pip.close();
+    await expectNoLiveTracks(page);
+    pip = await reopen(page, context);
+    await expect(pip.locator('.pip-screen-monitoring')).toBeVisible({ timeout: 8000 });
+    expect(await liveTracks(page)).toBe(1);
+  });
+
+  test('closed during calibration, with the mic held on Step 2 prep: no live track', async ({ page, context }) => {
+    test.setTimeout(30000);
+    const pip = await openCompanion(page, context);
+    await expect(pip.locator('.pip-screen-ready')).toBeVisible({ timeout: 10000 });
+    await pip.locator('.pip-ready-selector-trigger').click();
+    await pip.locator('text=Create new profile').click();
+    await pip.locator('.pip-screen-prep-room .pip-intro-primary-btn').click();
+    await expect(pip.locator('.pip-screen-prep-voice')).toBeVisible({ timeout: 8000 });
+    expect(await liveTracks(page)).toBe(1);
+    await pip.close();
+    await expectNoLiveTracks(page);
+  });
+
+  test('closed right after Start monitoring, before the mic arrives: the mic is stopped when it does, and Reopen resumes monitoring', async ({ page, context }) => {
+    test.setTimeout(30000);
+    let pip = await openCompanion(page, context);
+    await expect(pip.locator('.pip-screen-ready')).toBeVisible({ timeout: 10000 });
+    await page.evaluate(() => { window.__micDelayMs = 1500; });
+    await pip.locator('.pip-ready-start-btn').click();
+    await page.waitForTimeout(200);
+    await pip.close();
+    await expectNoLiveTracks(page);
+    // The page says the Companion closed (it never started monitoring).
+    await expect(page.locator('#state-dock')).toHaveAttribute('data-variant', 'closed');
+    await expect(page.locator('#btn-reopen-companion')).toBeVisible();
+    await page.evaluate(() => { window.__micDelayMs = 0; });
+    pip = await reopen(page, context);
+    await expect(pip.locator('.pip-screen-monitoring')).toBeVisible({ timeout: 8000 });
+    expect(await liveTracks(page)).toBe(1);
+  });
+
+  test('closed again right after Reopen Companion, before the mic arrives: no live track', async ({ page, context }) => {
+    test.setTimeout(30000);
+    let pip = await openCompanion(page, context);
+    await pip.locator('.pip-ready-start-btn').click();
+    await expect(pip.locator('.pip-screen-monitoring')).toBeVisible({ timeout: 5000 });
+    await pip.close();
+    await expectNoLiveTracks(page);
+    await page.evaluate(() => { window.__micDelayMs = 1500; });
+    pip = await reopen(page, context);
+    await page.waitForTimeout(300);
+    await pip.close();
+    await expectNoLiveTracks(page);
+  });
+});
+
 test.describe('Main page: status for the browser extension (2026-10-25)', () => {
   test('reports { companionOpen, monitoring } as the Companion opens, monitors, stops and closes, from the same state as the status line; and answers when asked', async ({ page, context }) => {
     await page.addInitScript(() => {

@@ -430,6 +430,10 @@ export function createCalibrationController({
       if (myGeneration !== generation) return; // already cancelled/superseded — not this run's timer to touch
       acquireTimeoutHandle = null;
       generation++; // invalidate this attempt — a late-resolving acquire() is caught by the generation checks below, same as an explicit cancel()
+      // Give up on the request itself too: a retry then asks afresh instead
+      // of joining the stalled one (audio.js shares a waiting request), and
+      // if the stalled one ever answers, its stream is stopped on arrival.
+      audio.release();
       setState({
         status: STATUSES.FAILED,
         failure: {

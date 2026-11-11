@@ -692,6 +692,10 @@ export function createMezzoSession({
   let baselineRMS = 0;
   let activeProfile = null;
   let isMonitoringActive = false;
+  // True while Start monitoring (or a Reopen that resumes it) waits for the
+  // microphone: a Companion closed in that window still releases it and
+  // still offers to resume (handlePipClose()).
+  let monitoringStarting = false;
   let isPageUnloading = false;
   // Reopen Companion (2026-10-23). Only endSession() (Home's Close Companion
   // link) closes the Companion on purpose from this page's side; the
@@ -1065,10 +1069,21 @@ export function createMezzoSession({
     if (pipZoneLiveEl) pipZoneLiveEl.textContent = '';
     if (monitoringScreenEl) monitoringScreenEl.dataset.zone = '0';
 
+    monitoringStarting = true;
     try {
       await audio.acquire();
     } catch (err) {
-      console.error('[Session] Mic acquisition failed:', err.message);
+      // AbortError: the Companion closed while the mic was on its way, and
+      // handlePipClose() already released it.
+      if (err?.name === 'AbortError') console.log('[Session] Monitoring not started: the Companion closed first');
+      else console.error('[Session] Mic acquisition failed:', err.message);
+      return false;
+    } finally {
+      monitoringStarting = false;
+    }
+    // Defensive: never monitor without a Companion.
+    if (!pipWindow) {
+      audio.release();
       return false;
     }
 
@@ -6649,6 +6664,7 @@ function ringLayout() {
 
   function handlePipClose() {
     const wasActive = isMonitoringActive; // capture before teardownMonitoringEngine clears it
+    const wasStarting = monitoringStarting; // Start monitoring pressed, mic not here yet
     const wasTemporary = isTemporaryProfile(activeProfile);
     const onPurpose = closingOnPurpose;
     closingOnPurpose = false;
@@ -6656,7 +6672,7 @@ function ringLayout() {
       reopenOffer = {
         profile: activeProfile,
         unsaved: unsavedProfile,
-        resumeMonitoring: wasActive,
+        resumeMonitoring: wasActive || wasStarting,
         // The call this close interrupted, so a resumed session continues it.
         studySession: wasActive && glowCounter.running ? { startedAt: glowCounter.startedAt, glows: glowCounter.glows } : null,
       };
@@ -6805,6 +6821,14 @@ function ringLayout() {
     if (wasActive) {
       teardownMonitoringEngine();
       activeCircle = null;
+    } else if (wasStarting) {
+      // Mezzo never listens while the Companion is closed. Start monitoring
+      // (or Reopen resuming it) is still waiting for the mic: release()
+      // makes that request stop its stream when it arrives (audio.js's
+      // _acquire()). Only then: Close Companion has already sent the page
+      // Home, whose own permission check may be acquiring right now, and
+      // calibration releases its own mic in calibrationController.close().
+      audio.release();
     }
 
     sessionState.set(SESSION_STATES.COMPANION_CLOSED);

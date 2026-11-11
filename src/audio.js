@@ -70,6 +70,13 @@ class AudioProcessor {
     this.isInitialized = false;  // True only while mic is actively acquired
     this.isMonitoring = false;   // True while actively sampling
 
+    // A request still waiting on getUserMedia(), shared by every caller
+    // that arrives meanwhile, and a count release() bumps: a request that
+    // was waiting when release() ran stops its stream the moment it
+    // arrives instead of keeping it (see acquire()).
+    this.pendingAcquire = null;
+    this.releaseCount = 0;
+
     // Sampling interval
     this.monitoringInterval = null;
 
@@ -103,18 +110,51 @@ class AudioProcessor {
       console.log('[Audio] Microphone already acquired');
       return;
     }
+    // A request already waiting: share it. A second getUserMedia() would
+    // replace the first stream here, and the first could never be stopped.
+    if (this.pendingAcquire) return this.pendingAcquire;
 
+    const pending = this._acquire(this.releaseCount);
+    this.pendingAcquire = pending;
+    try {
+      await pending;
+    } finally {
+      if (this.pendingAcquire === pending) this.pendingAcquire = null;
+    }
+  }
+
+  /** acquire()'s work. `releaseCountAtStart` is releaseCount when the
+   *  request began: if release() ran while getUserMedia() was waiting, the
+   *  stream it returns belongs to nobody, so it's stopped right away and the
+   *  request fails with an AbortError. */
+  async _acquire(releaseCountAtStart) {
     console.log('[Audio] Acquiring microphone...');
 
+    let stream;
     try {
       // Request microphone - this shows browser permission prompt if needed
-      this.mediaStream = await navigator.mediaDevices.getUserMedia({
+      stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: false,
           noiseSuppression: !!this.settings.noiseSuppression,
           autoGainControl: false,
         },
       });
+    } catch (error) {
+      console.error('[Audio] Failed to acquire microphone:', error.message);
+      throw error;
+    }
+
+    if (this.releaseCount !== releaseCountAtStart) {
+      stream.getTracks().forEach((track) => track.stop());
+      console.log('[Audio] Microphone arrived after release() - stopped it');
+      const aborted = new Error('Microphone released while it was being acquired');
+      aborted.name = 'AbortError';
+      throw aborted;
+    }
+
+    try {
+      this.mediaStream = stream;
 
       // Create AudioContext
       this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -136,7 +176,7 @@ class AudioProcessor {
       console.log('[Audio] Microphone acquired - browser indicator should be ON');
 
     } catch (error) {
-      console.error('[Audio] Failed to acquire microphone:', error.message);
+      console.error('[Audio] Failed to set up the microphone:', error.message);
       // Ensure clean state on failure
       this.release();
       throw error;
@@ -179,6 +219,11 @@ class AudioProcessor {
    */
   release() {
     console.log('[Audio] Releasing microphone...');
+
+    // A request still waiting on getUserMedia() stops its stream when it
+    // arrives (see _acquire()), and the next acquire() starts fresh.
+    this.releaseCount += 1;
+    this.pendingAcquire = null;
 
     // Stop monitoring interval if running
     if (this.monitoringInterval) {
