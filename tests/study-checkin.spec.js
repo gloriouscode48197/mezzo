@@ -617,7 +617,7 @@ test.describe('Study mode: the /study page', () => {
   });
 
   for (const colorScheme of ['light', 'dark']) {
-    test(`its own look (${colorScheme} system theme): cream page, charcoal text and buttons, "Mezzo study" in the header, no chartreuse anywhere`, async ({ page }) => {
+    test(`its own look (${colorScheme} system theme): white page, a slate-blue header band with "Mezzo study" in white, slate-blue buttons; no Mezzo charcoal, cream or chartreuse`, async ({ page }) => {
       await page.emulateMedia({ colorScheme });
       await seed(page, { code: 'R4-01', firstSessionAgo: 15 * DAY });
       await page.goto('/study');
@@ -628,35 +628,61 @@ test.describe('Study mode: the /study page', () => {
         const rgba = (c) => { ctx.clearRect(0, 0, 1, 1); ctx.fillStyle = c; ctx.fillRect(0, 0, 1, 1); return [...ctx.getImageData(0, 0, 1, 1).data]; };
         const cs = (sel) => getComputedStyle(document.querySelector(sel));
         const visible = [...document.querySelectorAll('body, body *')].filter((el) => el.getClientRects().length);
+        const nav = document.querySelector('nav').getBoundingClientRect();
         return {
           bg: rgba(cs('body').backgroundColor),
           text: rgba(cs('.study-title').color),
+          // Every visible run of text on the page body (not the band).
+          bodyText: visible.filter((el) => !el.closest('nav') && [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()))
+            .map((el) => ({ text: el.textContent.trim().slice(0, 40), color: rgba(getComputedStyle(el).color), button: !!el.closest('.btn-primary') })),
+          band: rgba(cs('nav').backgroundColor),
+          bandWidth: nav.width,
+          label: rgba(cs('.study-nav-label').color),
+          navLink: rgba(cs('#study-nav-home').color),
           openBg: rgba(cs('#study-open-mezzo').backgroundColor),
           openText: rgba(cs('#study-open-mezzo').color),
           outlineBorder: rgba(cs('#study-check-in').borderTopColor),
           outlineText: rgba(cs('#study-check-in').color),
-          wrapUpText: rgba(cs('#study-wrap-up').color),
+          backgrounds: visible.map((el) => rgba(getComputedStyle(el).backgroundColor)),
           colors: visible.flatMap((el) => {
             const st = getComputedStyle(el);
             return [st.color, st.backgroundColor, st.borderTopColor, st.borderBottomColor, st.outlineColor].map(rgba);
           }),
         };
       });
-      const CREAM = [243, 235, 222];
-      const CHARCOAL = [45, 46, 49];
+      const WHITE = [255, 255, 255];
+      const SLATE = [68, 96, 122];
       const near = (c, target, tol = 3) => c.slice(0, 3).every((v, i) => Math.abs(v - target[i]) <= tol);
-      expect(near(look.bg, CREAM)).toBe(true);
-      expect(near(look.text, CHARCOAL)).toBe(true);
-      // Primary: charcoal with cream text. Secondary: charcoal text, a
-      // visible charcoal border (not the dark theme's cream hairline).
-      expect(near(look.openBg, CHARCOAL)).toBe(true);
+      const lum = ([r, g, b]) => {
+        const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+        return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+      };
+      const contrast = (a, b) => (Math.max(lum(a), lum(b)) + 0.05) / (Math.min(lum(a), lum(b)) + 0.05);
+
+      expect(near(look.bg, WHITE)).toBe(true);
+      expect(contrast(look.text, look.bg)).toBeGreaterThan(7);
+      // All body text reads on white (buttons are checked against their fill).
+      for (const t of look.bodyText.filter((x) => !x.button)) {
+        expect(contrast(t.color, look.bg), t.text).toBeGreaterThan(4.5);
+      }
+      // The full-width band, with white text on it.
+      expect(near(look.band, SLATE)).toBe(true);
+      expect(look.bandWidth).toBe(page.viewportSize().width);
+      expect(near(look.label, WHITE)).toBe(true);
+      expect(contrast(look.label, look.band)).toBeGreaterThan(4.5);
+      expect(contrast(look.navLink, look.band)).toBeGreaterThan(4.5);
+      // Primary: the band color with white text. Secondary: slate outline and text.
+      expect(near(look.openBg, SLATE)).toBe(true);
       expect(look.openBg[3]).toBe(255);
-      expect(near(look.openText, CREAM)).toBe(true);
-      expect(near(look.outlineText, CHARCOAL)).toBe(true);
-      expect(near(look.wrapUpText, CHARCOAL)).toBe(true);
-      expect(near(look.outlineBorder, CHARCOAL)).toBe(true);
-      expect(look.outlineBorder[3]).toBeGreaterThan(40);
-      // No chartreuse (#DEDE65) on anything visible.
+      expect(near(look.openText, WHITE)).toBe(true);
+      expect(near(look.outlineText, SLATE)).toBe(true);
+      expect(near(look.outlineBorder, SLATE)).toBe(true);
+      // None of Mezzo's surfaces: no charcoal (#2D2E31) or cream (#F3EBDE)
+      // background, and no chartreuse (#DEDE65) on anything.
+      for (const c of look.backgrounds) {
+        expect(c[3] > 0 && near(c, [45, 46, 49], 6)).toBe(false);
+        expect(c[3] > 0 && near(c, [243, 235, 222], 6)).toBe(false);
+      }
       for (const c of look.colors) expect(c[3] > 0 && near(c, [222, 222, 101], 8)).toBe(false);
 
       // "Mezzo study" labels the header; the app's wordmark isn't there.

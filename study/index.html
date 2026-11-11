@@ -17,34 +17,55 @@
   <link rel="stylesheet" href="/design-tokens/mezzo-tokens.css?v=16">
   <link rel="icon" type="image/svg+xml" sizes="64x64" href="/icons/icon-64.svg?v=2">
   <style>
-    /* The study page's own look (2026-11-11): the cream surface the
-       "Companion closed" page uses (data-surface="cream" in the tokens),
-       charcoal buttons, and no chartreuse anywhere. The tokens' button and
-       hairline colors are computed at :root from the dark theme, so they're
-       set again here for cream. */
+    /* The study page's own look (2026-11-11): none of Mezzo's surfaces (the
+       dark charcoal site, the cream Companion pages) and no chartreuse. A
+       white page, a full-width slate-blue header band, slate-blue buttons
+       with white text. Always light, in light and dark system themes alike
+       (color-scheme: light; nothing here follows prefers-color-scheme).
+       White on the slate is 6.6:1, the text on white 15:1 and 7:1. */
     body.study-page {
-      --color-accent: #2D2E31;                   /* nothing on this page is chartreuse */
-      --color-btn-primary-bg: #2D2E31;
-      --color-btn-primary-text: #F3EBDE;
-      --color-btn-secondary-border: color-mix(in srgb, #2D2E31 35%, transparent);
-      --border: color-mix(in srgb, #2D2E31 14%, transparent);
+      --study-band: #44607A;
+      --study-band-hover: #36506A;
+      --color-bg: #FFFFFF;
+      --color-text: #1F2933;
+      --color-text-muted: #52606D;
+      --color-link: var(--study-band);           /* also the focus ring */
+      --color-accent: var(--study-band);         /* nothing on this page is chartreuse */
+      --color-nav-active: #FFFFFF;
+      --color-btn-primary-bg: var(--study-band);
+      --color-btn-primary-text: #FFFFFF;
+      --color-btn-secondary-border: var(--study-band);
+      --border: #E1E5EA;
+      /* The tokens derive these from the dark theme at :root; set them
+         for white here, or body text inherits the dark theme's beige. */
+      --surface: #FFFFFF;
+      --text-primary: var(--color-text);
+      --text-default: var(--color-text);
+      --text-body: var(--color-text-muted);
+      --text-quiet: var(--color-text-muted);
+      --text-subdued: var(--color-text-muted);
+      --text-ghost: color-mix(in srgb, var(--color-text-muted) 55%, transparent);
+      --border-outline: var(--color-btn-secondary-border);
       color-scheme: light;
     }
-    .study-page .btn-primary:hover { background: color-mix(in srgb, #2D2E31 86%, #F3EBDE); }
-    .study-page ::selection { background: #2D2E31; color: #F3EBDE; }
-    /* "Mezzo study" in the header, in place of the app's wordmark. */
+    .study-page .btn-primary:hover { background: var(--study-band-hover); }
+    .study-page .btn-outline { color: var(--study-band); }
+    .study-page .btn-outline:hover { background: color-mix(in srgb, var(--study-band) 8%, #FFFFFF); border-color: var(--study-band-hover); }
+    .study-page ::selection { background: var(--study-band); color: #FFFFFF; }
+    /* The header: a full-width band, "Mezzo study" in white. */
+    .study-page .nav {
+      background: var(--study-band);
+      border-bottom: none;
+    }
+    .study-page .nav-link-quiet { color: color-mix(in srgb, #FFFFFF 85%, var(--study-band)); }
+    .study-page .nav-link-quiet:hover { color: #FFFFFF; }
+    .study-page .nav a:focus-visible { outline: 2px solid #FFFFFF; outline-offset: 3px; }
     .study-nav-label {
-      display: inline-flex;
-      align-items: center;
-      padding: 5px 10px;
-      border: 1px solid #2D2E31;
-      border-radius: var(--radius-control);
-      font-family: var(--font-mono);
-      font-size: 12px;
+      font-family: var(--font-display);
+      font-size: 17px;
       font-weight: var(--weight-medium);
-      letter-spacing: var(--tracking-label);
-      text-transform: uppercase;
-      color: var(--color-text);
+      letter-spacing: var(--tracking-heading);
+      color: #FFFFFF;
     }
     body { margin: 0; min-height: 100vh; background: var(--color-bg); }
     .study-main {
@@ -107,7 +128,7 @@
     }
   </style>
 </head>
-<body data-surface="cream" class="study-page">
+<body data-surface="study" class="study-page">
 
   <!-- No links into the app during the baseline stage: the label isn't a
        link, and Home shows only outside that stage. -->
