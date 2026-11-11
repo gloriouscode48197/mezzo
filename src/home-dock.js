@@ -444,7 +444,10 @@ export function initHomeDock({
       body: 'Keep this page open while using Mezzo. Closing it will also close the Mezzo Companion.',
     },
     closed: {
-      label: 'Companion closed',
+      // The same status line as the open variant's "not active" state
+      // (2026-11-11), so the line above the heading always says whether
+      // monitoring is running.
+      label: 'Monitoring is not active',
       heading: 'The Companion closed',
       body: "If you didn't close it, another mini window like Meet's may have. Reopen it to pick up where you left off.",
     },

@@ -375,7 +375,7 @@ test.describe('Main page: Reopen Companion (2026-10-23)', () => {
     const running = page.locator('#state-dock');
     await expect(running).toBeVisible();
     await expect(page.locator('body')).toHaveAttribute('data-surface', 'cream');
-    await expect(running.locator('.running-label')).toHaveText('Companion closed');
+    await expect(running.locator('.running-label')).toHaveText('Monitoring is not active');
     await expect(running.locator('h1')).toHaveText('The Companion closed');
     // The page can't tell the user's own ✕ from another mini window, so the
     // body covers both.
