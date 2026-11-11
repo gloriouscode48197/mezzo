@@ -577,7 +577,7 @@ test.describe('Companion: toast styling completeness (2026-08-20)', () => {
     expect(await pipPage.locator('.pip-toast').evaluate((el) => el.tabIndex)).toBe(-1);
   });
 
-  test('the toast never covers the profile name or a control: 12px from the top on Ready, 8px below the profile name in Monitoring', async ({ page, context }) => {
+  test('the toast never covers the profile name or a control: 12px from the top on Ready, below the name (where shown) and clear of the controls in Monitoring', async ({ page, context }) => {
     const pipPage = await openCompanion(page, context);
     await pipPage.setViewportSize({ width: 380, height: 364 });
     await pipPage.locator('button:has-text("Create speaking profile")').click();
@@ -600,9 +600,13 @@ test.describe('Companion: toast styling completeness (2026-08-20)', () => {
     await expect(toast).toHaveClass(/pip-toast-visible/);
     await pipPage.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
     card = (await boxes('.pip-toast-card'))[0];
+    // Compact shows no profile name (2026-11-11); where a name shows, the
+    // toast sits 8px below it. Either way it never covers a control.
     const [name] = await boxes('.pip-profile-info');
-    expect(Math.round(card.top - name.bottom)).toBeGreaterThanOrEqual(8);
-    expect(overlaps(card, name)).toBe(false);
+    if (name) {
+      expect(Math.round(card.top - name.bottom)).toBeGreaterThanOrEqual(8);
+      expect(overlaps(card, name)).toBe(false);
+    }
     for (const control of await boxes('.pip-screen-monitoring button')) expect(overlaps(card, control)).toBe(false);
   });
 
