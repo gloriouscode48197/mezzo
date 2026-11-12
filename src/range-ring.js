@@ -261,6 +261,37 @@ export function bandExtent(edgePx, b = DEFAULT_RING_SETTINGS.band) {
   return edgePx * (1 + 2 * b.maxFraction);
 }
 
+/**
+ * The largest circle that fits inside a width×height window and keeps clear
+ * of every obstacle rectangle (the Compact toolbar, padded by the caller),
+ * found on a 1px grid of centers. Among equally large circles, the one
+ * nearest the window's center wins, so the ring sits as centrally as it can.
+ *
+ * @param {number} width
+ * @param {number} height
+ * @param {{ left: number, top: number, right: number, bottom: number }[]} [obstacles]
+ * @returns {{ cx: number, cy: number, radius: number }}
+ */
+export function largestClearCircle(width, height, obstacles = []) {
+  const toRect = (r, x, y) => Math.hypot(Math.max(r.left - x, 0, x - r.right), Math.max(r.top - y, 0, y - r.bottom));
+  const mx = width / 2;
+  const my = height / 2;
+  let best = { cx: mx, cy: my, radius: 0 };
+  let bestOff = Infinity;
+  for (let x = 0; x <= width; x += 1) {
+    for (let y = 0; y <= height; y += 1) {
+      let r = Math.min(x, y, width - x, height - y);
+      for (const o of obstacles) r = Math.min(r, toRect(o, x, y));
+      const off = Math.hypot(x - mx, y - my);
+      if (r > best.radius + 1e-9 || (Math.abs(r - best.radius) <= 1e-9 && off < bestOff)) {
+        best = { cx: x, cy: y, radius: r };
+        bestOff = off;
+      }
+    }
+  }
+  return best;
+}
+
 /** The edge whose solid extent (see bandExtent()) is exactly extentPx. */
 export function edgeForBandExtent(extentPx, b = DEFAULT_RING_SETTINGS.band) {
   return Math.max(0, extentPx) / (1 + 2 * b.maxFraction);

@@ -30,7 +30,7 @@
 import { test, expect } from '@playwright/test';
 import { openCompanion } from './support/open-companion.js';
 import { installLevelDriver, setLevelDb, rangeBoundsDb } from './support/drive-level.js';
-import { edgeForBandExtent, edgeForExtent, scaledBand, DEFAULT_RING_SETTINGS } from '../src/range-ring.js';
+import { edgeForBandExtent, edgeForExtent, largestClearCircle, scaledBand, DEFAULT_RING_SETTINGS } from '../src/range-ring.js';
 
 const SAVED_PROFILE = [{ id: 'p-kitchen', name: 'Kitchen', speakingDb: -30, spreadDb: 4, calibratedTs: 100 }];
 const LONG_NAME = 'The Kitchen And Dining Room Combined Open-Plan Space';
@@ -46,14 +46,13 @@ const BAND_CAP = { mini: 0.18, compact: 0.1, expanded: 0.18 };
 const bandFor = (sizeBand) => scaledBand(DEFAULT_RING_SETTINGS.band, BAND_CAP[sizeBand] / DEFAULT_RING_SETTINGS.band.maxFraction);
 /** Distance from a point to the nearest point of a rect (0 inside). */
 const distanceToRect = (x, y, r) => Math.hypot(Math.max(r.left - x, 0, x - r.right), Math.max(r.top - y, 0, y - r.bottom));
-/** Compact and Mini (2026-11-11): the space the ring may use, beside the
- *  toolbar (right side, wider than tall) or above it (bottom row), 4px clear
- *  of its panel, and that space's center. */
+/** Compact and Mini (2026-11-12): the largest circle in the window that
+ *  keeps 4px clear of the bottom-right toolbar (its panel and buttons), as
+ *  the app finds it (largestClearCircle()). */
 const ringArea = (boxes) => {
-  const tb = boxes.toolbarPanel;
-  const right = boxes.toolbar === 'side' ? tb.left - 4 : boxes.width;
-  const bottom = boxes.toolbar === 'bottom' ? tb.top - 4 : boxes.height;
-  return { right, bottom, cx: right / 2, cy: bottom / 2 };
+  const pad = (r) => ({ left: r.left - 4, top: r.top - 4, right: r.right + 4, bottom: r.bottom + 4 });
+  const { cx, cy, radius } = largestClearCircle(boxes.width, boxes.height, [boxes.toolbarPanel, ...boxes.controls].map(pad));
+  return { cx, cy, radius };
 };
 /** The edge the ring should have for a layout (see ringEdge() in the app).
  *  Expanded: its solid band fills the area between the name and Stop.
@@ -66,9 +65,7 @@ const expectedEdge = (boxes) => {
     return Math.min(edgeForBandExtent(boxes.ringMax.bottom - boxes.ringMax.top, band), edgeForExtent(boxes.width, band));
   }
   const area = ringArea(boxes);
-  let clear = Math.min(area.right, area.bottom) / 2;
-  for (const c of boxes.controls) clear = Math.min(clear, distanceToRect(area.cx, area.cy, c));
-  return Math.min(edgeForExtent(2 * (clear - 2), band), 0.8 * Math.min(boxes.width, boxes.height));
+  return Math.min(edgeForExtent(2 * (area.radius - 2), band), 0.8 * Math.min(boxes.width, boxes.height));
 };
 /** The glow's visible reach past the band (outer spread plus half its
  *  blur, scaled with the edge), as the app counts it (ringExtent()). */
@@ -487,7 +484,7 @@ test.describe('Monitoring presentation: the ring is sized for full Outside', () 
     { width: 240, height: 186 }, SIZES.compact, { width: 299, height: 299 }, { width: 170, height: 170 },
     { width: 290, height: 165 }, SIZES.mini, { width: 140, height: 140 }, { width: 150, height: 300 },
   ]) {
-    test(`${size.width}×${size.height}: far over, the ring is the largest thing in the window, centered beside or above the toolbar, and its glow is never clipped or over the toolbar`, async ({ page, context }) => {
+    test(`${size.width}×${size.height}: far over, the ring is the largest circle clear of the bottom-right toolbar, and its glow is never clipped or over the toolbar`, async ({ page, context }) => {
       const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size, driven: true, layout: 'compact' });
       const short = Math.min(size.width, size.height);
       const bandName = short < 160 ? 'mini' : 'compact';
@@ -505,7 +502,7 @@ test.describe('Monitoring presentation: the ring is sized for full Outside', () 
 
       // The toolbar: right side when wider than tall, else a bottom row.
       expect(boxes.toolbar).toBe(size.width > size.height ? 'side' : 'bottom');
-      // Centered in the space beside or above it.
+      // At the center of the largest clear circle.
       const area = ringArea(boxes);
       const ringBox = await monitoringScreen.locator('.mezzo-ring').boundingBox();
       const cx = ringBox.x + ringBox.width / 2;
@@ -531,7 +528,7 @@ test.describe('Monitoring presentation: the ring is sized for full Outside', () 
     });
   }
 
-  test('Compact\'s real size (240×186): the toolbar on the right, and a 125px ring, about two thirds of the short side', async ({ page, context }) => {
+  test('Compact\'s real size (240×186): the toolbar in the bottom-right corner, stacked, and a 124.5px ring, about two thirds of the short side', async ({ page, context }) => {
     const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 240, height: 186 }, layout: 'compact' });
     await expect(monitoringScreen).toHaveAttribute('data-toolbar', 'side');
     const r = await readRing(pipPage);
@@ -608,7 +605,7 @@ test.describe('Monitoring presentation: controls by size band', () => {
   });
 
   for (const [size, toolbar] of [[{ width: 240, height: 186 }, 'side'], [{ width: 186, height: 240 }, 'bottom'], [SIZES.compact, 'bottom'], [SIZES.mini, 'side']]) {
-    test(`toolbar at ${size.width}×${size.height}: Stop and Expand together, ${toolbar === 'side' ? 'stacked on the right, centered vertically' : 'in a row along the bottom, centered'}, inside one faint panel; Stop first; names kept`, async ({ page, context }) => {
+    test(`toolbar at ${size.width}×${size.height}: pinned to the bottom-right corner, ${toolbar === 'side' ? 'stacked' : 'side by side'}, inside one faint panel, 16px apart; Stop first; names kept`, async ({ page, context }) => {
       const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size, layout: 'compact' });
       await expect(monitoringScreen).toHaveAttribute('data-toolbar', toolbar);
       const edge = Math.min(size.width, size.height) < 160 ? 8 : 12;
@@ -620,15 +617,14 @@ test.describe('Monitoring presentation: controls by size band', () => {
       const e = await monitoringScreen.locator('.pip-control-btn-expand').boundingBox();
       const inside = (b) => b.x >= panel.x && b.y >= panel.y && b.x + b.width <= panel.x + panel.width && b.y + b.height <= panel.y + panel.height;
       expect(inside(s) && inside(e)).toBe(true);
+      // Pinned: the panel's bottom-right corner sits `edge` from the window's.
+      expect(Math.round(size.width - (panel.x + panel.width))).toBe(edge);
+      expect(Math.round(size.height - (panel.y + panel.height))).toBe(edge);
       if (toolbar === 'side') {
-        expect(Math.round(size.width - (panel.x + panel.width))).toBe(edge);
-        expect(Math.abs(panel.y + panel.height / 2 - size.height / 2)).toBeLessThanOrEqual(1);
-        expect(e.y).toBeGreaterThan(s.y); // Stop above Expand
+        expect(Math.round(e.y - (s.y + s.height))).toBe(16); // Stop above Expand
         expect(Math.round(s.x)).toBe(Math.round(e.x));
       } else {
-        expect(Math.round(size.height - (panel.y + panel.height))).toBe(edge);
-        expect(Math.abs(panel.x + panel.width / 2 - size.width / 2)).toBeLessThanOrEqual(1);
-        expect(e.x).toBeGreaterThan(s.x); // Stop left of Expand
+        expect(Math.round(e.x - (s.x + s.width))).toBe(16); // Stop left of Expand
         expect(Math.round(s.y)).toBe(Math.round(e.y));
       }
       // Low contrast, never chartreuse: a faint cream outline and fill.
@@ -662,6 +658,21 @@ test.describe('Monitoring presentation: controls by size band', () => {
     expect(s.height).toBeGreaterThanOrEqual(32);
     expect([c.width, c.height].map(Math.round)).toEqual([32, 32]);
     expect([s.x, 512 - (s.y + s.height), 382 - (c.x + c.width), c.y].map(Math.round)).toEqual([16, 16, 16, 16]);
+  });
+
+  test('the toolbar never moves on resize: its bottom-right corner stays put across window shapes; only the buttons turn', async ({ page, context }) => {
+    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 240, height: 186 }, layout: 'compact' });
+    const panelEl = monitoringScreen.locator('.pip-monitoring-toolbar');
+    const expandEl = monitoringScreen.locator('.pip-control-btn-expand');
+    for (const size of [{ width: 240, height: 186 }, { width: 186, height: 240 }, { width: 220, height: 220 }, { width: 290, height: 200 }, { width: 200, height: 290 }]) {
+      await pipPage.setViewportSize(size);
+      await expect(monitoringScreen).toHaveAttribute('data-toolbar', size.width > size.height ? 'side' : 'bottom');
+      const panel = await panelEl.boundingBox();
+      const e = await expandEl.boundingBox();
+      expect([size.width - (panel.x + panel.width), size.height - (panel.y + panel.height)].map(Math.round)).toEqual([12, 12]);
+      // Expand is always the corner button.
+      expect([size.width - (e.x + e.width), size.height - (e.y + e.height)].map(Math.round)).toEqual([16, 16]);
+    }
   });
 
   test('Mini (280×110): ring only at rest; pointer entry reveals the toolbar with Stop and Expand, hidden again 2s after it leaves', async ({ page, context }) => {

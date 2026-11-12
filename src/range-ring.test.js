@@ -6,6 +6,7 @@ import {
   BAND_MIN_FRACTION, BAND_MAX_FRACTION, BAND_FULL_DB, BAND_FADE_MS, BAND_THIN_FRACTION,
   VOICE_FRACTION_END, VOICE_OPACITY_REST, REFERENCE_EDGE_PX,
   ringExtent, edgeForExtent, bandExtent, edgeForBandExtent, scaledBand,
+  largestClearCircle,
 } from './range-ring.js';
 import { MezzoEngine, OUTSIDE_ENTRY_DWELL_MS } from './engine.js';
 
@@ -375,5 +376,28 @@ describe('scaledBand: a smaller band cap for a layout', () => {
     assert.ok(Math.abs(edge - 90) < 1e-9);
     assert.ok(Math.abs(c.maxFraction * edge - 9) < 1e-9);
     assert.ok(Math.abs(c.minFraction * edge - 3.25) < 1e-9);
+  });
+});
+
+describe('largestClearCircle (the Compact ring\'s space, 2026-11-12)', () => {
+  it('with nothing in the way: the window\'s inscribed circle, centered', () => {
+    assert.deepEqual(largestClearCircle(240, 186), { cx: 120, cy: 93, radius: 93 });
+  });
+
+  it('keeps clear of a bottom-right toolbar, and stays as central as it can', () => {
+    // 240×186 with a stacked toolbar (40×88, 12px from the corner) padded 4px.
+    const tb = { left: 184, top: 82, right: 232, bottom: 178 };
+    const c = largestClearCircle(240, 186, [tb]);
+    assert.ok(c.radius <= 93);
+    const toRect = Math.hypot(Math.max(tb.left - c.cx, 0, c.cx - tb.right), Math.max(tb.top - c.cy, 0, c.cy - tb.bottom));
+    assert.ok(toRect >= c.radius - 1e-9);
+    assert.ok(c.radius >= 91);
+  });
+
+  it('in a square window, uses the room beside a corner toolbar', () => {
+    const tb = { left: 116, top: 164, right: 212, bottom: 212 }; // 220×220, a row
+    const c = largestClearCircle(220, 220, [tb]);
+    assert.ok(c.radius > (164 - 0) / 2); // more than the strip above the toolbar alone
+    assert.ok(c.cy < 110 && c.cx < 110); // nudged up and left, away from the corner
   });
 });

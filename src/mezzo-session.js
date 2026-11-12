@@ -114,7 +114,7 @@
 
 import { AudioProcessor } from './audio.js?v=2';
 import { MezzoEngine, DEFAULT_ZONE_SETTINGS, isNoisyRoom } from './engine.js?v=5';
-import { MezzoRangeRing, edgeForBandExtent, edgeForExtent, ringExtent, bandExtent, scaledBand, DEFAULT_RING_SETTINGS } from './range-ring.js';
+import { MezzoRangeRing, edgeForBandExtent, edgeForExtent, ringExtent, bandExtent, largestClearCircle, scaledBand, DEFAULT_RING_SETTINGS } from './range-ring.js';
 import { MezzoLevelMeter } from './level-meter.js';
 import { createZoneAnnouncer, ZONE_LABELS } from './zone-announcer.js';
 import { createCalibrationController } from './calibration-controller.js';
@@ -2967,11 +2967,12 @@ export function createMezzoSession({
       /* ── Compact and Mini toolbar (2026-11-11): Stop and Expand together
          in one small, low-contrast panel (a faint cream outline over a
          barely lighter fill, never chartreuse), so they read as controls
-         without competing with the glow. data-toolbar (set by ringLayout()
-         from the window's shape): "side", stacked along the right edge and
-         centered, when the window is wider than tall; "bottom", in a row
-         along the bottom and centered, otherwise. The ring is centered in
-         the rest of the window. The panel is decorative; each button keeps
+         without competing with the glow. Always pinned to the bottom-right
+         corner, so resizing never moves it (2026-11-12); data-toolbar (set
+         by ringLayout() from the window's shape) only turns it: "side",
+         stacked, when the window is wider than tall; "bottom", side by
+         side, otherwise. The ring is the largest circle that keeps its
+         far-over glow clear of it (ringLayout()). The panel is decorative; each button keeps
          its own accessible name. In Mini it fades in with the buttons, and
          the top and bottom scrims aren't needed. ── */
       .pip-monitoring-toolbar {
@@ -2990,25 +2991,20 @@ export function createMezzoSession({
       .pip-screen-monitoring[data-toolbar]::after { display: none; }
       .pip-screen-monitoring[data-size-band="mini"] .pip-monitoring-toolbar { opacity: 0; }
       .pip-screen-monitoring[data-size-band="mini"].pip-controls-revealed .pip-monitoring-toolbar { opacity: 1; }
-      .pip-screen-monitoring[data-toolbar="side"] .pip-monitoring-toolbar {
-        right: var(--edge); top: 50%; width: 40px; height: 88px; transform: translateY(-50%);
-      }
+      .pip-screen-monitoring[data-toolbar] .pip-monitoring-toolbar { right: var(--edge); bottom: var(--edge); }
+      .pip-screen-monitoring[data-toolbar="side"] .pip-monitoring-toolbar { width: 40px; height: 88px; }
+      .pip-screen-monitoring[data-toolbar="bottom"] .pip-monitoring-toolbar { width: 88px; height: 40px; }
       /* 4px inside the panel, 16px between the two (the tap-target rule:
-         16px of clear space between adjacent hit areas). */
+         16px of clear space between adjacent hit areas). Expand always in
+         the corner; Stop above it, or to its left. */
+      .pip-screen-monitoring[data-toolbar] .pip-control-btn-expand {
+        top: auto; left: auto; right: calc(var(--edge) + 4px); bottom: calc(var(--edge) + 4px);
+      }
       .pip-screen-monitoring[data-toolbar="side"] .pip-control-btn-stop {
-        left: auto; bottom: auto; right: calc(var(--edge) + 4px); top: calc(50% - 40px);
-      }
-      .pip-screen-monitoring[data-toolbar="side"] .pip-control-btn-expand {
-        right: calc(var(--edge) + 4px); top: calc(50% + 8px);
-      }
-      .pip-screen-monitoring[data-toolbar="bottom"] .pip-monitoring-toolbar {
-        bottom: var(--edge); left: 50%; width: 88px; height: 40px; transform: translateX(-50%);
+        top: auto; left: auto; right: calc(var(--edge) + 4px); bottom: calc(var(--edge) + 52px);
       }
       .pip-screen-monitoring[data-toolbar="bottom"] .pip-control-btn-stop {
-        bottom: calc(var(--edge) + 4px); left: calc(50% - 40px);
-      }
-      .pip-screen-monitoring[data-toolbar="bottom"] .pip-control-btn-expand {
-        top: auto; right: auto; bottom: calc(var(--edge) + 4px); left: calc(50% + 8px);
+        top: auto; left: auto; right: calc(var(--edge) + 52px); bottom: calc(var(--edge) + 4px);
       }
       @media (prefers-reduced-motion: reduce) {
         .pip-control-btn,
@@ -4679,15 +4675,16 @@ function ringBand() {
 // gap (the glow isn't counted, so it may reach into the gap and under the
 // name), but the glow stays inside the window's width, where the window's
 // side would otherwise cut it off visibly (382 wide).
-// Compact and Mini (2026-11-11): the ring is the largest thing in the
-// window, centered in the space beside or above the toolbar, and sized by
-// its far-over extent (the circle, the widest band and the glow's visible
-// reach, ringExtent()): that extent stays inside that space, so it's never
-// clipped and never reaches the toolbar, at any window size, and the edge
-// is at most RING_MAX_FRACTION of the short side.
+// Compact and Mini (2026-11-11; toolbar pinned 2026-11-12): the ring is the
+// largest thing in the window, sized by its far-over extent (the circle, the
+// widest band and the glow's visible reach, ringExtent()): the largest
+// circle in the window that keeps clear of the bottom-right toolbar
+// (largestClearCircle()), so it's never clipped and never reaches the
+// toolbar, at any window size; the edge is at most RING_MAX_FRACTION of the
+// short side.
 const RING_MAX_FRACTION = 0.8;
 const RING_GLOW_MARGIN_PX = 2;
-// Space kept between the ring's area and the Compact/Mini toolbar.
+// Space kept between the ring's far-over glow and the Compact/Mini toolbar.
 const TOOLBAR_GAP_PX = 4;
 function ringEdge() {
   const layout = ringLayout(); // sets the size band first
@@ -4716,39 +4713,38 @@ function ringLayout() {
     if (monitoringScreenEl) monitoringScreenEl.dataset.sizeBand = band;
     let top = 0;
     let bottom = height;
-    // Compact and Mini: Stop and Expand share a toolbar on the right
-    // (wider than tall) or along the bottom; the ring is centered in the
-    // rest of the window, and the largest circle it may fill (with its
-    // glow) stays inside that space, so it never reaches the toolbar
-    // (see ringEdge()).
+    // Compact and Mini: Stop and Expand share a toolbar pinned to the
+    // bottom-right corner; the ring is the largest circle that fits in the
+    // window and keeps clear of it (TOOLBAR_GAP_PX around its panel and
+    // buttons), so its far-over glow never reaches the toolbar or the
+    // window's edges (see ringEdge()).
     if (band !== 'expanded') {
       const toolbar = width > height ? 'side' : 'bottom';
       if (monitoringScreenEl) monitoringScreenEl.dataset.toolbar = toolbar;
-      let right = width;
-      let bottomEdge = height;
-      const tb = monitoringScreenEl?.querySelector('.pip-monitoring-toolbar')?.getBoundingClientRect();
-      if (tb && tb.width && tb.height) {
-        if (toolbar === 'side') right = Math.max(0, tb.left - TOOLBAR_GAP_PX);
-        else bottomEdge = Math.max(0, tb.top - TOOLBAR_GAP_PX);
-      }
-      const cx = right / 2;
-      const cy = bottomEdge / 2;
-      let clearRadius = Math.min(right, bottomEdge) / 2;
-      for (const el of monitoringScreenEl?.querySelectorAll('.pip-control-btn') ?? []) {
+      const pad = (r) => ({ left: r.left - TOOLBAR_GAP_PX, top: r.top - TOOLBAR_GAP_PX, right: r.right + TOOLBAR_GAP_PX, bottom: r.bottom + TOOLBAR_GAP_PX });
+      const obstacles = [];
+      for (const el of monitoringScreenEl?.querySelectorAll('.pip-monitoring-toolbar, .pip-control-btn') ?? []) {
         if (el.offsetParent === null) continue;
         const r = el.getBoundingClientRect();
-        if (r.width === 0 || r.height === 0) continue;
-        clearRadius = Math.min(clearRadius, distanceToRect(cx, cy, r));
+        if (r.width && r.height) obstacles.push(pad(r));
       }
+      const { cx, cy, radius } = largestClearCircle(width, height, obstacles);
       if (pipCircleWrapperEl) {
-        pipCircleWrapperEl.style.top = '0px';
-        pipCircleWrapperEl.style.height = `${bottomEdge}px`;
-        pipCircleWrapperEl.style.right = `${width - right}px`;
+        const box = Math.max(0, 2 * radius);
+        pipCircleWrapperEl.style.left = `${cx - radius}px`;
+        pipCircleWrapperEl.style.right = 'auto';
+        pipCircleWrapperEl.style.width = `${box}px`;
+        pipCircleWrapperEl.style.top = `${cy - radius}px`;
+        pipCircleWrapperEl.style.height = `${box}px`;
       }
-      return { band, gap, top: 0, bottom: bottomEdge, right, cx, cy, width, height, toolbar, clearRadius, extent: Math.max(0, Math.min(right, bottomEdge) - 2 * gap) };
+      return { band, gap, top: 0, bottom: height, cx, cy, width, height, toolbar, clearRadius: radius, extent: Math.max(0, 2 * radius - 2 * gap) };
     }
     if (monitoringScreenEl) delete monitoringScreenEl.dataset.toolbar;
-    if (pipCircleWrapperEl) pipCircleWrapperEl.style.right = '';
+    if (pipCircleWrapperEl) {
+      pipCircleWrapperEl.style.left = '';
+      pipCircleWrapperEl.style.right = '';
+      pipCircleWrapperEl.style.width = '';
+    }
     if (monitoringScreenEl) {
       const rows = [monitoringProfileNameEl, ...monitoringScreenEl.querySelectorAll('.pip-control-btn')];
       for (const el of rows) {
