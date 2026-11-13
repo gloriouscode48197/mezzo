@@ -2984,7 +2984,7 @@ export function createMezzoSession({
         z-index: 1;
         box-sizing: border-box;
         border: 1px solid rgba(243, 235, 222, 0.12);
-        background: rgba(243, 235, 222, 0.04);
+        background: var(--color-bg); /* the window's own color at rest (2026-11-13) */
         pointer-events: none;
         transition: opacity 0.15s ease;
       }
@@ -3017,23 +3017,26 @@ export function createMezzoSession({
       }
       .pip-screen-monitoring[data-toolbar="bottom"] .pip-control-btn-stop { left: calc(50% - 40px); }
       .pip-screen-monitoring[data-toolbar="bottom"] .pip-control-btn-expand { left: calc(50% + 8px); }
-      /* At rest (2026-11-13) only the glow should draw the eye: the
-         toolbar's icons are a muted gray, #84807A, about 3.1:1 against the
-         panel (the minimum for visible controls), and its outline is
-         fainter. The pointer over the window, keyboard focus in it, or
-         Mini's reveal brings them back to #B0AB9E (5.3:1) and the usual
-         outline; hovering a button still turns it cream. Never chartreuse;
-         no size or position changes. */
-      .pip-screen-monitoring[data-toolbar] .pip-control-btn { color: #84807A; }
+      /* At rest (2026-11-13) only the glow should draw the eye: the panel
+         is filled with the window's own color (never lighter), so it
+         doesn't read as a block, with a faint outline so the controls stay
+         recognizable; the icons are a muted gray, #7E7A72, about 3.2:1
+         against it (the minimum for visible controls). The pointer over the
+         window, keyboard focus in it, or Mini's reveal brings the icons back
+         to #B0AB9E (about 5.3:1) and lightens the panel slightly (#353638)
+         with the usual outline; hovering a button still turns it cream.
+         Mini's floating toolbar stays solid either way, so it reads over
+         the glow. Never chartreuse; no size or position changes. */
+      .pip-screen-monitoring[data-toolbar] .pip-control-btn { color: #7E7A72; }
       .pip-screen-monitoring[data-toolbar] .pip-monitoring-toolbar { border-color: rgba(243, 235, 222, 0.07); }
       .pip-screen-monitoring[data-toolbar]:hover .pip-control-btn,
       .pip-screen-monitoring[data-toolbar]:focus-within .pip-control-btn,
       .pip-screen-monitoring[data-toolbar].pip-controls-revealed .pip-control-btn { color: #B0AB9E; }
       .pip-screen-monitoring[data-toolbar]:hover .pip-monitoring-toolbar,
       .pip-screen-monitoring[data-toolbar]:focus-within .pip-monitoring-toolbar,
-      .pip-screen-monitoring[data-toolbar].pip-controls-revealed .pip-monitoring-toolbar { border-color: rgba(243, 235, 222, 0.12); }
+      .pip-screen-monitoring[data-toolbar].pip-controls-revealed .pip-monitoring-toolbar { border-color: rgba(243, 235, 222, 0.12); background: #353638; }
       .pip-screen-monitoring[data-toolbar] .pip-control-btn:hover { color: #F3EBDE; }
-      .pip-monitoring-toolbar { transition: opacity 0.15s ease, border-color 0.12s ease; }
+      .pip-monitoring-toolbar { transition: opacity 0.15s ease, border-color 0.12s ease, background-color 0.12s ease; }
       @media (prefers-reduced-motion: reduce) {
         .pip-monitoring-toolbar { transition: none; }
       }

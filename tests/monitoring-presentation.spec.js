@@ -73,7 +73,7 @@ const expectedEdge = (boxes) => {
  *  blur, scaled with the edge), as the app counts it (ringExtent()). */
 const glowReach = (r) => (10 + 38 / 2) * r.glowScale;
 const ICON = 'rgb(176, 171, 158)';       // #B0AB9E
-const MUTED_ICON = 'rgb(132, 128, 122)'; // #84807A, Compact and Mini toolbar at rest
+const MUTED_ICON = 'rgb(126, 122, 114)'; // #7E7A72, Compact and Mini toolbar at rest
 const CREAM = 'rgb(243, 235, 222)';      // #F3EBDE
 const SIZES = { mini: { width: 280, height: 110 }, compact: { width: 220, height: 220 }, expanded: { width: 382, height: 512 } };
 const SAGE = 'rgb(206, 226, 196)';       // --color-link
@@ -663,7 +663,7 @@ test.describe('Monitoring presentation: controls by size band', () => {
       }
       // Low contrast, never chartreuse: a faint cream outline and fill.
       expect(look.border).toBe('rgba(243, 235, 222, 0.12)');
-      expect(look.bg).toBe('rgba(243, 235, 222, 0.04)');
+      expect(look.bg).toBe('rgb(53, 54, 56)'); // hovered: slightly lighter than the window
       await expect(monitoringScreen.getByRole('button', { name: 'Stop monitoring' })).toBeVisible();
       await expect(monitoringScreen.getByRole('button', { name: 'Expand' })).toBeVisible();
       await assertNoOverflow(pipPage);
@@ -699,7 +699,7 @@ test.describe('Monitoring presentation: controls by size band', () => {
           radii: [st.borderTopLeftRadius, st.borderTopRightRadius, st.borderBottomRightRadius, st.borderBottomLeftRadius],
         };
       });
-      expect(look.bg).toBe('rgb(45, 46, 49)'); // --color-bg, solid
+      expect(look.bg).toBe('rgb(53, 54, 56)'); // solid; hovered, slightly lighter than the window
       expect(look.border).toBe('rgba(243, 235, 222, 0.12)');
       expect(look.widths).toEqual(['1px', '1px', '1px', '1px']);
       expect(look.radii).toEqual(['6px', '6px', '6px', '6px']);
@@ -866,7 +866,7 @@ test.describe('Monitoring presentation: controls by size band', () => {
   });
 
   for (const [label, size] of [['Compact 240×186', { width: 240, height: 186 }], ['Compact 220×220', SIZES.compact], ['Mini 280×110 (docked)', SIZES.mini], ['Mini 140×140 (floating)', { width: 140, height: 140 }]]) {
-    test(`${label}: at rest the toolbar icons are muted to about 3:1 against the panel with a fainter outline; hover and keyboard focus bring them back to full contrast`, async ({ page, context }) => {
+    test(`${label}: at rest the panel is the window's color with a faint outline and the icons are muted to about 3:1; hover and keyboard focus bring the icons back to full contrast and lighten the panel slightly`, async ({ page, context }) => {
       const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size, layout: 'compact' });
       const mini = Math.min(size.width, size.height) < 160;
       const read = () => pipPage.evaluate(() => {
@@ -880,6 +880,8 @@ test.describe('Monitoring presentation: controls by size band', () => {
         const icon = (sel) => getComputedStyle(document.querySelector(sel)).color;
         return {
           fill: `rgb(${fill.join(', ')})`,
+          windowBg: getComputedStyle(screen).backgroundColor,
+          panelBg: getComputedStyle(panel).backgroundColor,
           stop: icon('.pip-control-btn-stop'),
           expand: icon('.pip-control-btn-expand'),
           stopSquare: getComputedStyle(document.querySelector('.pip-control-icon-stop')).backgroundColor,
@@ -891,6 +893,7 @@ test.describe('Monitoring presentation: controls by size band', () => {
         await expect(monitoringScreen.locator('.pip-control-btn-stop')).toHaveCSS('color', MUTED_ICON);
         await expect(monitoringScreen.locator('.pip-control-btn-expand')).toHaveCSS('color', MUTED_ICON);
         await expect(monitoringScreen.locator('.pip-monitoring-toolbar')).toHaveCSS('border-top-color', 'rgba(243, 235, 222, 0.07)');
+        await expect(monitoringScreen.locator('.pip-monitoring-toolbar')).toHaveCSS('background-color', 'rgb(45, 46, 49)');
         const rest = await read();
         for (const c of [rest.stop, rest.expand, rest.stopSquare]) {
           expect(c).toBe(MUTED_ICON);
@@ -899,18 +902,26 @@ test.describe('Monitoring presentation: controls by size band', () => {
           expect(ratio).toBeLessThan(3.6);
         }
         expect(rest.outline).toBe('rgba(243, 235, 222, 0.07)');
+        // The panel is the window's own color at rest: never a lighter block.
+        expect(rest.panelBg).toBe(rest.windowBg);
+        expect(rest.fill).toBe(rest.windowBg);
       }
       // Hover (Mini: the reveal): full contrast and the usual outline.
       await monitoringScreen.hover();
       await expect(monitoringScreen.locator('.pip-control-btn-stop')).toHaveCSS('color', ICON);
       await expect(monitoringScreen.locator('.pip-control-btn-expand')).toHaveCSS('color', ICON);
       await expect(monitoringScreen.locator('.pip-monitoring-toolbar')).toHaveCSS('border-top-color', 'rgba(243, 235, 222, 0.12)');
+      await expect(monitoringScreen.locator('.pip-monitoring-toolbar')).toHaveCSS('background-color', 'rgb(53, 54, 56)');
       const hovered = await read();
       for (const c of [hovered.stop, hovered.expand, hovered.stopSquare]) {
         expect(c).toBe(ICON);
         expect(contrast(c, hovered.fill)).toBeGreaterThanOrEqual(4.5);
       }
       expect(hovered.outline).toBe('rgba(243, 235, 222, 0.12)');
+      // Hover lightens the panel slightly, and it stays solid (readable over the glow in Mini).
+      expect(hovered.panelBg).toBe('rgb(53, 54, 56)');
+      expect(contrast(hovered.panelBg, hovered.windowBg)).toBeGreaterThan(1.05);
+      expect(contrast(hovered.panelBg, hovered.windowBg)).toBeLessThan(1.3);
       // Keyboard focus, with the pointer gone: full contrast too.
       await pipPage.mouse.move(0, 0);
       await pipPage.mouse.move(-10, -10).catch(() => {});
