@@ -292,6 +292,11 @@ export function isWrapUpOpen(mezzoStageStartAt, now, config = STUDY_CONFIG) {
 }
 
 /** "November 23, 2026" */
+/** "November 27": the wrap-up date on /study, without the year. */
+export function formatMonthDay(ms) {
+  return new Date(ms).toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+}
+
 export function formatLongDate(ms) {
   return new Date(ms).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 }

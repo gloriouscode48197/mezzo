@@ -161,11 +161,43 @@
     .study-main .study-privacy { margin-top: var(--space-6); }
     .study-main .study-list-intro { margin-bottom: var(--space-2); }
     .study-list {
+      list-style: disc; /* also inside the numbered steps */
       margin: 0 0 var(--space-3);
       padding-left: 1.25em;
       color: var(--color-text);
     }
     .study-list li + li { margin-top: var(--space-1); }
+    /* Step 2's picture of the Companion's check-in card: small, never
+       wider than its column, rounded with a thin border. */
+    .study-card-shot {
+      display: block;
+      box-sizing: border-box;
+      width: 240px;
+      max-width: 100%;
+      height: auto;
+      margin: 0 0 var(--space-3);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    .study-main .study-help {
+      margin: var(--space-2) 0 0;
+      font-family: var(--font-body);
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--color-text-muted);
+    }
+    /* One callout on the page (2026-11-13): "Mezzo comes later" in Your
+       usual calls. A pale slate tint (10% of the header color on white,
+       about #ECEFF2) with the normal dark text, 13:1. The page is always
+       light (color-scheme: light), so it reads the same in both system
+       themes. */
+    .study-main .study-callout {
+      background: color-mix(in srgb, var(--study-band) 10%, #FFFFFF);
+      color: var(--color-text);
+      border-radius: 6px;
+      padding: var(--space-3) var(--space-4);
+      margin-bottom: var(--space-4);
+    }
     [hidden] { display: none !important; }
     .study-main a:not(.btn-primary):not(.btn-outline) {
       color: var(--color-link);
@@ -193,13 +225,13 @@
     <section id="study-participant" hidden>
       <h1 class="study-title">Thanks for joining the Mezzo study</h1>
       <p class="type-body">Your study code: <span class="study-code" id="study-code"></span></p>
-      <!-- Baseline stage only. -->
+      <!-- Both stages; With Mezzo sets its own wording (script below). -->
       <p class="type-body" id="study-bookmark" hidden>Bookmark this page. You’ll come back here after each call.</p>
 
       <!-- Baseline stage: a code, before the With Mezzo stage. -->
       <section class="study-phase" id="study-baseline" hidden aria-labelledby="study-baseline-heading">
         <h2 id="study-baseline-heading">Your usual calls</h2>
-        <p class="type-body">Mezzo comes later. I’ll email it once your 2 check-ins are in.</p>
+        <p class="type-body study-callout">Mezzo comes later. I’ll email it once your 2 check-ins are in.</p>
         <p class="type-body">For now, take your next 2 calls as you normally would. After each one, come back here and tap Check in after a call. It takes about a minute.</p>
         <p class="type-body study-list-intro" id="study-baseline-count">Only count calls where:</p>
         <ul class="type-body study-list" aria-labelledby="study-baseline-count">
@@ -223,23 +255,42 @@
                 <span class="study-step-num" aria-hidden="true">1</span>
                 <h3>Use Mezzo on your calls</h3>
               </div>
-              <p class="type-body">When you take a call where you’ll speak, with headphones and people nearby, open Mezzo and start monitoring. If you’ve installed the extension, Mezzo also offers to start when a Google Meet call begins.</p>
-              <a class="btn-primary" id="study-open-mezzo" href="/index.html">Open Mezzo</a>
+              <!-- Head, body and actions: the three rows the two steps share
+                   on wide screens, so their buttons line up. -->
+              <div class="study-item-body">
+                <p class="type-body study-list-intro" id="study-use-intro">Open Mezzo and start monitoring on calls where:</p>
+                <ul class="type-body study-list" aria-labelledby="study-use-intro">
+                  <li>you’re wearing headphones</li>
+                  <li>people are nearby</li>
+                  <li>you’ll speak, even a little</li>
+                </ul>
+                <p class="type-body">With the Chrome extension, Mezzo also offers to start when a Google Meet call begins. <a id="study-get-extension" target="_blank" rel="noopener noreferrer" hidden>Get the extension</a></p>
+              </div>
+              <div class="study-item-actions">
+                <a class="btn-primary" id="study-open-mezzo" href="/index.html">Open Mezzo</a>
+              </div>
             </li>
             <li class="study-item" id="study-step-check-in">
               <div class="study-item-head">
                 <span class="study-step-num" aria-hidden="true">2</span>
                 <h3>Check in after your call</h3>
               </div>
-              <p class="type-body">When you stop monitoring, Mezzo asks how your call went. Missed it? Check in here, ideally within 2 hours of your call.</p>
-              <a class="btn-outline" id="study-check-in" target="_blank" rel="noopener noreferrer">Check in after a call</a>
+              <div class="study-item-body">
+                <p class="type-body">When you stop monitoring, Mezzo asks how your call went. Look for this card:</p>
+                <img class="study-card-shot" src="/study/checkin-card.png" width="382" height="512" alt="The Mezzo Companion showing a 'How did your call go?' card with Open check-in and Skip this one buttons.">
+                <p class="type-body">Please check in after at least 2 calls.</p>
+              </div>
+              <div class="study-item-actions">
+                <a class="btn-outline" id="study-check-in" target="_blank" rel="noopener noreferrer">Check in after a call</a>
+                <p class="study-help">Missed one? Check in here, ideally within 2 hours of your call.</p>
+              </div>
             </li>
           </ol>
         </section>
 
         <section class="study-phase" aria-labelledby="study-wrap-up-heading">
           <h2 id="study-wrap-up-heading">Wrap-up</h2>
-          <p class="type-body" id="study-wrap-up-text">A few questions about your whole time with Mezzo.</p>
+          <p class="type-body" id="study-wrap-up-text">A few questions about your whole time with Mezzo. Finish it to get your $5 gift card.</p>
           <a class="btn-outline" id="study-wrap-up" target="_blank" rel="noopener noreferrer" hidden>Wrap up the study</a>
         </section>
       </div>
@@ -266,11 +317,12 @@
       isWithinCheckInWindow,
       isWrapUpOpen,
       wrapUpOpensAt,
-      formatLongDate,
+      formatMonthDay,
       markCheckInHandled,
       buildCheckInUrl,
       buildBaselineUrl,
       buildWrapUpUrl,
+  isFormUrlReady,
     } from '/src/study.js';
     import { STUDY_CONFIG } from '/src/study-config.js';
     import { openMezzoWindow } from '/src/study-open-mezzo.js';
@@ -304,6 +356,15 @@
 
     if (stage === 'mezzo') {
       $('study-mezzo').hidden = false;
+      $('study-bookmark').textContent = 'Bookmark this page. You’ll come back here after calls and for the wrap-up.';
+      $('study-bookmark').hidden = false;
+
+      // Get the extension: shown once its Chrome Web Store link is in the
+      // config (STUDY_CONFIG.extensionUrl).
+      if (isFormUrlReady(STUDY_CONFIG.extensionUrl)) {
+        $('study-get-extension').href = STUDY_CONFIG.extensionUrl;
+        $('study-get-extension').hidden = false;
+      }
 
       // Open Mezzo: through the extension when it's installed (its own
       // window, or the open Mezzo brought forward), otherwise a window of
@@ -350,7 +411,7 @@
         wrapUp.href = buildWrapUpUrl({ testerCode });
         wrapUp.hidden = false;
       } else {
-        wrapUpText.textContent = `A few questions about your whole time with Mezzo. Opens on ${formatLongDate(wrapUpOpensAt(mezzoStageStartAt))}.`;
+        wrapUpText.textContent = `A few questions about your whole time with Mezzo. Opens ${formatMonthDay(wrapUpOpensAt(mezzoStageStartAt))}, and I’ll email you a reminder. Finish it to get your $5 gift card.`;
       }
     }
   </script>

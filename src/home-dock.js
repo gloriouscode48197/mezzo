@@ -441,8 +441,8 @@ export function initHomeDock({
   const RUNNING_COPY = {
     open: {
       label: null, // the live status line (dockStatusCopy())
-      heading: 'Keep this window open while you use Mezzo',
-      body: "It runs your Companion, so minimize it instead of closing it. When you're done, click Close Companion.",
+      heading: 'Keep this page open while you use Mezzo',
+      body: "It runs your Companion. You can minimize this window or switch tabs, but closing this page closes the Companion. When you're done, click Close Companion.",
     },
     closed: {
       // The same status line as the open variant's "not active" state
@@ -475,7 +475,7 @@ export function initHomeDock({
   //    the page shows:
   //    - 'closed': the "Companion closed" page, below Reopen and Done.
   //      Open check-in ends the interrupted call there, like Stop.
-  //    - 'open': "Keep this window open", below Close Companion, except
+  //    - 'open': "Keep this page open", below Close Companion, except
   //      while monitoring runs or Reopen is about to continue the call (that
   //      call isn't over yet).
   //    - 'home': the page the tab returns to after Done or Close Companion.

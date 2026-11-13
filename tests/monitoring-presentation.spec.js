@@ -73,6 +73,7 @@ const expectedEdge = (boxes) => {
  *  blur, scaled with the edge), as the app counts it (ringExtent()). */
 const glowReach = (r) => (10 + 38 / 2) * r.glowScale;
 const ICON = 'rgb(176, 171, 158)';       // #B0AB9E
+const MUTED_ICON = 'rgb(132, 128, 122)'; // #84807A, Compact and Mini toolbar at rest
 const CREAM = 'rgb(243, 235, 222)';      // #F3EBDE
 const SIZES = { mini: { width: 280, height: 110 }, compact: { width: 220, height: 220 }, expanded: { width: 382, height: 512 } };
 const SAGE = 'rgb(206, 226, 196)';       // --color-link
@@ -607,12 +608,12 @@ test.describe('Monitoring presentation: controls by size band', () => {
     await expect(expandBtn).toHaveAttribute('aria-label', 'Expand');
     for (const btn of [stop, expandBtn]) {
       await expect(btn).toHaveCSS('opacity', '1');
-      await expect(btn).toHaveCSS('color', ICON);
+      await expect(btn).toHaveCSS('color', MUTED_ICON); // at rest (2026-11-13)
       await expect(btn).toHaveCSS('border-top-style', 'none');
       await expect(btn).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
     }
     const stopIcon = stop.locator('.pip-control-icon-stop');
-    await expect(stopIcon).toHaveCSS('background-color', ICON);
+    await expect(stopIcon).toHaveCSS('background-color', MUTED_ICON);
     await expect(stopIcon).toHaveCSS('width', '10px');
     await expect(stopIcon).toHaveCSS('border-radius', '2px');
     const s = await stop.boundingBox(); const e = await expandBtn.boundingBox();
@@ -623,10 +624,11 @@ test.describe('Monitoring presentation: controls by size band', () => {
     test(`toolbar at ${size.width}×${size.height}: docked flush to the ${toolbar === 'side' ? 'right edge, centered top to bottom, stacked' : 'bottom edge, centered left to right, side by side'}, inside one faint panel, 16px apart; Stop first; names kept`, async ({ page, context }) => {
       const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size, layout: 'compact' });
       await expect(monitoringScreen).toHaveAttribute('data-toolbar', toolbar);
-      if (Math.min(size.width, size.height) < 160) await monitoringScreen.hover(); // Mini reveals its toolbar on hover
+      await monitoringScreen.hover(); // Mini reveals its toolbar on hover; the full outline
       const panelEl = monitoringScreen.locator('.pip-monitoring-toolbar');
       await expect(panelEl).toHaveAttribute('aria-hidden', 'true');
       await expect(panelEl).toHaveCSS('opacity', '1');
+      await expect(panelEl).toHaveCSS('border-top-color', 'rgba(243, 235, 222, 0.12)');
       const panel = await panelEl.boundingBox();
       const s = await monitoringScreen.locator('.pip-control-btn-stop').boundingBox();
       const e = await monitoringScreen.locator('.pip-control-btn-expand').boundingBox();
@@ -862,6 +864,62 @@ test.describe('Monitoring presentation: controls by size band', () => {
     expect(contrast(colors.name, colors.bg)).toBeGreaterThanOrEqual(4.5);
     expect(contrast(colors.stopLabel, colors.bg)).toBeGreaterThanOrEqual(4.5);
   });
+
+  for (const [label, size] of [['Compact 240×186', { width: 240, height: 186 }], ['Compact 220×220', SIZES.compact], ['Mini 280×110 (docked)', SIZES.mini], ['Mini 140×140 (floating)', { width: 140, height: 140 }]]) {
+    test(`${label}: at rest the toolbar icons are muted to about 3:1 against the panel with a fainter outline; hover and keyboard focus bring them back to full contrast`, async ({ page, context }) => {
+      const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size, layout: 'compact' });
+      const mini = Math.min(size.width, size.height) < 160;
+      const read = () => pipPage.evaluate(() => {
+        const screen = document.querySelector('.pip-screen-monitoring');
+        const panel = document.querySelector('.pip-monitoring-toolbar');
+        const parse = (c) => c.match(/[\d.]+/g).map(Number);
+        // The panel's fill over the window background (alpha-composited).
+        const [br, bgG, bb] = parse(getComputedStyle(screen).backgroundColor);
+        const [pr, pg, pb, pa = 1] = parse(getComputedStyle(panel).backgroundColor);
+        const fill = [pr * pa + br * (1 - pa), pg * pa + bgG * (1 - pa), pb * pa + bb * (1 - pa)];
+        const icon = (sel) => getComputedStyle(document.querySelector(sel)).color;
+        return {
+          fill: `rgb(${fill.join(', ')})`,
+          stop: icon('.pip-control-btn-stop'),
+          expand: icon('.pip-control-btn-expand'),
+          stopSquare: getComputedStyle(document.querySelector('.pip-control-icon-stop')).backgroundColor,
+          outline: getComputedStyle(panel).borderTopColor,
+        };
+      });
+      if (!mini) {
+        // At rest: muted, about 3:1, the minimum for visible controls; a fainter outline.
+        await expect(monitoringScreen.locator('.pip-control-btn-stop')).toHaveCSS('color', MUTED_ICON);
+        await expect(monitoringScreen.locator('.pip-control-btn-expand')).toHaveCSS('color', MUTED_ICON);
+        await expect(monitoringScreen.locator('.pip-monitoring-toolbar')).toHaveCSS('border-top-color', 'rgba(243, 235, 222, 0.07)');
+        const rest = await read();
+        for (const c of [rest.stop, rest.expand, rest.stopSquare]) {
+          expect(c).toBe(MUTED_ICON);
+          const ratio = contrast(c, rest.fill);
+          expect(ratio).toBeGreaterThanOrEqual(3);
+          expect(ratio).toBeLessThan(3.6);
+        }
+        expect(rest.outline).toBe('rgba(243, 235, 222, 0.07)');
+      }
+      // Hover (Mini: the reveal): full contrast and the usual outline.
+      await monitoringScreen.hover();
+      await expect(monitoringScreen.locator('.pip-control-btn-stop')).toHaveCSS('color', ICON);
+      await expect(monitoringScreen.locator('.pip-control-btn-expand')).toHaveCSS('color', ICON);
+      await expect(monitoringScreen.locator('.pip-monitoring-toolbar')).toHaveCSS('border-top-color', 'rgba(243, 235, 222, 0.12)');
+      const hovered = await read();
+      for (const c of [hovered.stop, hovered.expand, hovered.stopSquare]) {
+        expect(c).toBe(ICON);
+        expect(contrast(c, hovered.fill)).toBeGreaterThanOrEqual(4.5);
+      }
+      expect(hovered.outline).toBe('rgba(243, 235, 222, 0.12)');
+      // Keyboard focus, with the pointer gone: full contrast too.
+      await pipPage.mouse.move(0, 0);
+      await pipPage.mouse.move(-10, -10).catch(() => {});
+      await monitoringScreen.locator('.pip-control-btn-stop').focus();
+      await expect(monitoringScreen.locator('.pip-control-btn-expand')).toHaveCSS('color', ICON);
+      // Never chartreuse.
+      for (const c of [hovered.stop, hovered.expand, hovered.outline]) expect(c).not.toMatch(/rgba?\(2[0-9]{2}, 2[0-9]{2}, (?:[0-9]{1,2}|1[0-4][0-9])[,)]/);
+    });
+  }
 
   test('Expand and Compact view switch the layout mode without stopping monitoring', async ({ page, context }) => {
     const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: SIZES.compact, layout: 'compact' });

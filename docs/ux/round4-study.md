@@ -47,7 +47,7 @@ Not linked from anywhere in Mezzo. It has its own look so it's never mistaken fo
 | --- | --- |
 | No code | "This page is for study participants", how to get in, and links to Mezzo and Privacy |
 | Code, baseline | Thanks, the code, "Your usual calls" with its count-these list, **Check in after a call** (baseline form). No link into the app. |
-| Code, With Mezzo, before day 14 | Thanks, the code, two numbered steps (**Open Mezzo**, **Check in after a call**), and Wrap-up: "Opens on {date}." |
+| Code, With Mezzo, before day 14 | Thanks, the code, two numbered steps (**Open Mezzo**, **Check in after a call**), and Wrap-up: "Opens {Month day}, and I’ll email you a reminder." |
 | Code, With Mezzo, day 14 on | The same, with **Wrap up the study** in place of the date |
 
 Every participant view ends with **How study data is handled**, a link to the Privacy page's "Research participants" section.
@@ -64,7 +64,7 @@ Shown below Ready's privacy line when a check-in is pending (§3). It never cove
 
 Shown after any close other than Close Companion (Meet's mini window, the native ✕). The card sits below **Reopen Companion** and **Done**. **Open check-in** here also ends the call, like Stop, so Reopen then opens to Ready. While a Reopen is continuing the call, the card waits. Source: `companion_closed`.
 
-### The "Keep this window open" page
+### The "Keep this page open" page
 
 The card sits below Close Companion, only while the Companion isn't monitoring. It's hidden mid-call, including while Reopen is resuming one. Source: `companion_open`.
 
@@ -107,7 +107,7 @@ Mezzo sends nothing itself. The values ride in the form link's query string, and
 | --- | --- | --- |
 | `mezzo_tester` | The tester code | All three |
 | `mezzo_browser_id` | The existing anonymous analytics ID (`mezzo_anonymous_id` in localStorage), so sessions from one browser can be grouped | Check-in |
-| `mezzo_source` | Where the link was opened from: `companion` (Ready card), `companion_closed` ("Companion closed" page), `companion_open` ("Keep this window open" page), `home` (page after Done or Close Companion), `study_page` (`/study`) | Check-in |
+| `mezzo_source` | Where the link was opened from: `companion` (Ready card), `companion_closed` ("Companion closed" page), `companion_open` ("Keep this page open" page), `home` (page after Done or Close Companion), `study_page` (`/study`) | Check-in |
 | `mezzo_session_date` | Local date the session started, `YYYY-MM-DD` | Check-in, with a session |
 | `mezzo_session_minutes` | Session length, Start to end, in minutes to one decimal (40s is `0.7`) | Check-in, with a session |
 | `mezzo_speech_minutes` | Speaking time in minutes, one decimal | Check-in, with a session that recorded it |
@@ -131,7 +131,7 @@ Mezzo sends nothing itself. The values ride in the form link's query string, and
 - "1-minute check-in"
 - **Open check-in** · **Skip this one**
 
-**Page cards ("Companion closed", "Keep this window open", the page after Done or Close Companion)**
+**Page cards ("Companion closed", "Keep this page open", the page after Done or Close Companion)**
 - "Call over? How did your call go?"
 - **Open check-in** · **Skip this one**
 
@@ -142,10 +142,10 @@ Mezzo sends nothing itself. The values ride in the form link's query string, and
 - **Reopen Companion** · **Done**
 - "Mezzo only measures volume. Nothing you say is recorded."
 
-**"Keep this window open" page**
+**"Keep this page open" page**
 - Status line: "Monitoring is not active" / "Monitoring is active"
-- "Keep this window open while you use Mezzo"
-- "It runs your Companion, so minimize it instead of closing it. When you're done, click Close Companion."
+- "Keep this page open while you use Mezzo"
+- "It runs your Companion. You can minimize this window or switch tabs, but closing this page closes the Companion. When you're done, click Close Companion."
 - **Close Companion**
 
 **Page after Done or Close Companion**
@@ -161,14 +161,15 @@ Mezzo sends nothing itself. The values ride in the form link's query string, and
 - Baseline only, under the code: "Bookmark this page. You’ll come back here after each call."
 - Baseline:
   - "Your usual calls"
-  - "Mezzo comes later. I’ll email it once your 2 check-ins are in."
+  - "Mezzo comes later. I’ll email it once your 2 check-ins are in." (in a pale slate callout, the only one on the page)
   - "For now, take your next 2 calls as you normally would. After each one, come back here and tap Check in after a call. It takes about a minute."
   - "Only count calls where:" "you’re wearing headphones" / "people are nearby" / "you speak, even a little"
   - **Check in after a call**
 - With Mezzo:
-  - "1 Use Mezzo on your calls": "When you take a call where you’ll speak, with headphones and people nearby, open Mezzo and start monitoring. If you’ve installed the extension, Mezzo also offers to start when a Google Meet call begins." **Open Mezzo**
-  - "2 Check in after your call": "When you stop monitoring, Mezzo asks how your call went. Missed it? Check in here, ideally within 2 hours of your call." **Check in after a call**
-  - "Wrap-up": "A few questions about your whole time with Mezzo. Opens on {date}." Then, from that date, **Wrap up the study**.
+  - Under the code: "Bookmark this page. You’ll come back here after calls and for the wrap-up."
+  - "1 Use Mezzo on your calls": "Open Mezzo and start monitoring on calls where:" "you’re wearing headphones" / "people are nearby" / "you’ll speak, even a little". "With the Chrome extension, Mezzo also offers to start when a Google Meet call begins." **Get the extension** (once its Chrome Web Store link is in `STUDY_CONFIG.extensionUrl`). **Open Mezzo**
+  - "2 Check in after your call": "When you stop monitoring, Mezzo asks how your call went. Look for this card:" [picture of the Companion's check-in card; alt: "The Mezzo Companion showing a 'How did your call go?' card with Open check-in and Skip this one buttons."] "Please check in after at least 2 calls." **Check in after a call**, then the note "Missed one? Check in here, ideally within 2 hours of your call."
+  - "Wrap-up": "A few questions about your whole time with Mezzo. Opens {Month day}, and I’ll email you a reminder. Finish it to get your $5 gift card." From that date: "A few questions about your whole time with Mezzo. Finish it to get your $5 gift card." and **Wrap up the study**.
 - "How study data is handled"
 - No code: "This page is for study participants" / "If you’re in a Mezzo study, open the personal study link you were given." / "Go to Mezzo · Privacy"
 

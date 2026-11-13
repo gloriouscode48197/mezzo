@@ -34,6 +34,7 @@ import {
   wrapUpOpensAt,
   isWrapUpOpen,
   formatLongDate,
+  formatMonthDay,
   isFormUrlReady,
   buildBaselineUrl,
 } from './study.js';
@@ -517,6 +518,7 @@ describe('end of study', () => {
   it('the wrap-up opens at the start of the local day 14 days after the first session', () => {
     assert.equal(wrapUpOpensAt(first), new Date(2026, 10, 23).getTime());
     assert.equal(formatLongDate(wrapUpOpensAt(first)), 'November 23, 2026');
+    assert.equal(formatMonthDay(wrapUpOpensAt(first)), 'November 23'); // /study's wrap-up line, no year
     assert.equal(isWrapUpOpen(first, new Date(2026, 10, 22, 23, 59).getTime()), false);
     assert.equal(isWrapUpOpen(first, new Date(2026, 10, 23, 0, 0).getTime()), true);
     assert.equal(isWrapUpOpen(null, Date.now()), false);

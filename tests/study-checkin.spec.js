@@ -405,7 +405,7 @@ test.describe('Study mode: the check-in on the "Companion closed" page', () => {
     await pipPage.waitForTimeout(300);
     await stopMonitoring(pipPage);
     await expect(card(pipPage)).toBeVisible();
-    // And on the "Keep this window open" page, for the same session.
+    // And on the "Keep this page open" page, for the same session.
     await expect(page.locator('#state-dock')).toHaveAttribute('data-variant', 'open');
     await expect(closedCard(page)).toBeVisible();
     expect((await closedParams(page)).mezzo_source).toBe('companion_open');
@@ -438,7 +438,7 @@ test.describe('Study mode: one pending check-in, in every view (2026-11-11)', ()
     return pipPage;
   }
 
-  test('after Stop: the Companion card and the "Keep this window open" card, below Close Companion; the page card hides while monitoring', async ({ page, context }) => {
+  test('after Stop: the Companion card and the "Keep this page open" card, below Close Companion; the page card hides while monitoring', async ({ page, context }) => {
     await seed(page, { code: 'R4-01' });
     const pipPage = await talkThenStop(page, context);
     await expect(card(pipPage)).toBeVisible();
@@ -561,6 +561,32 @@ test.describe('Study mode: the /study page', () => {
       'For now, take your next 2 calls as you normally would. After each one, come back here and tap Check in after a call. It takes about a minute.',
       'Only count calls where:',
     ]);
+    // "Mezzo comes later" (and nothing else) sits in a pale slate callout,
+    // with the normal dark text at well over 4.5:1, in light and dark
+    // system themes alike.
+    await expect(page.locator('.study-callout')).toHaveCount(1);
+    for (const scheme of ['light', 'dark']) {
+      await page.emulateMedia({ colorScheme: scheme });
+      const look = await page.locator('.study-callout').evaluate((el) => {
+        const st = getComputedStyle(el);
+        return { text: el.textContent, bg: st.backgroundColor, color: st.color, radius: st.borderTopLeftRadius, pad: st.paddingLeft };
+      });
+      expect(look.text).toBe('Mezzo comes later. I’ll email it once your 2 check-ins are in.');
+      expect(look.color).toBe('rgb(31, 41, 51)'); // --color-text, #1F2933
+      expect(look.bg).not.toBe('rgba(0, 0, 0, 0)');
+      expect(look.radius).toBe('6px');
+      expect(parseFloat(look.pad)).toBeGreaterThanOrEqual(12);
+      const lum = (c) => {
+        const v = c.match(/[\d.]+/g).slice(0, 3).map(Number).map((x) => { x /= 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; });
+        return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
+      };
+      // color-mix() may report as color(srgb ...) with 0..1 channels.
+      const toRgb = (c) => (c.startsWith('color(') ? `rgb(${c.match(/[\d.]+/g).slice(0, 3).map((x) => Number(x) * 255).join(', ')})` : c);
+      const [hi, lo] = [lum(toRgb(look.bg)), lum(look.color)].sort((x, y) => y - x);
+      expect((hi + 0.05) / (lo + 0.05)).toBeGreaterThanOrEqual(4.5);
+      expect(lum(toRgb(look.bg))).toBeGreaterThan(0.75); // pale
+    }
+    await page.emulateMedia({ colorScheme: 'light' });
     await expect(baselineSection.getByRole('list', { name: 'Only count calls where:' }).getByRole('listitem'))
       .toHaveText(['you’re wearing headphones', 'people are nearby', 'you speak, even a little']);
     // The button comes after the list, and nothing follows it (the old
@@ -603,7 +629,7 @@ test.describe('Study mode: the /study page', () => {
   test('?start=1 with a code unlocks With Mezzo before any session, remembers it, and leaves the address bar', async ({ page }) => {
     await page.goto('/study?study=R4-03&start=1');
     await expect(page.locator('body')).toHaveAttribute('data-study-stage', 'mezzo');
-    await expect(page.locator('#study-bookmark')).toBeHidden(); // baseline only
+    await expect(page.locator('#study-bookmark')).toHaveText('Bookmark this page. You’ll come back here after calls and for the wrap-up.');
     const url = new URL(page.url());
     expect(url.searchParams.has('study')).toBe(false);
     expect(url.searchParams.has('start')).toBe(false);
@@ -617,9 +643,9 @@ test.describe('Study mode: the /study page', () => {
     const expected = await page.evaluate(() => {
       const d = new Date(Number(localStorage.getItem('mezzoStudyMezzoStage:' + localStorage.getItem('mezzoStudyTesterCode'))));
       return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 14)
-        .toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+        .toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
     });
-    await expect(page.getByText(`A few questions about your whole time with Mezzo. Opens on ${expected}.`)).toBeVisible();
+    await expect(page.getByText(`A few questions about your whole time with Mezzo. Opens ${expected}, and I’ll email you a reminder. Finish it to get your $5 gift card.`)).toBeVisible();
   });
 
   test('?start=1 without a code does nothing', async ({ page }) => {
@@ -655,8 +681,44 @@ test.describe('Study mode: the /study page', () => {
     await expect(page.getByText('Your study code: R4-01')).toBeVisible();
     await expect(page.getByRole('heading', { level: 2 })).toHaveText(['With Mezzo', 'Wrap-up']);
     await expect(page.getByRole('heading', { level: 3 })).toHaveText(['Use Mezzo on your calls', 'Check in after your call']);
-    await expect(page.getByText('When you take a call where you’ll speak, with headphones and people nearby, open Mezzo and start monitoring. If you’ve installed the extension, Mezzo also offers to start when a Google Meet call begins.')).toBeVisible();
-    await expect(page.getByText('When you stop monitoring, Mezzo asks how your call went. Missed it? Check in here, ideally within 2 hours of your call.')).toBeVisible();
+    // Under the code, this stage's own bookmark line.
+    await expect(page.locator('#study-bookmark')).toHaveText('Bookmark this page. You’ll come back here after calls and for the wrap-up.');
+    expect(await page.locator('#study-bookmark').evaluate((el) => el.previousElementSibling.textContent)).toBe('Your study code: R4-01');
+    // Step 1: when to use Mezzo, the extension sentence; no extension link
+    // while its Chrome Web Store URL isn't in the config.
+    const step1 = page.locator('#study-step-use');
+    await expect(step1.locator('.study-item-body > p')).toHaveText([
+      'Open Mezzo and start monitoring on calls where:',
+      'With the Chrome extension, Mezzo also offers to start when a Google Meet call begins.',
+    ], { useInnerText: true }); // the hidden link isn't visible text
+    await expect(step1.getByRole('list', { name: 'Open Mezzo and start monitoring on calls where:' }).getByRole('listitem'))
+      .toHaveText(['you’re wearing headphones', 'people are nearby', 'you’ll speak, even a little']);
+    await expect(page.locator('#study-get-extension')).toBeHidden();
+    // Step 2: the text, the card picture, the ask, the button, the help note.
+    const step2 = page.locator('#study-step-check-in');
+    await expect(step2.locator('.study-item-body > p')).toHaveText([
+      'When you stop monitoring, Mezzo asks how your call went. Look for this card:',
+      'Please check in after at least 2 calls.',
+    ]);
+    const shot = step2.locator('img.study-card-shot');
+    await expect(shot).toHaveAttribute('alt', "The Mezzo Companion showing a 'How did your call go?' card with Open check-in and Skip this one buttons.");
+    expect(await shot.evaluate((img) => img.complete && img.naturalWidth > 0)).toBe(true);
+    const look = await shot.evaluate((img) => {
+      const st = getComputedStyle(img);
+      return { w: img.getBoundingClientRect().width, col: img.parentElement.getBoundingClientRect().width, radius: st.borderTopLeftRadius, border: st.borderTopWidth };
+    });
+    expect(look.w).toBeLessThanOrEqual(look.col);
+    expect(look.w).toBeLessThanOrEqual(240);
+    expect(look.radius).toBe('8px');
+    expect(look.border).toBe('1px');
+    const help = step2.locator('.study-help');
+    await expect(help).toHaveText('Missed one? Check in here, ideally within 2 hours of your call.');
+    // The page's own type (not the browser's serif), and plain bullets in step 1.
+    expect(await help.evaluate((el) => getComputedStyle(el).fontFamily)).toBe(await page.locator('#study-step-use .study-item-body > p').first().evaluate((el) => getComputedStyle(el).fontFamily));
+    await expect(page.locator('#study-step-use ul')).toHaveCSS('list-style-type', 'disc');
+    const [btn, helpBox, shotBox] = [await link(page, 'Check in after a call').boundingBox(), await help.boundingBox(), await shot.boundingBox()];
+    expect(shotBox.y).toBeLessThan(btn.y);                     // picture above the button
+    expect(helpBox.y).toBeGreaterThanOrEqual(btn.y + btn.height); // note under it
     await expect(page.getByText('Mezzo comes later.', { exact: false })).toBeHidden();
 
     // Open Mezzo is the primary button, the check-in the secondary one.
@@ -679,9 +741,9 @@ test.describe('Study mode: the /study page', () => {
     const expected = await page.evaluate(() => {
       const d = new Date(Number(localStorage.getItem('mezzoStudyFirstSession:' + localStorage.getItem('mezzoStudyTesterCode'))));
       return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 14)
-        .toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+        .toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
     });
-    await expect(page.getByText(`A few questions about your whole time with Mezzo. Opens on ${expected}.`)).toBeVisible();
+    await expect(page.getByText(`A few questions about your whole time with Mezzo. Opens ${expected}, and I’ll email you a reminder. Finish it to get your $5 gift card.`)).toBeVisible();
     await expect(page.getByRole('link', { name: 'How study data is handled' })).toHaveAttribute('href', '/privacy.html#research-participants');
   });
 
@@ -706,6 +768,23 @@ test.describe('Study mode: the /study page', () => {
     });
   }
 
+  test('With Mezzo stage: "Get the extension" appears after the extension sentence once its Chrome Web Store link is in the config', async ({ page }) => {
+    const STORE = 'https://chromewebstore.google.com/detail/mezzo/abcdefghijklmnop';
+    await page.route('**/src/study-config.js', async (route) => {
+      const res = await route.fetch();
+      const body = (await res.text()).replace("extensionUrl: ''", `extensionUrl: '${STORE}'`);
+      await route.fulfill({ response: res, body });
+    });
+    await seed(page, { code: 'R4-01', firstSessionAgo: DAY });
+    await page.goto('/study');
+    const ext = page.locator('#study-step-use').getByRole('link', { name: 'Get the extension' });
+    await expect(ext).toBeVisible();
+    await expect(ext).toHaveAttribute('href', STORE);
+    await expect(ext).toHaveAttribute('target', '_blank');
+    await expect(page.locator('#study-step-use .study-item-body > p').nth(1))
+      .toHaveText('With the Chrome extension, Mezzo also offers to start when a Google Meet call begins. Get the extension');
+  });
+
   test('With Mezzo stage, last session more than 2 hours ago: the check-in carries only the code and browser ID', async ({ page }) => {
     await seed(page, { code: 'R4-01', firstSessionAgo: 2 * DAY, lastSession: { length: 20 * MIN, endedAgo: 2 * 60 * MIN + MIN } });
     await page.goto('/study');
@@ -720,8 +799,8 @@ test.describe('Study mode: the /study page', () => {
     const wrapUp = new URL(await link(page, 'Wrap up the study').getAttribute('href'));
     expect(wrapUp.origin + wrapUp.pathname).toBe('https://tally.so/r/q5alaO');
     expect(Object.fromEntries(wrapUp.searchParams)).toEqual({ mezzo_tester: 'R4-01' });
-    await expect(page.getByText(/Opens on/)).toBeHidden();
-    await expect(page.getByText('A few questions about your whole time with Mezzo.')).toBeVisible();
+    await expect(page.getByText(/Opens /)).toBeHidden();
+    await expect(page.getByText('A few questions about your whole time with Mezzo. Finish it to get your $5 gift card.')).toBeVisible();
   });
 
   test('Open Mezzo without the extension: Mezzo opens in a window of its own, sized like the extension\'s, and this page stays', async ({ page, context }) => {

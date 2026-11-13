@@ -14,6 +14,9 @@ export const STUDY_CONFIG = {
    *  Tester code only. A placeholder URL here hides the button
    *  (isFormUrlReady()). */
   baselineFormUrl: 'https://tally.so/r/zEN6jg',
+  /** The extension's Chrome Web Store page, for /study's "Get the
+   *  extension" link. Empty hides the link (isFormUrlReady()). */
+  extensionUrl: '',
 
   /** The check-in is offered for this long after a session ends. */
   checkInWindowMs: 2 * 60 * 60 * 1000,
@@ -64,7 +67,7 @@ export const STUDY_CONFIG = {
     companion: 'companion',
     studyPage: 'study_page',
     companionClosed: 'companion_closed',
-    /** The main tab's "Keep this window open" page. */
+    /** The main tab's "Keep this page open" page. */
     companionOpen: 'companion_open',
     /** The page the tab returns to after Done or Close Companion. */
     home: 'home',

@@ -3017,6 +3017,26 @@ export function createMezzoSession({
       }
       .pip-screen-monitoring[data-toolbar="bottom"] .pip-control-btn-stop { left: calc(50% - 40px); }
       .pip-screen-monitoring[data-toolbar="bottom"] .pip-control-btn-expand { left: calc(50% + 8px); }
+      /* At rest (2026-11-13) only the glow should draw the eye: the
+         toolbar's icons are a muted gray, #84807A, about 3.1:1 against the
+         panel (the minimum for visible controls), and its outline is
+         fainter. The pointer over the window, keyboard focus in it, or
+         Mini's reveal brings them back to #B0AB9E (5.3:1) and the usual
+         outline; hovering a button still turns it cream. Never chartreuse;
+         no size or position changes. */
+      .pip-screen-monitoring[data-toolbar] .pip-control-btn { color: #84807A; }
+      .pip-screen-monitoring[data-toolbar] .pip-monitoring-toolbar { border-color: rgba(243, 235, 222, 0.07); }
+      .pip-screen-monitoring[data-toolbar]:hover .pip-control-btn,
+      .pip-screen-monitoring[data-toolbar]:focus-within .pip-control-btn,
+      .pip-screen-monitoring[data-toolbar].pip-controls-revealed .pip-control-btn { color: #B0AB9E; }
+      .pip-screen-monitoring[data-toolbar]:hover .pip-monitoring-toolbar,
+      .pip-screen-monitoring[data-toolbar]:focus-within .pip-monitoring-toolbar,
+      .pip-screen-monitoring[data-toolbar].pip-controls-revealed .pip-monitoring-toolbar { border-color: rgba(243, 235, 222, 0.12); }
+      .pip-screen-monitoring[data-toolbar] .pip-control-btn:hover { color: #F3EBDE; }
+      .pip-monitoring-toolbar { transition: opacity 0.15s ease, border-color 0.12s ease; }
+      @media (prefers-reduced-motion: reduce) {
+        .pip-monitoring-toolbar { transition: none; }
+      }
       /* Mini (2026-11-12), when docking would overlap the ring's far-over
          glow (ringLayout()): floated over the ring, centered in the window
          (the ring's center), on a solid backing in the window's color with
