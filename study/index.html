@@ -126,27 +126,20 @@
     }
     .study-item-head h3 { margin: 0; }
     /* Wider screens: the With Mezzo stage widens so its two steps sit side
-       by side as equal columns, tops aligned and buttons on one line; Wrap-up
-       stays full width below. Your usual calls keeps the 560px column. */
+       by side as equal columns, tops aligned; each step's button follows
+       its own text (2026-11-13: no shared rows, so step 1 has no gap
+       under it). Wrap-up stays full width below. Your usual calls keeps
+       the 560px column. */
     @media (min-width: 760px) {
       body[data-study-stage="mezzo"] .study-main { max-width: 760px; }
-      /* Shared rows (subgrid): the headings, the text and the buttons each
-         line up across the two columns, buttons by their top edge. */
       .study-steps {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        grid-template-rows: auto 1fr auto;
+        align-items: start;
         column-gap: var(--space-6);
         margin-top: var(--space-5);
       }
-      .study-steps .study-item {
-        margin-top: 0;
-        display: grid;
-        grid-row: span 3;
-        grid-template-rows: subgrid;
-        justify-items: start;
-        align-items: start;
-      }
+      .study-steps .study-item { margin-top: 0; }
     }
     .study-item h3 {
       margin: 0 0 var(--space-2);
@@ -167,12 +160,13 @@
       color: var(--color-text);
     }
     .study-list li + li { margin-top: var(--space-1); }
-    /* Step 2's picture of the Companion's check-in card: small, never
-       wider than its column, rounded with a thin border. */
+    /* Step 2's picture of the Companion's check-in card: small (200px,
+       so step 2 stays close to step 1's height), never wider than its
+       column, rounded with a thin border. */
     .study-card-shot {
       display: block;
       box-sizing: border-box;
-      width: 240px;
+      width: 200px;
       max-width: 100%;
       height: auto;
       margin: 0 0 var(--space-3);
@@ -237,7 +231,28 @@
       margin: 0;
       accent-color: var(--study-band);
     }
-    .study-main .study-done { margin-top: var(--space-3); color: var(--color-text); }
+    /* The Part 1 thank-you: the callout's pale slate with the dark text
+       (about 13:1), led by a small slate check (about 5.5:1 on the tint). */
+    .study-main .study-done {
+      display: flex;
+      align-items: flex-start;
+      gap: var(--space-2);
+      margin: var(--space-3) 0 0;
+      padding: var(--space-3) var(--space-4);
+      border-radius: 6px;
+      background: color-mix(in srgb, var(--study-band) 10%, #FFFFFF);
+      color: var(--color-text);
+    }
+    .study-main .study-done::before {
+      content: "";
+      flex: none;
+      width: 16px;
+      height: 16px;
+      margin-top: 0.2em;
+      background: var(--study-band);
+      -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8.5l3.2 3.2L13 4.8' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+      mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8.5l3.2 3.2L13 4.8' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+    }
     .study-main .study-done:empty { display: none; }
     .visually-hidden {
       position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
@@ -276,7 +291,7 @@
       <!-- Baseline stage: a code, before the With Mezzo stage. -->
       <section class="study-phase" id="study-baseline" hidden aria-labelledby="study-baseline-heading">
         <h2 id="study-baseline-heading">Part 1: Your usual calls</h2>
-        <p class="type-body study-callout">Mezzo comes later. I’ll email it once your 2 check-ins are in.</p>
+        <p class="type-body study-callout">Mezzo comes later. I’ll email it to you once you’ve given feedback on 2 calls.</p>
         <p class="type-body">For now, take your next 2 calls as you normally would. After each one, come back here and click Check in after a call. It takes about a minute.</p>
         <!-- Which calls count, with the button beside the list (stacked on
              a phone). -->
@@ -314,8 +329,6 @@
                 <span class="study-step-num" aria-hidden="true">1</span>
                 <h3>Use Mezzo on your calls</h3>
               </div>
-              <!-- Head, body and actions: the three rows the two steps share
-                   on wide screens, so their buttons line up. -->
               <div class="study-item-body">
                 <p class="type-body study-list-intro" id="study-use-intro">Open Mezzo and start monitoring on calls where:</p>
                 <ul class="type-body study-list" aria-labelledby="study-use-intro">

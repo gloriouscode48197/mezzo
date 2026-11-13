@@ -166,10 +166,10 @@ Mezzo sends nothing itself. The values ride in the form link's query string, and
 - Baseline only, under the code: "Bookmark this page. You’ll come back here after each call."
 - Baseline:
   - "Part 1: Your usual calls"
-  - "Mezzo comes later. I’ll email it once your 2 check-ins are in." (in a pale slate callout, the only one on the page)
+  - "Mezzo comes later. I’ll email it to you once you’ve given feedback on 2 calls." (in a pale slate callout, the only one on the page)
   - "For now, take your next 2 calls as you normally would. After each one, come back here and click Check in after a call. It takes about a minute."
   - In a bordered box: "Only give feedback on calls where:" "you’re wearing headphones" / "people are nearby" / "you speak, even a little", with **Check in after a call** to the right (below the list on a phone)
-  - Two checkboxes the tester ticks: "I finished check-in 1" / "I finished check-in 2". Both ticked: "You’re done with Part 1. Thank you! I’ll email you Mezzo soon." 
+  - Two checkboxes the tester ticks: "I finished check-in 1" / "I finished check-in 2". Both ticked: "You’re done with Part 1. Thank you! I’ll email you Mezzo soon." in the callout's pale slate, led by a small slate check
 - With Mezzo:
   - Under the code: "Bookmark this page. You’ll come back here after calls and for the wrap-up."
   - "Part 2: With Mezzo"

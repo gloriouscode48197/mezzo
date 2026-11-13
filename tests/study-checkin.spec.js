@@ -568,7 +568,7 @@ test.describe('Study mode: the /study page', () => {
     await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Part 1: Your usual calls']);
     const baselineSection = page.locator('#study-baseline');
     await expect(baselineSection.locator('p:visible')).toHaveText([
-      'Mezzo comes later. I’ll email it once your 2 check-ins are in.',
+      'Mezzo comes later. I’ll email it to you once you’ve given feedback on 2 calls.',
       'For now, take your next 2 calls as you normally would. After each one, come back here and click Check in after a call. It takes about a minute.',
       'Only give feedback on calls where:',
     ]);
@@ -582,7 +582,7 @@ test.describe('Study mode: the /study page', () => {
         const st = getComputedStyle(el);
         return { text: el.textContent, bg: st.backgroundColor, color: st.color, radius: st.borderTopLeftRadius, pad: st.paddingLeft };
       });
-      expect(look.text).toBe('Mezzo comes later. I’ll email it once your 2 check-ins are in.');
+      expect(look.text).toBe('Mezzo comes later. I’ll email it to you once you’ve given feedback on 2 calls.');
       expect(look.color).toBe('rgb(31, 41, 51)'); // --color-text, #1F2933
       expect(look.bg).not.toBe('rgba(0, 0, 0, 0)');
       expect(look.radius).toBe('6px');
@@ -726,7 +726,7 @@ test.describe('Study mode: the /study page', () => {
       return { w: img.getBoundingClientRect().width, col: img.parentElement.getBoundingClientRect().width, radius: st.borderTopLeftRadius, border: st.borderTopWidth };
     });
     expect(look.w).toBeLessThanOrEqual(look.col);
-    expect(look.w).toBeLessThanOrEqual(240);
+    expect(look.w).toBe(200);
     expect(look.radius).toBe('8px');
     expect(look.border).toBe('1px');
     const help = step2.locator('.study-help');
@@ -929,7 +929,7 @@ test.describe('Study mode: the /study page', () => {
     await expect.poll(async () => (await nav.boundingBox()).y).toBeLessThan(-200);
   });
 
-  test('layout, wide screen: With Mezzo\'s two numbered steps sit side by side as equal columns, tops and buttons aligned; Wrap-up full width below, unnumbered', async ({ page }) => {
+  test('layout, wide screen: With Mezzo\'s two numbered steps sit side by side as equal columns, tops aligned, each button right under its own step; Wrap-up full width below, unnumbered', async ({ page }) => {
     await page.setViewportSize({ width: 1200, height: 900 });
     await seed(page, { code: 'R4-01', firstSessionAgo: DAY });
     await page.goto('/study');
@@ -941,8 +941,14 @@ test.describe('Study mode: the /study page', () => {
     expect(Math.abs(one.y - two.y)).toBeLessThanOrEqual(1);          // same top edge
     expect(Math.abs(one.width - two.width)).toBeLessThanOrEqual(1);  // equal columns
     expect(two.x).toBeGreaterThan(one.x + one.width);                // side by side
-    const [b1, b2] = [await page.locator('#study-open-mezzo').boundingBox(), await page.locator('#study-check-in').boundingBox()];
-    expect(Math.abs(b1.y - b2.y)).toBeLessThanOrEqual(1);            // buttons on one line
+    // Each button sits right under its own step's text (no shared rows),
+    // so step 1 has no gap; step 2 isn't much taller than step 1.
+    for (const [step, button] of [['#study-step-use', '#study-open-mezzo'], ['#study-step-check-in', '#study-check-in']]) {
+      const body = await page.locator(`${step} .study-item-body`).boundingBox();
+      const b = await page.locator(button).boundingBox();
+      expect(b.y - (body.y + body.height)).toBeLessThanOrEqual(24);
+    }
+    expect(two.height).toBeLessThan(one.height * 2);  // the 200px picture keeps step 2 under twice step 1
     // The number marker: a small slate circle with a white number.
     const num = await steps.nth(0).locator('.study-step-num').evaluate((el) => {
       const st = getComputedStyle(el);
@@ -988,6 +994,29 @@ test.describe('Study mode: the /study page', () => {
     await two.check();
     await expect(done).toHaveText(THANKS);
     await expect(done).toBeVisible();
+    // It stands out: the callout's pale slate and dark text, led by a
+    // small slate check icon; text and icon both meet contrast.
+    const look = await done.evaluate((el) => {
+      const st = getComputedStyle(el);
+      const icon = getComputedStyle(el, '::before');
+      const callout = getComputedStyle(document.querySelector('.study-callout'));
+      return { bg: st.backgroundColor, calloutBg: callout.backgroundColor, color: st.color, radius: st.borderTopLeftRadius,
+        iconW: icon.width, iconBg: icon.backgroundColor, iconMask: icon.maskImage || icon.webkitMaskImage };
+    });
+    expect(look.bg).toBe(look.calloutBg);
+    expect(look.color).toBe('rgb(31, 41, 51)');
+    expect(look.radius).toBe('6px');
+    expect(look.iconW).toBe('16px');
+    expect(look.iconBg).toBe('rgb(68, 96, 122)'); // --study-band
+    expect(look.iconMask).toContain('svg');
+    const lum = (c) => {
+      const v = c.match(/[\d.]+/g).slice(0, 3).map(Number).map((x) => { x /= 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; });
+      return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
+    };
+    const toRgb = (c) => (c.startsWith('color(') ? `rgb(${c.match(/[\d.]+/g).slice(0, 3).map((x) => Number(x) * 255).join(', ')})` : c);
+    const ratio = (a, b) => { const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x); return (hi + 0.05) / (lo + 0.05); };
+    expect(ratio(toRgb(look.bg), look.color)).toBeGreaterThanOrEqual(4.5);
+    expect(ratio(toRgb(look.bg), look.iconBg)).toBeGreaterThanOrEqual(3);
     // Below the checkboxes.
     const checksBox = await page.locator('.study-checks').boundingBox();
     expect((await done.boundingBox()).y).toBeGreaterThan(checksBox.y + checksBox.height - 1);
