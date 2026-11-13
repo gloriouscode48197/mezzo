@@ -4743,8 +4743,11 @@ function ringLayout() {
       const toolbar = width > height ? 'side' : 'bottom';
       if (monitoringScreenEl) monitoringScreenEl.dataset.toolbar = toolbar;
       const pad = (r) => ({ left: r.left - TOOLBAR_GAP_PX, top: r.top - TOOLBAR_GAP_PX, right: r.right + TOOLBAR_GAP_PX, bottom: r.bottom + TOOLBAR_GAP_PX });
+      // Mini (2026-11-12): the toolbar only fades in on hover or focus, so
+      // the ring takes the whole window and the toolbar sits over its edge
+      // when it appears; the ring never resizes for it.
       const obstacles = [];
-      for (const el of monitoringScreenEl?.querySelectorAll('.pip-monitoring-toolbar, .pip-control-btn') ?? []) {
+      for (const el of band === 'mini' ? [] : monitoringScreenEl?.querySelectorAll('.pip-monitoring-toolbar, .pip-control-btn') ?? []) {
         if (el.offsetParent === null) continue;
         const r = el.getBoundingClientRect();
         if (r.width && r.height) obstacles.push(pad(r));

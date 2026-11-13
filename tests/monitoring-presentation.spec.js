@@ -51,7 +51,9 @@ const distanceToRect = (x, y, r) => Math.hypot(Math.max(r.left - x, 0, x - r.rig
  *  the app finds it (largestClearCircle()). */
 const ringArea = (boxes) => {
   const pad = (r) => ({ left: r.left - 4, top: r.top - 4, right: r.right + 4, bottom: r.bottom + 4 });
-  const { cx, cy, radius } = largestClearCircle(boxes.width, boxes.height, [boxes.toolbarPanel, ...boxes.controls].map(pad));
+  // Mini (2026-11-12): the whole window; its toolbar sits over the ring.
+  const obstacles = boxes.band === 'mini' ? [] : [boxes.toolbarPanel, ...boxes.controls].map(pad);
+  const { cx, cy, radius } = largestClearCircle(boxes.width, boxes.height, obstacles);
   return { cx, cy, radius };
 };
 /** The edge the ring should have for a layout (see ringEdge() in the app).
@@ -484,7 +486,7 @@ test.describe('Monitoring presentation: the ring is sized for full Outside', () 
     { width: 240, height: 186 }, SIZES.compact, { width: 299, height: 299 }, { width: 170, height: 170 },
     { width: 290, height: 165 }, SIZES.mini, { width: 140, height: 140 }, { width: 150, height: 300 },
   ]) {
-    test(`${size.width}×${size.height}: far over, the ring is the largest circle clear of the docked toolbar, and its glow is never clipped or over the toolbar`, async ({ page, context }) => {
+    test(`${size.width}×${size.height}: far over, the ring is the largest circle clear of the docked toolbar (Mini: of the whole window), and its glow is never clipped`, async ({ page, context }) => {
       const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size, driven: true, layout: 'compact' });
       const short = Math.min(size.width, size.height);
       const bandName = short < 160 ? 'mini' : 'compact';
@@ -517,9 +519,16 @@ test.describe('Monitoring presentation: the ring is sized for full Outside', () 
       expect(cy - glowRadius).toBeGreaterThanOrEqual(0);
       expect(cx + glowRadius).toBeLessThanOrEqual(size.width);
       expect(cy + glowRadius).toBeLessThanOrEqual(size.height);
-      expect(distanceToRect(cx, cy, boxes.toolbarPanel), 'glow clear of the toolbar').toBeGreaterThan(glowRadius);
-      for (const c of await controlRects(pipPage)) {
-        expect(distanceToRect(cx, cy, c), `glow clear of ${c.name}`).toBeGreaterThan(glowRadius);
+      // Compact: clear of the toolbar too. Mini: the toolbar only fades in
+      // on hover or focus and may sit over the ring's edge.
+      if (bandName === 'compact') {
+        expect(distanceToRect(cx, cy, boxes.toolbarPanel), 'glow clear of the toolbar').toBeGreaterThan(glowRadius);
+        for (const c of await controlRects(pipPage)) {
+          expect(distanceToRect(cx, cy, c), `glow clear of ${c.name}`).toBeGreaterThan(glowRadius);
+        }
+      } else {
+        expect(Math.abs(cx - size.width / 2)).toBeLessThanOrEqual(1);
+        expect(Math.abs(cy - size.height / 2)).toBeLessThanOrEqual(1);
       }
       // The ring is the largest element.
       for (const c of await controlRects(pipPage)) expect(r.edgePx).toBeGreaterThan(c.right - c.left);
@@ -692,6 +701,30 @@ test.describe('Monitoring presentation: controls by size band', () => {
       }
     }
   });
+
+  for (const size of [SIZES.mini, { width: 140, height: 140 }]) {
+    test(`Mini ${size.width}×${size.height}: the ring fills the window as if the toolbar weren't there, and doesn't resize when the toolbar fades in over its edge`, async ({ page, context }) => {
+      const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size, layout: 'compact' });
+      await expect(monitoringScreen).toHaveAttribute('data-size-band', 'mini');
+      const ring = monitoringScreen.locator('.mezzo-ring');
+      const before = await ring.boundingBox();
+      // Centered in the whole window.
+      expect(Math.abs(before.x + before.width / 2 - size.width / 2)).toBeLessThanOrEqual(1);
+      expect(Math.abs(before.y + before.height / 2 - size.height / 2)).toBeLessThanOrEqual(1);
+      expect(before.width).toBeCloseTo(expectedEdge(await layoutBoxes(pipPage)), 0);
+      await monitoringScreen.hover();
+      const panel = monitoringScreen.locator('.pip-monitoring-toolbar');
+      await expect(panel).toHaveCSS('opacity', '1');
+      const after = await ring.boundingBox();
+      expect([after.x, after.y, after.width, after.height]).toEqual([before.x, before.y, before.width, before.height]);
+      // The toolbar is drawn above the ring.
+      const z = await pipPage.evaluate(() => [
+        getComputedStyle(document.querySelector('.pip-monitoring-toolbar')).zIndex,
+        getComputedStyle(document.querySelector('.pip-circle-wrapper')).zIndex,
+      ].map(Number));
+      expect(z[0]).toBeGreaterThan(z[1]);
+    });
+  }
 
   test('Mini (280×110): ring only at rest; pointer entry reveals the toolbar with Stop and Expand, hidden again 2s after it leaves', async ({ page, context }) => {
     const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: SIZES.mini, layout: 'compact' });
