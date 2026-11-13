@@ -158,11 +158,12 @@ Mezzo sends nothing itself. The values ride in the form link's query string, and
 - Header: "Mezzo study" · Privacy
 - "Thanks for joining the Mezzo study"
 - "Your study code: {code}"
+- Baseline only, under the code: "Bookmark this page. You’ll come back here after each call."
 - Baseline:
   - "Your usual calls"
-  - "Mezzo comes later. I’ll send it once your 2 check-ins are in."
-  - "For now, take your next 2 calls as you normally would. After each one, fill out a 1-minute check-in."
-  - "Count calls where:" "you’re wearing headphones" / "people are nearby" / "you speak, even a little"
+  - "Mezzo comes later. I’ll email it once your 2 check-ins are in."
+  - "For now, take your next 2 calls as you normally would. After each one, come back here and tap Check in after a call. It takes about a minute."
+  - "Only count calls where:" "you’re wearing headphones" / "people are nearby" / "you speak, even a little"
   - **Check in after a call**
 - With Mezzo:
   - "1 Use Mezzo on your calls": "When you take a call where you’ll speak, with headphones and people nearby, open Mezzo and start monitoring. If you’ve installed the extension, Mezzo also offers to start when a Google Meet call begins." **Open Mezzo**
@@ -186,7 +187,7 @@ Mezzo sends nothing itself. The values ride in the form link's query string, and
 - **Unlock by link, or the first session:** the researcher controls the switch, and a tester who starts Mezzo anyway is still counted correctly.
 - **`/study` has its own look** (white page, slate-blue band and buttons, no cream, charcoal or chartreuse): it's a research page, never to be mistaken for the product.
 - **`/study` header scrolls away, no Home link:** it's a short page, and a Home link would lead baseline testers into the app.
-- **"Mezzo comes later" first, then "Count calls where":** testers asked what counts and when they'd get Mezzo. Answering both up front prevents uncounted calls.
+- **"Mezzo comes later" first, then "Only count calls where":** testers asked what counts and when they'd get Mezzo. Answering both up front prevents uncounted calls.
 - **Numbered steps, side by side:** the With Mezzo stage is two actions in order. Numbers and columns make it read as a sequence at a glance.
 - **"ideally within 2 hours of your call":** it tells testers to check in soon, without making a late check-in feel wrong.
 - **Check-in card is filled but lighter than Start monitoring:** it should be noticed after a call without competing with the main action, and chartreuse stays reserved for the over-range band.

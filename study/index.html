@@ -193,13 +193,15 @@
     <section id="study-participant" hidden>
       <h1 class="study-title">Thanks for joining the Mezzo study</h1>
       <p class="type-body">Your study code: <span class="study-code" id="study-code"></span></p>
+      <!-- Baseline stage only. -->
+      <p class="type-body" id="study-bookmark" hidden>Bookmark this page. You’ll come back here after each call.</p>
 
       <!-- Baseline stage: a code, before the With Mezzo stage. -->
       <section class="study-phase" id="study-baseline" hidden aria-labelledby="study-baseline-heading">
         <h2 id="study-baseline-heading">Your usual calls</h2>
-        <p class="type-body">Mezzo comes later. I’ll send it once your 2 check-ins are in.</p>
-        <p class="type-body">For now, take your next 2 calls as you normally would. After each one, fill out a 1-minute check-in.</p>
-        <p class="type-body study-list-intro" id="study-baseline-count">Count calls where:</p>
+        <p class="type-body">Mezzo comes later. I’ll email it once your 2 check-ins are in.</p>
+        <p class="type-body">For now, take your next 2 calls as you normally would. After each one, come back here and tap Check in after a call. It takes about a minute.</p>
+        <p class="type-body study-list-intro" id="study-baseline-count">Only count calls where:</p>
         <ul class="type-body study-list" aria-labelledby="study-baseline-count">
           <li>you’re wearing headphones</li>
           <li>people are nearby</li>
@@ -293,6 +295,7 @@
     if (stage === 'baseline') {
       // Baseline: one check-in form, tester code only. No way into Mezzo.
       $('study-baseline').hidden = false;
+      $('study-bookmark').hidden = false;
       const href = buildBaselineUrl({ testerCode });
       const button = $('study-baseline-check-in');
       if (href) button.href = href;

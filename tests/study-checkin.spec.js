@@ -550,14 +550,18 @@ test.describe('Study mode: the /study page', () => {
     await expect(page.locator('body')).toHaveAttribute('data-study-stage', 'baseline');
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Thanks for joining the Mezzo study');
     await expect(page.getByText('Your study code: R4-01')).toBeVisible();
+    await expect(page.locator('#study-bookmark')).toBeVisible();
+    await expect(page.locator('#study-bookmark')).toHaveText('Bookmark this page. You’ll come back here after each call.');
+    // Right under the study code.
+    expect(await page.locator('#study-bookmark').evaluate((el) => el.previousElementSibling.textContent)).toBe('Your study code: R4-01');
     await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Your usual calls']);
     const baselineSection = page.locator('#study-baseline');
     await expect(baselineSection.locator('p')).toHaveText([
-      'Mezzo comes later. I’ll send it once your 2 check-ins are in.',
-      'For now, take your next 2 calls as you normally would. After each one, fill out a 1-minute check-in.',
-      'Count calls where:',
+      'Mezzo comes later. I’ll email it once your 2 check-ins are in.',
+      'For now, take your next 2 calls as you normally would. After each one, come back here and tap Check in after a call. It takes about a minute.',
+      'Only count calls where:',
     ]);
-    await expect(baselineSection.getByRole('list', { name: 'Count calls where:' }).getByRole('listitem'))
+    await expect(baselineSection.getByRole('list', { name: 'Only count calls where:' }).getByRole('listitem'))
       .toHaveText(['you’re wearing headphones', 'people are nearby', 'you speak, even a little']);
     // The button comes after the list, and nothing follows it (the old
     // "Please don’t try Mezzo yet…" note is gone).
@@ -599,6 +603,7 @@ test.describe('Study mode: the /study page', () => {
   test('?start=1 with a code unlocks With Mezzo before any session, remembers it, and leaves the address bar', async ({ page }) => {
     await page.goto('/study?study=R4-03&start=1');
     await expect(page.locator('body')).toHaveAttribute('data-study-stage', 'mezzo');
+    await expect(page.locator('#study-bookmark')).toBeHidden(); // baseline only
     const url = new URL(page.url());
     expect(url.searchParams.has('study')).toBe(false);
     expect(url.searchParams.has('start')).toBe(false);
