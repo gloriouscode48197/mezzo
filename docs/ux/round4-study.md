@@ -217,4 +217,3 @@ Mezzo sends nothing itself. The values ride in the form link's query string, and
 - **A "Try again" button when the noisy-room tip shows**, so a tester can recalibrate on the spot after moving closer to the mic instead of finding Recalibrate later.
 - **Per-mic calibrations:** profiles measured with one microphone drift when used with another. See `docs/prd/mic-and-distance-mismatch.md` (Proposed, not built).
 - **Narrow the extension's content-script matches** (`meet.google.com`, `*.zoom.us`, `teams.microsoft.com`, `teams.live.com`) once real Zoom and Teams calls confirm which hosts the meeting pages actually use.
-- **Stale comment in `study/index.html`:** a comment still mentions a "5-minute" rule that was removed on 2026-11-11 (the behavior is correct; only the comment is old).

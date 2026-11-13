@@ -3017,6 +3017,21 @@ export function createMezzoSession({
       }
       .pip-screen-monitoring[data-toolbar="bottom"] .pip-control-btn-stop { left: calc(50% - 40px); }
       .pip-screen-monitoring[data-toolbar="bottom"] .pip-control-btn-expand { left: calc(50% + 8px); }
+      /* Mini (2026-11-12): floated over the ring, centered in the window
+         (the ring's center), on a solid backing in the window's color with
+         the faint outline and rounded corners on every side; Stop and
+         Expand side by side. Only shown on hover or focus (above). */
+      .pip-screen-monitoring[data-toolbar="center"] .pip-monitoring-toolbar {
+        left: calc(50% - 44px); top: calc(50% - 20px); right: auto; bottom: auto;
+        width: 88px; height: 40px;
+        background: var(--color-bg);
+        border-radius: 6px;
+      }
+      .pip-screen-monitoring[data-toolbar="center"] .pip-control-btn {
+        top: calc(50% - 16px); right: auto; bottom: auto;
+      }
+      .pip-screen-monitoring[data-toolbar="center"] .pip-control-btn-stop { left: calc(50% - 40px); }
+      .pip-screen-monitoring[data-toolbar="center"] .pip-control-btn-expand { left: calc(50% + 8px); }
       @media (prefers-reduced-motion: reduce) {
         .pip-control-btn,
         .pip-screen-monitoring[data-size-band="expanded"] .pip-control-btn-stop,
@@ -4740,7 +4755,9 @@ function ringLayout() {
     // buttons), so its far-over glow never reaches the toolbar or the
     // window's edges (see ringEdge()).
     if (band !== 'expanded') {
-      const toolbar = width > height ? 'side' : 'bottom';
+      // Mini (2026-11-12): the toolbar floats over the ring's center when
+      // it fades in; Compact docks it to an edge.
+      const toolbar = band === 'mini' ? 'center' : width > height ? 'side' : 'bottom';
       if (monitoringScreenEl) monitoringScreenEl.dataset.toolbar = toolbar;
       const pad = (r) => ({ left: r.left - TOOLBAR_GAP_PX, top: r.top - TOOLBAR_GAP_PX, right: r.right + TOOLBAR_GAP_PX, bottom: r.bottom + TOOLBAR_GAP_PX });
       // Mini (2026-11-12): the toolbar only fades in on hover or focus, so

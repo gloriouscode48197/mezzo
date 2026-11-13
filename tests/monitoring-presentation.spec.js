@@ -503,7 +503,7 @@ test.describe('Monitoring presentation: the ring is sized for full Outside', () 
       expect(r.edgePx).toBeLessThanOrEqual(0.8 * short + 0.5);
 
       // The toolbar: docked right when wider than tall, else docked bottom.
-      expect(boxes.toolbar).toBe(size.width > size.height ? 'side' : 'bottom');
+      expect(boxes.toolbar).toBe(bandName === 'mini' ? 'center' : size.width > size.height ? 'side' : 'bottom');
       // At the center of the largest clear circle.
       const area = ringArea(boxes);
       const ringBox = await monitoringScreen.locator('.mezzo-ring').boundingBox();
@@ -612,7 +612,7 @@ test.describe('Monitoring presentation: controls by size band', () => {
     expect([s.width, s.height, e.width, e.height].map(Math.round)).toEqual([32, 32, 32, 32]);
   });
 
-  for (const [size, toolbar] of [[{ width: 240, height: 186 }, 'side'], [{ width: 186, height: 240 }, 'bottom'], [SIZES.compact, 'bottom'], [SIZES.mini, 'side'], [{ width: 140, height: 140 }, 'bottom']]) {
+  for (const [size, toolbar] of [[{ width: 240, height: 186 }, 'side'], [{ width: 186, height: 240 }, 'bottom'], [SIZES.compact, 'bottom']]) {
     test(`toolbar at ${size.width}×${size.height}: docked flush to the ${toolbar === 'side' ? 'right edge, centered top to bottom, stacked' : 'bottom edge, centered left to right, side by side'}, inside one faint panel, 16px apart; Stop first; names kept`, async ({ page, context }) => {
       const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size, layout: 'compact' });
       await expect(monitoringScreen).toHaveAttribute('data-toolbar', toolbar);
@@ -655,6 +655,47 @@ test.describe('Monitoring presentation: controls by size band', () => {
       // Low contrast, never chartreuse: a faint cream outline and fill.
       expect(look.border).toBe('rgba(243, 235, 222, 0.12)');
       expect(look.bg).toBe('rgba(243, 235, 222, 0.04)');
+      await expect(monitoringScreen.getByRole('button', { name: 'Stop monitoring' })).toBeVisible();
+      await expect(monitoringScreen.getByRole('button', { name: 'Expand' })).toBeVisible();
+      await assertNoOverflow(pipPage);
+    });
+  }
+
+  for (const size of [SIZES.mini, { width: 140, height: 140 }]) {
+    test(`Mini ${size.width}×${size.height}: on hover the toolbar floats over the ring's center, side by side, 16px apart, on a solid backing with the outline and rounded corners on every side; names kept`, async ({ page, context }) => {
+      const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size, layout: 'compact' });
+      await expect(monitoringScreen).toHaveAttribute('data-toolbar', 'center');
+      const ringBox = await monitoringScreen.locator('.mezzo-ring').boundingBox();
+      await monitoringScreen.hover();
+      const panelEl = monitoringScreen.locator('.pip-monitoring-toolbar');
+      await expect(panelEl).toHaveCSS('opacity', '1');
+      await expect(panelEl).toHaveAttribute('aria-hidden', 'true');
+      const panel = await panelEl.boundingBox();
+      // Centered in the window, which is the ring's center.
+      expect(Math.abs(panel.x + panel.width / 2 - size.width / 2)).toBeLessThanOrEqual(1);
+      expect(Math.abs(panel.y + panel.height / 2 - size.height / 2)).toBeLessThanOrEqual(1);
+      expect(Math.abs(ringBox.x + ringBox.width / 2 - (panel.x + panel.width / 2))).toBeLessThanOrEqual(1);
+      expect(Math.abs(ringBox.y + ringBox.height / 2 - (panel.y + panel.height / 2))).toBeLessThanOrEqual(1);
+      const s = await monitoringScreen.locator('.pip-control-btn-stop').boundingBox();
+      const e = await monitoringScreen.locator('.pip-control-btn-expand').boundingBox();
+      const inside = (b) => b.x >= panel.x && b.y >= panel.y && b.x + b.width <= panel.x + panel.width && b.y + b.height <= panel.y + panel.height;
+      expect(inside(s) && inside(e)).toBe(true);
+      expect(Math.round(e.x - (s.x + s.width))).toBe(16); // Stop left of Expand
+      expect(Math.round(s.y)).toBe(Math.round(e.y));
+      const look = await panelEl.evaluate((el) => {
+        const st = getComputedStyle(el);
+        return {
+          border: st.borderTopColor, bg: st.backgroundColor,
+          widths: [st.borderTopWidth, st.borderRightWidth, st.borderBottomWidth, st.borderLeftWidth],
+          radii: [st.borderTopLeftRadius, st.borderTopRightRadius, st.borderBottomRightRadius, st.borderBottomLeftRadius],
+        };
+      });
+      expect(look.bg).toBe('rgb(45, 46, 49)'); // --color-bg, solid
+      expect(look.border).toBe('rgba(243, 235, 222, 0.12)');
+      expect(look.widths).toEqual(['1px', '1px', '1px', '1px']);
+      expect(look.radii).toEqual(['6px', '6px', '6px', '6px']);
+      // The ring doesn't move or resize.
+      expect(await monitoringScreen.locator('.mezzo-ring').boundingBox()).toEqual(ringBox);
       await expect(monitoringScreen.getByRole('button', { name: 'Stop monitoring' })).toBeVisible();
       await expect(monitoringScreen.getByRole('button', { name: 'Expand' })).toBeVisible();
       await assertNoOverflow(pipPage);

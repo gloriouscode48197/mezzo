@@ -312,9 +312,10 @@
 
       const checkIn = $('study-check-in');
       // The last session's data rides along whenever it ended within the
-      // 2-hour window, whatever its length or speaking time (the 5-minute
-      // and 1-minute-of-speech rules are only for the Companion's cards);
-      // otherwise just the tester code and browser ID.
+      // 2-hour window, whatever its speaking time. The cards' rule (a
+      // session qualifies with at least 1 minute of speech, with no minimum
+      // length) doesn't apply here; otherwise just the tester code and
+      // browser ID.
       function cardSession(now) {
         const session = getLastSession();
         return isWithinCheckInWindow(session, now) ? session : null;
