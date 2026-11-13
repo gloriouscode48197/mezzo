@@ -503,7 +503,8 @@ test.describe('Monitoring presentation: the ring is sized for full Outside', () 
       expect(r.edgePx).toBeLessThanOrEqual(0.8 * short + 0.5);
 
       // The toolbar: docked right when wider than tall, else docked bottom.
-      expect(boxes.toolbar).toBe(bandName === 'mini' ? 'center' : size.width > size.height ? 'side' : 'bottom');
+      const docked = size.width > size.height ? 'side' : 'bottom';
+      if (bandName === 'compact') expect(boxes.toolbar).toBe(docked);
       // At the center of the largest clear circle.
       const area = ringArea(boxes);
       const ringBox = await monitoringScreen.locator('.mezzo-ring').boundingBox();
@@ -529,6 +530,12 @@ test.describe('Monitoring presentation: the ring is sized for full Outside', () 
       } else {
         expect(Math.abs(cx - size.width / 2)).toBeLessThanOrEqual(1);
         expect(Math.abs(cy - size.height / 2)).toBeLessThanOrEqual(1);
+        // Mini: docked when the docked panel clears the far-over glow,
+        // otherwise floated over the ring's center.
+        const dockedRect = docked === 'side'
+          ? { left: size.width - 40, right: size.width, top: size.height / 2 - 44, bottom: size.height / 2 + 44 }
+          : { left: size.width / 2 - 44, right: size.width / 2 + 44, top: size.height - 40, bottom: size.height };
+        expect(boxes.toolbar).toBe(distanceToRect(cx, cy, dockedRect) >= glowRadius - 0.5 ? docked : 'center');
       }
       // The ring is the largest element.
       for (const c of await controlRects(pipPage)) expect(r.edgePx).toBeGreaterThan(c.right - c.left);
@@ -612,7 +619,7 @@ test.describe('Monitoring presentation: controls by size band', () => {
     expect([s.width, s.height, e.width, e.height].map(Math.round)).toEqual([32, 32, 32, 32]);
   });
 
-  for (const [size, toolbar] of [[{ width: 240, height: 186 }, 'side'], [{ width: 186, height: 240 }, 'bottom'], [SIZES.compact, 'bottom']]) {
+  for (const [size, toolbar] of [[{ width: 240, height: 186 }, 'side'], [{ width: 186, height: 240 }, 'bottom'], [SIZES.compact, 'bottom'], [SIZES.mini, 'side']]) {
     test(`toolbar at ${size.width}×${size.height}: docked flush to the ${toolbar === 'side' ? 'right edge, centered top to bottom, stacked' : 'bottom edge, centered left to right, side by side'}, inside one faint panel, 16px apart; Stop first; names kept`, async ({ page, context }) => {
       const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size, layout: 'compact' });
       await expect(monitoringScreen).toHaveAttribute('data-toolbar', toolbar);
@@ -661,7 +668,7 @@ test.describe('Monitoring presentation: controls by size band', () => {
     });
   }
 
-  for (const size of [SIZES.mini, { width: 140, height: 140 }]) {
+  for (const size of [{ width: 140, height: 140 }]) {
     test(`Mini ${size.width}×${size.height}: on hover the toolbar floats over the ring's center, side by side, 16px apart, on a solid backing with the outline and rounded corners on every side; names kept`, async ({ page, context }) => {
       const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size, layout: 'compact' });
       await expect(monitoringScreen).toHaveAttribute('data-toolbar', 'center');
@@ -699,6 +706,34 @@ test.describe('Monitoring presentation: controls by size band', () => {
       await expect(monitoringScreen.getByRole('button', { name: 'Stop monitoring' })).toBeVisible();
       await expect(monitoringScreen.getByRole('button', { name: 'Expand' })).toBeVisible();
       await assertNoOverflow(pipPage);
+    });
+  }
+
+  for (const [size, placement] of [[SIZES.mini, 'side'], [{ width: 140, height: 140 }, 'center']]) {
+    test(`Mini ${size.width}×${size.height}: the toolbar ${placement === 'side' ? 'docks on the right (it clears the far-over glow)' : 'floats centered (docking would overlap the far-over glow)'}, the same at rest and far over, and recalculated on resize`, async ({ page, context }) => {
+      const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size, driven: true, layout: 'compact' });
+      await expect(monitoringScreen).toHaveAttribute('data-toolbar', placement);
+      const b = await rangeBoundsDb(page, SAVED_PROFILE[0].spreadDb);
+      await settleAt(page, pipPage, b.endDb + 8, 1800);
+      await monitoringScreen.hover();
+      await expect(monitoringScreen).toHaveAttribute('data-toolbar', placement);
+      const panel = await monitoringScreen.locator('.pip-monitoring-toolbar').boundingBox();
+      if (placement === 'side') {
+        expect(Math.round(panel.x + panel.width)).toBe(size.width);
+        // The far-over glow stays clear of the docked panel.
+        const r = await readRing(pipPage);
+        const ringBox = await monitoringScreen.locator('.mezzo-ring').boundingBox();
+        const glowRadius = r.edgePx / 2 + r.bandPx + glowReach(r);
+        const rect = { left: panel.x, top: panel.y, right: panel.x + panel.width, bottom: panel.y + panel.height };
+        expect(distanceToRect(ringBox.x + ringBox.width / 2, ringBox.y + ringBox.height / 2, rect)).toBeGreaterThanOrEqual(glowRadius - 0.5);
+      } else {
+        expect(Math.abs(panel.x + panel.width / 2 - size.width / 2)).toBeLessThanOrEqual(1);
+        expect(Math.abs(panel.y + panel.height / 2 - size.height / 2)).toBeLessThanOrEqual(1);
+      }
+      // Recalculated on resize: 140×140 floats, 280×110 docks.
+      const other = placement === 'side' ? [{ width: 140, height: 140 }, 'center'] : [SIZES.mini, 'side'];
+      await pipPage.setViewportSize(other[0]);
+      await expect(monitoringScreen).toHaveAttribute('data-toolbar', other[1]);
     });
   }
 

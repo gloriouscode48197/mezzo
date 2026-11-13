@@ -3017,7 +3017,8 @@ export function createMezzoSession({
       }
       .pip-screen-monitoring[data-toolbar="bottom"] .pip-control-btn-stop { left: calc(50% - 40px); }
       .pip-screen-monitoring[data-toolbar="bottom"] .pip-control-btn-expand { left: calc(50% + 8px); }
-      /* Mini (2026-11-12): floated over the ring, centered in the window
+      /* Mini (2026-11-12), when docking would overlap the ring's far-over
+         glow (ringLayout()): floated over the ring, centered in the window
          (the ring's center), on a solid backing in the window's color with
          the faint outline and rounded corners on every side; Stop and
          Expand side by side. Only shown on hover or focus (above). */
@@ -4733,6 +4734,18 @@ function ringEdge() {
   return Math.min(edgeForExtent(2 * radius, band), RING_MAX_FRACTION * short);
 }
 
+// The docked toolbar panel's size (the CSS above): 40×88 on the right
+// edge, 88×40 on the bottom edge, centered along it.
+const TOOLBAR_THICKNESS_PX = 40;
+const TOOLBAR_LENGTH_PX = 88;
+/** The docked toolbar panel's rectangle, which holds both buttons. */
+function dockedToolbarRect(docked, width, height) {
+  if (docked === 'side') {
+    return { left: width - TOOLBAR_THICKNESS_PX, right: width, top: height / 2 - TOOLBAR_LENGTH_PX / 2, bottom: height / 2 + TOOLBAR_LENGTH_PX / 2 };
+  }
+  return { left: width / 2 - TOOLBAR_LENGTH_PX / 2, right: width / 2 + TOOLBAR_LENGTH_PX / 2, top: height - TOOLBAR_THICKNESS_PX, bottom: height };
+}
+
 /** Distance from a point to the nearest point of a rectangle (0 inside). */
 function distanceToRect(x, y, r) {
   const dx = Math.max(r.left - x, 0, x - r.right);
@@ -4755,10 +4768,8 @@ function ringLayout() {
     // buttons), so its far-over glow never reaches the toolbar or the
     // window's edges (see ringEdge()).
     if (band !== 'expanded') {
-      // Mini (2026-11-12): the toolbar floats over the ring's center when
-      // it fades in; Compact docks it to an edge.
-      const toolbar = band === 'mini' ? 'center' : width > height ? 'side' : 'bottom';
-      if (monitoringScreenEl) monitoringScreenEl.dataset.toolbar = toolbar;
+      const docked = width > height ? 'side' : 'bottom';
+      let toolbar = docked;
       const pad = (r) => ({ left: r.left - TOOLBAR_GAP_PX, top: r.top - TOOLBAR_GAP_PX, right: r.right + TOOLBAR_GAP_PX, bottom: r.bottom + TOOLBAR_GAP_PX });
       // Mini (2026-11-12): the toolbar only fades in on hover or focus, so
       // the ring takes the whole window and the toolbar sits over its edge
@@ -4770,6 +4781,17 @@ function ringLayout() {
         if (r.width && r.height) obstacles.push(pad(r));
       }
       const { cx, cy, radius } = largestClearCircle(width, height, obstacles);
+      // Mini (2026-11-12): dock the toolbar like Compact when its whole
+      // panel (the buttons' tap targets are inside it) stays clear of the
+      // ring's far-over glow; otherwise float it over the ring's center.
+      // Decided from the window size alone (the far-over glow, not the
+      // current one), so it never changes with volume.
+      if (band === 'mini') {
+        const edge = Math.min(edgeForExtent(2 * Math.max(0, radius - RING_GLOW_MARGIN_PX), ringBand()), RING_MAX_FRACTION * short);
+        const glowRadius = ringExtent(edge, ringBand()) / 2;
+        if (distanceToRect(cx, cy, dockedToolbarRect(docked, width, height)) < glowRadius) toolbar = 'center';
+      }
+      if (monitoringScreenEl) monitoringScreenEl.dataset.toolbar = toolbar;
       if (pipCircleWrapperEl) {
         const box = Math.max(0, 2 * radius);
         pipCircleWrapperEl.style.left = `${cx - radius}px`;
