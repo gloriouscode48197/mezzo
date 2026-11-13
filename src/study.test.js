@@ -677,6 +677,7 @@ describe('privacy page', () => {
   it('Research participants: Tally gets the fields when the survey opens; the same ID links check-ins to usage', () => {
     const study = section('research-participants', 'chrome-extension');
     assert.match(study, /Check-ins are collected through Tally/);
+    assert.match(study, /If you sign up for a study, Tally stores the name and email you enter, used only to contact you about the study\./);
     assert.match(study, /Tally receives these when the survey opens, and saves them as a response only if you submit it\./);
     assert.match(study, /how many times the glow appeared, and which Companion view you used and its window size\./);
     assert.match(study, /a submitted check-in can be matched with that browser’s usage events/);

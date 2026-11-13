@@ -31,7 +31,7 @@ Checked against the code on branch `v4` on 2026-11-13, then the gaps were fixed 
 Still for you to check (not code):
 
 - Mixpanel for `study=` URLs already recorded.
-- Whether the Tally forms ask for email or other personal details.
+- ~~Whether the Tally forms ask for email or other personal details.~~ Answered: the sign-up screener (`tally.so/r/KpejzD`) asks for first name and email; the check-ins and wrap-up don't. `privacy.html` now says so.
 - Vercel's log retention, if you want to state it.
 - Returning visitors may still have the old Mixpanel cookie (`mp_…_mixpanel`) from before this change, until it expires or they clear site data.
 
