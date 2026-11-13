@@ -565,7 +565,8 @@ test.describe('Study mode: the /study page', () => {
     await expect(page.locator('#study-bookmark')).toHaveText('Bookmark this page. You’ll come back here after each call.');
     // Right under the study code.
     expect(await page.locator('#study-bookmark').evaluate((el) => el.previousElementSibling.textContent)).toBe('Your study code: R4-01');
-    await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Part 1: Your usual calls']);
+    // All three parts: Part 1 open, Parts 2 and 3 upcoming.
+    await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Part 1: Your usual calls', 'Part 2: With Mezzo Unlocks after Part 1', 'Part 3: Wrap-up After Part 2']);
     const baselineSection = page.locator('#study-baseline');
     await expect(baselineSection.locator('p:visible')).toHaveText([
       'Mezzo comes later. I’ll email it to you once you’ve given feedback on 2 calls.',
@@ -612,7 +613,7 @@ test.describe('Study mode: the /study page', () => {
     expect(buttonBox.y).toBeLessThan(listBox.y + listBox.height);
     expect(buttonBox.y + buttonBox.height).toBeGreaterThan(listBox.y);
     // The checkboxes come right after the box.
-    expect(await box.evaluate((el) => el.nextElementSibling.className)).toBe('study-checks');
+    expect(await page.locator('#study-baseline-active').evaluate((el) => el.nextElementSibling.className)).toBe('study-checks');
 
     const baseline = link(page, 'Check in after a call');
     await expect(baseline).toBeVisible();
@@ -663,7 +664,7 @@ test.describe('Study mode: the /study page', () => {
       return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 14)
         .toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
     });
-    await expect(page.getByText(`A few questions about your whole time with Mezzo. Opens ${expected}, and I’ll email you a reminder. Finish it to get your $5 gift card.`)).toBeVisible();
+    await expect(page.locator('#study-wrap-up-part .study-part-status')).toHaveText(`Opens ${expected}`);
   });
 
   test('?start=1 without a code does nothing', async ({ page }) => {
@@ -679,7 +680,7 @@ test.describe('Study mode: the /study page', () => {
 
     await page.goto('/study?study=TEST-02');
     expect(await stage()).toBe('baseline');
-    await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Part 1: Your usual calls']);
+    await expect(page.locator('#study-baseline')).toHaveAttribute('data-state', 'current');
     await expect(page.getByText('Your study code: TEST-02')).toBeVisible();
 
     await page.goto('/study?study=TEST-01');
@@ -697,7 +698,9 @@ test.describe('Study mode: the /study page', () => {
     await page.goto('/study/');
     await expect(page.locator('body')).toHaveAttribute('data-study-stage', 'mezzo');
     await expect(page.getByText('Your study code: R4-01')).toBeVisible();
-    await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Part 2: With Mezzo', 'Part 3: Wrap-up']);
+    await expect(page.getByRole('heading', { level: 2 })).toHaveText([/^\s*Part 1: Your usual calls\s+Completed ✓\s*$/, 'Part 2: With Mezzo', /^\s*Part 3: Wrap-up Opens /]);
+    await expect(page.locator('#study-mezzo')).toHaveAttribute('data-state', 'current');
+    await expect(page.getByRole('button', { name: 'Part 2: With Mezzo' })).toHaveAttribute('aria-expanded', 'true');
     await expect(page.getByRole('heading', { level: 3 })).toHaveText(['Use Mezzo on your calls', 'Check in after your call']);
     // Under the code, this stage's own bookmark line.
     await expect(page.locator('#study-bookmark')).toHaveText('Bookmark this page. You’ll come back here after calls and for the wrap-up.');
@@ -712,14 +715,15 @@ test.describe('Study mode: the /study page', () => {
     await expect(step1.getByRole('list', { name: 'Open Mezzo and start monitoring on calls where:' }).getByRole('listitem'))
       .toHaveText(['you’re wearing headphones', 'people are nearby', 'you’ll speak, even a little']);
     await expect(page.locator('#study-get-extension')).toBeHidden();
-    // Step 2: the text, the card picture, the ask, the button, the help note.
+    // Step B: the text, the card picture, the ask, "Missed the card?", the
+    // button, the help note.
     const step2 = page.locator('#study-step-check-in');
     await expect(step2.locator('.study-item-body > p')).toHaveText([
       'When you stop monitoring, Mezzo asks how your call went. Look for this card:',
       'Please check in after at least 2 calls.',
     ]);
     const shot = step2.locator('img.study-card-shot');
-    await expect(shot).toHaveAttribute('alt', "The Mezzo Companion showing a 'How did your call go?' card with Open check-in and Skip this one buttons.");
+    await expect(shot).toHaveAttribute('alt', "The Mezzo Companion's Ready screen, dimmed, with its 'How did your call go?' card highlighted. The card has Open check-in and Skip this one buttons.");
     expect(await shot.evaluate((img) => img.complete && img.naturalWidth > 0)).toBe(true);
     const look = await shot.evaluate((img) => {
       const st = getComputedStyle(img);
@@ -730,12 +734,17 @@ test.describe('Study mode: the /study page', () => {
     expect(look.radius).toBe('8px');
     expect(look.border).toBe('1px');
     const help = step2.locator('.study-help');
-    await expect(help).toHaveText('Missed one? Check in here, ideally within 2 hours of your call.');
+    await expect(help).toHaveText('Best within 2 hours of your call.');
+    await expect(page.getByText('Missed one?', { exact: false })).toHaveCount(0);
+    const subhead = step2.getByRole('heading', { level: 4 });
+    await expect(subhead).toHaveText('Missed the card?');
+    const subBox = await subhead.boundingBox();
     // The page's own type (not the browser's serif), and plain bullets in step 1.
     expect(await help.evaluate((el) => getComputedStyle(el).fontFamily)).toBe(await page.locator('#study-step-use .study-item-body > p').first().evaluate((el) => getComputedStyle(el).fontFamily));
     await expect(page.locator('#study-step-use ul')).toHaveCSS('list-style-type', 'disc');
     const [btn, helpBox, shotBox] = [await link(page, 'Check in after a call').boundingBox(), await help.boundingBox(), await shot.boundingBox()];
-    expect(shotBox.y).toBeLessThan(btn.y);                     // picture above the button
+    expect(shotBox.y).toBeLessThan(subBox.y);                  // picture, then "Missed the card?"
+    expect(subBox.y + subBox.height).toBeLessThanOrEqual(btn.y);  // then the button
     expect(helpBox.y).toBeGreaterThanOrEqual(btn.y + btn.height); // note under it
     await expect(page.getByText('Mezzo comes later.', { exact: false })).toBeHidden();
 
@@ -763,7 +772,9 @@ test.describe('Study mode: the /study page', () => {
       return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 14)
         .toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
     });
-    await expect(page.getByText(`A few questions about your whole time with Mezzo. Opens ${expected}, and I’ll email you a reminder. Finish it to get your $5 gift card.`)).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2 }).nth(2)).toHaveText(`Part 3: Wrap-up Opens ${expected}`);
+    await expect(page.locator('#study-wrap-up-summary')).toHaveText('A few questions about your whole time with Mezzo. I’ll email you a reminder. Finish it to get your $5 gift card.');
+    await expect(page.locator('#study-wrap-up-summary')).toBeVisible();
     await expect(page.getByRole('link', { name: 'How study data is handled' })).toHaveAttribute('href', '/privacy.html#research-participants');
   });
 
@@ -819,8 +830,13 @@ test.describe('Study mode: the /study page', () => {
     const wrapUp = new URL(await link(page, 'Wrap up the study').getAttribute('href'));
     expect(wrapUp.origin + wrapUp.pathname).toBe('https://tally.so/r/q5alaO');
     expect(Object.fromEntries(wrapUp.searchParams)).toEqual({ mezzo_tester: 'R4-01' });
-    await expect(page.getByText(/Opens /)).toBeHidden();
-    await expect(page.getByText('A few questions about your whole time with Mezzo. Finish it to get your $5 gift card.')).toBeVisible();
+    await expect(page.getByText(/Opens /)).toHaveCount(0);
+    // Part 3 is current and open; Parts 1 and 2 are done, collapsed.
+    await expect(page.getByRole('heading', { level: 2 })).toHaveText([/Part 1: Your usual calls\s*Completed ✓/, /Part 2: With Mezzo\s*Completed ✓/, 'Part 3: Wrap-up']);
+    await expect(page.locator('#study-mezzo-body')).toBeHidden();
+    await expect(page.locator('#study-wrap-up-body > p')).toHaveText('A few questions about your whole time with Mezzo. Finish it to get your $5 gift card.');
+    await expect(page.locator('#study-wrap-up-body')).toBeVisible();
+    await expect(page.locator('#study-wrap-up-summary')).toBeHidden();
   });
 
   test('Open Mezzo without the extension: Mezzo opens in a window of its own, sized like the extension\'s, and this page stays', async ({ page, context }) => {
@@ -929,13 +945,18 @@ test.describe('Study mode: the /study page', () => {
     await expect.poll(async () => (await nav.boundingBox()).y).toBeLessThan(-200);
   });
 
-  test('layout, wide screen: With Mezzo\'s two numbered steps sit side by side as equal columns, tops aligned, each button right under its own step; Wrap-up full width below, unnumbered', async ({ page }) => {
+  test('layout, wide screen: With Mezzo\'s two numbered steps sit side by side as equal columns, tops aligned, markers A and B centered on their headings, each button right under its own step; Wrap-up full width below, unnumbered', async ({ page }) => {
     await page.setViewportSize({ width: 1200, height: 900 });
     await seed(page, { code: 'R4-01', firstSessionAgo: DAY });
     await page.goto('/study');
     const steps = page.locator('ol.study-steps > li');
     await expect(steps).toHaveCount(2);
-    await expect(steps.locator('.study-step-num')).toHaveText(['1', '2']);
+    await expect(steps.locator('.study-step-num')).toHaveText(['A', 'B']);
+    // Each marker is centered on its heading's line.
+    for (const i of [0, 1]) {
+      const [m, h] = [await steps.nth(i).locator('.study-step-num').boundingBox(), await steps.nth(i).locator('h3').boundingBox()];
+      expect(Math.abs((m.y + m.height / 2) - (h.y + h.height / 2))).toBeLessThanOrEqual(1);
+    }
     await expect(steps.locator('h3')).toHaveText(['Use Mezzo on your calls', 'Check in after your call']);
     const [one, two] = [await steps.nth(0).boundingBox(), await steps.nth(1).boundingBox()];
     expect(Math.abs(one.y - two.y)).toBeLessThanOrEqual(1);          // same top edge
@@ -945,8 +966,10 @@ test.describe('Study mode: the /study page', () => {
     // so step 1 has no gap; step 2 isn't much taller than step 1.
     for (const [step, button] of [['#study-step-use', '#study-open-mezzo'], ['#study-step-check-in', '#study-check-in']]) {
       const body = await page.locator(`${step} .study-item-body`).boundingBox();
+      const actions = await page.locator(`${step} .study-item-actions`).boundingBox();
+      expect(actions.y - (body.y + body.height)).toBeLessThanOrEqual(16); // the last paragraph's margin
       const b = await page.locator(button).boundingBox();
-      expect(b.y - (body.y + body.height)).toBeLessThanOrEqual(24);
+      expect(b.y - actions.y).toBeLessThanOrEqual(48); // only "Missed the card?" above step B's
     }
     expect(two.height).toBeLessThan(one.height * 2);  // the 200px picture keeps step 2 under twice step 1
     // The number marker: a small slate circle with a white number.
@@ -958,7 +981,7 @@ test.describe('Study mode: the /study page', () => {
     expect(num.bg).toBe('rgb(68, 96, 122)');
     expect(num.color).toBe('rgb(255, 255, 255)');
     // Wrap-up: below both columns, spanning them, with no number.
-    const wrapUp = page.locator('section[aria-labelledby="study-wrap-up-heading"]');
+    const wrapUp = page.locator('#study-wrap-up-part');
     const w = await wrapUp.boundingBox();
     expect(w.y).toBeGreaterThan(Math.max(one.y + one.height, two.y + two.height));
     expect(w.width).toBeGreaterThanOrEqual(two.x + two.width - one.x - 1);
@@ -1044,6 +1067,64 @@ test.describe('Study mode: the /study page', () => {
     // The ticks never leave the browser: no request carries them.
     for (const url of requests) expect(url).not.toMatch(/check-in-?[12]|baseline.?checks/i);
     expect(requests.filter((u) => !u.startsWith('http://localhost') && !u.startsWith('http://127.0.0.1') && !/fonts\.(googleapis|gstatic)\.com/.test(u))).toEqual([]);
+  });
+
+  test('the parts during Part 1: Part 1 opens and closes from the keyboard; Parts 2 and 3 show only a status and one line, with nothing of Part 2 on the page', async ({ page }) => {
+    await seed(page, { code: 'R4-01' });
+    await page.goto('/study');
+    const toggle = page.getByRole('button', { name: 'Part 1: Your usual calls' });
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(toggle).toHaveAttribute('aria-controls', 'study-baseline-body');
+    await toggle.focus();
+    await page.keyboard.press('Enter');
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.locator('#study-baseline-body')).toBeHidden();
+    await page.keyboard.press('Space');
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.locator('#study-baseline-body')).toBeVisible();
+    // Upcoming parts: no toggle, a status and a one-line description.
+    await expect(page.getByRole('button', { name: /Part 2|Part 3/ })).toHaveCount(0);
+    await expect(page.locator('#study-mezzo .study-part-summary')).toHaveText('Use Mezzo on your calls for about 2 weeks. I’ll email you when it’s ready.');
+    await expect(page.locator('#study-wrap-up-summary')).toHaveText('A few questions about your whole time with Mezzo, about 2 weeks after Part 2 starts. Finish it to get your $5 gift card.');
+    // Grayed out but readable: heading, status and line in the muted color.
+    for (const sel of ['#study-mezzo .study-part-title', '#study-mezzo .study-part-status', '#study-mezzo .study-part-summary', '#study-wrap-up-part .study-part-title']) {
+      await expect(page.locator(sel)).toHaveCSS('color', 'rgb(82, 96, 109)');
+    }
+    await expect(page.locator('#study-baseline .study-part-title')).toHaveCSS('color', 'rgb(31, 41, 51)');
+    // Nothing of Part 2 or 3 is in the page: no way into Mezzo.
+    await expect(page.locator('#study-open-mezzo, #study-check-in, #study-wrap-up, .study-steps')).toHaveCount(0);
+  });
+
+  test('the parts during Part 2: Part 1 is done and collapsed; opened, it shows the ticked boxes read only and a thank-you, never its check-in button', async ({ page }) => {
+    await seed(page, { code: 'R4-01' });
+    await page.goto('/study');
+    await page.getByRole('checkbox', { name: 'I finished check-in 1' }).check();
+    await page.goto('/study?study=R4-01&start=1');
+    await expect(page.locator('body')).toHaveAttribute('data-study-stage', 'mezzo');
+    const toggle = page.getByRole('button', { name: /Part 1: Your usual calls/ });
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.locator('#study-baseline .study-part-status')).toHaveText('Completed ✓');
+    await expect(page.locator('#study-baseline-body')).toBeHidden();
+    // No baseline check-in once Mezzo is unlocked: the button and Part 1's
+    // instructions are gone from the page, open or not.
+    await expect(page.locator('#study-baseline-check-in, #study-baseline-active')).toHaveCount(0);
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    const one = page.getByRole('checkbox', { name: 'I finished check-in 1' });
+    const two = page.getByRole('checkbox', { name: 'I finished check-in 2' });
+    await expect(one).toBeChecked();
+    await expect(two).not.toBeChecked();
+    await expect(one).toBeDisabled();
+    await expect(two).toBeDisabled();
+    // Read only, but still full contrast: the slate box, not a greyed one.
+    expect(await one.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe('rgb(68, 96, 122)');
+    await expect(page.locator('#study-baseline-done')).toHaveText('Thanks for your feedback on your usual calls.');
+    await expect(page.locator('#study-baseline-done')).toBeVisible();
+    await expect(page.locator('#study-baseline-body').getByRole('link')).toHaveCount(0);
+    // Part 2 is current and open, with its own toggle.
+    await expect(page.getByRole('button', { name: 'Part 2: With Mezzo' })).toHaveAttribute('aria-expanded', 'true');
+    await page.getByRole('button', { name: 'Part 2: With Mezzo' }).click();
+    await expect(page.locator('#study-mezzo-body')).toBeHidden();
   });
 
   test('Part 1 on a phone: the button goes below the list, inside the box', async ({ page }) => {

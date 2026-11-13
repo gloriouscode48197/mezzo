@@ -47,9 +47,9 @@ Not linked from anywhere in Mezzo. It has its own look so it's never mistaken fo
 | State | What it shows |
 | --- | --- |
 | No code | "This page is for study participants", how to get in, and links to Mezzo and Privacy |
-| Code, baseline | Thanks, the code, "Your usual calls" with its count-these list, **Check in after a call** (baseline form). No link into the app. |
-| Code, With Mezzo, before day 14 | Thanks, the code, two numbered steps (**Open Mezzo**, **Check in after a call**), and Wrap-up: "Opens {Month day}, and I’ll email you a reminder." |
-| Code, With Mezzo, day 14 on | The same, with **Wrap up the study** in place of the date |
+| Code, baseline | Thanks, the code, the three parts: Part 1 open (its count-these list, **Check in after a call**, the two checkboxes), Part 2 "Unlocks after Part 1" and Part 3 "After Part 2", each grayed out with one line. No link into the app. |
+| Code, With Mezzo, before day 14 | Thanks, the code, Part 1 collapsed ("Completed ✓"; no check-in button), Part 2 open with steps A and B (**Open Mezzo**, **Check in after a call**), Part 3 "Opens {Month day}" with one line. |
+| Code, With Mezzo, day 14 on | Parts 1 and 2 collapsed ("Completed ✓"), Part 3 open with **Wrap up the study** |
 
 Every participant view ends with **How study data is handled**, a link to the Privacy page's "Research participants" section.
 
@@ -164,18 +164,22 @@ Mezzo sends nothing itself. The values ride in the form link's query string, and
 - "Thanks for joining the Mezzo study"
 - "Your study code: {code}"
 - Baseline only, under the code: "Bookmark this page. You’ll come back here after each call."
+- Every stage shows all three parts as rows: heading, status on the right, and a chevron toggle (a button, Enter or Space) when there's something to open. Current: open. Done: collapsed, "Completed ✓". Upcoming: grayed out (muted heading, status and line, still readable), a status and one line, no toggle, its content removed.
 - Baseline:
-  - "Part 1: Your usual calls"
+  - "Part 1: Your usual calls" (open)
   - "Mezzo comes later. I’ll email it to you once you’ve given feedback on 2 calls." (in a pale slate callout, the only one on the page)
   - "For now, take your next 2 calls as you normally would. After each one, come back here and click Check in after a call. It takes about a minute."
   - In a bordered box: "Only give feedback on calls where:" "you’re wearing headphones" / "people are nearby" / "you speak, even a little", with **Check in after a call** to the right (below the list on a phone)
   - Two checkboxes the tester ticks: "I finished check-in 1" / "I finished check-in 2". Both ticked: "You’re done with Part 1. Thank you! I’ll email you Mezzo soon." in the callout's pale slate, led by a small slate check
+  - "Part 2: With Mezzo" · "Unlocks after Part 1": "Use Mezzo on your calls for about 2 weeks. I’ll email you when it’s ready."
+  - "Part 3: Wrap-up" · "After Part 2": "A few questions about your whole time with Mezzo, about 2 weeks after Part 2 starts. Finish it to get your $5 gift card."
 - With Mezzo:
   - Under the code: "Bookmark this page. You’ll come back here after calls and for the wrap-up."
-  - "Part 2: With Mezzo"
-  - "1 Use Mezzo on your calls": "Open Mezzo and start monitoring on calls where:" "you’re wearing headphones" / "people are nearby" / "you’ll speak, even a little". "With the Chrome extension, Mezzo also offers to start when a Google Meet call begins." **Get the extension** (once its Chrome Web Store link is in `STUDY_CONFIG.extensionUrl`). **Open Mezzo**
-  - "2 Check in after your call": "When you stop monitoring, Mezzo asks how your call went. Look for this card:" [picture of the Companion's check-in card; alt: "The Mezzo Companion showing a 'How did your call go?' card with Open check-in and Skip this one buttons."] "Please check in after at least 2 calls." **Check in after a call**, then the note "Missed one? Check in here, ideally within 2 hours of your call."
-  - "Part 3: Wrap-up": "A few questions about your whole time with Mezzo. Opens {Month day}, and I’ll email you a reminder. Finish it to get your $5 gift card." From that date: "A few questions about your whole time with Mezzo. Finish it to get your $5 gift card." and **Wrap up the study**.
+  - "Part 1: Your usual calls" · "Completed ✓" (collapsed). Opened: the two checkboxes as the tester left them, read only, and "Thanks for your feedback on your usual calls." No check-in button, so no baseline check-ins after Mezzo.
+  - "Part 2: With Mezzo" (open)
+  - "A Use Mezzo on your calls": "Open Mezzo and start monitoring on calls where:" "you’re wearing headphones" / "people are nearby" / "you’ll speak, even a little". "With the Chrome extension, Mezzo also offers to start when a Google Meet call begins." **Get the extension** (once its Chrome Web Store link is in `STUDY_CONFIG.extensionUrl`). **Open Mezzo**
+  - "B Check in after your call": "When you stop monitoring, Mezzo asks how your call went. Look for this card:" [picture of the whole Companion, everything but the check-in card dimmed to 40%, the card outlined in light slate; alt: "The Mezzo Companion's Ready screen, dimmed, with its 'How did your call go?' card highlighted. The card has Open check-in and Skip this one buttons."] "Please check in after at least 2 calls." "Missed the card?" (small heading), **Check in after a call**, then the note "Best within 2 hours of your call."
+  - "Part 3: Wrap-up" · "Opens {Month day}": "A few questions about your whole time with Mezzo. I’ll email you a reminder. Finish it to get your $5 gift card." From that date Parts 1 and 2 are collapsed ("Completed ✓") and Part 3 is open: "A few questions about your whole time with Mezzo. Finish it to get your $5 gift card." and **Wrap up the study**.
 - "How study data is handled"
 - No code: "This page is for study participants" / "If you’re in a Mezzo study, open the personal study link you were given." / "Go to Mezzo · Privacy"
 
@@ -197,7 +201,11 @@ Mezzo sends nothing itself. The values ride in the form link's query string, and
 - **"Mezzo comes later" first, then "Only count calls where":** testers asked what counts and when they'd get Mezzo. Answering both up front prevents uncounted calls.
 - **"Part 1/2/3" headings:** testers see one stage at a time, and the part numbers tell them where they are in the whole study.
 - **Part 1 checkboxes, never sent:** the baseline form doesn't report back to the page, so testers track their own two check-ins. The researcher counts real submissions in Tally; the boxes are only a reminder.
-- **Numbered steps, side by side:** the With Mezzo stage is two actions in order. Numbers and columns make it read as a sequence at a glance.
+- **All three parts on every stage:** testers see where they are in the whole study and what comes next. Upcoming parts have no toggle, since there's nothing to open yet, and their content isn't on the page, so Part 1 has no way into Mezzo.
+- **Part 1's check-in removed once Part 2 unlocks:** a baseline check-in after someone has used Mezzo would no longer be a baseline.
+- **Lettered steps (A, B):** "Part 1/2/3" already uses numbers; letters keep the steps inside Part 2 from reading as more parts.
+- **Dimmed screenshot:** the whole Companion shows where the card appears; dimming the rest and outlining the card shows what to look for.
+- **Steps side by side:** the With Mezzo stage is two actions in order. Letters and columns make it read as a sequence at a glance.
 - **"ideally within 2 hours of your call":** it tells testers to check in soon, without making a late check-in feel wrong.
 - **Check-in card is filled but lighter than Start monitoring:** it should be noticed after a call without competing with the main action, and chartreuse stays reserved for the over-range band.
 - **Open check-in on the "Companion closed" page ends the call:** choosing to check in means the call is over, so Reopen shouldn't resume a finished session.

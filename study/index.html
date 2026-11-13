@@ -87,20 +87,69 @@
     }
     .study-main p { margin: 0 0 var(--space-3); }
     .study-code { font-family: var(--font-mono); }
-    .study-phase {
+    /* The three parts (2026-11-13): every stage shows all three, each a
+       row with its heading, a status on the right and, when it has more
+       to show, a chevron. The current part starts open, a finished one
+       ("Completed ✓") and an upcoming one ("Unlocks after Part 1", "Opens …")
+       start collapsed. An upcoming part is grayed out and has nothing to
+       open yet: it shows its one-line description and no toggle, so there
+       is no control that does nothing; its heading is still in the
+       heading outline. */
+    .study-part {
       margin-top: var(--space-6);
-      padding-top: var(--space-5);
       border-top: 1px solid color-mix(in srgb, var(--color-text) 14%, transparent);
     }
-    .study-phase h2 {
-      margin: 0 0 var(--space-2);
+    .study-part + .study-part { margin-top: 0; }
+    .study-part-heading {
+      margin: 0;
       font-family: var(--font-display);
       font-weight: var(--weight-medium);
       font-size: 20px;
       line-height: 1.3;
       color: var(--color-text);
     }
-    .study-item { margin-top: var(--space-5); }
+    .study-part-toggle {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      width: 100%;
+      min-height: 48px;
+      margin: 0;
+      padding: var(--space-4) 0;
+      border: 0;
+      background: none;
+      font: inherit;
+      color: inherit;
+      text-align: left;
+    }
+    button.study-part-toggle { cursor: pointer; }
+    button.study-part-toggle:focus-visible { outline: 2px solid var(--color-link); outline-offset: 2px; border-radius: 4px; }
+    .study-part-title { flex: 1 1 auto; }
+    .study-part[data-state="upcoming"] .study-part-title { color: var(--color-text-muted); }
+    .study-part-status {
+      flex: none;
+      font-family: var(--font-body);
+      font-size: 14px;
+      font-weight: var(--weight-medium);
+      line-height: 1.4;
+      color: var(--color-text-muted);
+      white-space: nowrap;
+    }
+    .study-part[data-state="done"] .study-part-status { color: var(--study-band); }
+    .study-part-chevron {
+      flex: none;
+      width: 16px;
+      height: 16px;
+      color: var(--color-text-muted);
+      transition: transform 0.15s ease;
+    }
+    .study-part-toggle[aria-expanded="true"] .study-part-chevron { transform: rotate(180deg); }
+    @media (prefers-reduced-motion: reduce) { .study-part-chevron { transition: none; } }
+    /* Upcoming parts are grayed out: heading, status and line all in the
+       muted color (#52606D, 6.6:1 on white), so still easy to read. */
+    .study-main .study-part-summary { margin: calc(-1 * var(--space-2)) 0 var(--space-4); color: var(--color-text-muted); }
+    .study-part-body { padding-bottom: var(--space-5); }
+    .study-item + .study-item { margin-top: var(--space-5); }
     /* With Mezzo's numbered steps. */
     .study-steps { list-style: none; margin: 0; padding: 0; }
     .study-item-head {
@@ -124,7 +173,6 @@
       font-weight: var(--weight-medium);
       line-height: 1;
     }
-    .study-item-head h3 { margin: 0; }
     /* Wider screens: the With Mezzo stage widens so its two steps sit side
        by side as equal columns, tops aligned; each step's button follows
        its own text (2026-11-13: no shared rows, so step 1 has no gap
@@ -137,20 +185,28 @@
         grid-template-columns: 1fr 1fr;
         align-items: start;
         column-gap: var(--space-6);
-        margin-top: var(--space-5);
       }
       .study-steps .study-item { margin-top: 0; }
     }
     .study-item h3 {
-      margin: 0 0 var(--space-2);
+      margin: 0;
       font-family: var(--font-display);
       font-weight: var(--weight-medium);
       font-size: 16px;
       line-height: 1.4;
       color: var(--color-text);
     }
-    .study-phase .btn-primary,
-    .study-phase .btn-outline { margin-top: var(--space-2); text-decoration: none; }
+    /* Step B's "Missed the card?" */
+    .study-subhead {
+      margin: var(--space-2) 0 0;
+      font-family: var(--font-body);
+      font-weight: var(--weight-medium);
+      font-size: 14px;
+      line-height: 1.4;
+      color: var(--color-text);
+    }
+    .study-part .btn-primary,
+    .study-part .btn-outline { margin-top: var(--space-2); text-decoration: none; }
     .study-main .study-privacy { margin-top: var(--space-6); }
     .study-main .study-list-intro { margin-bottom: var(--space-2); }
     .study-list {
@@ -160,9 +216,11 @@
       color: var(--color-text);
     }
     .study-list li + li { margin-top: var(--space-1); }
-    /* Step 2's picture of the Companion's check-in card: small (200px,
-       so step 2 stays close to step 1's height), never wider than its
-       column, rounded with a thin border. */
+    /* Step B's picture of the Companion: everything but the check-in card
+       dimmed to 40%, the card outlined in light slate (baked into the
+       image by tests/capture-study-card.spec.js). Small (200px, so step B
+       stays close to step A's height), never wider than its column,
+       rounded with a thin border. */
     .study-card-shot {
       display: block;
       box-sizing: border-box;
@@ -204,7 +262,7 @@
     }
     .study-box-text { flex: 1 1 auto; }
     .study-main .study-box .study-list { margin-bottom: 0; }
-    .study-phase .study-box .btn-primary { flex: none; margin-top: 0; }
+    .study-part .study-box .btn-primary { flex: none; margin-top: 0; }
     @media (max-width: 479px) {
       .study-box { flex-direction: column; align-items: flex-start; }
     }
@@ -225,12 +283,26 @@
       color: var(--color-text);
       cursor: pointer;
     }
+    .study-checks label:has(input:disabled) { cursor: default; }
+    /* Drawn here rather than by the browser, so a done Part 1's read-only
+       boxes keep full contrast (a disabled native checkbox greys out). */
     .study-checks input {
+      appearance: none;
+      -webkit-appearance: none;
+      flex: none;
       width: 18px;
       height: 18px;
       margin: 0;
-      accent-color: var(--study-band);
+      border: 1.5px solid var(--study-band);
+      border-radius: 3px;
+      background: #FFFFFF center / 14px 14px no-repeat;
+      cursor: inherit;
     }
+    .study-checks input:checked {
+      background-color: var(--study-band);
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8.5l3.2 3.2L13 4.8' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    }
+    .study-checks input:focus-visible { outline: 2px solid var(--color-link); outline-offset: 2px; }
     /* The Part 1 thank-you: the callout's pale slate with the dark text
        (about 13:1), led by a small slate check (about 5.5:1 on the tint). */
     .study-main .study-done {
@@ -288,45 +360,66 @@
       <!-- Both stages; With Mezzo sets its own wording (script below). -->
       <p class="type-body" id="study-bookmark" hidden>Bookmark this page. You’ll come back here after each call.</p>
 
-      <!-- Baseline stage: a code, before the With Mezzo stage. -->
-      <section class="study-phase" id="study-baseline" hidden aria-labelledby="study-baseline-heading">
-        <h2 id="study-baseline-heading">Part 1: Your usual calls</h2>
-        <p class="type-body study-callout">Mezzo comes later. I’ll email it to you once you’ve given feedback on 2 calls.</p>
-        <p class="type-body">For now, take your next 2 calls as you normally would. After each one, come back here and click Check in after a call. It takes about a minute.</p>
-        <!-- Which calls count, with the button beside the list (stacked on
-             a phone). -->
-        <div class="study-box">
-          <div class="study-box-text">
-            <p class="type-body study-list-intro" id="study-baseline-count">Only give feedback on calls where:</p>
-            <ul class="type-body study-list" aria-labelledby="study-baseline-count">
-              <li>you’re wearing headphones</li>
-              <li>people are nearby</li>
-              <li>you speak, even a little</li>
-            </ul>
+      <!-- The three parts, shown in every stage (the script sets each one's
+           state: current, done or upcoming). -->
+      <section class="study-part" id="study-baseline" aria-labelledby="study-baseline-heading">
+        <h2 class="study-part-heading">
+          <button type="button" class="study-part-toggle" aria-expanded="false" aria-controls="study-baseline-body">
+            <span class="study-part-title" id="study-baseline-heading">Part 1: Your usual calls</span>
+            <span class="study-part-status"></span>
+            <svg class="study-part-chevron" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M3.5 6l4.5 4.5L12.5 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </h2>
+        <p class="type-body study-part-summary" hidden>Take 2 calls as you normally would, and give feedback after each.</p>
+        <div class="study-part-body" id="study-baseline-body" hidden>
+          <!-- While Part 1 is current. Removed once Part 2 is unlocked, so
+               no baseline check-in comes in after someone has used Mezzo. -->
+          <div id="study-baseline-active">
+            <p class="type-body study-callout">Mezzo comes later. I’ll email it to you once you’ve given feedback on 2 calls.</p>
+            <p class="type-body">For now, take your next 2 calls as you normally would. After each one, come back here and click Check in after a call. It takes about a minute.</p>
+            <!-- Which calls count, with the button beside the list (stacked on
+                 a phone). -->
+            <div class="study-box">
+              <div class="study-box-text">
+                <p class="type-body study-list-intro" id="study-baseline-count">Only give feedback on calls where:</p>
+                <ul class="type-body study-list" aria-labelledby="study-baseline-count">
+                  <li>you’re wearing headphones</li>
+                  <li>people are nearby</li>
+                  <li>you speak, even a little</li>
+                </ul>
+              </div>
+              <a class="btn-primary" id="study-baseline-check-in" target="_blank" rel="noopener noreferrer">Check in after a call</a>
+            </div>
           </div>
-          <a class="btn-primary" id="study-baseline-check-in" target="_blank" rel="noopener noreferrer">Check in after a call</a>
+          <!-- The tester's own reminder, kept per tester code in this browser
+               (study.js's getBaselineChecks()). Never sent anywhere. Read
+               only once Part 1 is done. -->
+          <fieldset class="study-checks">
+            <legend class="visually-hidden">Your check-ins</legend>
+            <label class="type-body"><input type="checkbox" id="study-baseline-done-1"> I finished check-in 1</label>
+            <label class="type-body"><input type="checkbox" id="study-baseline-done-2"> I finished check-in 2</label>
+          </fieldset>
+          <p class="type-body study-done" id="study-baseline-done" role="status"></p>
         </div>
-        <!-- The tester's own reminder, kept per tester code in this browser
-             (study.js's getBaselineChecks()). Never sent anywhere. -->
-        <fieldset class="study-checks">
-          <legend class="visually-hidden">Your check-ins</legend>
-          <label class="type-body"><input type="checkbox" id="study-baseline-done-1"> I finished check-in 1</label>
-          <label class="type-body"><input type="checkbox" id="study-baseline-done-2"> I finished check-in 2</label>
-        </fieldset>
-        <p class="type-body study-done" id="study-baseline-done" role="status"></p>
       </section>
 
-      <!-- With Mezzo stage: after ?start=1 or the first monitoring session. -->
-      <div id="study-mezzo" hidden>
-        <section class="study-phase" aria-labelledby="study-mezzo-heading">
-          <h2 id="study-mezzo-heading">Part 2: With Mezzo</h2>
-          <!-- Two numbered steps: side by side on wide screens, stacked on a
+      <section class="study-part" id="study-mezzo" aria-labelledby="study-mezzo-heading">
+        <h2 class="study-part-heading">
+          <button type="button" class="study-part-toggle" aria-expanded="false" aria-controls="study-mezzo-body">
+            <span class="study-part-title" id="study-mezzo-heading">Part 2: With Mezzo</span>
+            <span class="study-part-status"></span>
+            <svg class="study-part-chevron" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M3.5 6l4.5 4.5L12.5 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </h2>
+        <p class="type-body study-part-summary" hidden>Use Mezzo on your calls for about 2 weeks. I’ll email you when it’s ready.</p>
+        <div class="study-part-body" id="study-mezzo-body" hidden>
+          <!-- Two lettered steps: side by side on wide screens, stacked on a
                phone. An ordered list, so the order is announced too; the
-               number marker itself is decorative. -->
+               letter marker itself is decorative. -->
           <ol class="study-steps">
             <li class="study-item" id="study-step-use">
               <div class="study-item-head">
-                <span class="study-step-num" aria-hidden="true">1</span>
+                <span class="study-step-num" aria-hidden="true">A</span>
                 <h3>Use Mezzo on your calls</h3>
               </div>
               <div class="study-item-body">
@@ -344,28 +437,38 @@
             </li>
             <li class="study-item" id="study-step-check-in">
               <div class="study-item-head">
-                <span class="study-step-num" aria-hidden="true">2</span>
+                <span class="study-step-num" aria-hidden="true">B</span>
                 <h3>Check in after your call</h3>
               </div>
               <div class="study-item-body">
                 <p class="type-body">When you stop monitoring, Mezzo asks how your call went. Look for this card:</p>
-                <img class="study-card-shot" src="/study/checkin-card.png" width="382" height="512" alt="The Mezzo Companion showing a 'How did your call go?' card with Open check-in and Skip this one buttons.">
+                <img class="study-card-shot" src="/study/checkin-card.png" width="382" height="512" alt="The Mezzo Companion's Ready screen, dimmed, with its 'How did your call go?' card highlighted. The card has Open check-in and Skip this one buttons.">
                 <p class="type-body">Please check in after at least 2 calls.</p>
               </div>
               <div class="study-item-actions">
+                <h4 class="study-subhead">Missed the card?</h4>
                 <a class="btn-outline" id="study-check-in" target="_blank" rel="noopener noreferrer">Check in after a call</a>
-                <p class="study-help">Missed one? Check in here, ideally within 2 hours of your call.</p>
+                <p class="study-help">Best within 2 hours of your call.</p>
               </div>
             </li>
           </ol>
-        </section>
+        </div>
+      </section>
 
-        <section class="study-phase" aria-labelledby="study-wrap-up-heading">
-          <h2 id="study-wrap-up-heading">Part 3: Wrap-up</h2>
-          <p class="type-body" id="study-wrap-up-text">A few questions about your whole time with Mezzo. Finish it to get your $5 gift card.</p>
-          <a class="btn-outline" id="study-wrap-up" target="_blank" rel="noopener noreferrer" hidden>Wrap up the study</a>
-        </section>
-      </div>
+      <section class="study-part" id="study-wrap-up-part" aria-labelledby="study-wrap-up-heading">
+        <h2 class="study-part-heading">
+          <button type="button" class="study-part-toggle" aria-expanded="false" aria-controls="study-wrap-up-body">
+            <span class="study-part-title" id="study-wrap-up-heading">Part 3: Wrap-up</span>
+            <span class="study-part-status"></span>
+            <svg class="study-part-chevron" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M3.5 6l4.5 4.5L12.5 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </h2>
+        <p class="type-body study-part-summary" hidden id="study-wrap-up-summary">A few questions about your whole time with Mezzo, about 2 weeks after Part 2 starts. Finish it to get your $5 gift card.</p>
+        <div class="study-part-body" id="study-wrap-up-body" hidden>
+          <p class="type-body">A few questions about your whole time with Mezzo. Finish it to get your $5 gift card.</p>
+          <a class="btn-outline" id="study-wrap-up" target="_blank" rel="noopener noreferrer">Wrap up the study</a>
+        </div>
+      </section>
 
       <p class="type-body study-privacy"><a href="/privacy.html#research-participants">How study data is handled</a></p>
     </section>
@@ -418,9 +521,47 @@
       $('study-code').textContent = testerCode;
     }
 
+    // The three parts. current: open, with its toggle. done: collapsed,
+    // "Completed ✓", with its toggle. upcoming: collapsed, a status and a
+    // one-line description, and no toggle (nothing to open yet; its
+    // content is removed, so nothing in it can be reached).
+    function setPart(id, state, status = '') {
+      const part = $(id);
+      part.dataset.state = state;
+      const toggle = part.querySelector('.study-part-toggle');
+      const statusEl = part.querySelector('.study-part-status');
+      const body = part.querySelector('.study-part-body');
+      if (state === 'done') {
+        statusEl.innerHTML = 'Completed <span aria-hidden="true">✓</span>';
+      } else {
+        statusEl.textContent = status;
+      }
+      if (state === 'upcoming') {
+        part.querySelector('.study-part-summary').hidden = false;
+        body.remove();
+        // The same row, as plain text: a heading with its status.
+        const row = document.createElement('span');
+        row.className = 'study-part-toggle';
+        row.append(part.querySelector('.study-part-title'), ' ', statusEl);
+        toggle.replaceWith(row);
+        return;
+      }
+      const setOpen = (open) => {
+        toggle.setAttribute('aria-expanded', String(open));
+        body.hidden = !open;
+      };
+      setOpen(state === 'current');
+      toggle.addEventListener('click', () => setOpen(toggle.getAttribute('aria-expanded') !== 'true'));
+    }
+
+    if (stage === 'baseline') {
+      setPart('study-baseline', 'current');
+      setPart('study-mezzo', 'upcoming', 'Unlocks after Part 1');
+      setPart('study-wrap-up-part', 'upcoming', 'After Part 2');
+    }
+
     if (stage === 'baseline') {
       // Baseline: one check-in form, tester code only. No way into Mezzo.
-      $('study-baseline').hidden = false;
       $('study-bookmark').hidden = false;
       const href = buildBaselineUrl({ testerCode });
       const button = $('study-baseline-check-in');
@@ -445,7 +586,29 @@
     }
 
     if (stage === 'mezzo') {
-      $('study-mezzo').hidden = false;
+      // Part 1 is done once Part 2 is unlocked: its check-in button is
+      // removed (no baseline check-ins after Mezzo), its checkboxes are
+      // shown as the tester left them, read only, with a thank-you.
+      setPart('study-baseline', 'done');
+      $('study-baseline-active').remove();
+      const boxes = [$('study-baseline-done-1'), $('study-baseline-done-2')];
+      getBaselineChecks().forEach((checked, i) => { boxes[i].checked = checked; boxes[i].disabled = true; });
+      const done = $('study-baseline-done');
+      done.removeAttribute('role');
+      done.textContent = 'Thanks for your feedback on your usual calls.';
+
+      // Part 3 opens 14 days after the With Mezzo stage began; then Part 2
+      // is done too.
+      if (isWrapUpOpen(mezzoStageStartAt, Date.now())) {
+        setPart('study-mezzo', 'done');
+        setPart('study-wrap-up-part', 'current');
+        $('study-wrap-up').href = buildWrapUpUrl({ testerCode });
+      } else {
+        setPart('study-mezzo', 'current');
+        setPart('study-wrap-up-part', 'upcoming', `Opens ${formatMonthDay(wrapUpOpensAt(mezzoStageStartAt))}`);
+        $('study-wrap-up-summary').textContent = 'A few questions about your whole time with Mezzo. I’ll email you a reminder. Finish it to get your $5 gift card.';
+      }
+
       $('study-bookmark').textContent = 'Bookmark this page. You’ll come back here after calls and for the wrap-up.';
       $('study-bookmark').hidden = false;
 
@@ -493,16 +656,6 @@
         // offer it again.
         if (session) markCheckInHandled(session.id, 'opened');
       });
-
-      // The wrap-up opens 14 days after the With Mezzo stage began.
-      const wrapUpText = $('study-wrap-up-text');
-      if (isWrapUpOpen(mezzoStageStartAt, Date.now())) {
-        const wrapUp = $('study-wrap-up');
-        wrapUp.href = buildWrapUpUrl({ testerCode });
-        wrapUp.hidden = false;
-      } else {
-        wrapUpText.textContent = `A few questions about your whole time with Mezzo. Opens ${formatMonthDay(wrapUpOpensAt(mezzoStageStartAt))}, and I’ll email you a reminder. Finish it to get your $5 gift card.`;
-      }
     }
   </script>
 </body>
