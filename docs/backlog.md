@@ -19,3 +19,15 @@ Ideas and small changes that aren't designed or built yet. Not canonical: `docs/
 | Discard (temporary profile) | New profile discarded | No |
 
 Each should be checked against the same rule. Not designed or built yet; tests in `tests/ready-screen-flows.spec.js` and the docs assert the current strings and would change with it.
+
+## Noisy-room tip: a "Try again" button
+
+**Problem.** When the result screen shows "Your room is a bit noisy for how softly you speak. Try moving a little closer to your mic.", the only way to act on it is to save or keep the result and find Recalibrate later.
+
+**Proposed.** A **Try again** action next to the tip that reruns Step 2 (the voice step), keeping the room reading, like the voice-failure retry (`retryVoice()`). Not designed or built yet.
+
+## Extension: narrow the meeting content-script matches
+
+**Problem.** `content-scripts/meeting-detect.js` matches `https://*.zoom.us/*`, `https://teams.microsoft.com/*` and `https://teams.live.com/*`, broader than the meeting pages need. Meet is confirmed; Zoom and Teams web meetings haven't been tested in a real call.
+
+**Proposed.** After real Zoom and Teams calls, narrow each match to the hosts and paths their meeting pages actually use (for example Zoom's web client path). Not built yet.

@@ -201,6 +201,8 @@ Attention rises in three steps, each using brightness and size, which work in pe
 - **What Stop does:** it ends the session, releases the microphone, and returns to Ready with the current profile still selected.
 - **No pause:** an earlier Pause/Resume was removed. Stop and Start monitoring cover it, and one control keeps the peripheral window quiet.
 
+*Changed 2026-11-11 and 2026-11-12: in Compact and Mini the profile name is gone, and Stop and Expand share one faint toolbar (first pinned to the bottom-right corner, then docked flush to the right edge in a wider window or the bottom edge otherwise), so the controls stay together and the ring stays the largest element: 126px at 240×186. The glow was left at full size on purpose; noticing the nudge matters more than a bigger ring. The Profile name and Controls bullets above describe the earlier layout; see docs/product-experience.md for the current one.*
+
 *Changed during build: Monitoring opens in Compact instead of Expanded, and Pause was removed; Compact is the peripheral view the product is for, and one control keeps it quiet. Later (2026-10-26): the 60%-of-short-side ring and the 35%-opacity controls were replaced by the size bands above. The ring had to step the name aside at full Outside, and 35% opacity failed the 3:1 contrast minimum for icons.*
 - Band and glow are scaled so they never touch the window edge.
 
@@ -322,7 +324,7 @@ Unchanged. The address-bar chip shows the page's real host (`window.location.hos
 
 ### Running page (Dock)
 
-While the Companion is open, the page turns cream (`[data-surface="cream"]`, charcoal text): a status line ("Monitoring is not active" / "Monitoring is active", live), "Your Companion is open", "Keep this page open while using Mezzo. Closing it will also close the Mezzo Companion.", and a quiet charcoal **Close Companion** link.
+While the Companion is open, the page turns cream (`[data-surface="cream"]`, charcoal text): a status line ("Monitoring is not active" / "Monitoring is active", live), "Your Companion is open", "Keep this page open while using Mezzo. Closing it will also close the Mezzo Companion.", and a quiet charcoal **Close Companion** link. *Changed 2026-11-11: the "Companion closed" variant shows the same status line, "Monitoring is not active", so the line always says whether monitoring is running and confirms nothing is listening (the microphone is released whenever the Companion closes, 2026-11-10).*
 
 *Changed during build: the running page went back to the original wording and status line after a live Meet test; the privacy line shows only on the closed page.*
 
