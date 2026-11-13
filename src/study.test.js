@@ -659,25 +659,32 @@ describe('baseline form', () => {
 describe('privacy page', () => {
   const html = readFileSync(new URL('../privacy.html', import.meta.url), 'utf8');
   const text = html.replace(/<[^>]+>/g, '');
+  const section = (id, next) => html.slice(html.indexOf(`id="${id}"`), html.indexOf(`id="${next}"`));
 
-  it('the anonymous ID is not shared with other websites, except a submitted study check-in, linked to Research participants', () => {
-    assert.doesNotMatch(text, /not shared across websites/);
-    assert.match(text, /is not shared with other websites, except in a study check-in you choose to submit/);
-    assert.match(html, /<a href="#research-participants">Research participants<\/a>/);
+  it('names Mixpanel and its events; no cookies; no location from the IP; study codes kept out', () => {
+    const usage = section('anonymous-usage-data', 'research-participants');
+    assert.match(usage, /Mezzo uses Mixpanel, an analytics service/);
+    for (const event of ['Mezzo opened', 'A calibration finished', 'Monitoring started', 'Monitoring ended, with how long it lasted and whether the glow appeared']) {
+      assert.ok(usage.includes(event), event);
+    }
+    assert.match(usage, /Mezzo sets no cookies\./);
+    assert.match(usage, /tells it not to use that address to estimate your location/);
+    assert.match(usage, /Study codes are removed from the page address before Mixpanel starts\./);
+    assert.match(usage, /isn’t shared with other websites, except in a study check-in/);
+    assert.match(usage, /<a href="#research-participants">Research participants<\/a>/);
   });
 
-  it('no sale of data; third parties only for submitted check-ins through Tally', () => {
-    assert.doesNotMatch(text, /No sale or sharing of data with third parties/);
-    assert.match(text, /No sale of data\. Data is never shared with third parties, except study check-ins you choose to submit through the survey tool, Tally\./);
+  it('Research participants: Tally gets the fields when the survey opens; the same ID links check-ins to usage', () => {
+    const study = section('research-participants', 'chrome-extension');
+    assert.match(study, /Check-ins are collected through Tally/);
+    assert.match(study, /Tally receives these when the survey opens, and saves them as a response only if you submit it\./);
+    assert.match(study, /how many times the glow appeared, and which Companion view you used and its window size\./);
+    assert.match(study, /a submitted check-in can be matched with that browser’s usage events/);
   });
 
-  it('Research participants says check-ins are collected through Tally', () => {
-    const section = html.slice(html.indexOf('id="research-participants"'), html.indexOf('id="what-mezzo-does-not-do"'));
-    assert.match(section, /Check-ins are collected through Tally/);
-  });
-
-  it('Research participants lists the Companion view and window size among what the survey records', () => {
-    const section = html.slice(html.indexOf('id="research-participants"'), html.indexOf('id="what-mezzo-does-not-do"'));
-    assert.match(section, /how many times the glow appeared, and which Companion view you used and its window size\./);
+  it('the extension, the outside services, and no Google Fonts', () => {
+    assert.match(section('chrome-extension', 'what-mezzo-does-not-do'), /doesn’t use your microphone, doesn’t read meeting content, and doesn’t store or send any data/);
+    assert.match(text, /The only outside services are Mixpanel, for the anonymous usage events above, and Tally, for study check-ins\./);
+    assert.match(text, /Mezzo’s fonts come from its own site\./);
   });
 });

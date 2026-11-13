@@ -23,22 +23,7 @@
 
     <nav class="popup-links" aria-label="More">
       <a id="link-privacy" class="popup-link" href="#">Privacy</a>
-      <button id="btn-settings" class="popup-link" type="button" aria-expanded="false" aria-controls="settings-panel">Settings</button>
     </nav>
-
-    <div id="settings-panel" class="settings-panel" hidden>
-      <p class="settings-note">More settings coming soon.</p>
-      <!-- Developer installs only (see lib/mezzo-url.js). -->
-      <form id="dev-url-form" class="dev-url" hidden>
-        <label class="dev-url-label" for="dev-url-input">Mezzo address (developer)</label>
-        <input id="dev-url-input" class="dev-url-input" type="url" placeholder="https://mezzo-one.vercel.app" spellcheck="false" autocomplete="off">
-        <div class="dev-url-actions">
-          <button id="dev-url-save" class="btn-outline btn-small" type="submit">Save</button>
-          <button id="dev-url-reset" class="popup-link" type="button">Use live site</button>
-        </div>
-        <p id="dev-url-status" class="settings-note" role="status"></p>
-      </form>
-    </div>
   </main>
 
   <script src="popup.js" type="module"></script>

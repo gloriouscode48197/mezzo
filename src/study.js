@@ -144,8 +144,11 @@ export function applyStartParam(search, storage = defaultStorage(), config = STU
  *  (the /study page), ?start=1 too. */
 export function applyStudyFromLocation(win = globalThis.window, storage = defaultStorage(), config = STUDY_CONFIG, { start = false } = {}) {
   if (!win?.location) return 'none';
-  const result = applyStudyParam(win.location.search, storage, config);
-  const startResult = start ? applyStartParam(win.location.search, storage, config) : 'none';
+  // Home moves the parameters out of the address bar before analytics
+  // starts (index.html's first script) and leaves them here.
+  const search = typeof win.mezzoStudySearch === 'string' ? win.mezzoStudySearch : win.location.search;
+  const result = applyStudyParam(search, storage, config);
+  const startResult = start ? applyStartParam(search, storage, config) : 'none';
   if (result !== 'none' || startResult !== 'none') {
     try {
       const url = new URL(win.location.href);

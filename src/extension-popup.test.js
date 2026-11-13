@@ -57,7 +57,9 @@ describe('extension popup', () => {
     assert.ok(!note.hidden);
     assert.equal(note.innerHTML, 'Opens in its own window.<br>Only measures volume.');
     assert.equal(text(document, '#link-privacy'), 'Privacy');
-    assert.equal(text(document, '#btn-settings'), 'Settings');
+    // No Settings: its only setting (a developer address) is gone.
+    assert.equal(document.getElementById('btn-settings'), null);
+    assert.equal(document.getElementById('settings-panel'), null);
   });
 
   it('"Open Mezzo" asks the background to open Mezzo in its own window, focused', async () => {
@@ -155,48 +157,6 @@ describe('extension popup', () => {
     for (const old of ['Georgia', '#C4593A', '#F0EBE2', '#AE4D31', '100px']) assert.ok(!css.includes(old), old);
     assert.match(css, /font-family: 'Geist'/);
     assert.match(css, /fonts\/geist-latin\.woff2/);
-  });
-
-  it('the developer address field is hidden in a store install', async () => {
-    const { document, init } = setup();
-    await init();
-    assert.ok(document.getElementById('dev-url-form').hidden);
-  });
-
-  it('an unpacked install shows the developer address field, saves a preview address, and resets to the live site', async () => {
-    const store = {};
-    const { document } = parseHTML(html);
-    const chromeApi = {
-      runtime: { sendMessage: () => {}, getManifest: () => ({ version: '1' }) },
-      tabs: { create: () => {} },
-      storage: { local: {
-        get: async (k) => (k in store ? { [k]: store[k] } : {}),
-        set: async (o) => Object.assign(store, o),
-        remove: async (k) => { delete store[k]; },
-      } },
-    };
-    await initPopup(document, { tabs: { findMezzoTab: async () => null, focusTab: async () => {} }, chromeApi, closePopup: () => {} });
-    const form = document.getElementById('dev-url-form');
-    const status = document.getElementById('dev-url-status');
-    assert.ok(!form.hidden);
-    assert.equal(status.textContent, 'Opens the live site.');
-
-    document.getElementById('dev-url-input').value = 'https://mezzo-git-v3-me.vercel.app/';
-    form.dispatchEvent(new document.defaultView.Event('submit'));
-    await new Promise((r) => setTimeout(r, 0));
-    assert.equal(store.mezzoDevBaseUrl, 'https://mezzo-git-v3-me.vercel.app');
-    assert.equal(status.textContent, 'Opens https://mezzo-git-v3-me.vercel.app');
-
-    document.getElementById('dev-url-input').value = 'http://example.com';
-    form.dispatchEvent(new document.defaultView.Event('submit'));
-    await new Promise((r) => setTimeout(r, 0));
-    assert.equal(store.mezzoDevBaseUrl, 'https://mezzo-git-v3-me.vercel.app');
-    assert.equal(status.textContent, 'Use an https address, or http://localhost.');
-
-    document.getElementById('dev-url-reset').click();
-    await new Promise((r) => setTimeout(r, 0));
-    assert.equal(store.mezzoDevBaseUrl, undefined);
-    assert.equal(status.textContent, 'Opens the live site.');
   });
 
   it('the toolbar badge uses the new palette, not hanko orange', () => {

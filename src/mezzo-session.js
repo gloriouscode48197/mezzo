@@ -1524,14 +1524,11 @@ export function createMezzoSession({
     // investigation's own findings.
     pipDoc.title = 'Mezzo Companion';
 
-    const fontLink = pipDoc.createElement('link');
-    fontLink.rel = 'stylesheet';
-    fontLink.href = 'https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap';
-    pipDoc.head.appendChild(fontLink);
-
+    // Geist comes from the tokens stylesheet's own @font-face (self-hosted
+    // under /fonts, never Google Fonts).
     const link = pipDoc.createElement('link');
     link.rel = 'stylesheet';
-    link.href = baseUrl + 'design-tokens/mezzo-tokens.css';
+    link.href = baseUrl + 'design-tokens/mezzo-tokens.css?v=17';
     const cssReady = new Promise((resolve) => {
       link.onload = resolve;
       link.onerror = resolve;

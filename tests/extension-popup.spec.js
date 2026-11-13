@@ -6,8 +6,8 @@
  *
  * The extension is loaded from a temporary copy whose manifest also lets
  * the bridge run on this suite's local server (http://localhost:8973), and
- * it is pointed there with its own developer-address setting
- * (lib/mezzo-url.js). The repository's manifest is unchanged.
+ * whose lib/mezzo-url.js opens that server instead of the live site. The
+ * repository's files are unchanged.
  */
 import { test, expect, chromium } from '@playwright/test';
 import fs from 'node:fs';
@@ -26,6 +26,12 @@ function extensionCopyForLocalhost() {
   manifest.host_permissions.push(`${LOCAL}/*`);
   manifest.content_scripts.find((c) => c.js.includes('content-scripts/mezzo-page-bridge.js')).matches.push(`${LOCAL}/*`);
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+  // The extension always opens the live site (lib/mezzo-url.js); the copy
+  // opens this suite's server instead.
+  const urlPath = path.join(dir, 'lib', 'mezzo-url.js');
+  const src = fs.readFileSync(urlPath, 'utf8');
+  if (!src.includes("'https://mezzo-one.vercel.app'")) throw new Error('mezzo-url.js changed: update this copy step');
+  fs.writeFileSync(urlPath, src.replace("'https://mezzo-one.vercel.app'", `'${LOCAL}'`));
   return dir;
 }
 
@@ -51,8 +57,6 @@ test.describe('Extension popup (real extension)', () => {
     let [worker] = context.serviceWorkers();
     if (!worker) worker = await context.waitForEvent('serviceworker');
     extensionId = new URL(worker.url()).host;
-    // An unpacked install may point at another address (lib/mezzo-url.js).
-    await worker.evaluate((base) => chrome.storage.local.set({ mezzoDevBaseUrl: base }), LOCAL);
   });
 
   test.afterAll(async () => {

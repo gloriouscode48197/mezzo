@@ -1,11 +1,15 @@
 /**
  * Mezzo — Analytics (Mixpanel)
  *
- * Lightweight event tracking for engagement metrics.
+ * Lightweight event tracking for engagement metrics. Loaded on Home
+ * (index.html) only; its Mixpanel snippet sets persistence: 'localStorage'
+ * (no cookies), ip: false (no location from the IP address), and turns
+ * off autocapture and automatic page views, so these are the only events:
  * - Anonymous persistent user ID (localStorage, no cookies)
  * - Debug exclusion via ?debug=true URL param
- * - Only 4 events tracked (see exports)
- * - No audio data, volume levels, or voice content is ever sent
+ * - Only 4 events tracked (see exports), plus Mixpanel's own $identify
+ * - No audio data, volume levels, or voice content is ever sent; a session
+ *   says only whether the glow appeared (alert_triggered)
  */
 
 // =============================================================================
@@ -67,7 +71,7 @@ checkDebugFlag();
 
 const _disabled = isDebugUser();
 
-// Mixpanel is initialized by the snippet in <head>.
+// Mixpanel is initialized by the snippet in index.html's <head>.
 // We just need to identify the anonymous user.
 if (!_disabled && typeof window.mixpanel !== 'undefined') {
   const anonId = getOrCreateAnonymousId();

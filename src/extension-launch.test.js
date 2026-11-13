@@ -1,35 +1,21 @@
 /**
  * How the browser extension opens Mezzo: a normal Chrome window (address bar
  * included, for the site controls that fix a blocked mic), at the live
- * site unless an unpacked install points it elsewhere, and the Lantern
- * meeting banner.
+ * site always, and the Lantern meeting banner.
  */
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { placeWindow } from '../extension/lib/positioning.js';
 import { isMezzoHome, findMezzoTab } from '../extension/lib/mezzo-tabs.js';
-import { LIVE_BASE_URL, normalizeBaseUrl, isUnpacked, getBaseUrl, setBaseUrlOverride, clearBaseUrlOverride } from '../extension/lib/mezzo-url.js';
+import { LIVE_BASE_URL, getBaseUrl } from '../extension/lib/mezzo-url.js';
 
-function fakeChrome({ unpacked = true } = {}) {
-  const store = {};
+// No chrome.storage: the extension has no permission for it, so any use
+// would throw here.
+function fakeChrome() {
   const created = [];
   return {
-    store,
     created,
-    runtime: { getManifest: () => (unpacked ? { version: '1' } : { version: '1', update_url: 'https://clients2.google.com/service/update2/crx' }) },
-    storage: {
-      local: {
-        get: async (k) => (k in store ? { [k]: store[k] } : {}),
-        set: async (o) => Object.assign(store, o),
-        remove: async (k) => { delete store[k]; },
-      },
-      session: {
-        get: async () => ({}),
-        set: async () => {},
-        remove: async () => {},
-      },
-    },
     focused: [],
     tabs: { query: async () => [], update: async () => {} },
     windows: {
@@ -42,31 +28,11 @@ function fakeChrome({ unpacked = true } = {}) {
 }
 
 describe('extension: Mezzo address', () => {
-  it('accepts https anywhere and http only on this machine, keeping the origin', () => {
-    assert.equal(normalizeBaseUrl('https://mezzo-git-v3-me.vercel.app/index.html?x=1'), 'https://mezzo-git-v3-me.vercel.app');
-    assert.equal(normalizeBaseUrl(' http://localhost:8080/ '), 'http://localhost:8080');
-    assert.equal(normalizeBaseUrl('http://127.0.0.1:5173'), 'http://127.0.0.1:5173');
-    assert.equal(normalizeBaseUrl('http://example.com'), null);
-    assert.equal(normalizeBaseUrl('javascript:alert(1)'), null);
-    assert.equal(normalizeBaseUrl('not a url'), null);
-    assert.equal(normalizeBaseUrl(''), null);
-  });
-
-  it('a store install always opens the live site, even with an override stored', async () => {
-    const chrome = fakeChrome({ unpacked: false });
-    chrome.store.mezzoDevBaseUrl = 'https://preview.vercel.app';
-    assert.equal(isUnpacked(chrome), false);
-    assert.equal(await getBaseUrl(chrome), LIVE_BASE_URL);
-    assert.equal(await setBaseUrlOverride('https://preview.vercel.app', chrome), null);
-  });
-
-  it('an unpacked install can point at a preview and back', async () => {
-    const chrome = fakeChrome();
-    assert.equal(await getBaseUrl(chrome), LIVE_BASE_URL);
-    assert.equal(await setBaseUrlOverride('https://preview.vercel.app/', chrome), 'https://preview.vercel.app');
-    assert.equal(await getBaseUrl(chrome), 'https://preview.vercel.app');
-    await clearBaseUrlOverride(chrome);
-    assert.equal(await getBaseUrl(chrome), LIVE_BASE_URL);
+  it('always opens the live site: no developer override, nothing read from storage', async () => {
+    assert.equal(await getBaseUrl(fakeChrome()), LIVE_BASE_URL);
+    assert.equal(LIVE_BASE_URL, 'https://mezzo-one.vercel.app');
+    const src = readFileSync(new URL('../extension/lib/mezzo-url.js', import.meta.url), 'utf8');
+    assert.ok(!/chrome\.storage|chromeApi\.storage/.test(src));
   });
 });
 
@@ -116,14 +82,16 @@ describe('extension: no second Mezzo', () => {
     assert.equal(tab.id, 5);
     assert.deepEqual(chrome.queries, [{ url: 'https://mezzo-one.vercel.app/*' }]);
     const manifest = JSON.parse(readFileSync(new URL('../extension/manifest.json', import.meta.url), 'utf8'));
-    assert.ok(!manifest.permissions.includes('tabs'));
+    assert.ok(!(manifest.permissions ?? []).includes('tabs'));
     assert.ok(manifest.host_permissions.includes('https://mezzo-one.vercel.app/*'));
   });
 
   it('asks for host access to the Mezzo site only; the meeting sites are reached by the content script alone', () => {
     const manifest = JSON.parse(readFileSync(new URL('../extension/manifest.json', import.meta.url), 'utf8'));
     assert.deepEqual(manifest.host_permissions, ['https://mezzo-one.vercel.app/*']);
-    assert.deepEqual(manifest.permissions, ['storage']);
+    // No "storage" (or any other) permission: nothing is kept (2026-11-13).
+    assert.equal(manifest.permissions, undefined);
+    assert.equal(manifest.version, '1.0.6');
     // Detection still runs on all three platforms, in every frame (unchanged).
     const detect = manifest.content_scripts.find((c) => c.js.includes('content-scripts/meeting-detect.js'));
     assert.deepEqual(detect.matches, [

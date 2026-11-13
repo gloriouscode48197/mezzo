@@ -6,7 +6,25 @@
    ═══════════════════════════════════════════ */
 
 
-/* ── Fonts ── */
+/* ── Fonts ──
+   Geist and Geist Mono, served from Mezzo's own site (/fonts, SIL Open
+   Font License) rather than Google Fonts, so no font request leaves the
+   site (2026-11-13). Latin subsets, the same files the extension bundles.
+   The URLs are relative to this stylesheet, so they also work in the
+   Companion, which loads it by absolute address. */
+@font-face {
+  font-family: 'Geist';
+  src: url('../fonts/geist-latin.woff2') format('woff2');
+  font-weight: 400 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('../fonts/geist-mono-latin.woff2') format('woff2');
+  font-weight: 400 500;
+  font-display: swap;
+}
+
 :root {
   --font-display: 'Geist', system-ui, sans-serif;
   --font-body: 'Geist', system-ui, sans-serif;
