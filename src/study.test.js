@@ -10,6 +10,8 @@ import {
   applyStudyParam,
   applyStartParam,
   clearStudy,
+  getBaselineChecks,
+  setBaselineCheck,
   onCheckInChange,
   codeBoundKey,
   getMezzoStageUnlockedAt,
@@ -554,6 +556,28 @@ describe('study stages', () => {
     applyStudyParam('?study=TEST-01', storage);
     assert.equal(getMezzoStageStartAt(storage), null);
     assert.equal(getLastSession(storage), null);
+  });
+
+  it("Part 1's checkboxes: kept per tester code, nothing without one, removed by ?study=clear", () => {
+    const storage = memoryStorage();
+    assert.deepEqual(getBaselineChecks(storage), [false, false]);
+    assert.equal(setBaselineCheck(0, true, storage), false); // no code
+    applyStudyParam('?study=TEST-01', storage);
+    assert.equal(setBaselineCheck(0, true, storage), true);
+    assert.deepEqual(getBaselineChecks(storage), [true, false]);
+    assert.equal(storage.getItem('mezzoStudyBaselineChecks:TEST-01'), '[true,false]');
+    assert.equal(setBaselineCheck(2, true, storage), false); // only two
+    applyStudyParam('?study=TEST-02', storage);
+    assert.deepEqual(getBaselineChecks(storage), [false, false]);
+    applyStudyParam('?study=TEST-01', storage);
+    setBaselineCheck(1, true, storage);
+    setBaselineCheck(0, false, storage);
+    assert.deepEqual(getBaselineChecks(storage), [false, true]);
+    storage.setItem('mezzoStudyBaselineChecks:TEST-01', 'not json');
+    assert.deepEqual(getBaselineChecks(storage), [false, false]);
+    setBaselineCheck(0, true, storage);
+    clearStudy(storage);
+    assert.equal(storage.getItem('mezzoStudyBaselineChecks:TEST-01'), null);
   });
 
   it('?study=clear removes the unlock too', () => {

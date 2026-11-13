@@ -555,7 +555,7 @@ test.describe('Study mode: the /study page', () => {
     await expect(link(page, 'Wrap up the study')).toBeHidden();
   });
 
-  test('baseline stage (a code, no session yet): "Your usual calls", the copy and list, one check-in button, no way into Mezzo', async ({ page }) => {
+  test('baseline stage (a code, no session yet): "Part 1: Your usual calls", the copy, the box with the list and button, no way into Mezzo', async ({ page }) => {
     await seed(page, { code: 'R4-01' });
     await page.goto('/study');
     await expect(page.locator('body')).toHaveAttribute('data-study-stage', 'baseline');
@@ -565,12 +565,12 @@ test.describe('Study mode: the /study page', () => {
     await expect(page.locator('#study-bookmark')).toHaveText('Bookmark this page. You’ll come back here after each call.');
     // Right under the study code.
     expect(await page.locator('#study-bookmark').evaluate((el) => el.previousElementSibling.textContent)).toBe('Your study code: R4-01');
-    await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Your usual calls']);
+    await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Part 1: Your usual calls']);
     const baselineSection = page.locator('#study-baseline');
-    await expect(baselineSection.locator('p')).toHaveText([
+    await expect(baselineSection.locator('p:visible')).toHaveText([
       'Mezzo comes later. I’ll email it once your 2 check-ins are in.',
-      'For now, take your next 2 calls as you normally would. After each one, come back here and tap Check in after a call. It takes about a minute.',
-      'Only count calls where:',
+      'For now, take your next 2 calls as you normally would. After each one, come back here and click Check in after a call. It takes about a minute.',
+      'Only give feedback on calls where:',
     ]);
     // "Mezzo comes later" (and nothing else) sits in a pale slate callout,
     // with the normal dark text at well over 4.5:1, in light and dark
@@ -598,14 +598,21 @@ test.describe('Study mode: the /study page', () => {
       expect(lum(toRgb(look.bg))).toBeGreaterThan(0.75); // pale
     }
     await page.emulateMedia({ colorScheme: 'light' });
-    await expect(baselineSection.getByRole('list', { name: 'Only count calls where:' }).getByRole('listitem'))
+    await expect(baselineSection.getByRole('list', { name: 'Only give feedback on calls where:' }).getByRole('listitem'))
       .toHaveText(['you’re wearing headphones', 'people are nearby', 'you speak, even a little']);
-    // The button comes after the list, and nothing follows it (the old
-    // "Please don’t try Mezzo yet…" note is gone).
-    expect(await baselineSection.evaluate((el) => el.lastElementChild.id)).toBe('study-baseline-check-in');
-    const listBox = await baselineSection.locator('ul').boundingBox();
-    const buttonBox = await baselineSection.locator('#study-baseline-check-in').boundingBox();
-    expect(buttonBox.y).toBeGreaterThan(listBox.y + listBox.height);
+    // One bordered box holds the list and, to its right, the button; the
+    // old "Please don’t try Mezzo yet…" note is gone.
+    const box = baselineSection.locator('.study-box');
+    await expect(box.locator('ul')).toHaveCount(1);
+    await expect(box.locator('#study-baseline-check-in')).toHaveCount(1);
+    expect(await box.evaluate((el) => getComputedStyle(el).borderTopWidth)).toBe('1px');
+    const listBox = await box.locator('ul').boundingBox();
+    const buttonBox = await box.locator('#study-baseline-check-in').boundingBox();
+    expect(buttonBox.x).toBeGreaterThan(listBox.x + 100);
+    expect(buttonBox.y).toBeLessThan(listBox.y + listBox.height);
+    expect(buttonBox.y + buttonBox.height).toBeGreaterThan(listBox.y);
+    // The checkboxes come right after the box.
+    expect(await box.evaluate((el) => el.nextElementSibling.className)).toBe('study-checks');
 
     const baseline = link(page, 'Check in after a call');
     await expect(baseline).toBeVisible();
@@ -672,7 +679,7 @@ test.describe('Study mode: the /study page', () => {
 
     await page.goto('/study?study=TEST-02');
     expect(await stage()).toBe('baseline');
-    await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Your usual calls']);
+    await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Part 1: Your usual calls']);
     await expect(page.getByText('Your study code: TEST-02')).toBeVisible();
 
     await page.goto('/study?study=TEST-01');
@@ -690,7 +697,7 @@ test.describe('Study mode: the /study page', () => {
     await page.goto('/study/');
     await expect(page.locator('body')).toHaveAttribute('data-study-stage', 'mezzo');
     await expect(page.getByText('Your study code: R4-01')).toBeVisible();
-    await expect(page.getByRole('heading', { level: 2 })).toHaveText(['With Mezzo', 'Wrap-up']);
+    await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Part 2: With Mezzo', 'Part 3: Wrap-up']);
     await expect(page.getByRole('heading', { level: 3 })).toHaveText(['Use Mezzo on your calls', 'Check in after your call']);
     // Under the code, this stage's own bookmark line.
     await expect(page.locator('#study-bookmark')).toHaveText('Bookmark this page. You’ll come back here after calls and for the wrap-up.');
@@ -961,6 +968,64 @@ test.describe('Study mode: the /study page', () => {
     expect(two.y).toBeGreaterThan(one.y + one.height - 1);
     expect(Math.abs(one.x - two.x)).toBeLessThanOrEqual(1);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  });
+
+  test('Part 1 checkboxes: the tester ticks both, sees the thank-you, and they stay ticked for that code only; nothing is sent', async ({ page }) => {
+    await seed(page, { code: 'R4-01' });
+    const requests = [];
+    page.on('request', (r) => requests.push(r.url()));
+    await page.goto('/study');
+    const one = page.getByRole('checkbox', { name: 'I finished check-in 1' });
+    const two = page.getByRole('checkbox', { name: 'I finished check-in 2' });
+    const done = page.locator('#study-baseline-done');
+    const THANKS = 'You’re done with Part 1. Thank you! I’ll email you Mezzo soon.';
+    await expect(one).not.toBeChecked();
+    await expect(two).not.toBeChecked();
+    await expect(done).toBeHidden();
+
+    await one.check();
+    await expect(done).toBeHidden();
+    await two.check();
+    await expect(done).toHaveText(THANKS);
+    await expect(done).toBeVisible();
+    // Below the checkboxes.
+    const checksBox = await page.locator('.study-checks').boundingBox();
+    expect((await done.boundingBox()).y).toBeGreaterThan(checksBox.y + checksBox.height - 1);
+    expect(await page.evaluate(() => localStorage.getItem('mezzoStudyBaselineChecks:R4-01'))).toBe('[true,true]');
+
+    // Kept after a reload.
+    await page.reload();
+    await expect(one).toBeChecked();
+    await expect(two).toBeChecked();
+    await expect(done).toHaveText(THANKS);
+
+    // Unticking one hides the thank-you.
+    await one.uncheck();
+    await expect(done).toBeHidden();
+    expect(await page.evaluate(() => localStorage.getItem('mezzoStudyBaselineChecks:R4-01'))).toBe('[false,true]');
+
+    // A new code starts unticked; the first code keeps its own.
+    await page.goto('/study?study=R4-09');
+    await expect(one).not.toBeChecked();
+    await expect(two).not.toBeChecked();
+    await page.goto('/study?study=R4-01');
+    await expect(one).not.toBeChecked();
+    await expect(two).toBeChecked();
+
+    // The ticks never leave the browser: no request carries them.
+    for (const url of requests) expect(url).not.toMatch(/check-in-?[12]|baseline.?checks/i);
+    expect(requests.filter((u) => !u.startsWith('http://localhost') && !u.startsWith('http://127.0.0.1') && !/fonts\.(googleapis|gstatic)\.com/.test(u))).toEqual([]);
+  });
+
+  test('Part 1 on a phone: the button goes below the list, inside the box', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 800 });
+    await seed(page, { code: 'R4-01' });
+    await page.goto('/study');
+    const box = page.locator('.study-box');
+    const listBox = await box.locator('ul').boundingBox();
+    const buttonBox = await box.locator('#study-baseline-check-in').boundingBox();
+    expect(buttonBox.y).toBeGreaterThan(listBox.y + listBox.height - 1);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
   });
 
   test('layout: "Your usual calls" stays one 560px column with no step numbers', async ({ page }) => {

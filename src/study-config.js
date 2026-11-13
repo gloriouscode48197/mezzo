@@ -36,7 +36,8 @@ export const STUDY_CONFIG = {
   startParam: 'start',
   startValue: '1',
 
-  /** lastSession, firstSession and mezzoStage are stored per tester code,
+  /** lastSession, firstSession, mezzoStage and baselineChecks are stored
+   *  per tester code,
    *  as `${key}:${code}` (study.js's codeBoundKey()). */
   storageKeys: {
     testerCode: 'mezzoStudyTesterCode',
@@ -46,6 +47,9 @@ export const STUDY_CONFIG = {
     firstSession: 'mezzoStudyFirstSession',
     /** When ?start=1 moved the tester to the With Mezzo stage (ms). */
     mezzoStage: 'mezzoStudyMezzoStage',
+    /** /study's Part 1 checkboxes ("I finished check-in 1/2"), as a JSON
+     *  array of two booleans. The tester's own reminder: never sent. */
+    baselineChecks: 'mezzoStudyBaselineChecks',
     /** The existing anonymous analytics ID (src/analytics.js's ANON_ID_KEY). */
     browserId: 'mezzo_anonymous_id',
   },

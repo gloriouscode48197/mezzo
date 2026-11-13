@@ -198,6 +198,51 @@
       padding: var(--space-3) var(--space-4);
       margin-bottom: var(--space-4);
     }
+    /* Part 1's box (2026-11-13): which calls count, with Check in after a
+       call to the right; stacked on a phone. */
+    .study-box {
+      display: flex;
+      align-items: center;
+      gap: var(--space-4);
+      padding: var(--space-4);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+    }
+    .study-box-text { flex: 1 1 auto; }
+    .study-main .study-box .study-list { margin-bottom: 0; }
+    .study-phase .study-box .btn-primary { flex: none; margin-top: 0; }
+    @media (max-width: 479px) {
+      .study-box { flex-direction: column; align-items: flex-start; }
+    }
+    /* Part 1's two checkboxes, below the box: the tester's own reminder. */
+    .study-checks {
+      margin: var(--space-4) 0 0;
+      padding: 0;
+      border: none;
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+    }
+    .study-checks label {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+      min-height: 24px;
+      color: var(--color-text);
+      cursor: pointer;
+    }
+    .study-checks input {
+      width: 18px;
+      height: 18px;
+      margin: 0;
+      accent-color: var(--study-band);
+    }
+    .study-main .study-done { margin-top: var(--space-3); color: var(--color-text); }
+    .study-main .study-done:empty { display: none; }
+    .visually-hidden {
+      position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+      overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+    }
     [hidden] { display: none !important; }
     .study-main a:not(.btn-primary):not(.btn-outline) {
       color: var(--color-link);
@@ -230,22 +275,36 @@
 
       <!-- Baseline stage: a code, before the With Mezzo stage. -->
       <section class="study-phase" id="study-baseline" hidden aria-labelledby="study-baseline-heading">
-        <h2 id="study-baseline-heading">Your usual calls</h2>
+        <h2 id="study-baseline-heading">Part 1: Your usual calls</h2>
         <p class="type-body study-callout">Mezzo comes later. I’ll email it once your 2 check-ins are in.</p>
-        <p class="type-body">For now, take your next 2 calls as you normally would. After each one, come back here and tap Check in after a call. It takes about a minute.</p>
-        <p class="type-body study-list-intro" id="study-baseline-count">Only count calls where:</p>
-        <ul class="type-body study-list" aria-labelledby="study-baseline-count">
-          <li>you’re wearing headphones</li>
-          <li>people are nearby</li>
-          <li>you speak, even a little</li>
-        </ul>
-        <a class="btn-primary" id="study-baseline-check-in" target="_blank" rel="noopener noreferrer">Check in after a call</a>
+        <p class="type-body">For now, take your next 2 calls as you normally would. After each one, come back here and click Check in after a call. It takes about a minute.</p>
+        <!-- Which calls count, with the button beside the list (stacked on
+             a phone). -->
+        <div class="study-box">
+          <div class="study-box-text">
+            <p class="type-body study-list-intro" id="study-baseline-count">Only give feedback on calls where:</p>
+            <ul class="type-body study-list" aria-labelledby="study-baseline-count">
+              <li>you’re wearing headphones</li>
+              <li>people are nearby</li>
+              <li>you speak, even a little</li>
+            </ul>
+          </div>
+          <a class="btn-primary" id="study-baseline-check-in" target="_blank" rel="noopener noreferrer">Check in after a call</a>
+        </div>
+        <!-- The tester's own reminder, kept per tester code in this browser
+             (study.js's getBaselineChecks()). Never sent anywhere. -->
+        <fieldset class="study-checks">
+          <legend class="visually-hidden">Your check-ins</legend>
+          <label class="type-body"><input type="checkbox" id="study-baseline-done-1"> I finished check-in 1</label>
+          <label class="type-body"><input type="checkbox" id="study-baseline-done-2"> I finished check-in 2</label>
+        </fieldset>
+        <p class="type-body study-done" id="study-baseline-done" role="status"></p>
       </section>
 
       <!-- With Mezzo stage: after ?start=1 or the first monitoring session. -->
       <div id="study-mezzo" hidden>
         <section class="study-phase" aria-labelledby="study-mezzo-heading">
-          <h2 id="study-mezzo-heading">With Mezzo</h2>
+          <h2 id="study-mezzo-heading">Part 2: With Mezzo</h2>
           <!-- Two numbered steps: side by side on wide screens, stacked on a
                phone. An ordered list, so the order is announced too; the
                number marker itself is decorative. -->
@@ -289,7 +348,7 @@
         </section>
 
         <section class="study-phase" aria-labelledby="study-wrap-up-heading">
-          <h2 id="study-wrap-up-heading">Wrap-up</h2>
+          <h2 id="study-wrap-up-heading">Part 3: Wrap-up</h2>
           <p class="type-body" id="study-wrap-up-text">A few questions about your whole time with Mezzo. Finish it to get your $5 gift card.</p>
           <a class="btn-outline" id="study-wrap-up" target="_blank" rel="noopener noreferrer" hidden>Wrap up the study</a>
         </section>
@@ -322,7 +381,9 @@
       buildCheckInUrl,
       buildBaselineUrl,
       buildWrapUpUrl,
-  isFormUrlReady,
+      isFormUrlReady,
+      getBaselineChecks,
+      setBaselineCheck,
     } from '/src/study.js';
     import { STUDY_CONFIG } from '/src/study-config.js';
     import { openMezzoWindow } from '/src/study-open-mezzo.js';
@@ -352,6 +413,22 @@
       const button = $('study-baseline-check-in');
       if (href) button.href = href;
       else button.hidden = true;
+
+      // The two checkboxes: the tester's own reminder, saved per tester
+      // code in this browser, never sent.
+      const boxes = [$('study-baseline-done-1'), $('study-baseline-done-2')];
+      const done = $('study-baseline-done');
+      function showDone() {
+        done.textContent = boxes.every((box) => box.checked)
+          ? 'You’re done with Part 1. Thank you! I’ll email you Mezzo soon.'
+          : '';
+      }
+      getBaselineChecks().forEach((checked, i) => { boxes[i].checked = checked; });
+      showDone();
+      boxes.forEach((box, i) => box.addEventListener('change', () => {
+        setBaselineCheck(i, box.checked);
+        showDone();
+      }));
     }
 
     if (stage === 'mezzo') {

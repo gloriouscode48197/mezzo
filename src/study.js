@@ -39,10 +39,10 @@ export function getTesterCode(storage = defaultStorage(), config = STUDY_CONFIG)
 // ── Data tied to the tester code ─────────────────────────────────────────
 
 /** The study data kept per tester code: the last session, the first-session
- *  date and the With Mezzo unlock. Each is stored under `${key}:${code}`,
+ *  date, the With Mezzo unlock and Part 1's two checkboxes. Each is stored under `${key}:${code}`,
  *  so a new code starts at "Your usual calls" and a code switched back to
  *  finds its own. The tester code itself and the browser ID are not. */
-export const CODE_BOUND_KEYS = Object.freeze(['lastSession', 'firstSession', 'mezzoStage']);
+export const CODE_BOUND_KEYS = Object.freeze(['lastSession', 'firstSession', 'mezzoStage', 'baselineChecks']);
 
 /** The storage key for `name` under the saved tester code, or null
  *  without one. */
@@ -63,7 +63,7 @@ function storageKeysOf(storage) {
 }
 
 /** Removes the tester code and every code's study data (the last session,
- *  the first-session date and the With Mezzo unlock), including copies
+ *  the first-session date, the With Mezzo unlock and Part 1's checkboxes), including copies
  *  saved before the data was tied to the code.
  *  The anonymous browser ID belongs to analytics, so it stays. */
 export function clearStudy(storage = defaultStorage(), config = STUDY_CONFIG) {
@@ -74,6 +74,34 @@ export function clearStudy(storage = defaultStorage(), config = STUDY_CONFIG) {
     for (const key of new Set([...bases, ...current, ...all])) storage?.removeItem(key);
     storage?.removeItem(config.storageKeys.testerCode);
   } catch { /* storage unavailable */ }
+}
+
+// ── Part 1's checkboxes ──────────────────────────────────────────────────
+
+/** /study's "I finished check-in 1" and "I finished check-in 2", ticked by
+ *  the tester as a reminder for themselves. Kept per tester code; nothing
+ *  reads them but /study, and they're never sent anywhere.
+ *  @returns {[boolean, boolean]} */
+export function getBaselineChecks(storage = defaultStorage(), config = STUDY_CONFIG) {
+  try {
+    const key = codeBoundKey('baselineChecks', storage, config);
+    const value = key ? JSON.parse(storage?.getItem(key) ?? 'null') : null;
+    return Array.isArray(value) ? [value[0] === true, value[1] === true] : [false, false];
+  } catch {
+    return [false, false];
+  }
+}
+
+/** Ticks or unticks check-in `index` (0 or 1). Returns false without a
+ *  tester code or storage. */
+export function setBaselineCheck(index, checked, storage = defaultStorage(), config = STUDY_CONFIG) {
+  if (index !== 0 && index !== 1) return false;
+  const key = codeBoundKey('baselineChecks', storage, config);
+  if (!key) return false;
+  const checks = getBaselineChecks(storage, config);
+  checks[index] = checked === true;
+  try { storage?.setItem(key, JSON.stringify(checks)); } catch { return false; }
+  return true;
 }
 
 /**
