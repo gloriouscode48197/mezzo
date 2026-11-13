@@ -242,8 +242,8 @@ test.describe('Main page: running (Companion open)', () => {
     await expect(running.locator('.running-label')).toHaveText('Monitoring is not active');
     await expect(running.locator('.running-label')).toHaveCSS('font-size', '11px');
     await expect(running.locator('.running-label .running-dot')).toBeVisible();
-    await expect(running.locator('h1')).toHaveText('Your Companion is open');
-    await expect(running.locator('.running-body')).toHaveText('Keep this page open while using Mezzo. Closing it will also close the Mezzo Companion.');
+    await expect(running.locator('h1')).toHaveText('Keep this window open while you use Mezzo');
+    await expect(running.locator('.running-body')).toHaveText("It runs your Companion, so minimize it instead of closing it. When you're done, click Close Companion.");
     await expect(running.locator('.running-privacy')).toBeHidden();
     await expect(page.locator('#running-live')).toHaveText('Monitoring is not active.');
 
@@ -295,7 +295,7 @@ test.describe('Main page: running (Companion open)', () => {
     await expect(pipPage.locator('.pip-screen-monitoring')).toBeVisible({ timeout: 5000 });
     await expect(label).toHaveText('Monitoring is active');
     await expect(page.locator('#running-live')).toHaveText('Monitoring is active.');
-    await expect(h1).toHaveText('Your Companion is open');
+    await expect(h1).toHaveText('Keep this window open while you use Mezzo');
 
     await pipPage.locator('.pip-control-btn-stop').click();
     await expect(pipPage.locator('.pip-screen-ready')).toBeVisible({ timeout: 5000 });
@@ -304,7 +304,7 @@ test.describe('Main page: running (Companion open)', () => {
     await recalibrateFromSelector(pipPage, 'Kitchen');
     await expect(pipPage.locator('.pip-screen-calibrating')).toBeVisible({ timeout: 10000 });
     await expect(label).toHaveText('Monitoring is not active');
-    await expect(h1).toHaveText('Your Companion is open');
+    await expect(h1).toHaveText('Keep this window open while you use Mezzo');
   });
 
   test('no illustrative Companion-window preview or status dot remains', async ({ page, context }) => {
@@ -394,7 +394,7 @@ test.describe('Main page: Reopen Companion (2026-10-23)', () => {
     pipPage = await pipPromise;
     await expect(pipPage.locator('.pip-screen-monitoring')).toBeVisible({ timeout: 8000 });
     await expect(pipPage.locator('.pip-profile-info')).toHaveText('Kitchen');
-    await expect(running.locator('h1')).toHaveText('Your Companion is open');
+    await expect(running.locator('h1')).toHaveText('Keep this window open while you use Mezzo');
     await expect(running.locator('.running-label')).toHaveText('Monitoring is active');
     await expect(running.locator('#btn-reopen-companion')).toBeHidden();
     await expect(running.locator('#btn-close-companion')).toBeVisible();

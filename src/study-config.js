@@ -64,7 +64,7 @@ export const STUDY_CONFIG = {
     companion: 'companion',
     studyPage: 'study_page',
     companionClosed: 'companion_closed',
-    /** The main tab's "Your Companion is open" page. */
+    /** The main tab's "Keep this window open" page. */
     companionOpen: 'companion_open',
     /** The page the tab returns to after Done or Close Companion. */
     home: 'home',

@@ -405,7 +405,7 @@ test.describe('Study mode: the check-in on the "Companion closed" page', () => {
     await pipPage.waitForTimeout(300);
     await stopMonitoring(pipPage);
     await expect(card(pipPage)).toBeVisible();
-    // And on the "Your Companion is open" page, for the same session.
+    // And on the "Keep this window open" page, for the same session.
     await expect(page.locator('#state-dock')).toHaveAttribute('data-variant', 'open');
     await expect(closedCard(page)).toBeVisible();
     expect((await closedParams(page)).mezzo_source).toBe('companion_open');
@@ -438,7 +438,7 @@ test.describe('Study mode: one pending check-in, in every view (2026-11-11)', ()
     return pipPage;
   }
 
-  test('after Stop: the Companion card and the "Your Companion is open" card, below Close Companion; the page card hides while monitoring', async ({ page, context }) => {
+  test('after Stop: the Companion card and the "Keep this window open" card, below Close Companion; the page card hides while monitoring', async ({ page, context }) => {
     await seed(page, { code: 'R4-01' });
     const pipPage = await talkThenStop(page, context);
     await expect(card(pipPage)).toBeVisible();

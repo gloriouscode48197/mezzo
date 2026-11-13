@@ -164,6 +164,24 @@ describe('extension: no second Mezzo', () => {
     assert.equal(chrome.created.length, 1);
     assert.equal(chrome.created[0].focused, true);
   });
+
+  it('opening or focusing Mezzo never activates a tab in the meeting\'s window, so a Meet tab is never hidden (no mini window)', async () => {
+    const MEET = { id: 9, windowId: 1, active: true, url: 'https://meet.google.com/abc-defg-hij' };
+    const { MezzoWindowManager } = await import('../extension/lib/window-manager.js');
+    // No Mezzo yet: a new normal window of its own, and no tab touched.
+    let chrome = withTabs([MEET]);
+    globalThis.chrome = chrome;
+    await MezzoWindowManager.openOrFocus({ url: `${LIVE}/index.html` });
+    assert.equal(chrome.created.length, 1);
+    assert.equal(chrome.created[0].type, 'normal');
+    assert.deepEqual(chrome.updates, []);
+    // Mezzo open in its own window: only its tab and window are touched.
+    chrome = withTabs([MEET, { id: 5, windowId: 2, active: true, url: `${LIVE}/index.html` }]);
+    globalThis.chrome = chrome;
+    await MezzoWindowManager.openOrFocus({ url: `${LIVE}/index.html` });
+    assert.equal(chrome.created.length, 0);
+    assert.ok(chrome.updates.every(([kind, id]) => (kind === 'tab' ? id === 5 : id === 2)));
+  });
 });
 
 describe('extension: window placement', () => {

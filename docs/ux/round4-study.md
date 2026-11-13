@@ -64,7 +64,7 @@ Shown below Ready's privacy line when a check-in is pending (§3). It never cove
 
 Shown after any close other than Close Companion (Meet's mini window, the native ✕). The card sits below **Reopen Companion** and **Done**. **Open check-in** here also ends the call, like Stop, so Reopen then opens to Ready. While a Reopen is continuing the call, the card waits. Source: `companion_closed`.
 
-### The "Your Companion is open" page
+### The "Keep this window open" page
 
 The card sits below Close Companion, only while the Companion isn't monitoring. It's hidden mid-call, including while Reopen is resuming one. Source: `companion_open`.
 
@@ -107,7 +107,7 @@ Mezzo sends nothing itself. The values ride in the form link's query string, and
 | --- | --- | --- |
 | `mezzo_tester` | The tester code | All three |
 | `mezzo_browser_id` | The existing anonymous analytics ID (`mezzo_anonymous_id` in localStorage), so sessions from one browser can be grouped | Check-in |
-| `mezzo_source` | Where the link was opened from: `companion` (Ready card), `companion_closed` ("Companion closed" page), `companion_open` ("Your Companion is open" page), `home` (page after Done or Close Companion), `study_page` (`/study`) | Check-in |
+| `mezzo_source` | Where the link was opened from: `companion` (Ready card), `companion_closed` ("Companion closed" page), `companion_open` ("Keep this window open" page), `home` (page after Done or Close Companion), `study_page` (`/study`) | Check-in |
 | `mezzo_session_date` | Local date the session started, `YYYY-MM-DD` | Check-in, with a session |
 | `mezzo_session_minutes` | Session length, Start to end, in minutes to one decimal (40s is `0.7`) | Check-in, with a session |
 | `mezzo_speech_minutes` | Speaking time in minutes, one decimal | Check-in, with a session that recorded it |
@@ -131,7 +131,7 @@ Mezzo sends nothing itself. The values ride in the form link's query string, and
 - "1-minute check-in"
 - **Open check-in** · **Skip this one**
 
-**Page cards ("Companion closed", "Your Companion is open", the page after Done or Close Companion)**
+**Page cards ("Companion closed", "Keep this window open", the page after Done or Close Companion)**
 - "Call over? How did your call go?"
 - **Open check-in** · **Skip this one**
 
@@ -142,10 +142,10 @@ Mezzo sends nothing itself. The values ride in the form link's query string, and
 - **Reopen Companion** · **Done**
 - "Mezzo only measures volume. Nothing you say is recorded."
 
-**"Your Companion is open" page**
+**"Keep this window open" page**
 - Status line: "Monitoring is not active" / "Monitoring is active"
-- "Your Companion is open"
-- "Keep this page open while using Mezzo. Closing it will also close the Mezzo Companion."
+- "Keep this window open while you use Mezzo"
+- "It runs your Companion, so minimize it instead of closing it. When you're done, click Close Companion."
 - **Close Companion**
 
 **Page after Done or Close Companion**

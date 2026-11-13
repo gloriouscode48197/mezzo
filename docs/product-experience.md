@@ -133,8 +133,8 @@ Internal term only (retired name: Anchor page) — see Canonical Terminology in 
 The running state (cream surface, charcoal text, the website's one light theme):
 
 * a status line (Geist Mono, small, with a dot): "Monitoring is not active" until monitoring starts, then "Monitoring is active", updating live — the only thing on the page that changes, announced to screen readers when it does
-* "Your Companion is open"
-* "Keep this page open while using Mezzo. Closing it will also close the Mezzo Companion."
+* "Keep this window open while you use Mezzo"
+* "It runs your Companion, so minimize it instead of closing it. When you're done, click Close Companion."
 * **Close Companion**, a quiet text link: the recovery action for a Companion buried behind other windows — the one thing this page is allowed to do
 
 The status line collapses the Companion's states to one distinction: Welcome, Ready, Calibrating and every decision screen all read "not active." No calibration UI, no profile UI, no Start monitoring, no Stop, no Save.
@@ -145,7 +145,7 @@ The status line collapses the Companion's states to one distinction: Welcome, Re
 
 The Mezzo Companion, not the Dock, is meant to stay available across an entire meeting-filled day — monitoring starts and stops independently inside it, session by session, without the Companion needing to reopen.
 
-User-facing copy never names this page — it says things like "Your Companion is open in its own window."
+User-facing copy never names this page; it says what to do with it: "Keep this window open while you use Mezzo." (2026-11-13; was "Your Companion is open". The page has to stay open because it runs the Companion, and minimizing it is the safe alternative to closing it.)
 
 ---
 
@@ -353,7 +353,7 @@ Only for study testers; without a tester code none of this shows and nothing is 
 * **Card.** On Ready, below the privacy line: "How did your call go?", "1-minute check-in", **Open check-in** (filled with a translucent cream, lighter than Start monitoring; opens the check-in form in a new tab, pre-filled) and **Skip this one**, on a panel slightly lighter than the window, no chartreuse. Because it reads the stored last session, a session ended by closing the window gets its card the next time the Companion opens to Ready. It never covers or disables Start monitoring.
 * **Page cards.** "Call over? How did your call go?", **Open check-in** and **Skip this one**, on the main tab in every view where a check-in can be pending (one card per view, the same pending check-in):
   * the **"Companion closed"** page, below Reopen Companion and Done. Open check-in there ends the call like Stop (Reopen then opens to Ready); source `companion_closed`. Reopen continues the session, and the card waits while that call runs.
-  * the **"Your Companion is open"** page, below Close Companion, while the Companion isn't monitoring (hidden mid-call, including while Reopen is continuing one); source `companion_open`.
+  * the **"Keep this window open"** page, below Close Companion, while the Companion isn't monitoring (hidden mid-call, including while Reopen is continuing one); source `companion_open`.
   * the page the tab returns to after **Done** or **Close Companion** (the granted Home), below Open Mezzo Companion, also on a later visit while one is pending; source `home`.
   Without a tester code none of them show.
 * **`/study` page.** Not linked anywhere. Its own look, apart from every Mezzo page: a white page with a short, full-width muted slate-blue (#44607A) header band that scrolls away with the page, reading "Mezzo study" in white (in place of the wordmark) with only a Privacy link, slate-blue buttons with white text (the secondary one outlined in slate), no charcoal, cream or chartreuse, and the same in light and dark system themes. Without a code: "This page is for study participants." With one: "Thanks for joining the Mezzo study", "Your study code: {code}", then one of two stages, and "How study data is handled" at the bottom.
