@@ -1001,8 +1001,9 @@ export function createMezzoSession({
     const voiced = activeCircle ? activeCircle.gateOpen : true;
     const frameAt = performance.now();
     engine.processFrame(zoneInput, frameAt, voiced);
-    // Study speaking time: the same gate verdict, only read (study.js).
-    glowCounter.onFrame(voiced, frameAt);
+    // Study speaking time: the same gate verdict, only read (study.js); and
+    // the Companion view and window size, for mezzo_view and mezzo_window.
+    glowCounter.onFrame(voiced, frameAt, studyView());
     markClassification(); // TEMPORARY — see docs/monitoring-runtime-investigation.md
 
     const zone = engine.getZone();
@@ -1135,6 +1136,15 @@ export function createMezzoSession({
 
     clearSustained();
     currentZone = 0;
+  }
+
+  /** The Companion's view (its size band) and window size right now, for
+   *  the study session (study.js's createGlowCounter()). Read only. */
+  const STUDY_VIEW_NAMES = { expanded: 'Expanded', compact: 'Compact', mini: 'Mini' };
+  function studyView() {
+    const name = STUDY_VIEW_NAMES[monitoringScreenEl?.dataset.sizeBand];
+    if (!name || !pipWindow) return null;
+    return { name, width: pipWindow.innerWidth, height: pipWindow.innerHeight };
   }
 
   /** Ends the study session (if one is running) and keeps it as the last
@@ -2965,16 +2975,16 @@ export function createMezzoSession({
       .pip-screen-monitoring[data-size-band="mini"].pip-controls-revealed::before,
       .pip-screen-monitoring[data-size-band="mini"].pip-controls-revealed::after { opacity: 1; }
       /* ── Compact and Mini toolbar (2026-11-11): Stop and Expand together
-         in one small, low-contrast panel (a faint cream outline over a
-         barely lighter fill, never chartreuse), so they read as controls
-         without competing with the glow. Docked to a window edge
-         (2026-11-12): data-toolbar (set by ringLayout() from the window's
-         shape) picks it. "side", when the window is wider than tall: flush
-         against the right edge, centered top to bottom, Stop above Expand.
-         "bottom", otherwise: flush against the bottom edge, centered left
-         to right, Stop and Expand side by side. Only the corners facing
-         into the window are rounded, and the side touching the window has
-         no border. The ring is the largest circle that keeps its far-over
+         in one small, low-contrast panel (a faint cream outline over the
+         window's own color, never chartreuse), so they read as controls
+         without competing with the glow. Docked in the bottom-right corner,
+         flush with the edges (2026-11-13): data-toolbar (set by
+         ringLayout() from the window's shape) picks how. "side", when the
+         window is wider than tall: against the right edge, Stop above
+         Expand. "bottom", otherwise: against the bottom edge, Stop left of
+         Expand. Expand is always in the corner. Only the corner facing into
+         the window is rounded, and the sides touching the window have no
+         border. The ring is the largest circle that keeps its far-over
          glow clear of it (ringLayout()). The panel is decorative; each
          button keeps its own accessible name. In Mini it fades in with the
          buttons, and the top and bottom scrims aren't needed. ── */
@@ -2993,30 +3003,28 @@ export function createMezzoSession({
       .pip-screen-monitoring[data-toolbar]::after { display: none; }
       .pip-screen-monitoring[data-size-band="mini"] .pip-monitoring-toolbar { opacity: 0; }
       .pip-screen-monitoring[data-size-band="mini"].pip-controls-revealed .pip-monitoring-toolbar { opacity: 1; }
-      .pip-screen-monitoring[data-toolbar="side"] .pip-monitoring-toolbar {
-        right: 0; left: auto; top: calc(50% - 44px); bottom: auto;
-        width: 40px; height: 88px;
-        border-right: none;
-        border-radius: 6px 0 0 6px;
-      }
+      /* Docked in the bottom-right corner (2026-11-13), flush with both
+         edges: "side" against the right edge, Stop above Expand; "bottom"
+         against the bottom edge, Stop left of Expand. Expand is always the
+         corner button. Only the corner facing into the window is rounded;
+         the sides touching the window's edges are square, with no border. */
+      .pip-screen-monitoring[data-toolbar="side"] .pip-monitoring-toolbar,
       .pip-screen-monitoring[data-toolbar="bottom"] .pip-monitoring-toolbar {
-        bottom: 0; top: auto; left: calc(50% - 44px); right: auto;
-        width: 88px; height: 40px;
+        right: 0; bottom: 0; left: auto; top: auto;
+        border-right: none;
         border-bottom: none;
-        border-radius: 6px 6px 0 0;
+        border-radius: 6px 0 0 0;
       }
+      .pip-screen-monitoring[data-toolbar="side"] .pip-monitoring-toolbar { width: 40px; height: 88px; }
+      .pip-screen-monitoring[data-toolbar="bottom"] .pip-monitoring-toolbar { width: 88px; height: 40px; }
       /* 4px inside the panel, 16px between the two (the tap-target rule:
          16px of clear space between adjacent hit areas). */
-      .pip-screen-monitoring[data-toolbar="side"] .pip-control-btn {
-        right: 4px; left: auto; bottom: auto;
-      }
-      .pip-screen-monitoring[data-toolbar="side"] .pip-control-btn-stop { top: calc(50% - 40px); }
-      .pip-screen-monitoring[data-toolbar="side"] .pip-control-btn-expand { top: calc(50% + 8px); }
-      .pip-screen-monitoring[data-toolbar="bottom"] .pip-control-btn {
-        bottom: 4px; top: auto; right: auto;
-      }
-      .pip-screen-monitoring[data-toolbar="bottom"] .pip-control-btn-stop { left: calc(50% - 40px); }
-      .pip-screen-monitoring[data-toolbar="bottom"] .pip-control-btn-expand { left: calc(50% + 8px); }
+      .pip-screen-monitoring[data-toolbar="side"] .pip-control-btn,
+      .pip-screen-monitoring[data-toolbar="bottom"] .pip-control-btn { top: auto; left: auto; }
+      .pip-screen-monitoring[data-toolbar="side"] .pip-control-btn-expand,
+      .pip-screen-monitoring[data-toolbar="bottom"] .pip-control-btn-expand { right: 4px; bottom: 4px; }
+      .pip-screen-monitoring[data-toolbar="side"] .pip-control-btn-stop { right: 4px; bottom: 52px; }
+      .pip-screen-monitoring[data-toolbar="bottom"] .pip-control-btn-stop { right: 52px; bottom: 4px; }
       /* At rest (2026-11-13) only the glow should draw the eye: the panel
          is filled with the window's own color (never lighter), so it
          doesn't read as a block, with a faint outline so the controls stay
@@ -4757,16 +4765,16 @@ function ringEdge() {
   return Math.min(edgeForExtent(2 * radius, band), RING_MAX_FRACTION * short);
 }
 
-// The docked toolbar panel's size (the CSS above): 40×88 on the right
-// edge, 88×40 on the bottom edge, centered along it.
+// The docked toolbar panel's size (the CSS above): 40×88 against the
+// right edge, 88×40 against the bottom edge, in the bottom-right corner.
 const TOOLBAR_THICKNESS_PX = 40;
 const TOOLBAR_LENGTH_PX = 88;
 /** The docked toolbar panel's rectangle, which holds both buttons. */
 function dockedToolbarRect(docked, width, height) {
   if (docked === 'side') {
-    return { left: width - TOOLBAR_THICKNESS_PX, right: width, top: height / 2 - TOOLBAR_LENGTH_PX / 2, bottom: height / 2 + TOOLBAR_LENGTH_PX / 2 };
+    return { left: width - TOOLBAR_THICKNESS_PX, right: width, top: height - TOOLBAR_LENGTH_PX, bottom: height };
   }
-  return { left: width / 2 - TOOLBAR_LENGTH_PX / 2, right: width / 2 + TOOLBAR_LENGTH_PX / 2, top: height - TOOLBAR_THICKNESS_PX, bottom: height };
+  return { left: width - TOOLBAR_LENGTH_PX, right: width, top: height - TOOLBAR_THICKNESS_PX, bottom: height };
 }
 
 /** Distance from a point to the nearest point of a rectangle (0 inside). */
@@ -4785,8 +4793,9 @@ function ringLayout() {
     if (monitoringScreenEl) monitoringScreenEl.dataset.sizeBand = band;
     let top = 0;
     let bottom = height;
-    // Compact and Mini: Stop and Expand share a toolbar docked to the right
-    // edge (wider than tall) or the bottom edge (otherwise); the ring is the largest circle that fits in the
+    // Compact and Mini: Stop and Expand share a toolbar docked in the
+    // bottom-right corner, against the right edge (wider than tall) or the
+    // bottom edge (otherwise); the ring is the largest circle that fits in the
     // window and keeps clear of it (TOOLBAR_GAP_PX around its panel and
     // buttons), so its far-over glow never reaches the toolbar or the
     // window's edges (see ringEdge()).
@@ -6905,7 +6914,7 @@ function ringLayout() {
         unsaved: unsavedProfile,
         resumeMonitoring: wasActive || wasStarting,
         // The call this close interrupted, so a resumed session continues it.
-        studySession: wasActive && glowCounter.running ? { startedAt: glowCounter.startedAt, glows: glowCounter.glows, speechMs: glowCounter.speechMs } : null,
+        studySession: wasActive && glowCounter.running ? { startedAt: glowCounter.startedAt, glows: glowCounter.glows, speechMs: glowCounter.speechMs, viewMs: glowCounter.viewMs } : null,
       };
     }
 

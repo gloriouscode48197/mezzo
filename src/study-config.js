@@ -59,6 +59,10 @@ export const STUDY_CONFIG = {
     sessionMinutes: 'mezzo_session_minutes',
     speechMinutes: 'mezzo_speech_minutes',
     glows: 'mezzo_glows',
+    /** The Companion view used most of the session: Expanded, Compact or Mini. */
+    view: 'mezzo_view',
+    /** That view's window size most of that time, as WIDTHxHEIGHT (px). */
+    windowSize: 'mezzo_window',
     minutesAfter: 'mezzo_minutes_after',
   },
 

@@ -19,6 +19,7 @@ import {
   getTesterCode,
   getBrowserId,
   createGlowCounter,
+  mainView,
   saveLastSession,
   getLastSession,
   markCheckInHandled,
@@ -82,6 +83,8 @@ describe('config', () => {
       sessionMinutes: 'mezzo_session_minutes',
       speechMinutes: 'mezzo_speech_minutes',
       glows: 'mezzo_glows',
+      view: 'mezzo_view',
+      windowSize: 'mezzo_window',
       minutesAfter: 'mezzo_minutes_after',
     });
     assert.deepEqual(STUDY_CONFIG.sources, {
@@ -210,6 +213,78 @@ describe('glow counter', () => {
     c.onZone(3);
     assert.equal(c.stop(), null);
     assert.equal(c.glows, 0);
+  });
+});
+
+describe('Companion view and window size (mezzo_view, mezzo_window)', () => {
+  it('counts the time in each view at each window size, between frames, capped like speaking time', () => {
+    let t = 0;
+    const c = createGlowCounter({ now: () => t });
+    c.start();
+    const compact = { name: 'Compact', width: 240, height: 186 };
+    const mini = { name: 'Mini', width: 280, height: 110 };
+    c.onFrame(false, 0, compact);
+    c.onFrame(false, 400, compact);   // 400ms Compact
+    c.onFrame(true, 700, mini);       // 300ms Mini
+    c.onFrame(true, 60000, mini);     // a stall: counts 1000ms at most
+    assert.deepEqual(c.viewMs, { 'Compact|240x186': 400, 'Mini|280x110': 1300 });
+    t = 60000;
+    const s = c.stop();
+    assert.equal(s.view, 'Mini');
+    assert.equal(s.window, '280x110');
+  });
+
+  it('frames without a view (no Companion) add nothing', () => {
+    const c = createGlowCounter({ now: () => 0 });
+    c.start();
+    c.onFrame(true, 0);
+    c.onFrame(true, 500);
+    const s = c.stop();
+    assert.equal(s.view, undefined);
+    assert.equal(s.window, undefined);
+  });
+
+  it('the main view is the one with the most time in total; the window is its most-used size', () => {
+    assert.deepEqual(mainView({
+      'Compact|240x186': 300, 'Compact|220x220': 400, // Compact: 700 in all
+      'Expanded|382x512': 600,
+    }), { view: 'Compact', window: '220x220' });
+    assert.deepEqual(mainView({}), {});
+    assert.deepEqual(mainView(null), {});
+  });
+
+  it('window sizes are whole pixels', () => {
+    const c = createGlowCounter({ now: () => 0 });
+    c.start();
+    c.onFrame(false, 0, { name: 'Expanded', width: 381.6, height: 512.2 });
+    c.onFrame(false, 100, { name: 'Expanded', width: 381.6, height: 512.2 });
+    assert.deepEqual(c.viewMs, { 'Expanded|382x512': 100 });
+  });
+
+  it('Reopen Companion continues the view time', () => {
+    const c = createGlowCounter({ now: () => 0 });
+    c.start({ startedAt: 5, glows: 1, speechMs: 10, viewMs: { 'Compact|240x186': 900 } });
+    c.onFrame(false, 0, { name: 'Mini', width: 140, height: 140 });
+    c.onFrame(false, 500, { name: 'Mini', width: 140, height: 140 });
+    assert.deepEqual(c.stop().view, 'Compact');
+  });
+
+  it('kept with the last session (only with a tester code), and in the check-in link', () => {
+    const storage = withCode();
+    saveLastSession({ ...session(), view: 'Compact', window: '240x186' }, storage);
+    const kept = getLastSession(storage);
+    assert.equal(kept.view, 'Compact');
+    assert.equal(kept.window, '240x186');
+    const url = new URL(buildCheckInUrl({ testerCode: 'R4-01', source: 'study_page', session: kept, now: kept.endedAt + MIN }));
+    assert.equal(url.searchParams.get('mezzo_view'), 'Compact');
+    assert.equal(url.searchParams.get('mezzo_window'), '240x186');
+    assert.equal(saveLastSession({ ...session(), view: 'Compact', window: '240x186' }, memoryStorage()), null);
+  });
+
+  it('no session, no view or window', () => {
+    const url = new URL(buildCheckInUrl({ testerCode: 'R4-01', source: 'study_page', session: null }));
+    assert.equal(url.searchParams.has('mezzo_view'), false);
+    assert.equal(url.searchParams.has('mezzo_window'), false);
   });
 });
 
@@ -575,5 +650,10 @@ describe('privacy page', () => {
   it('Research participants says check-ins are collected through Tally', () => {
     const section = html.slice(html.indexOf('id="research-participants"'), html.indexOf('id="what-mezzo-does-not-do"'));
     assert.match(section, /Check-ins are collected through Tally/);
+  });
+
+  it('Research participants lists the Companion view and window size among what the survey records', () => {
+    const section = html.slice(html.indexOf('id="research-participants"'), html.indexOf('id="what-mezzo-does-not-do"'));
+    assert.match(section, /how many times the glow appeared, and which Companion view you used and its window size\./);
   });
 });

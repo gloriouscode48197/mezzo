@@ -31,3 +31,13 @@ Each should be checked against the same rule. Not designed or built yet; tests i
 **Problem.** `content-scripts/meeting-detect.js` matches `https://*.zoom.us/*`, `https://teams.microsoft.com/*` and `https://teams.live.com/*`, broader than the meeting pages need. Meet is confirmed; Zoom and Teams web meetings haven't been tested in a real call.
 
 **Proposed.** After real Zoom and Teams calls, narrow each match to the hosts and paths their meeting pages actually use (for example Zoom's web client path). Not built yet.
+
+## Half-ring for wide Mini windows
+
+**Idea.** In a wide, short Mini window, anchor the Range Ring's center to the bottom edge so only the top half shows, roughly doubling its size. The far-over glow rises above the edge like a horizon.
+
+**Open questions.**
+- Does switching between a full ring and a half ring feel like two different signals?
+- Does the half inner circle still read as volume?
+
+**When to decide.** After Round 4, using the `mezzo_view` and `mezzo_window` check-in data on how often testers use wide Mini windows. Not designed or built yet.

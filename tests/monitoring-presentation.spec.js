@@ -534,8 +534,8 @@ test.describe('Monitoring presentation: the ring is sized for full Outside', () 
         // Mini: docked when the docked panel clears the far-over glow,
         // otherwise floated over the ring's center.
         const dockedRect = docked === 'side'
-          ? { left: size.width - 40, right: size.width, top: size.height / 2 - 44, bottom: size.height / 2 + 44 }
-          : { left: size.width / 2 - 44, right: size.width / 2 + 44, top: size.height - 40, bottom: size.height };
+          ? { left: size.width - 40, right: size.width, top: size.height - 88, bottom: size.height }
+          : { left: size.width - 88, right: size.width, top: size.height - 40, bottom: size.height };
         expect(boxes.toolbar).toBe(distanceToRect(cx, cy, dockedRect) >= glowRadius - 0.5 ? docked : 'center');
       }
       // The ring is the largest element.
@@ -621,7 +621,7 @@ test.describe('Monitoring presentation: controls by size band', () => {
   });
 
   for (const [size, toolbar] of [[{ width: 240, height: 186 }, 'side'], [{ width: 186, height: 240 }, 'bottom'], [SIZES.compact, 'bottom'], [SIZES.mini, 'side']]) {
-    test(`toolbar at ${size.width}×${size.height}: docked flush to the ${toolbar === 'side' ? 'right edge, centered top to bottom, stacked' : 'bottom edge, centered left to right, side by side'}, inside one faint panel, 16px apart; Stop first; names kept`, async ({ page, context }) => {
+    test(`toolbar at ${size.width}×${size.height}: docked in the bottom-right corner, flush to the ${toolbar === 'side' ? 'right edge, stacked' : 'bottom edge, side by side'}, Expand in the corner, inside one faint panel, 16px apart; Stop first; names kept`, async ({ page, context }) => {
       const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size, layout: 'compact' });
       await expect(monitoringScreen).toHaveAttribute('data-toolbar', toolbar);
       await monitoringScreen.hover(); // Mini reveals its toolbar on hover; the full outline
@@ -642,25 +642,24 @@ test.describe('Monitoring presentation: controls by size band', () => {
           radii: [st.borderTopLeftRadius, st.borderTopRightRadius, st.borderBottomRightRadius, st.borderBottomLeftRadius],
         };
       });
+      // In the bottom-right corner, flush with both edges; Expand is the
+      // corner button, 4px in from each edge.
+      expect(Math.round(panel.x + panel.width)).toBe(size.width);
+      expect(Math.round(panel.y + panel.height)).toBe(size.height);
+      expect([Math.round(size.width - (e.x + e.width)), Math.round(size.height - (e.y + e.height))]).toEqual([4, 4]);
       if (toolbar === 'side') {
-        // Flush with the right edge, centered top to bottom.
-        expect(Math.round(panel.x + panel.width)).toBe(size.width);
-        expect(Math.abs(panel.y + panel.height / 2 - size.height / 2)).toBeLessThanOrEqual(1);
+        expect([Math.round(panel.width), Math.round(panel.height)]).toEqual([40, 88]);
         expect(Math.round(e.y - (s.y + s.height))).toBe(16); // Stop above Expand
         expect(Math.round(s.x)).toBe(Math.round(e.x));
-        // Only the corners facing into the window are rounded; no border
-        // on the side touching the window.
-        expect(look.radii).toEqual(['6px', '0px', '0px', '6px']);
-        expect(look.widths).toEqual(['1px', '0px', '1px', '1px']);
       } else {
-        // Flush with the bottom edge, centered left to right.
-        expect(Math.round(panel.y + panel.height)).toBe(size.height);
-        expect(Math.abs(panel.x + panel.width / 2 - size.width / 2)).toBeLessThanOrEqual(1);
+        expect([Math.round(panel.width), Math.round(panel.height)]).toEqual([88, 40]);
         expect(Math.round(e.x - (s.x + s.width))).toBe(16); // Stop left of Expand
         expect(Math.round(s.y)).toBe(Math.round(e.y));
-        expect(look.radii).toEqual(['6px', '6px', '0px', '0px']);
-        expect(look.widths).toEqual(['1px', '1px', '0px', '1px']);
       }
+      // Only the corner facing into the window is rounded; no border on
+      // the sides touching the window's edges.
+      expect(look.radii).toEqual(['6px', '0px', '0px', '0px']);
+      expect(look.widths).toEqual(['1px', '0px', '0px', '1px']);
       // Low contrast, never chartreuse: a faint cream outline and fill.
       expect(look.border).toBe('rgba(243, 235, 222, 0.12)');
       expect(look.bg).toBe('rgb(53, 54, 56)'); // hovered: slightly lighter than the window
@@ -762,7 +761,7 @@ test.describe('Monitoring presentation: controls by size band', () => {
     expect([s.x, 512 - (s.y + s.height), 382 - (c.x + c.width), c.y].map(Math.round)).toEqual([16, 16, 16, 16]);
   });
 
-  test('on resize the toolbar stays docked: to the right edge when wider than tall, else the bottom edge, centered on it', async ({ page, context }) => {
+  test('on resize the toolbar stays in the bottom-right corner: against the right edge when wider than tall, else the bottom edge; Expand always in the corner', async ({ page, context }) => {
     const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 240, height: 186 }, layout: 'compact' });
     const panelEl = monitoringScreen.locator('.pip-monitoring-toolbar');
     for (const size of [{ width: 240, height: 186 }, { width: 186, height: 240 }, { width: 220, height: 220 }, { width: 290, height: 200 }, { width: 200, height: 290 }]) {
@@ -770,13 +769,10 @@ test.describe('Monitoring presentation: controls by size band', () => {
       const side = size.width > size.height;
       await expect(monitoringScreen).toHaveAttribute('data-toolbar', side ? 'side' : 'bottom');
       const p = await panelEl.boundingBox();
-      if (side) {
-        expect(Math.round(p.x + p.width)).toBe(size.width);
-        expect(Math.abs(p.y + p.height / 2 - size.height / 2)).toBeLessThanOrEqual(1);
-      } else {
-        expect(Math.round(p.y + p.height)).toBe(size.height);
-        expect(Math.abs(p.x + p.width / 2 - size.width / 2)).toBeLessThanOrEqual(1);
-      }
+      expect([Math.round(p.x + p.width), Math.round(p.y + p.height)]).toEqual([size.width, size.height]);
+      expect([Math.round(p.width), Math.round(p.height)]).toEqual(side ? [40, 88] : [88, 40]);
+      const e = await monitoringScreen.locator('.pip-control-btn-expand').boundingBox();
+      expect([Math.round(size.width - (e.x + e.width)), Math.round(size.height - (e.y + e.height))]).toEqual([4, 4]);
     }
   });
 

@@ -154,10 +154,12 @@ export const MAX_SPEECH_FRAME_MS = 1000;
  * Counts one monitoring session: glows, one each time the committed zone
  * moves into Outside range (the moment the glow turns on), never per frame;
  * and speaking time, the time between audio frames while the circle's
- * noise gate counted the level as voice (onFrame()). start() begins a new
- * session at zero; start({ startedAt, glows, speechMs }) continues one
- * (Reopen Companion after an involuntary close resumes the same call).
- * stop() returns the session, or null if none was running.
+ * noise gate counted the level as voice (onFrame()); and, for the
+ * check-in's mezzo_view and mezzo_window (2026-11-13), the time spent in
+ * each Companion view at each window size (onFrame()'s `view`). start()
+ * begins a new session at zero; start({ startedAt, glows, speechMs, viewMs })
+ * continues one (Reopen Companion after an involuntary close resumes the
+ * same call). stop() returns the session, or null if none was running.
  */
 export function createGlowCounter({ outsideZone = 3, now = () => Date.now() } = {}) {
   let running = false;
@@ -165,6 +167,7 @@ export function createGlowCounter({ outsideZone = 3, now = () => Date.now() } = 
   let lastZone = 0;
   let glows = 0;
   let speechMs = 0;
+  let viewMs = {};
   let lastFrameAt = null;
 
   return {
@@ -173,6 +176,7 @@ export function createGlowCounter({ outsideZone = 3, now = () => Date.now() } = 
       startedAt = Number.isFinite(resume?.startedAt) ? resume.startedAt : now();
       glows = Number.isFinite(resume?.glows) ? resume.glows : 0;
       speechMs = Number.isFinite(resume?.speechMs) ? resume.speechMs : 0;
+      viewMs = resume?.viewMs && typeof resume.viewMs === 'object' ? { ...resume.viewMs } : {};
       lastZone = 0;
       lastFrameAt = null;
     },
@@ -182,24 +186,64 @@ export function createGlowCounter({ outsideZone = 3, now = () => Date.now() } = 
       lastZone = zone;
     },
     /** One audio frame: `voiced` is the noise gate's verdict for it. The
-     *  time since the previous frame counts as speech when it is voiced. */
-    onFrame(voiced, atMs = now()) {
+     *  time since the previous frame counts as speech when it is voiced,
+     *  and toward `view` ({ name, width, height }: the Companion's view and
+     *  window size) when one is given. */
+    onFrame(voiced, atMs = now(), view = null) {
       if (!running) return;
-      if (voiced && lastFrameAt !== null) speechMs += Math.min(Math.max(0, atMs - lastFrameAt), MAX_SPEECH_FRAME_MS);
+      if (lastFrameAt !== null) {
+        const elapsed = Math.min(Math.max(0, atMs - lastFrameAt), MAX_SPEECH_FRAME_MS);
+        if (voiced) speechMs += elapsed;
+        if (view?.name) {
+          const key = viewKey(view);
+          viewMs[key] = (viewMs[key] ?? 0) + elapsed;
+        }
+      }
       lastFrameAt = atMs;
     },
     get glows() { return glows; },
     get speechMs() { return speechMs; },
+    get viewMs() { return { ...viewMs }; },
     get startedAt() { return startedAt; },
     get running() { return running; },
-    /** @returns {{ id: string, startedAt: number, endedAt: number, glows: number, speechMs: number } | null} */
+    /** @returns {{ id: string, startedAt: number, endedAt: number, glows: number, speechMs: number, view?: string, window?: string } | null} */
     stop() {
       if (!running) return null;
       running = false;
       const endedAt = Math.max(startedAt, now());
-      return { id: String(startedAt), startedAt, endedAt, glows, speechMs };
+      return { id: String(startedAt), startedAt, endedAt, glows, speechMs, ...mainView(viewMs) };
     },
   };
+}
+
+/** "Compact|240x186": one Companion view at one window size (whole pixels). */
+function viewKey({ name, width, height }) {
+  return `${name}|${Math.round(width)}x${Math.round(height)}`;
+}
+
+/**
+ * The view the session spent the most time in (Expanded, Compact or Mini),
+ * and, within that view, the window size it was most of that time.
+ * Ties go to the one seen first.
+ * @param {Object<string, number>} viewMs ms per "View|WxH"
+ * @returns {{ view?: string, window?: string }} empty without any time
+ */
+export function mainView(viewMs) {
+  const byView = {};
+  for (const [key, ms] of Object.entries(viewMs ?? {})) {
+    const name = key.split('|')[0];
+    byView[name] = (byView[name] ?? 0) + ms;
+  }
+  let view = null;
+  for (const [name, ms] of Object.entries(byView)) if (ms > 0 && (view === null || ms > byView[view])) view = name;
+  if (!view) return {};
+  let size = null;
+  let best = -1;
+  for (const [key, ms] of Object.entries(viewMs)) {
+    const [name, wxh] = key.split('|');
+    if (name === view && ms > best) { size = wxh; best = ms; }
+  }
+  return { view, window: size };
 }
 
 // ── The last session ─────────────────────────────────────────────────────
@@ -212,6 +256,8 @@ export function saveLastSession(session, storage = defaultStorage(), config = ST
   if (!session || !getTesterCode(storage, config)) return null;
   const record = { id: session.id, startedAt: session.startedAt, endedAt: session.endedAt, glows: session.glows };
   if (Number.isFinite(session.speechMs)) record.speechMs = session.speechMs;
+  if (typeof session.view === 'string' && session.view) record.view = session.view;
+  if (typeof session.window === 'string' && session.window) record.window = session.window;
   // The same session saved again (Reopen Companion continued it, then
   // Stop): keep its check-in answer, so the card shows once per session
   // wherever it was opened or skipped first.
@@ -417,6 +463,8 @@ export function buildCheckInUrl({ testerCode, browserId, source, session = null,
     url.searchParams.set(p.sessionMinutes, String(sessionMinutes(sessionDurationMs(session))));
     if (Number.isFinite(session.speechMs)) url.searchParams.set(p.speechMinutes, String(sessionMinutes(session.speechMs)));
     url.searchParams.set(p.glows, String(session.glows));
+    if (session.view) url.searchParams.set(p.view, session.view);
+    if (session.window) url.searchParams.set(p.windowSize, session.window);
     url.searchParams.set(p.minutesAfter, String(Math.max(0, Math.round((now - session.endedAt) / 60000))));
   }
   return url.toString();

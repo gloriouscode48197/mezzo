@@ -26,7 +26,7 @@
 | Baseline | nothing more | `/study` shows "Your usual calls" |
 | `?start=1` (with a code) | `mezzoStudyMezzoStage:CODE` = now | `/study` shows "With Mezzo" |
 | First monitoring session with a code | `mezzoStudyFirstSession:CODE` = its start time, saved when it ends (only if not already set) | Also switches `/study` to "With Mezzo" |
-| Each monitoring session | `mezzoStudyLastSession:CODE` = `{ id, startedAt, endedAt, speechMs, glows, handled? }`; the latest one replaces the one before | A check-in card, if the session qualifies |
+| Each monitoring session | `mezzoStudyLastSession:CODE` = `{ id, startedAt, endedAt, speechMs, glows, view?, window?, handled? }`; the latest one replaces the one before | A check-in card, if the session qualifies |
 | Open check-in or Skip this one | `handled: 'opened'` or `'skipped'` on the last session | Every card clears, in this tab and others |
 | Day 14 of the With Mezzo stage | nothing | Cards stop; `/study` shows Wrap up the study |
 | `?study=clear` | every study key, for every code, removed | Back to a non-participant |
@@ -97,6 +97,8 @@ All four card surfaces show the same pending check-in, one card per view. Answer
 
 **Glows.** One per move into Outside range, from the zone the engine already committed.
 
+**View and window (2026-11-13).** Each audio frame's time also counts toward the Companion's current view (Expanded, Compact or Mini, its size band) at its current window size, capped at 1s per frame like speaking time. The view with the most time wins, then that view's most-used size. Only read; nothing visible changes. Reopen Companion continues the tally. Kept and sent like the other session data, only with a tester code. Sessions saved before this have neither field.
+
 ---
 
 ## 4. The data sent to Tally
@@ -112,6 +114,8 @@ Mezzo sends nothing itself. The values ride in the form link's query string, and
 | `mezzo_session_minutes` | Session length, Start to end, in minutes to one decimal (40s is `0.7`) | Check-in, with a session |
 | `mezzo_speech_minutes` | Speaking time in minutes, one decimal | Check-in, with a session that recorded it |
 | `mezzo_glows` | Moves into Outside range during the session | Check-in, with a session |
+| `mezzo_view` | The Companion view used most during the session, by time spent in each: `Expanded`, `Compact` or `Mini` (the size band, from the window's short side) | Check-in, with a session that recorded it |
+| `mezzo_window` | That view's window size for most of that time, `WIDTHxHEIGHT` in pixels (e.g. `240x186`) | Check-in, with a session that recorded it |
 | `mezzo_minutes_after` | Whole minutes from the session's end to the click on Open check-in (recomputed at the click) | Check-in, with a session |
 
 "With a session" means a card's session, or, from `/study`, the last session if it ended within 2 hours. Otherwise only the first three parameters are sent. The baseline form (`zEN6jg`) and the wrap-up form (`q5alaO`) get `mezzo_tester` only. The check-in form is `gber54`.

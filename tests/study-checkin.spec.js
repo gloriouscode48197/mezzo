@@ -38,6 +38,8 @@ async function seed(page, { code = null, lastSession = null, firstSessionAgo = n
         endedAt: now - lastSession.endedAgo,
         glows: lastSession.glows ?? 1,
       };
+      if (lastSession.view) record.view = lastSession.view;
+      if (lastSession.window) record.window = lastSession.window;
       const speech = lastSession.speech === undefined ? 2 * 60 * 1000 : lastSession.speech;
       if (speech !== null) record.speechMs = speech;
       localStorage.setItem(`mezzoStudyLastSession:${code}`, JSON.stringify(record));
@@ -115,11 +117,17 @@ test.describe('Study mode: the Companion check-in card', () => {
 
     // A session at least the minimum length, with two glows, speaking at
     // the calibrated level throughout (the gate counts it as speech).
+    // Most of it in Compact at 240×186 (Chrome's real Compact size), a
+    // little in Expanded at 382×512: mezzo_view and mezzo_window.
     await startMonitoring(pipPage);
+    await pipPage.setViewportSize({ width: 382, height: 512 });
+    await pipPage.waitForTimeout(300);
+    await pipPage.setViewportSize({ width: 240, height: 186 });
     await glowOnce(page, pipPage, b.endDb);
     await glowOnce(page, pipPage, b.endDb);
     await pipPage.waitForTimeout(1500);
     await stopMonitoring(pipPage);
+    await pipPage.setViewportSize({ width: 382, height: 512 });
 
     await expect(card(pipPage)).toBeVisible();
     // The first session saved its date: /study moves to the Mezzo stage.
@@ -142,6 +150,9 @@ test.describe('Study mode: the Companion check-in card', () => {
     expect(stored.speechMs).toBeLessThanOrEqual(stored.endedAt - stored.startedAt);
     expect(params.mezzo_glows).toBe('2');
     expect(params.mezzo_minutes_after).toBe('0');
+    expect(params.mezzo_view).toBe('Compact');
+    expect(params.mezzo_window).toBe('240x186');
+    expect([stored.view, stored.window]).toEqual(['Compact', '240x186']);
 
     // It never blocks Start monitoring: Start is enabled and sits above it.
     const start = pipPage.locator('.pip-ready-start-btn');
@@ -675,7 +686,7 @@ test.describe('Study mode: the /study page', () => {
   });
 
   test('With Mezzo stage: phase headings, the copy, Open Mezzo and the check-in, then Wrap-up; the check-in carries the recent session', async ({ page }) => {
-    await seed(page, { code: 'R4-01', firstSessionAgo: 3 * DAY, lastSession: { length: 12 * MIN, endedAgo: 90 * MIN, glows: 4, speech: 3 * MIN } });
+    await seed(page, { code: 'R4-01', firstSessionAgo: 3 * DAY, lastSession: { length: 12 * MIN, endedAgo: 90 * MIN, glows: 4, speech: 3 * MIN, view: 'Mini', window: '280x110' } });
     await page.goto('/study/');
     await expect(page.locator('body')).toHaveAttribute('data-study-stage', 'mezzo');
     await expect(page.getByText('Your study code: R4-01')).toBeVisible();
@@ -735,6 +746,8 @@ test.describe('Study mode: the /study page', () => {
     expect(p.mezzo_speech_minutes).toBe('3');
     expect(p.mezzo_glows).toBe('4');
     expect(p.mezzo_minutes_after).toBe('90');
+    expect(p.mezzo_view).toBe('Mini');
+    expect(p.mezzo_window).toBe('280x110');
 
     // Wrap-up: not yet. The date is the first session's local date + 14 days.
     await expect(link(page, 'Wrap up the study')).toBeHidden();
