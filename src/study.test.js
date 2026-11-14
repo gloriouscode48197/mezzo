@@ -29,13 +29,12 @@ import {
   isWithinCheckInWindow,
   checkInExpiresAt,
   buildCheckInUrl,
-  buildWrapUpUrl,
   formatSessionDate,
   sessionMinutes,
   getFirstSessionAt,
   studyStage,
-  wrapUpOpensAt,
-  isWrapUpOpen,
+  studyEndsAt,
+  isStudyOver,
   formatLongDate,
   formatMonthDay,
   isFormUrlReady,
@@ -72,7 +71,7 @@ function session({ startedAt = Date.UTC(2026, 10, 9, 15), minutes = 30, glows = 
 describe('config', () => {
   it('holds the forms, the window, the speech minimum and every parameter name', () => {
     assert.equal(STUDY_CONFIG.checkInFormUrl, 'https://tally.so/r/gber54');
-    assert.equal(STUDY_CONFIG.wrapUpFormUrl, 'https://tally.so/r/q5alaO');
+    assert.equal('wrapUpFormUrl' in STUDY_CONFIG, false); // emailed, not linked from Mezzo
     assert.equal(STUDY_CONFIG.checkInWindowMs, 2 * HOUR);
     assert.equal(STUDY_CONFIG.minSpeechMs, 1 * MIN);
     assert.equal(STUDY_CONFIG.startParam, 'start');
@@ -434,15 +433,8 @@ describe('form links', () => {
     });
   });
 
-  it('wrap-up carries only the tester code', () => {
-    const url = new URL(buildWrapUpUrl({ testerCode: 'R4-01' }));
-    assert.equal(url.origin + url.pathname, 'https://tally.so/r/q5alaO');
-    assert.deepEqual(Object.fromEntries(url.searchParams), { mezzo_tester: 'R4-01' });
-  });
-
   it('no tester code, no link', () => {
     assert.equal(buildCheckInUrl({ testerCode: null, browserId: 'b', source: 'companion' }), null);
-    assert.equal(buildWrapUpUrl({ testerCode: '' }), null);
   });
 
   it('dates are local YYYY-MM-DD; minutes have one decimal', () => {
@@ -625,13 +617,13 @@ describe('study stages', () => {
 describe('end of study', () => {
   const first = new Date(2026, 10, 9, 15, 30).getTime(); // Nov 9, local
 
-  it('the wrap-up opens at the start of the local day 14 days after the first session', () => {
-    assert.equal(wrapUpOpensAt(first), new Date(2026, 10, 23).getTime());
-    assert.equal(formatLongDate(wrapUpOpensAt(first)), 'November 23, 2026');
-    assert.equal(formatMonthDay(wrapUpOpensAt(first)), 'November 23'); // /study's wrap-up line, no year
-    assert.equal(isWrapUpOpen(first, new Date(2026, 10, 22, 23, 59).getTime()), false);
-    assert.equal(isWrapUpOpen(first, new Date(2026, 10, 23, 0, 0).getTime()), true);
-    assert.equal(isWrapUpOpen(null, Date.now()), false);
+  it('the study ends at the start of the local day 14 days after the first session', () => {
+    assert.equal(studyEndsAt(first), new Date(2026, 10, 23).getTime());
+    assert.equal(formatLongDate(studyEndsAt(first)), 'November 23, 2026');
+    assert.equal(formatMonthDay(studyEndsAt(first)), 'November 23');
+    assert.equal(isStudyOver(first, new Date(2026, 10, 22, 23, 59).getTime()), false);
+    assert.equal(isStudyOver(first, new Date(2026, 10, 23, 0, 0).getTime()), true);
+    assert.equal(isStudyOver(null, Date.now()), false);
   });
 
   it('after 14 days the check-in card stops, even for a fresh long session', () => {
@@ -644,7 +636,7 @@ describe('end of study', () => {
   it('the tester code stays saved after the 14 days', () => {
     const storage = withCode();
     saveLastSession(session({ startedAt: first }), storage);
-    assert.equal(isWrapUpOpen(getFirstSessionAt(storage), first + 30 * 24 * HOUR), true);
+    assert.equal(isStudyOver(getFirstSessionAt(storage), first + 30 * 24 * HOUR), true);
     assert.equal(getTesterCode(storage), 'R4-01');
   });
 });

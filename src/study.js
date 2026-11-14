@@ -336,7 +336,7 @@ export function getMezzoStageUnlockedAt(storage = defaultStorage(), config = STU
 
 /** When the With Mezzo stage began: the earlier of the ?start=1 unlock and
  *  the first monitoring session, or null before either. The study's 14
- *  days (the wrap-up date, and the end of the check-in card) count from it. */
+ *  days (the end of the check-in card) count from it. */
 export function getMezzoStageStartAt(storage = defaultStorage(), config = STUDY_CONFIG) {
   const times = [getMezzoStageUnlockedAt(storage, config), getFirstSessionAt(storage, config)].filter((t) => t !== null);
   return times.length ? Math.min(...times) : null;
@@ -356,21 +356,21 @@ export function studyStage({ testerCode, mezzoStageStartAt }) {
 }
 
 /** The start of the local day `studyDays` after the With Mezzo stage began
- *  (getMezzoStageStartAt()): the wrap-up opens then, and the check-in card
- *  stops. */
-export function wrapUpOpensAt(mezzoStageStartAt, config = STUDY_CONFIG) {
+ *  (getMezzoStageStartAt()): the check-in card stops then. The wrap-up form
+ *  isn't on /study: it's emailed after a tester's 2nd Mezzo check-in. */
+export function studyEndsAt(mezzoStageStartAt, config = STUDY_CONFIG) {
   if (!Number.isFinite(mezzoStageStartAt)) return null;
   const d = new Date(mezzoStageStartAt);
   return new Date(d.getFullYear(), d.getMonth(), d.getDate() + config.studyDays).getTime();
 }
 
-export function isWrapUpOpen(mezzoStageStartAt, now, config = STUDY_CONFIG) {
-  const opensAt = wrapUpOpensAt(mezzoStageStartAt, config);
+export function isStudyOver(mezzoStageStartAt, now, config = STUDY_CONFIG) {
+  const opensAt = studyEndsAt(mezzoStageStartAt, config);
   return opensAt !== null && now >= opensAt;
 }
 
 /** "November 23, 2026" */
-/** "November 27": the wrap-up date on /study, without the year. */
+/** "November 27": a date without the year. */
 export function formatMonthDay(ms) {
   return new Date(ms).toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
 }
@@ -450,7 +450,7 @@ export function sessionSpeechMs(session) {
  *  study's 14 days not over (the tester code stays saved either way). */
 export function shouldShowCheckInCard({ testerCode, session, now, mezzoStageStartAt = null }, config = STUDY_CONFIG) {
   return Boolean(testerCode)
-    && !isWrapUpOpen(mezzoStageStartAt, now, config)
+    && !isStudyOver(mezzoStageStartAt, now, config)
     && Boolean(session)
     && !session.handled
     && sessionSpeechMs(session) >= config.minSpeechMs
@@ -517,10 +517,3 @@ export function buildBaselineUrl({ testerCode }, config = STUDY_CONFIG) {
   return url.toString();
 }
 
-/** The end-of-study form link, with the tester code only. */
-export function buildWrapUpUrl({ testerCode }, config = STUDY_CONFIG) {
-  if (!testerCode) return null;
-  const url = new URL(config.wrapUpFormUrl);
-  url.searchParams.set(config.params.tester, testerCode);
-  return url.toString();
-}

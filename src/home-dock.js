@@ -55,7 +55,7 @@ import {
   getMezzoStageStartAt,
   shouldShowCheckInCard,
   checkInExpiresAt,
-  wrapUpOpensAt,
+  studyEndsAt,
   markCheckInHandled,
   buildCheckInUrl,
   onCheckInChange,
@@ -531,7 +531,7 @@ export function initHomeDock({
     card.open.href = pageCheckInUrl(testerCode, sessionRecord, now);
     card.el.hidden = false;
     // Leaves on its own once the 2-hour window closes or the study ends.
-    const leavesAt = Math.min(checkInExpiresAt(sessionRecord), wrapUpOpensAt(mezzoStageStartAt) ?? Infinity);
+    const leavesAt = Math.min(checkInExpiresAt(sessionRecord), studyEndsAt(mezzoStageStartAt) ?? Infinity);
     checkInTimer = setTimeout(renderPageCheckIns, Math.max(0, leavesAt - now) + 50);
   }
 

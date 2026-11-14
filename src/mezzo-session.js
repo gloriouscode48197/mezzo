@@ -128,7 +128,7 @@ import {
   onCheckInChange,
   getTesterCode,
   getMezzoStageStartAt,
-  wrapUpOpensAt,
+  studyEndsAt,
   getBrowserId,
   shouldShowCheckInCard,
   checkInExpiresAt,
@@ -1179,7 +1179,7 @@ export function createMezzoSession({
     studyCardOpenEl.href = studyCheckInUrl(testerCode, session, now);
     studyCardEl.classList.remove('hidden');
     // Leaves on its own once the 2-hour window closes or the study ends.
-    const leavesAt = Math.min(checkInExpiresAt(session), wrapUpOpensAt(mezzoStageStartAt) ?? Infinity);
+    const leavesAt = Math.min(checkInExpiresAt(session), studyEndsAt(mezzoStageStartAt) ?? Infinity);
     studyCardTimer = pipWindow?.setTimeout(renderStudyCard, Math.max(0, leavesAt - now) + 50) ?? null;
   }
 

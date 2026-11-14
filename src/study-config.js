@@ -8,8 +8,6 @@
 export const STUDY_CONFIG = {
   /** Opened after a call, from the Companion card or the /study page. */
   checkInFormUrl: 'https://tally.so/r/gber54',
-  /** Opened once, at the end of the study, from the /study page. */
-  wrapUpFormUrl: 'https://tally.so/r/q5alaO',
   /** Baseline stage: check-ins after calls before the tester has Mezzo.
    *  Tester code only. A placeholder URL here hides the button
    *  (isFormUrlReady()). */
@@ -24,8 +22,8 @@ export const STUDY_CONFIG = {
    *  time the circle's noise gate counted as voice (study.js's
    *  createGlowCounter()). There is no minimum session length (2026-11-11). */
   minSpeechMs: 60 * 1000,
-  /** Days after the first session (counted from its local date) when the
-   *  wrap-up opens and the Companion stops showing the check-in card. */
+  /** Days after the With Mezzo stage began (counted from its local date)
+   *  when the check-in card stops being offered. */
   studyDays: 14,
 
   /** ?study=CODE saves a tester code; ?study=clear removes it. */

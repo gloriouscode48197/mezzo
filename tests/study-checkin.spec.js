@@ -638,7 +638,7 @@ test.describe('Study mode: the /study page', () => {
   test('?start=1 with a code unlocks With Mezzo before any session, remembers it, and leaves the address bar', async ({ page }) => {
     await page.goto('/study?study=R4-03&start=1');
     await expect(page.locator('body')).toHaveAttribute('data-study-stage', 'mezzo');
-    await expect(page.locator('#study-bookmark')).toHaveText('Bookmark this page. You’ll come back here after calls and for the wrap-up.');
+    await expect(page.locator('#study-bookmark')).toHaveText('Bookmark this page. You’ll come back here after calls.');
     const url = new URL(page.url());
     expect(url.searchParams.has('study')).toBe(false);
     expect(url.searchParams.has('start')).toBe(false);
@@ -648,16 +648,9 @@ test.describe('Study mode: the /study page', () => {
     // Remembered: a plain /study stays in With Mezzo.
     await page.goto('/study');
     await expect(page.locator('body')).toHaveAttribute('data-study-stage', 'mezzo');
-    // The wrap-up counts 14 days from the unlock.
-    const expected = await page.evaluate(() => {
-      const d = new Date(Number(localStorage.getItem('mezzoStudyMezzoStage:' + localStorage.getItem('mezzoStudyTesterCode'))));
-      return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 14)
-        .toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
-    });
-    // Before day 14, only Part 2: no Wrap-up yet (it opens on ${expected}).
-    expect(expected).toBeTruthy();
+    // Only Part 2.
     await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Part 2: With Mezzo']);
-    await expect(page.locator('#study-wrap-up-part, #study-baseline')).toHaveCount(0);
+    await expect(page.locator('#study-baseline')).toHaveCount(0);
   });
 
   test('?start=1 without a code does nothing', async ({ page }) => {
@@ -691,16 +684,16 @@ test.describe('Study mode: the /study page', () => {
     await page.goto('/study/');
     await expect(page.locator('body')).toHaveAttribute('data-study-stage', 'mezzo');
     await expect(page.getByText('Your study code: R4-01')).toBeVisible();
-    // Only Part 2: no Part 1, no Wrap-up before day 14, nothing grayed out.
+    // Only Part 2: no Part 1, no wrap-up (it's emailed), nothing grayed out.
     await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Part 2: With Mezzo']);
-    await expect(page.locator('#study-baseline, #study-wrap-up-part, #study-baseline-check-in')).toHaveCount(0);
+    await expect(page.locator('#study-baseline, #study-baseline-check-in')).toHaveCount(0);
     await expect(page.getByText('Completed')).toHaveCount(0);
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Great, you’re ready for Part 2');
     await expect(page.locator('#study-mezzo-intro')).toHaveText('Try Mezzo on your calls over the next week or two. Check in after at least 2 of them.');
     await expect(page.getByRole('heading', { level: 3 })).toHaveText(['Install the Chrome extension', 'Use Mezzo on your calls', 'Check in after your call', 'Your check-ins']);
     await expect(page.locator('.study-step-num')).toHaveText(['1', '2', '3']);
     // Under the code, this stage's own bookmark line.
-    await expect(page.locator('#study-bookmark')).toHaveText('Bookmark this page. You’ll come back here after calls and for the wrap-up.');
+    await expect(page.locator('#study-bookmark')).toHaveText('Bookmark this page. You’ll come back here after calls.');
     expect(await page.locator('#study-bookmark').evaluate((el) => el.previousElementSibling.textContent)).toBe('Your study code: R4-01');
     // Step 1: no Chrome Web Store link in the config yet, so a disabled
     // "Link coming soon" button, and the step still shows.
@@ -731,7 +724,7 @@ test.describe('Study mode: the /study page', () => {
     const mezzo = page.locator('#study-mezzo');
     await expect(mezzo.getByRole('group', { name: 'Your check-ins' }).getByRole('checkbox')).toHaveCount(2);
     await expect(mezzo.locator('.study-tracker-help')).toHaveText('Check these off to keep track. Your answers already reach me when you submit the form.');
-    await expect(mezzo.locator('.study-next')).toHaveText('What’s next: around day 14, I’ll email you a short wrap-up form.');
+    await expect(mezzo.locator('.study-next')).toHaveText('What’s next: after your 2nd check-in, I’ll email you a short wrap-up form.');
     await expect(link(page, 'Open Mezzo')).toHaveClass(/btn-primary/);
 
     const checkIn = new URL(await link(page, 'Check in after a call').getAttribute('href'));
@@ -747,8 +740,9 @@ test.describe('Study mode: the /study page', () => {
     expect(p.mezzo_view).toBe('Mini');
     expect(p.mezzo_window).toBe('280x110');
 
-    // Wrap-up: not yet, and not mentioned.
+    // No wrap-up on the page: it's emailed after the 2nd check-in.
     await expect(link(page, 'Wrap up the study')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Wrap-up' })).toHaveCount(0);
     await expect(page.getByRole('link', { name: 'How study data is handled' })).toHaveAttribute('href', '/privacy.html#research-participants');
   });
 
@@ -797,23 +791,19 @@ test.describe('Study mode: the /study page', () => {
       .toEqual(['mezzo_browser_id', 'mezzo_source', 'mezzo_tester']);
   });
 
-  test('With Mezzo stage after 14 days: Wrap up the study, tester code only', async ({ page }) => {
+  test('With Mezzo stage after 14 days: still Part 2 with its heading, no wrap-up section, and the check-in still takes late check-ins', async ({ page }) => {
     await seed(page, { code: 'R4-01', firstSessionAgo: 15 * DAY });
     await page.goto('/study');
-    const wrapUp = new URL(await link(page, 'Wrap up the study').getAttribute('href'));
-    expect(wrapUp.origin + wrapUp.pathname).toBe('https://tally.so/r/q5alaO');
-    expect(Object.fromEntries(wrapUp.searchParams)).toEqual({ mezzo_tester: 'R4-01' });
-    await expect(page.getByText(/Opens /)).toHaveCount(0);
-    // Wrap-up (not "Part 3") above Part 2; Part 2's check-in stays for
-    // late check-ins. No Part 1, nothing "Completed".
-    await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Wrap-up', 'Part 2: With Mezzo']);
-    await expect(page.locator('#study-wrap-up-part > p')).toHaveText('A short form about your 2 weeks with Mezzo. Finish it to get your $5 gift card.');
+    await expect(page.locator('body')).toHaveAttribute('data-study-stage', 'mezzo');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Great, you’re ready for Part 2');
+    await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Part 2: With Mezzo']);
+    await expect(page.locator('#study-wrap-up-part, #study-wrap-up, #study-baseline')).toHaveCount(0);
+    await expect(link(page, 'Wrap up the study')).toHaveCount(0);
     await expect(page.getByText('Part 3')).toHaveCount(0);
-    await expect(page.getByText('Completed')).toHaveCount(0);
-    await expect(page.locator('#study-baseline')).toHaveCount(0);
+    await expect(page.locator('#study-bookmark')).toHaveText('Bookmark this page. You’ll come back here after calls.');
     await expect(link(page, 'Check in after a call')).toBeVisible();
-    const [w, c] = [await link(page, 'Wrap up the study').boundingBox(), await link(page, 'Check in after a call').boundingBox()];
-    expect(w.y).toBeLessThan(c.y);
+    // The tester code stays saved.
+    expect(await page.evaluate(() => localStorage.getItem('mezzoStudyTesterCode'))).toBe('R4-01');
   });
 
   test('Open Mezzo without the extension: Mezzo opens in a window of its own, sized like the extension\'s, and this page stays', async ({ page, context }) => {
@@ -904,7 +894,7 @@ test.describe('Study mode: the /study page', () => {
       await expect(nav.locator('.study-nav-label')).toHaveText('Mezzo study');
       await expect(nav.locator('.type-nav-wordmark')).toHaveCount(0);
       // The same text everywhere else.
-      await expect(page.getByRole('heading', { level: 1 })).toHaveText('Thanks for joining the Mezzo study');
+      await expect(page.getByRole('heading', { level: 1 })).toHaveText('Great, you’re ready for Part 2');
     });
   }
 
@@ -923,9 +913,9 @@ test.describe('Study mode: the /study page', () => {
     await expect.poll(async () => (await nav.boundingBox()).y).toBeLessThan(-200);
   });
 
-  test('layout, wide screen: Part 2 is one 560px column like Part 1, steps 1 to 3 stacked, markers centered on their headings; from day 14, Wrap-up above, unnumbered', async ({ page }) => {
+  test('layout, wide screen: Part 2 is one 560px column like Part 1, steps 1 to 3 stacked, markers centered on their headings', async ({ page }) => {
     await page.setViewportSize({ width: 1200, height: 900 });
-    await seed(page, { code: 'R4-01', firstSessionAgo: 15 * DAY });
+    await seed(page, { code: 'R4-01', firstSessionAgo: DAY });
     await page.goto('/study');
     expect((await page.locator('.study-main').boundingBox()).width).toBe(560);
     const steps = page.locator('ol.study-steps > li');
@@ -949,13 +939,6 @@ test.describe('Study mode: the /study page', () => {
     expect(num.w).toBeLessThanOrEqual(28);
     expect(num.bg).toBe('rgb(68, 96, 122)');
     expect(num.color).toBe('rgb(255, 255, 255)');
-    // From day 14 the heading is the study's own again; Wrap-up sits above
-    // Part 2, unnumbered.
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Thanks for joining the Mezzo study');
-    const wrapUp = page.locator('#study-wrap-up-part');
-    const w = await wrapUp.boundingBox();
-    expect(w.y + w.height).toBeLessThan(boxes[0].y);
-    await expect(wrapUp.locator('.study-step-num')).toHaveCount(0);
   });
 
   test('layout, phone width: the steps stack, step 1 first, with no sideways scroll', async ({ page }) => {
@@ -1069,7 +1052,7 @@ test.describe('Study mode: the /study page', () => {
     const two = mezzo.getByRole('checkbox', { name: 'Check-in 2', exact: true });
     await one.check();
     await two.check();
-    await expect(mezzo.locator('.study-next')).toHaveText('What’s next: around day 14, I’ll email you a short wrap-up form.');
+    await expect(mezzo.locator('.study-next')).toHaveText('What’s next: after your 2nd check-in, I’ll email you a short wrap-up form.');
     await expect(mezzo.locator('.study-done')).toHaveCount(0);
     expect(await page.evaluate(() => localStorage.getItem('mezzoStudyMezzoChecks:R4-01'))).toBe('[true,true]');
     expect(await page.evaluate(() => localStorage.getItem('mezzoStudyBaselineChecks:R4-01'))).toBe(null);

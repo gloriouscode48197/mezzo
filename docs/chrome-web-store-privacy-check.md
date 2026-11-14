@@ -159,13 +159,13 @@ Study mode is only active once a tester code is saved through `?study=CODE` (`sr
 
 `?study=clear` removes all of these except the browser ID (`study.js:68-77`).
 
-**How it leaves:** only as query parameters on a Tally form link, when the tester clicks a check-in, baseline or wrap-up link:
+**How it leaves:** only as query parameters on a Tally form link, when the tester clicks a check-in or baseline link:
 
 - **Check-in link** (`https://tally.so/r/gber54`, `study-config.js:10`; built at `study.js:482-498`) carries:
   - `mezzo_tester` and `mezzo_browser_id`
   - `mezzo_source`
   - for a recent session: `mezzo_session_date`, `mezzo_session_minutes`, `mezzo_speech_minutes`, `mezzo_glows`, `mezzo_view`, `mezzo_window` and `mezzo_minutes_after`
-- **Baseline and wrap-up links** (`tally.so/r/zEN6jg`, `tally.so/r/q5alaO`) carry only `mezzo_tester` (`study.js:509-520`).
+- **Baseline link** (`tally.so/r/zEN6jg`) carries only `mezzo_tester` (`buildBaselineUrl()`). The wrap-up form (`tally.so/r/q5alaO`) is no longer linked from Mezzo: the researcher emails it (2026-11-14).
 - **Who receives it:** Tally, a third-party survey service.
 - **⚠ When:** the parameters are in the URL, so Tally's server receives them as soon as the form page loads, even if the tester never submits. The privacy page currently says the survey "records" them only if submitted, which is likely true of the stored response but not of the request. Whether Tally keeps unsubmitted visits is **unverified**: check Tally's documentation or settings.
 - **⚠ Unverified:** whether the Tally forms themselves ask for an email address or other personal details. That's form content, not code.
