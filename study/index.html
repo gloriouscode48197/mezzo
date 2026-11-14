@@ -164,11 +164,13 @@
     .study-box-text { flex: 1 1 auto; }
     .study-main .study-box .study-list { margin-bottom: 0; }
     .study-phase .study-box .btn-primary { flex: none; margin-top: 0; }
-    /* Part 2: Open Mezzo above Check in, both as
-       wide as the wider one (one grid column). */
+    /* The box's buttons, in one grid column: Part 1's Check in alone,
+       Part 2's Open Mezzo above Check in. At least 9rem wide, so Check in
+       is the same size in both parts, and as wide as the widest button. */
     .study-box-actions {
       flex: none;
       display: grid;
+      grid-template-columns: minmax(9rem, max-content);
       gap: var(--space-2);
     }
     .study-phase .study-box-actions .btn-outline,
@@ -277,8 +279,8 @@
       <!-- Only the tester's stage is shown; the script removes the other
            sections from the page. -->
       <section class="study-phase" id="study-baseline" aria-labelledby="study-baseline-heading">
-        <h2 id="study-baseline-heading">Part 1: Your usual calls</h2>
-        <p class="type-body">Take your calls as you normally would. Check in after at least 2 of them. After each one, come back here and click Check in after a call. It takes about a minute.</p>
+        <h2 id="study-baseline-heading">Part 1: Check in after your usual calls</h2>
+        <p class="type-body">Take your calls as you normally would, without Mezzo. Check in after at least 2 of them. Come back here after each call. It takes about a minute.</p>
         <!-- Which calls count, with the button beside the list (stacked on
              a phone). -->
         <div class="study-box">
@@ -290,7 +292,10 @@
               <li>you speak, even a little</li>
             </ul>
           </div>
-          <a class="btn-primary" id="study-baseline-check-in" target="_blank" rel="noopener noreferrer">Check in after a call</a>
+          <!-- The same button as Part 2's Check in: same column, same width. -->
+          <div class="study-box-actions">
+            <a class="btn-primary" id="study-baseline-check-in" target="_blank" rel="noopener noreferrer">Check in</a>
+          </div>
         </div>
         <!-- The tester's own tracker (Part 1): kept per tester code in
              this browser, never sent (study.js's getBaselineChecks()). -->

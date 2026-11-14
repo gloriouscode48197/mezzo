@@ -551,11 +551,11 @@ test.describe('Study mode: the /study page', () => {
     await page.goto('/study');
     await expect(page.locator('body')).toHaveAttribute('data-study-stage', 'none');
     await expect(page.getByRole('heading', { name: 'This page is for study participants' })).toBeVisible();
-    await expect(page.getByRole('link', { name: /Check in after a call/ })).toBeHidden();
+    await expect(page.getByRole('link', { name: /^Check in/ })).toBeHidden();
     await expect(link(page, 'Wrap up the study')).toBeHidden();
   });
 
-  test('baseline stage (a code, no session yet): "Part 1: Your usual calls", the copy, the box with the list and button, no way into Mezzo', async ({ page }) => {
+  test('baseline stage (a code, no session yet): "Part 1: Check in after your usual calls", the copy, the box with the list and button, no way into Mezzo', async ({ page }) => {
     await seed(page, { code: 'R4-01' });
     await page.goto('/study');
     await expect(page.locator('body')).toHaveAttribute('data-study-stage', 'baseline');
@@ -566,12 +566,12 @@ test.describe('Study mode: the /study page', () => {
     // Right under the study code.
     expect(await page.locator('#study-bookmark').evaluate((el) => el.previousElementSibling.textContent)).toBe('Your study code: R4-01');
     // Only Part 1: no other part, no callout, nothing grayed out.
-    await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Part 1: Your usual calls']);
+    await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Part 1: Check in after your usual calls']);
     await expect(page.locator('#study-mezzo, #study-wrap-up-part, .study-callout')).toHaveCount(0);
     await expect(page.getByText('Completed')).toHaveCount(0);
     const baselineSection = page.locator('#study-baseline');
     await expect(baselineSection.locator('p:visible')).toHaveText([
-      'Take your calls as you normally would. Check in after at least 2 of them. After each one, come back here and click Check in after a call. It takes about a minute.',
+      'Take your calls as you normally would, without Mezzo. Check in after at least 2 of them. Come back here after each call. It takes about a minute.',
       'Only give feedback on calls where:',
       'Check these off to keep track. Your answers already reach me when you submit the form.',
       'What’s next: after your 2nd check-in, I’ll email you Part 2 with Mezzo.',
@@ -599,7 +599,8 @@ test.describe('Study mode: the /study page', () => {
     // The tracker comes right after the box.
     expect(await box.evaluate((el) => el.nextElementSibling.className)).toBe('study-tracker');
 
-    const baseline = link(page, 'Check in after a call');
+    const baseline = link(page, 'Check in');
+    await expect(page.getByRole('link', { name: 'Check in after a call', exact: true })).toHaveCount(0);
     await expect(baseline).toBeVisible();
     const url = new URL(await baseline.getAttribute('href'));
     expect(url.origin + url.pathname).toBe('https://tally.so/r/zEN6jg');
@@ -631,8 +632,8 @@ test.describe('Study mode: the /study page', () => {
     await seed(page, { code: 'R4-01' });
     await page.goto('/study');
     await expect(page.locator('body')).toHaveAttribute('data-study-stage', 'baseline');
-    await expect(link(page, 'Check in after a call')).toBeHidden();
-    await expect(page.getByText('Take your calls as you normally would.', { exact: false })).toBeVisible();
+    await expect(link(page, 'Check in')).toBeHidden();
+    await expect(page.getByText('Take your calls as you normally would, without Mezzo.', { exact: false })).toBeVisible();
   });
 
   test('?start=1 with a code unlocks With Mezzo before any session, remembers it, and leaves the address bar', async ({ page }) => {
@@ -659,14 +660,14 @@ test.describe('Study mode: the /study page', () => {
     expect(await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('mezzoStudy')))).toEqual([]);
   });
 
-  test('the stage belongs to the tester code: a new code starts at "Your usual calls"; the first code keeps its stage; ?study=clear resets every code', async ({ page }) => {
+  test('the stage belongs to the tester code: a new code starts at Part 1; the first code keeps its stage; ?study=clear resets every code', async ({ page }) => {
     const stage = () => page.locator('body').getAttribute('data-study-stage');
     await page.goto('/study?study=TEST-01&start=1');
     expect(await stage()).toBe('mezzo');
 
     await page.goto('/study?study=TEST-02');
     expect(await stage()).toBe('baseline');
-    await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Part 1: Your usual calls']);
+    await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Part 1: Check in after your usual calls']);
     await expect(page.getByText('Your study code: TEST-02')).toBeVisible();
 
     await page.goto('/study?study=TEST-01');
@@ -904,6 +905,11 @@ test.describe('Study mode: the /study page', () => {
     await seed(page, { code: 'R4-01' });
     await page.goto('/study');
     const p1 = await page.locator('#study-baseline > .study-box').boundingBox();
+    const p1CheckIn = await page.locator('#study-baseline-check-in').boundingBox();
+    const p1Style = await page.locator('#study-baseline-check-in').evaluate((el) => {
+      const st = getComputedStyle(el);
+      return [st.backgroundColor, st.color, st.fontSize, st.fontWeight, st.paddingTop, st.paddingLeft];
+    });
     // Same browser, now in Part 2.
     await page.evaluate(() => localStorage.setItem('mezzoStudyFirstSession:R4-01', String(Date.now() - 24 * 60 * 60 * 1000)));
     await page.reload();
@@ -921,6 +927,13 @@ test.describe('Study mode: the /study page', () => {
     expect(Math.abs(o.x - c.x)).toBeLessThanOrEqual(1);
     expect(Math.abs(o.width - c.width)).toBeLessThanOrEqual(1);
     expect(Math.abs(o.height - c.height)).toBeLessThanOrEqual(1);
+    // Part 1's Check in is the same button: same size and style.
+    expect(Math.abs(c.width - p1CheckIn.width)).toBeLessThanOrEqual(1);
+    expect(Math.abs(c.height - p1CheckIn.height)).toBeLessThanOrEqual(1);
+    expect(await page.locator('#study-check-in').evaluate((el) => {
+      const st = getComputedStyle(el);
+      return [st.backgroundColor, st.color, st.fontSize, st.fontWeight, st.paddingTop, st.paddingLeft];
+    })).toEqual(p1Style);
     expect(o.y).toBeGreaterThan(p2.y);
     expect(c.y + c.height).toBeLessThanOrEqual(p2.y + p2.height);
   });
@@ -1061,7 +1074,7 @@ test.describe('Study mode: the /study page', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
   });
 
-  test('layout: "Your usual calls" stays one 560px column with no step numbers', async ({ page }) => {
+  test('layout: Part 1 stays one 560px column with no step numbers', async ({ page }) => {
     await page.setViewportSize({ width: 1200, height: 900 });
     await seed(page, { code: 'R4-01' });
     await page.goto('/study');
