@@ -104,13 +104,6 @@
     /* "Your check-ins" (both parts, 2026-11-14): a small heading, a helper
        line, the two boxes, then "What's next". */
     .study-tracker { margin-top: var(--space-5); }
-    /* Part 2's Open Mezzo, below the box: outlined and a size down from
-       the filled buttons, so Check in after a call stays the main action. */
-    .study-phase .btn-outline.study-btn-small {
-      margin-top: var(--space-4);
-      padding: 7px 14px;
-      font-size: 13px;
-    }
     .study-tracker h3 {
       margin: 0 0 var(--space-1);
       font-family: var(--font-display);
@@ -171,6 +164,19 @@
     .study-box-text { flex: 1 1 auto; }
     .study-main .study-box .study-list { margin-bottom: 0; }
     .study-phase .study-box .btn-primary { flex: none; margin-top: 0; }
+    /* Part 2: Open Mezzo above Check in after a call with Mezzo, both as
+       wide as the wider one (one grid column). */
+    .study-box-actions {
+      flex: none;
+      display: grid;
+      gap: var(--space-2);
+    }
+    .study-phase .study-box-actions .btn-outline,
+    .study-phase .study-box-actions .btn-primary { margin-top: 0; }
+    /* Open Mezzo the same size as the filled button (its 1px border
+       taken from the padding). */
+    .study-phase .study-box-actions .btn-primary { padding-inline: 16px; }
+    .study-phase .study-box-actions .btn-outline { font-size: 15px; padding: 12px 15px; }
     @media (max-width: 479px) {
       .study-box { flex-direction: column; align-items: flex-start; }
     }
@@ -318,10 +324,13 @@
               <li>you speak, even a little</li>
             </ul>
           </div>
-          <a class="btn-primary" id="study-check-in" target="_blank" rel="noopener noreferrer">Check in after a call</a>
+          <!-- Open Mezzo (outlined) above the check-in (filled), the same
+               width, where Part 1 has its one button. -->
+          <div class="study-box-actions">
+            <a class="btn-outline" id="study-open-mezzo" href="/index.html">Open Mezzo</a>
+            <a class="btn-primary" id="study-check-in" target="_blank" rel="noopener noreferrer">Check in after a call with Mezzo</a>
+          </div>
         </div>
-        <!-- Open Mezzo: smaller and outlined, below the box. -->
-        <a class="btn-outline study-btn-small" id="study-open-mezzo" href="/index.html">Open Mezzo</a>
         <!-- The tester's own tracker (Part 2): kept per tester code in
              this browser, never sent (study.js's getBaselineChecks()). -->
         <div class="study-tracker">

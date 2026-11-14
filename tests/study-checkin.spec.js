@@ -702,22 +702,22 @@ test.describe('Study mode: the /study page', () => {
     // Under the code, this stage's own bookmark line.
     await expect(page.locator('#study-bookmark')).toHaveText('Bookmark this page. You’ll come back here after calls.');
     expect(await page.locator('#study-bookmark').evaluate((el) => el.previousElementSibling.textContent)).toBe('Your study code: R4-01');
-    // Part 1's box, the same: the list and the filled check-in button.
+    // Part 1's box: the same list; where Part 1 has its one button, Open
+    // Mezzo (outlined) above Check in after a call with Mezzo (filled).
     const box = page.locator('#study-mezzo > .study-box');
     await expect(box.getByRole('list', { name: 'Only give feedback on calls where:' }).getByRole('listitem'))
       .toHaveText(['you’re wearing headphones', 'people are nearby', 'you speak, even a little']);
+    await expect(box.locator('.study-box-actions a')).toHaveText(['Open Mezzo', 'Check in after a call with Mezzo']);
+    await expect(box.locator('#study-open-mezzo')).toHaveClass(/btn-outline/);
     await expect(box.locator('#study-check-in')).toHaveClass(/btn-primary/);
-    // Open Mezzo below the box, outlined.
-    const openMezzo = link(page, 'Open Mezzo');
-    await expect(openMezzo).toHaveClass(/btn-outline/);
-    expect(await openMezzo.evaluate((el) => el.previousElementSibling.classList.contains('study-box'))).toBe(true);
+    await expect(page.getByRole('link', { name: 'Check in after a call', exact: true })).toHaveCount(0);
     // The tracker, as in Part 1, with Part 2's "What's next".
     const mezzo = page.locator('#study-mezzo');
     await expect(mezzo.getByRole('group', { name: 'Your check-ins' }).getByRole('checkbox')).toHaveCount(2);
     await expect(mezzo.locator('.study-tracker-help')).toHaveText('Check these off to keep track. Your answers already reach me when you submit the form.');
     await expect(mezzo.locator('.study-next')).toHaveText('What’s next: after your 2nd check-in, I’ll email you a short wrap-up form.');
 
-    const checkIn = new URL(await link(page, 'Check in after a call').getAttribute('href'));
+    const checkIn = new URL(await link(page, 'Check in after a call with Mezzo').getAttribute('href'));
     expect(checkIn.origin + checkIn.pathname).toBe('https://tally.so/r/gber54');
     const p = Object.fromEntries(checkIn.searchParams);
     expect(p.mezzo_tester).toBe('R4-01');
@@ -750,7 +750,7 @@ test.describe('Study mode: the /study page', () => {
         }, lastSession.handled);
       }
       await page.goto('/study');
-      const p = Object.fromEntries(new URL(await link(page, 'Check in after a call').getAttribute('href')).searchParams);
+      const p = Object.fromEntries(new URL(await link(page, 'Check in after a call with Mezzo').getAttribute('href')).searchParams);
       expect(p.mezzo_session_minutes).toBe(String(lastSession.length / MIN));
       expect(p.mezzo_speech_minutes).toBe(String((lastSession.speech ?? 2 * MIN) / MIN));
       expect(p.mezzo_minutes_after).toBe('10');
@@ -766,14 +766,14 @@ test.describe('Study mode: the /study page', () => {
     });
     await seed(page, { code: 'R4-01', firstSessionAgo: DAY });
     await page.goto('/study');
-    await expect(link(page, 'Check in after a call')).toBeVisible();
+    await expect(link(page, 'Check in after a call with Mezzo')).toBeVisible();
     await expect(page.locator(`a[href="${STORE}"]`)).toHaveCount(0);
   });
 
   test('With Mezzo stage, last session more than 2 hours ago: the check-in carries only the code and browser ID', async ({ page }) => {
     await seed(page, { code: 'R4-01', firstSessionAgo: 2 * DAY, lastSession: { length: 20 * MIN, endedAgo: 2 * 60 * MIN + MIN } });
     await page.goto('/study');
-    const checkIn = new URL(await link(page, 'Check in after a call').getAttribute('href'));
+    const checkIn = new URL(await link(page, 'Check in after a call with Mezzo').getAttribute('href'));
     expect(Object.keys(Object.fromEntries(checkIn.searchParams)).sort())
       .toEqual(['mezzo_browser_id', 'mezzo_source', 'mezzo_tester']);
   });
@@ -788,7 +788,7 @@ test.describe('Study mode: the /study page', () => {
     await expect(link(page, 'Wrap up the study')).toHaveCount(0);
     await expect(page.getByText('Part 3')).toHaveCount(0);
     await expect(page.locator('#study-bookmark')).toHaveText('Bookmark this page. You’ll come back here after calls.');
-    await expect(link(page, 'Check in after a call')).toBeVisible();
+    await expect(link(page, 'Check in after a call with Mezzo')).toBeVisible();
     // The tester code stays saved.
     expect(await page.evaluate(() => localStorage.getItem('mezzoStudyTesterCode'))).toBe('R4-01');
   });
@@ -899,45 +899,43 @@ test.describe('Study mode: the /study page', () => {
     await expect.poll(async () => (await nav.boundingBox()).y).toBeLessThan(-200);
   });
 
-  test('layout, wide screen: Part 2 matches Part 1: one 560px column, the box at the same place and size, Open Mezzo smaller below it', async ({ page }) => {
+  test('layout, wide screen: Part 2 matches Part 1: one 560px column, the box at the same place and width; Open Mezzo above the check-in, beside the list, the same width and height', async ({ page }) => {
     await page.setViewportSize({ width: 1200, height: 900 });
     await seed(page, { code: 'R4-01' });
     await page.goto('/study');
     const p1 = await page.locator('#study-baseline > .study-box').boundingBox();
-    const p1Btn = await page.locator('#study-baseline-check-in').boundingBox();
     // Same browser, now in Part 2.
     await page.evaluate(() => localStorage.setItem('mezzoStudyFirstSession:R4-01', String(Date.now() - 24 * 60 * 60 * 1000)));
     await page.reload();
     await expect(page.locator('body')).toHaveAttribute('data-study-stage', 'mezzo');
     expect((await page.locator('.study-main').boundingBox()).width).toBe(560);
     const p2 = await page.locator('#study-mezzo > .study-box').boundingBox();
-    const p2Btn = await page.locator('#study-check-in').boundingBox();
     expect(Math.abs(p2.x - p1.x)).toBeLessThanOrEqual(1);
     expect(Math.abs(p2.width - p1.width)).toBeLessThanOrEqual(1);
-    expect(Math.abs(p2.height - p1.height)).toBeLessThanOrEqual(1);
-    expect(Math.abs((p2Btn.x - p2.x) - (p1Btn.x - p1.x))).toBeLessThanOrEqual(1);
-    // The button beside the list, as in Part 1.
-    expect(p2Btn.x).toBeGreaterThan(p2.x + p2.width / 2);
-    const open = page.getByRole('link', { name: 'Open Mezzo', exact: true });
-    const o = await open.boundingBox();
-    expect(o.y).toBeGreaterThan(p2.y + p2.height);
-    expect(Math.abs(o.x - p2.x)).toBeLessThanOrEqual(1);
-    expect(o.height).toBeLessThan(p2Btn.height);
-    const size = (loc) => loc.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
-    expect(await size(open)).toBeLessThan(await size(page.locator('#study-check-in')));
+    const [o, c] = [await page.locator('#study-open-mezzo').boundingBox(), await page.locator('#study-check-in').boundingBox()];
+    // Beside the list, Open Mezzo on top.
+    const list = await page.locator('#study-mezzo .study-list').boundingBox();
+    expect(c.x).toBeGreaterThan(list.x + list.width - 1);
+    expect(c.x + c.width).toBeGreaterThan(p2.x + p2.width - 24);
+    expect(c.y).toBeGreaterThan(o.y + o.height - 1);
+    expect(Math.abs(o.x - c.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs(o.width - c.width)).toBeLessThanOrEqual(1);
+    expect(Math.abs(o.height - c.height)).toBeLessThanOrEqual(1);
+    expect(o.y).toBeGreaterThan(p2.y);
+    expect(c.y + c.height).toBeLessThanOrEqual(p2.y + p2.height);
   });
 
-  test('layout, phone width: the button goes below the list, Open Mezzo below the box, no sideways scroll', async ({ page }) => {
+  test('layout, phone width: both buttons go below the list, Open Mezzo first, the same width; no sideways scroll', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seed(page, { code: 'R4-01', firstSessionAgo: DAY });
     await page.goto('/study');
     const box = await page.locator('#study-mezzo > .study-box').boundingBox();
     const list = await page.locator('#study-mezzo .study-list').boundingBox();
-    const btn = await page.locator('#study-check-in').boundingBox();
-    expect(btn.y).toBeGreaterThan(list.y + list.height - 1);
-    expect(btn.y + btn.height).toBeLessThanOrEqual(box.y + box.height);
-    const o = await page.getByRole('link', { name: 'Open Mezzo', exact: true }).boundingBox();
-    expect(o.y).toBeGreaterThan(box.y + box.height);
+    const [o, c] = [await page.locator('#study-open-mezzo').boundingBox(), await page.locator('#study-check-in').boundingBox()];
+    expect(o.y).toBeGreaterThan(list.y + list.height - 1);
+    expect(c.y).toBeGreaterThan(o.y + o.height - 1);
+    expect(Math.abs(o.width - c.width)).toBeLessThanOrEqual(1);
+    expect(c.y + c.height).toBeLessThanOrEqual(box.y + box.height);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
   });
 
