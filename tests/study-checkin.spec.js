@@ -577,9 +577,9 @@ test.describe('Study mode: the /study page', () => {
       'What’s next: after your 2nd check-in, I’ll email you Part 2 with Mezzo.',
     ]);
     await expect(page.getByText('Mezzo comes later', { exact: false })).toHaveCount(0);
-    // "Your check-ins": a small heading, the helper line, the two boxes.
-    await expect(baselineSection.getByRole('heading', { level: 3 })).toHaveText('Your check-ins');
-    await expect(baselineSection.getByRole('group', { name: 'Your check-ins' }).getByRole('checkbox')).toHaveCount(2);
+    // "Your progress": a small heading, the helper line, the two boxes.
+    await expect(baselineSection.getByRole('heading', { level: 3 })).toHaveText('Your progress');
+    await expect(baselineSection.getByRole('group', { name: 'Your progress' }).getByRole('checkbox')).toHaveCount(2);
     await expect(page.getByRole('checkbox', { name: 'Check-in 1', exact: true })).toBeVisible();
     await expect(page.getByRole('checkbox', { name: 'Check-in 2', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: /submit/i })).toHaveCount(0);
@@ -692,7 +692,7 @@ test.describe('Study mode: the /study page', () => {
     await expect(page.locator('#study-mezzo-intro')).toHaveText('Try Mezzo on your calls over the next week or two. Check in after at least 2 of them. When you stop monitoring, Mezzo asks how your call went. If you miss it, check in here within 2 hours of your call.');
     // Like Part 1: no sections, setup steps or picture (they're in the
     // study email now); only the tracker's heading.
-    await expect(page.getByRole('heading', { level: 3 })).toHaveText(['Your check-ins']);
+    await expect(page.getByRole('heading', { level: 3 })).toHaveText(['Your progress']);
     await expect(page.locator('#study-mezzo img, #study-get-extension, .study-section, .study-step-num, .study-steps')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Link coming soon' })).toHaveCount(0);
     await expect(page.getByRole('link', { name: 'Get the Mezzo extension' })).toHaveCount(0);
@@ -713,7 +713,7 @@ test.describe('Study mode: the /study page', () => {
     await expect(page.getByRole('link', { name: 'Check in after a call', exact: true })).toHaveCount(0);
     // The tracker, as in Part 1, with Part 2's "What's next".
     const mezzo = page.locator('#study-mezzo');
-    await expect(mezzo.getByRole('group', { name: 'Your check-ins' }).getByRole('checkbox')).toHaveCount(2);
+    await expect(mezzo.getByRole('group', { name: 'Your progress' }).getByRole('checkbox')).toHaveCount(2);
     await expect(mezzo.locator('.study-tracker-help')).toHaveText('Check these off to keep track. Your answers already reach me when you submit the form.');
     await expect(mezzo.locator('.study-next')).toHaveText('What’s next: after your 2nd check-in, I’ll email you a short wrap-up form.');
 

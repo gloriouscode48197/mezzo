@@ -24,7 +24,7 @@
 | --- | --- | --- |
 | `?study=CODE` on any Mezzo page | `mezzoStudyTesterCode` = CODE; the parameter leaves the address bar | `/study` shows the participant view; check-in cards become possible |
 | Baseline | nothing more | `/study` shows "Part 1: Your usual calls" |
-| Tester ticks a "Your check-ins" box | Part 1: `mezzoStudyBaselineChecks:CODE`; Part 2: `mezzoStudyMezzoChecks:CODE`; each `[check-in 1, check-in 2]` (booleans). Never sent. | Both ticked: "You’re done with Part 1. Thank you! I’ll email you Mezzo soon." |
+| Tester ticks a "Your progress" box | Part 1: `mezzoStudyBaselineChecks:CODE`; Part 2: `mezzoStudyMezzoChecks:CODE`; each `[check-in 1, check-in 2]` (booleans). Never sent. | Both ticked: "You’re done with Part 1. Thank you! I’ll email you Mezzo soon." |
 | `?start=1` (with a code) | `mezzoStudyMezzoStage:CODE` = now | `/study` shows "With Mezzo" |
 | First monitoring session with a code | `mezzoStudyFirstSession:CODE` = its start time, saved when it ends (only if not already set) | Also switches `/study` to "With Mezzo" |
 | Each monitoring session | `mezzoStudyLastSession:CODE` = `{ id, startedAt, endedAt, speechMs, glows, view?, window?, handled? }`; the latest one replaces the one before | A check-in card, if the session qualifies |
@@ -47,8 +47,8 @@ Not linked from anywhere in Mezzo. It has its own look so it's never mistaken fo
 | State | What it shows |
 | --- | --- |
 | No code | "This page is for study participants", how to get in, and links to Mezzo and Privacy |
-| Code, baseline | Thanks, the code, the bookmark line, and only "Part 1: Your usual calls": the intro, the count-these box with **Check in after a call** (baseline form), "Your check-ins" with two boxes, "What’s next". No link into the app. |
-| Code, With Mezzo | "Great, you’re ready for Part 2", the code, the bookmark line, and only "Part 2: Check in after a call with Mezzo": laid out like Part 1: the intro, Part 1's box with **Open Mezzo** (outlined) above **Check in** (filled), the same width, "Your check-ins", "What’s next". Part 1 is removed from the page, so no baseline check-ins after Mezzo. The same for the rest of the study, after day 14 too; there is no wrap-up section (it's emailed). |
+| Code, baseline | Thanks, the code, the bookmark line, and only "Part 1: Your usual calls": the intro, the count-these box with **Check in after a call** (baseline form), "Your progress" with two boxes, "What’s next". No link into the app. |
+| Code, With Mezzo | "Great, you’re ready for Part 2", the code, the bookmark line, and only "Part 2: Check in after a call with Mezzo": laid out like Part 1: the intro, Part 1's box with **Open Mezzo** (outlined) above **Check in** (filled), the same width, "Your progress", "What’s next". Part 1 is removed from the page, so no baseline check-ins after Mezzo. The same for the rest of the study, after day 14 too; there is no wrap-up section (it's emailed). |
 
 Every participant view ends with a footer: "Questions? Reply to any study email. · **How study data is handled**", the link going to the Privacy page's "Research participants" section.
 
@@ -168,12 +168,12 @@ Mezzo sends nothing itself. The values ride in the form link's query string, and
   - "Part 1: Your usual calls"
   - "Take your calls as you normally would. Check in after at least 2 of them. After each one, come back here and click Check in after a call. It takes about a minute."
   - In a bordered box: "Only give feedback on calls where:" "you’re wearing headphones" / "people are nearby" / "you speak, even a little", with **Check in after a call** (filled) to the right (below the list on a phone)
-  - "Your check-ins" (small heading), "Check these off to keep track. Your answers already reach me when you submit the form.", two boxes the tester ticks, "Check-in 1" / "Check-in 2" (no submit button). Both ticked: "You’re done with Part 1. Thank you! I’ll email you Mezzo soon." in a pale slate box, led by a small slate check
+  - "Your progress" (small heading), "Check these off to keep track. Your answers already reach me when you submit the form.", two boxes the tester ticks, "Check-in 1" / "Check-in 2" (no submit button). Both ticked: "You’re done with Part 1. Thank you! I’ll email you Mezzo soon." in a pale slate box, led by a small slate check
   - "**What’s next:** after your 2nd check-in, I’ll email you Part 2 with Mezzo." (always visible, ticked or not)
 - With Mezzo (the same after day 14):
   - "Part 2: Check in after a call with Mezzo": "Try Mezzo on your calls over the next week or two. Check in after at least 2 of them. When you stop monitoring, Mezzo asks how your call went. If you miss it, check in here within 2 hours of your call."
   - Part 1's bordered box, the same list and position. Where Part 1 has its one button, two of the same width and height, stacked, to the right of the list (below it on a phone): **Open Mezzo** (outlined; the same behavior: the extension's launcher when installed, otherwise its own window), then **Check in** (filled).
-  - "Your check-ins" (small heading), "Check these off to keep track. Your answers already reach me when you submit the form.", two boxes the tester ticks, "Check-in 1" / "Check-in 2" (no submit button), kept apart from Part 1's
+  - "Your progress" (small heading), "Check these off to keep track. Your answers already reach me when you submit the form.", two boxes the tester ticks, "Check-in 1" / "Check-in 2" (no submit button), kept apart from Part 1's
   - "**What’s next:** after your 2nd check-in, I’ll email you a short wrap-up form." No thank-you when both boxes are ticked.
 - Footer, every participant stage, after a thin divider, in small muted text: "Questions? Reply to any study email. · How study data is handled" (the link goes to the Privacy page's Research participants section)
 - No code: "This page is for study participants" / "If you’re in a Mezzo study, open the personal study link you were given." / "Go to Mezzo · Privacy"
@@ -195,7 +195,7 @@ Mezzo sends nothing itself. The values ride in the form link's query string, and
 - **`/study` header scrolls away, no Home link:** it's a short page, and a Home link would lead baseline testers into the app.
 - **What counts and what's next, close to the action:** testers asked what counts and when they'd get Mezzo. The bordered box says what counts right by the button, and "What's next" under the tracker says when Mezzo comes, which prevents uncounted calls.
 - **"Part 1" and "Part 2" headings:** the numbers tell testers which stage they're in.
-- **"Your check-ins" boxes, never sent (both parts):** the forms don't report back to the page, so testers track their own two check-ins; the helper line says the answers already arrive on submit, so nobody waits for the boxes to send anything. The researcher counts real submissions in Tally. "What's next" stays visible whatever is ticked, so the next step is always clear, and there's no submit button because there's nothing to submit.
+- **"Your progress" boxes, never sent (both parts):** (heading renamed from "Your check-ins", 2026-11-14) the forms don't report back to the page, so testers track their own two check-ins; the helper line says the answers already arrive on submit, so nobody waits for the boxes to send anything. The researcher counts real submissions in Tally. "What's next" stays visible whatever is ticked, so the next step is always clear, and there's no submit button because there's nothing to submit.
 - **Only the current stage on the page (2026-11-14):** an earlier version showed all three parts, with finished ones collapsed and upcoming ones grayed out. It made the page busier than the one thing testers need to do now. Sections for other stages aren't on the page at all, so Part 1 has no way into Mezzo.
 - **Wrap-up by email, not on `/study` (2026-11-14):** it's sent right after the 2nd Mezzo check-in instead of waiting for day 14, so the page no longer needs a wrap-up section, its date rule or a heading change. Part 2 stays as it is for the rest of the study, its check-in there for calls the tester hasn't checked in on yet.
 - **Part 1's check-in removed once Part 2 unlocks:** a baseline check-in after someone has used Mezzo would no longer be a baseline.

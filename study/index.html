@@ -101,7 +101,7 @@
       color: var(--color-text);
     }
     .study-phase + .study-phase { margin-top: var(--space-6); }
-    /* "Your check-ins" (both parts, 2026-11-14): a small heading, a helper
+    /* "Your progress" (both parts, 2026-11-14): a small heading, a helper
        line, the two boxes, then "What's next". */
     .study-tracker { margin-top: var(--space-5); }
     .study-tracker h3 {
@@ -295,7 +295,7 @@
         <!-- The tester's own tracker (Part 1): kept per tester code in
              this browser, never sent (study.js's getBaselineChecks()). -->
         <div class="study-tracker">
-          <h3 id="study-baseline-tracker-heading">Your check-ins</h3>
+          <h3 id="study-baseline-tracker-heading">Your progress</h3>
           <p class="type-body study-tracker-help" id="study-baseline-tracker-help">Check these off to keep track. Your answers already reach me when you submit the form.</p>
           <fieldset class="study-checks" aria-labelledby="study-baseline-tracker-heading" aria-describedby="study-baseline-tracker-help">
             <label class="type-body"><input type="checkbox" id="study-baseline-done-1"> Check-in 1</label>
@@ -333,7 +333,7 @@
         <!-- The tester's own tracker (Part 2): kept per tester code in
              this browser, never sent (study.js's getBaselineChecks()). -->
         <div class="study-tracker">
-          <h3 id="study-mezzo-tracker-heading">Your check-ins</h3>
+          <h3 id="study-mezzo-tracker-heading">Your progress</h3>
           <p class="type-body study-tracker-help" id="study-mezzo-tracker-help">Check these off to keep track. Your answers already reach me when you submit the form.</p>
           <fieldset class="study-checks" aria-labelledby="study-mezzo-tracker-heading" aria-describedby="study-mezzo-tracker-help">
             <label class="type-body"><input type="checkbox" id="study-mezzo-done-1"> Check-in 1</label>
@@ -397,7 +397,7 @@
     if (stage !== 'baseline') $('study-baseline').remove();
     if (stage !== 'mezzo') $('study-mezzo').remove();
 
-    // "Your check-ins": the tester's own reminder, two boxes saved per
+    // "Your progress": the tester's own reminder, two boxes saved per
     // tester code in this browser, never sent. "What's next" stays visible
     // whatever is ticked; Part 1 adds a thank-you once both are.
     function setUpTracker(prefix, which, done = null, doneText = '') {
