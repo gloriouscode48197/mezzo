@@ -126,21 +126,6 @@
       font-weight: var(--weight-medium);
       line-height: 1;
     }
-    /* Wider screens: the With Mezzo stage widens so its two steps sit side
-       by side as equal columns, tops aligned; each step's button follows
-       its own text (2026-11-13: no shared rows, so step 1 has no gap
-       under it). Wrap-up stays full width below. Your usual calls keeps
-       the 560px column. */
-    @media (min-width: 760px) {
-      body[data-study-stage="mezzo"] .study-main { max-width: 760px; }
-      .study-steps {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        align-items: start;
-        column-gap: var(--space-6);
-      }
-      .study-steps .study-item { margin-top: 0; }
-    }
     .study-item h3 {
       margin: 0;
       font-family: var(--font-display);
@@ -149,18 +134,45 @@
       line-height: 1.4;
       color: var(--color-text);
     }
-    /* Step B's "Missed the card?" */
-    .study-subhead {
-      margin: var(--space-2) 0 0;
-      font-family: var(--font-body);
+    /* "Your check-ins" (both parts, 2026-11-14): a small heading, a helper
+       line, the two boxes, then "What's next". */
+    .study-tracker { margin-top: var(--space-5); }
+    .study-tracker h3 {
+      margin: 0 0 var(--space-1);
+      font-family: var(--font-display);
       font-weight: var(--weight-medium);
-      font-size: 14px;
+      font-size: 16px;
       line-height: 1.4;
       color: var(--color-text);
     }
+    .study-main .study-tracker-help { margin: 0; color: var(--color-text-muted); }
+    .study-tracker .study-checks { margin-top: var(--space-3); }
+    .study-main .study-next { margin: var(--space-4) 0 0; color: var(--color-text); }
+    .study-next strong { font-weight: var(--weight-medium); }
+    /* Step 1 while the Chrome Web Store link isn't in the config. */
+    .study-page .btn-primary:disabled {
+      background: #E1E5EA;
+      color: var(--color-text-muted);
+      cursor: default;
+    }
+    /* The footer, on every stage: a thin divider, small muted text. */
+    .study-footer {
+      margin-top: var(--space-6);
+      padding-top: var(--space-4);
+      border-top: 1px solid color-mix(in srgb, var(--color-text) 14%, transparent);
+    }
+    .study-main .study-footer p {
+      margin: 0;
+      font-family: var(--font-body);
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--color-text-muted);
+    }
     .study-phase .btn-primary,
     .study-phase .btn-outline { margin-top: var(--space-2); text-decoration: none; }
-    .study-main .study-privacy { margin-top: var(--space-6); }
+    .study-item-body > :last-child { margin-bottom: 0; }
+    .study-item .study-box { margin-top: var(--space-3); }
+    .study-main .study-after-box { margin: var(--space-3) 0 0; color: var(--color-text-muted); }
     .study-main .study-list-intro { margin-bottom: var(--space-2); }
     .study-list {
       list-style: disc; /* also inside the numbered steps */
@@ -169,27 +181,18 @@
       color: var(--color-text);
     }
     .study-list li + li { margin-top: var(--space-1); }
-    /* Step B's picture of the Companion: everything but the check-in card
-       dimmed to 40%, the card outlined in light slate (baked into the
-       image by tests/capture-study-card.spec.js). Small (200px, so step B
-       stays close to step A's height), never wider than its column,
-       rounded with a thin border. */
+    /* Step 3's picture: only the Companion's check-in card, with a little
+       of the window's color around it (tests/capture-study-card.spec.js),
+       at its own size, never wider than the column. */
     .study-card-shot {
       display: block;
       box-sizing: border-box;
-      width: 200px;
+      width: 312px;
       max-width: 100%;
       height: auto;
       margin: 0 0 var(--space-3);
       border: 1px solid var(--border);
       border-radius: 8px;
-    }
-    .study-main .study-help {
-      margin: var(--space-2) 0 0;
-      font-family: var(--font-body);
-      font-size: 13px;
-      line-height: 1.5;
-      color: var(--color-text-muted);
     }
     /* One callout on the page (2026-11-13): "Mezzo comes later" in Your
        usual calls. A pale slate tint (10% of the header color on white,
@@ -308,7 +311,8 @@
   <main class="study-main">
     <!-- With a saved tester code. -->
     <section id="study-participant" hidden>
-      <h1 class="study-title">Thanks for joining the Mezzo study</h1>
+      <!-- Part 2's own heading is set by the script. -->
+      <h1 class="study-title" id="study-title">Thanks for joining the Mezzo study</h1>
       <p class="type-body">Your study code: <span class="study-code" id="study-code"></span></p>
       <!-- Both stages; With Mezzo sets its own wording (script below). -->
       <p class="type-body" id="study-bookmark" hidden>Bookmark this page. You’ll come back here after each call.</p>
@@ -317,7 +321,7 @@
            sections from the page. -->
       <section class="study-phase" id="study-baseline" aria-labelledby="study-baseline-heading">
         <h2 id="study-baseline-heading">Part 1: Your usual calls</h2>
-        <p class="type-body">Take your next 2 calls as you normally would. After each one, come back here and click Check in after a call. It takes about a minute. Mezzo comes later. I’ll email it to you after your 2 check-ins.</p>
+        <p class="type-body">Take your calls as you normally would. Check in after at least 2 of them. After each one, come back here and click Check in after a call. It takes about a minute.</p>
         <!-- Which calls count, with the button beside the list (stacked on
              a phone). -->
         <div class="study-box">
@@ -331,14 +335,18 @@
           </div>
           <a class="btn-primary" id="study-baseline-check-in" target="_blank" rel="noopener noreferrer">Check in after a call</a>
         </div>
-        <!-- The tester's own reminder, kept per tester code in this browser
-             (study.js's getBaselineChecks()). Never sent anywhere. -->
-        <fieldset class="study-checks">
-          <legend class="visually-hidden">Your check-ins</legend>
-          <label class="type-body"><input type="checkbox" id="study-baseline-done-1"> I finished check-in 1</label>
-          <label class="type-body"><input type="checkbox" id="study-baseline-done-2"> I finished check-in 2</label>
-        </fieldset>
-        <p class="type-body study-done" id="study-baseline-done" role="status"></p>
+        <!-- The tester's own tracker (Part 1): kept per tester code in
+             this browser, never sent (study.js's getBaselineChecks()). -->
+        <div class="study-tracker">
+          <h3 id="study-baseline-tracker-heading">Your check-ins</h3>
+          <p class="type-body study-tracker-help" id="study-baseline-tracker-help">Check these off to keep track. Your answers already reach me when you submit the form.</p>
+          <fieldset class="study-checks" aria-labelledby="study-baseline-tracker-heading" aria-describedby="study-baseline-tracker-help">
+            <label class="type-body"><input type="checkbox" id="study-baseline-done-1"> Check-in 1</label>
+            <label class="type-body"><input type="checkbox" id="study-baseline-done-2"> Check-in 2</label>
+          </fieldset>
+          <p class="type-body study-done" id="study-baseline-done" role="status"></p>
+          <p class="type-body study-next"><strong>What’s next:</strong> after your 2nd check-in, I’ll email you Part 2 with Mezzo.</p>
+        </div>
       </section>
 
       <!-- Wrap-up: from day 14 of Part 2, above it. -->
@@ -348,51 +356,71 @@
         <a class="btn-primary" id="study-wrap-up" target="_blank" rel="noopener noreferrer">Wrap up the study</a>
       </section>
 
+      <!-- Part 2: one column, like Part 1 (2026-11-14), three numbered
+           steps, then the tracker. An ordered list, so the order is
+           announced; the number marker itself is decorative. -->
       <section class="study-phase" id="study-mezzo" aria-labelledby="study-mezzo-heading">
         <h2 id="study-mezzo-heading">Part 2: With Mezzo</h2>
-        <p class="type-body" id="study-mezzo-intro">Try Mezzo on your calls over the next 2 weeks. Check in after at least 2 of them.</p>
-        <!-- Two lettered steps: side by side on wide screens, stacked on a
-             phone. An ordered list, so the order is announced too; the
-             letter marker itself is decorative. -->
+        <p class="type-body" id="study-mezzo-intro">Try Mezzo on your calls over the next week or two. Check in after at least 2 of them.</p>
         <ol class="study-steps">
+          <li class="study-item" id="study-step-extension">
+            <div class="study-item-head">
+              <span class="study-step-num" aria-hidden="true">1</span>
+              <h3>Install the Chrome extension</h3>
+            </div>
+            <!-- A link once STUDY_CONFIG.extensionUrl is set; until then the
+                 script swaps in a disabled "Link coming soon" button. -->
+            <a class="btn-primary" id="study-get-extension" target="_blank" rel="noopener noreferrer">Get the Mezzo extension</a>
+          </li>
           <li class="study-item" id="study-step-use">
             <div class="study-item-head">
-              <span class="study-step-num" aria-hidden="true">A</span>
+              <span class="study-step-num" aria-hidden="true">2</span>
               <h3>Use Mezzo on your calls</h3>
             </div>
             <div class="study-item-body">
-              <p class="type-body study-list-intro" id="study-use-intro">Open Mezzo and start monitoring on calls where:</p>
-              <ul class="type-body study-list" aria-labelledby="study-use-intro">
-                <li>you’re wearing headphones</li>
-                <li>people are nearby</li>
-                <li>you’ll speak, even a little</li>
-              </ul>
-              <p class="type-body">With the Chrome extension, Mezzo also offers to start when a Google Meet call begins. <a id="study-get-extension" target="_blank" rel="noopener noreferrer" hidden>Get the extension</a></p>
+              <p class="type-body">There are a few ways to start Mezzo. With the extension, Mezzo offers to start when a call begins in your browser. You can also start it here anytime.</p>
             </div>
-            <div class="study-item-actions">
-              <a class="btn-primary" id="study-open-mezzo" href="/index.html">Open Mezzo</a>
-            </div>
+            <a class="btn-primary" id="study-open-mezzo" href="/index.html">Open Mezzo</a>
           </li>
           <li class="study-item" id="study-step-check-in">
             <div class="study-item-head">
-              <span class="study-step-num" aria-hidden="true">B</span>
+              <span class="study-step-num" aria-hidden="true">3</span>
               <h3>Check in after your call</h3>
             </div>
             <div class="study-item-body">
-              <p class="type-body">When you stop monitoring, Mezzo asks how your call went. Look for this card:</p>
-              <img class="study-card-shot" src="/study/checkin-card.png" width="382" height="512" alt="The Mezzo Companion's Ready screen, dimmed, with its 'How did your call go?' card highlighted. The card has Open check-in and Skip this one buttons.">
-              <p class="type-body">Please check in after at least 2 calls.</p>
+              <p class="type-body">When you stop monitoring, look for this:</p>
+              <img class="study-card-shot" src="/study/checkin-card.png?v=2" width="312" height="140" alt="A card in the Mezzo Companion that asks “How did your call go?”, with Open check-in and Skip this one buttons.">
             </div>
-            <div class="study-item-actions">
-              <h4 class="study-subhead">Missed the card?</h4>
-              <a class="btn-outline" id="study-check-in" target="_blank" rel="noopener noreferrer">Check in after a call</a>
-              <p class="study-help">Best within 2 hours of your call.</p>
-            </div>
+            <div class="study-box">
+          <div class="study-box-text">
+            <p class="type-body study-list-intro" id="study-mezzo-count">Only give feedback on calls where:</p>
+            <ul class="type-body study-list" aria-labelledby="study-mezzo-count">
+              <li>you’re wearing headphones</li>
+              <li>people are nearby</li>
+              <li>you speak, even a little</li>
+            </ul>
+          </div>
+          <a class="btn-primary" id="study-check-in" target="_blank" rel="noopener noreferrer">Check in after a call</a>
+        </div>
+            <p class="type-body study-after-box">If you close the window before checking in, you can check in here within 2 hours of your call.</p>
           </li>
         </ol>
+        <!-- The tester's own tracker (Part 2): kept per tester code in
+             this browser, never sent (study.js's getBaselineChecks()). -->
+        <div class="study-tracker">
+          <h3 id="study-mezzo-tracker-heading">Your check-ins</h3>
+          <p class="type-body study-tracker-help" id="study-mezzo-tracker-help">Check these off to keep track. Your answers already reach me when you submit the form.</p>
+          <fieldset class="study-checks" aria-labelledby="study-mezzo-tracker-heading" aria-describedby="study-mezzo-tracker-help">
+            <label class="type-body"><input type="checkbox" id="study-mezzo-done-1"> Check-in 1</label>
+            <label class="type-body"><input type="checkbox" id="study-mezzo-done-2"> Check-in 2</label>
+          </fieldset>
+          <p class="type-body study-next"><strong>What’s next:</strong> around day 14, I’ll email you a short wrap-up form.</p>
+        </div>
       </section>
 
-      <p class="type-body study-privacy"><a href="/privacy.html#research-participants">How study data is handled</a></p>
+      <footer class="study-footer">
+        <p>Questions? Reply to any study email. · <a href="/privacy.html#research-participants">How study data is handled</a></p>
+      </footer>
     </section>
 
     <!-- Without one. -->
@@ -449,6 +477,22 @@
     if (stage !== 'mezzo') $('study-mezzo').remove();
     if (!wrapUpOpen) $('study-wrap-up-part').remove();
 
+    // "Your check-ins": the tester's own reminder, two boxes saved per
+    // tester code in this browser, never sent. "What's next" stays visible
+    // whatever is ticked; Part 1 adds a thank-you once both are.
+    function setUpTracker(prefix, which, done = null, doneText = '') {
+      const boxes = [$(`${prefix}-done-1`), $(`${prefix}-done-2`)];
+      const showDone = () => {
+        if (done) done.textContent = boxes.every((box) => box.checked) ? doneText : '';
+      };
+      getBaselineChecks(undefined, undefined, which).forEach((checked, i) => { boxes[i].checked = checked; });
+      showDone();
+      boxes.forEach((box, i) => box.addEventListener('change', () => {
+        setBaselineCheck(i, box.checked, undefined, undefined, which);
+        showDone();
+      }));
+    }
+
     if (stage === 'baseline') {
       // Baseline: one check-in form, tester code only. No way into Mezzo.
       $('study-bookmark').hidden = false;
@@ -457,35 +501,34 @@
       if (href) button.href = href;
       else button.hidden = true;
 
-      // The two checkboxes: the tester's own reminder, saved per tester
-      // code in this browser, never sent.
-      const boxes = [$('study-baseline-done-1'), $('study-baseline-done-2')];
-      const done = $('study-baseline-done');
-      function showDone() {
-        done.textContent = boxes.every((box) => box.checked)
-          ? 'You’re done with Part 1. Thank you! I’ll email you Mezzo soon.'
-          : '';
-      }
-      getBaselineChecks().forEach((checked, i) => { boxes[i].checked = checked; });
-      showDone();
-      boxes.forEach((box, i) => box.addEventListener('change', () => {
-        setBaselineCheck(i, box.checked);
-        showDone();
-      }));
+      setUpTracker('study-baseline', 'baselineChecks', $('study-baseline-done'),
+        'You’re done with Part 1. Thank you! I’ll email you Mezzo soon.');
     }
 
     if (stage === 'mezzo') {
       // From day 14: Wrap-up above Part 2, which stays for late check-ins.
+      // Until then, the page's heading welcomes the tester to Part 2.
       if (wrapUpOpen) $('study-wrap-up').href = buildWrapUpUrl({ testerCode });
+      else $('study-title').textContent = 'Great, you’re ready for Part 2';
+      setUpTracker('study-mezzo', 'mezzoChecks');
 
       $('study-bookmark').textContent = 'Bookmark this page. You’ll come back here after calls and for the wrap-up.';
       $('study-bookmark').hidden = false;
 
-      // Get the extension: shown once its Chrome Web Store link is in the
-      // config (STUDY_CONFIG.extensionUrl).
+      // Step 1: the Chrome Web Store link once it's in the config
+      // (STUDY_CONFIG.extensionUrl); until then a disabled "Link coming
+      // soon" button, so the step still shows.
+      const getExtension = $('study-get-extension');
       if (isFormUrlReady(STUDY_CONFIG.extensionUrl)) {
-        $('study-get-extension').href = STUDY_CONFIG.extensionUrl;
-        $('study-get-extension').hidden = false;
+        getExtension.href = STUDY_CONFIG.extensionUrl;
+      } else {
+        const soon = document.createElement('button');
+        soon.type = 'button';
+        soon.className = 'btn-primary';
+        soon.id = 'study-get-extension';
+        soon.disabled = true;
+        soon.textContent = 'Link coming soon';
+        getExtension.replaceWith(soon);
       }
 
       // Open Mezzo: through the extension when it's installed (its own

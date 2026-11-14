@@ -1,10 +1,9 @@
 /**
- * Makes study/checkin-card.png, the picture /study's step B shows: the
- * Companion's Ready screen with the study check-in card ("How did your call
- * go?", Open check-in, Skip this one), cropped to the Companion window.
- * Everything but the card is dimmed to 40%, and the card is outlined in a
- * light slate blue, so the card is what the eye finds (picture only; the
- * Companion itself never looks like this).
+ * Makes study/checkin-card.png, the picture /study's Part 2 step 3 shows:
+ * only the Companion's study check-in card ("How did your call go?", Open
+ * check-in, Skip this one), cropped from the Ready screen with a 16px
+ * margin of the window's own color around it (2026-11-14; was the whole
+ * dimmed Companion).
  *
  * Skipped in the normal suite. To regenerate after the card or Ready
  * screen changes:
@@ -36,11 +35,13 @@ test('capture the Companion check-in card for /study', async ({ page, context })
   await pipPage.setViewportSize({ width: 382, height: 512 });
   await expect(pipPage.locator('.pip-screen-ready')).toBeVisible({ timeout: 10000 });
   await expect(pipPage.locator('.pip-study-card')).toBeVisible();
-  await pipPage.addStyleTag({ content: `
-    .pip-screen-ready > *:not(.pip-study-card) { opacity: 0.4; }
-    .pip-study-card { outline: 2px solid #8FA8C0; outline-offset: 4px; }
-  ` });
   await pipPage.mouse.move(0, 0);
   await pipPage.waitForTimeout(400);
-  await pipPage.screenshot({ path: 'study/checkin-card.png', animations: 'disabled' });
+  const card = await pipPage.locator('.pip-study-card').boundingBox();
+  const M = 16;
+  await pipPage.screenshot({
+    path: 'study/checkin-card.png',
+    animations: 'disabled',
+    clip: { x: Math.round(card.x - M), y: Math.round(card.y - M), width: Math.round(card.width + 2 * M), height: Math.round(card.height + 2 * M) },
+  });
 });

@@ -571,9 +571,18 @@ test.describe('Study mode: the /study page', () => {
     await expect(page.getByText('Completed')).toHaveCount(0);
     const baselineSection = page.locator('#study-baseline');
     await expect(baselineSection.locator('p:visible')).toHaveText([
-      'Take your next 2 calls as you normally would. After each one, come back here and click Check in after a call. It takes about a minute. Mezzo comes later. I’ll email it to you after your 2 check-ins.',
+      'Take your calls as you normally would. Check in after at least 2 of them. After each one, come back here and click Check in after a call. It takes about a minute.',
       'Only give feedback on calls where:',
+      'Check these off to keep track. Your answers already reach me when you submit the form.',
+      'What’s next: after your 2nd check-in, I’ll email you Part 2 with Mezzo.',
     ]);
+    await expect(page.getByText('Mezzo comes later', { exact: false })).toHaveCount(0);
+    // "Your check-ins": a small heading, the helper line, the two boxes.
+    await expect(baselineSection.getByRole('heading', { level: 3 })).toHaveText('Your check-ins');
+    await expect(baselineSection.getByRole('group', { name: 'Your check-ins' }).getByRole('checkbox')).toHaveCount(2);
+    await expect(page.getByRole('checkbox', { name: 'Check-in 1', exact: true })).toBeVisible();
+    await expect(page.getByRole('checkbox', { name: 'Check-in 2', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: /submit/i })).toHaveCount(0);
     await expect(baselineSection.getByRole('list', { name: 'Only give feedback on calls where:' }).getByRole('listitem'))
       .toHaveText(['you’re wearing headphones', 'people are nearby', 'you speak, even a little']);
     // One bordered box holds the list and, to its right, the button; the
@@ -587,8 +596,8 @@ test.describe('Study mode: the /study page', () => {
     expect(buttonBox.x).toBeGreaterThan(listBox.x + 100);
     expect(buttonBox.y).toBeLessThan(listBox.y + listBox.height);
     expect(buttonBox.y + buttonBox.height).toBeGreaterThan(listBox.y);
-    // The checkboxes come right after the box.
-    expect(await box.evaluate((el) => el.nextElementSibling.className)).toBe('study-checks');
+    // The tracker comes right after the box.
+    expect(await box.evaluate((el) => el.nextElementSibling.className)).toBe('study-tracker');
 
     const baseline = link(page, 'Check in after a call');
     await expect(baseline).toBeVisible();
@@ -603,7 +612,13 @@ test.describe('Study mode: the /study page', () => {
     await expect(link(page, 'Wrap up the study')).toBeHidden();
     const hrefs = await page.locator('a:visible').evaluateAll((as) => as.map((a) => new URL(a.href).pathname));
     for (const href of hrefs) expect(href === '/privacy.html' || href.startsWith('/r/')).toBe(true);
-    await expect(page.getByRole('link', { name: 'How study data is handled' })).toBeVisible();
+    // The footer: a thin divider, small muted text, the privacy link.
+    const footer = page.locator('footer.study-footer');
+    await expect(footer).toHaveText('Questions? Reply to any study email. · How study data is handled');
+    await expect(footer.getByRole('link', { name: 'How study data is handled' })).toHaveAttribute('href', '/privacy.html#research-participants');
+    const f = await footer.evaluate((el) => ({ border: getComputedStyle(el).borderTopWidth, size: getComputedStyle(el.querySelector('p')).fontSize, color: getComputedStyle(el.querySelector('p')).color }));
+    expect(f).toEqual({ border: '1px', size: '13px', color: 'rgb(82, 96, 109)' });
+    expect(await footer.evaluate((el) => el === el.parentElement.lastElementChild)).toBe(true);
   });
 
   test('baseline stage with a placeholder form ID: the text, no broken button', async ({ page }) => {
@@ -617,7 +632,7 @@ test.describe('Study mode: the /study page', () => {
     await page.goto('/study');
     await expect(page.locator('body')).toHaveAttribute('data-study-stage', 'baseline');
     await expect(link(page, 'Check in after a call')).toBeHidden();
-    await expect(page.getByText('Mezzo comes later.', { exact: false })).toBeVisible();
+    await expect(page.getByText('Take your calls as you normally would.', { exact: false })).toBeVisible();
   });
 
   test('?start=1 with a code unlocks With Mezzo before any session, remembers it, and leaves the address bar', async ({ page }) => {
@@ -680,57 +695,44 @@ test.describe('Study mode: the /study page', () => {
     await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Part 2: With Mezzo']);
     await expect(page.locator('#study-baseline, #study-wrap-up-part, #study-baseline-check-in')).toHaveCount(0);
     await expect(page.getByText('Completed')).toHaveCount(0);
-    await expect(page.locator('#study-mezzo-intro')).toHaveText('Try Mezzo on your calls over the next 2 weeks. Check in after at least 2 of them.');
-    await expect(page.getByRole('heading', { level: 3 })).toHaveText(['Use Mezzo on your calls', 'Check in after your call']);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Great, you’re ready for Part 2');
+    await expect(page.locator('#study-mezzo-intro')).toHaveText('Try Mezzo on your calls over the next week or two. Check in after at least 2 of them.');
+    await expect(page.getByRole('heading', { level: 3 })).toHaveText(['Install the Chrome extension', 'Use Mezzo on your calls', 'Check in after your call', 'Your check-ins']);
+    await expect(page.locator('.study-step-num')).toHaveText(['1', '2', '3']);
     // Under the code, this stage's own bookmark line.
     await expect(page.locator('#study-bookmark')).toHaveText('Bookmark this page. You’ll come back here after calls and for the wrap-up.');
     expect(await page.locator('#study-bookmark').evaluate((el) => el.previousElementSibling.textContent)).toBe('Your study code: R4-01');
-    // Step 1: when to use Mezzo, the extension sentence; no extension link
-    // while its Chrome Web Store URL isn't in the config.
-    const step1 = page.locator('#study-step-use');
-    await expect(step1.locator('.study-item-body > p')).toHaveText([
-      'Open Mezzo and start monitoring on calls where:',
-      'With the Chrome extension, Mezzo also offers to start when a Google Meet call begins.',
-    ], { useInnerText: true }); // the hidden link isn't visible text
-    await expect(step1.getByRole('list', { name: 'Open Mezzo and start monitoring on calls where:' }).getByRole('listitem'))
-      .toHaveText(['you’re wearing headphones', 'people are nearby', 'you’ll speak, even a little']);
-    await expect(page.locator('#study-get-extension')).toBeHidden();
-    // Step B: the text, the card picture, the ask, "Missed the card?", the
-    // button, the help note.
-    const step2 = page.locator('#study-step-check-in');
-    await expect(step2.locator('.study-item-body > p')).toHaveText([
-      'When you stop monitoring, Mezzo asks how your call went. Look for this card:',
-      'Please check in after at least 2 calls.',
-    ]);
-    const shot = step2.locator('img.study-card-shot');
-    await expect(shot).toHaveAttribute('alt', "The Mezzo Companion's Ready screen, dimmed, with its 'How did your call go?' card highlighted. The card has Open check-in and Skip this one buttons.");
+    // Step 1: no Chrome Web Store link in the config yet, so a disabled
+    // "Link coming soon" button, and the step still shows.
+    const soon = page.locator('#study-step-extension').getByRole('button', { name: 'Link coming soon' });
+    await expect(soon).toBeVisible();
+    await expect(soon).toBeDisabled();
+    await expect(page.getByRole('link', { name: 'Get the Mezzo extension' })).toHaveCount(0);
+    // Step 2: the ways to start, then Open Mezzo.
+    await expect(page.locator('#study-step-use .study-item-body > p')).toHaveText('There are a few ways to start Mezzo. With the extension, Mezzo offers to start when a call begins in your browser. You can also start it here anytime.');
+    // Step 3: the card alone, Part 1's box with a filled check-in button,
+    // and the 2-hour line under it. The old lines are gone.
+    const step3 = page.locator('#study-step-check-in');
+    await expect(step3.locator('.study-item-body > p')).toHaveText('When you stop monitoring, look for this:');
+    const shot = step3.locator('img.study-card-shot');
+    await expect(shot).toHaveAttribute('alt', 'A card in the Mezzo Companion that asks “How did your call go?”, with Open check-in and Skip this one buttons.');
     expect(await shot.evaluate((img) => img.complete && img.naturalWidth > 0)).toBe(true);
-    const look = await shot.evaluate((img) => {
-      const st = getComputedStyle(img);
-      return { w: img.getBoundingClientRect().width, col: img.parentElement.getBoundingClientRect().width, radius: st.borderTopLeftRadius, border: st.borderTopWidth };
-    });
-    expect(look.w).toBeLessThanOrEqual(look.col);
-    expect(look.w).toBe(200);
-    expect(look.radius).toBe('8px');
-    expect(look.border).toBe('1px');
-    const help = step2.locator('.study-help');
-    await expect(help).toHaveText('Best within 2 hours of your call.');
-    await expect(page.getByText('Missed one?', { exact: false })).toHaveCount(0);
-    const subhead = step2.getByRole('heading', { level: 4 });
-    await expect(subhead).toHaveText('Missed the card?');
-    const subBox = await subhead.boundingBox();
-    // The page's own type (not the browser's serif), and plain bullets in step 1.
-    expect(await help.evaluate((el) => getComputedStyle(el).fontFamily)).toBe(await page.locator('#study-step-use .study-item-body > p').first().evaluate((el) => getComputedStyle(el).fontFamily));
-    await expect(page.locator('#study-step-use ul')).toHaveCSS('list-style-type', 'disc');
-    const [btn, helpBox, shotBox] = [await link(page, 'Check in after a call').boundingBox(), await help.boundingBox(), await shot.boundingBox()];
-    expect(shotBox.y).toBeLessThan(subBox.y);                  // picture, then "Missed the card?"
-    expect(subBox.y + subBox.height).toBeLessThanOrEqual(btn.y);  // then the button
-    expect(helpBox.y).toBeGreaterThanOrEqual(btn.y + btn.height); // note under it
-    await expect(page.getByText('Mezzo comes later.', { exact: false })).toBeHidden();
-
-    // Open Mezzo is the primary button, the check-in the secondary one.
+    expect(await shot.evaluate((img) => [img.naturalWidth, img.naturalHeight])).toEqual([312, 140]); // the card only
+    expect((await shot.boundingBox()).width).toBeLessThanOrEqual(312);
+    await expect(step3.getByRole('list', { name: 'Only give feedback on calls where:' }).getByRole('listitem'))
+      .toHaveText(['you’re wearing headphones', 'people are nearby', 'you speak, even a little']);
+    await expect(step3.locator('.study-box #study-check-in')).toHaveClass(/btn-primary/);
+    await expect(step3.locator('.study-after-box')).toHaveText('If you close the window before checking in, you can check in here within 2 hours of your call.');
+    for (const gone of ['Please check in after at least 2 calls.', 'Missed the card?', 'Best within 2 hours of your call.']) {
+      await expect(page.getByText(gone)).toHaveCount(0);
+    }
+    await expect(page.locator('#study-step-use ul, .study-steps[style*="grid"]')).toHaveCount(0);
+    // The tracker, as in Part 1, with Part 2's "What's next".
+    const mezzo = page.locator('#study-mezzo');
+    await expect(mezzo.getByRole('group', { name: 'Your check-ins' }).getByRole('checkbox')).toHaveCount(2);
+    await expect(mezzo.locator('.study-tracker-help')).toHaveText('Check these off to keep track. Your answers already reach me when you submit the form.');
+    await expect(mezzo.locator('.study-next')).toHaveText('What’s next: around day 14, I’ll email you a short wrap-up form.');
     await expect(link(page, 'Open Mezzo')).toHaveClass(/btn-primary/);
-    await expect(link(page, 'Check in after a call')).toHaveClass(/btn-outline/);
 
     const checkIn = new URL(await link(page, 'Check in after a call').getAttribute('href'));
     expect(checkIn.origin + checkIn.pathname).toBe('https://tally.so/r/gber54');
@@ -771,7 +773,7 @@ test.describe('Study mode: the /study page', () => {
     });
   }
 
-  test('With Mezzo stage: "Get the extension" appears after the extension sentence once its Chrome Web Store link is in the config', async ({ page }) => {
+  test('With Mezzo stage: step 1 becomes a "Get the Mezzo extension" link once its Chrome Web Store link is in the config', async ({ page }) => {
     const STORE = 'https://chromewebstore.google.com/detail/mezzo/abcdefghijklmnop';
     await page.route('**/src/study-config.js', async (route) => {
       const res = await route.fetch();
@@ -780,12 +782,11 @@ test.describe('Study mode: the /study page', () => {
     });
     await seed(page, { code: 'R4-01', firstSessionAgo: DAY });
     await page.goto('/study');
-    const ext = page.locator('#study-step-use').getByRole('link', { name: 'Get the extension' });
+    const ext = page.locator('#study-step-extension').getByRole('link', { name: 'Get the Mezzo extension' });
     await expect(ext).toBeVisible();
     await expect(ext).toHaveAttribute('href', STORE);
     await expect(ext).toHaveAttribute('target', '_blank');
-    await expect(page.locator('#study-step-use .study-item-body > p').nth(1))
-      .toHaveText('With the Chrome extension, Mezzo also offers to start when a Google Meet call begins. Get the extension');
+    await expect(page.getByRole('button', { name: 'Link coming soon' })).toHaveCount(0);
   });
 
   test('With Mezzo stage, last session more than 2 hours ago: the check-in carries only the code and browser ID', async ({ page }) => {
@@ -852,8 +853,8 @@ test.describe('Study mode: the /study page', () => {
           navLink: rgba(cs('nav a[href="/privacy.html"]').color),
           openBg: rgba(cs('#study-open-mezzo').backgroundColor),
           openText: rgba(cs('#study-open-mezzo').color),
-          outlineBorder: rgba(cs('#study-check-in').borderTopColor),
-          outlineText: rgba(cs('#study-check-in').color),
+          checkInBg: rgba(cs('#study-check-in').backgroundColor),
+          checkInText: rgba(cs('#study-check-in').color),
           backgrounds: visible.map((el) => rgba(getComputedStyle(el).backgroundColor)),
           colors: visible.flatMap((el) => {
             const st = getComputedStyle(el);
@@ -883,12 +884,13 @@ test.describe('Study mode: the /study page', () => {
       expect(near(look.label, WHITE)).toBe(true);
       expect(contrast(look.label, look.band)).toBeGreaterThan(4.5);
       expect(contrast(look.navLink, look.band)).toBeGreaterThan(4.5);
-      // Primary: the band color with white text. Secondary: slate outline and text.
+      // Buttons: the band color with white text, the check-in filled too
+      // (2026-11-14, like Part 1's).
       expect(near(look.openBg, SLATE)).toBe(true);
       expect(look.openBg[3]).toBe(255);
       expect(near(look.openText, WHITE)).toBe(true);
-      expect(near(look.outlineText, SLATE)).toBe(true);
-      expect(near(look.outlineBorder, SLATE)).toBe(true);
+      expect(near(look.checkInBg, SLATE)).toBe(true);
+      expect(near(look.checkInText, WHITE)).toBe(true);
       // None of Mezzo's surfaces: no charcoal (#2D2E31) or cream (#F3EBDE)
       // background, and no chartreuse (#DEDE65) on anything.
       for (const c of look.backgrounds) {
@@ -921,33 +923,24 @@ test.describe('Study mode: the /study page', () => {
     await expect.poll(async () => (await nav.boundingBox()).y).toBeLessThan(-200);
   });
 
-  test('layout, wide screen: With Mezzo\'s two numbered steps sit side by side as equal columns, tops aligned, markers A and B centered on their headings, each button right under its own step; from day 14, Wrap-up full width above, unnumbered', async ({ page }) => {
+  test('layout, wide screen: Part 2 is one 560px column like Part 1, steps 1 to 3 stacked, markers centered on their headings; from day 14, Wrap-up above, unnumbered', async ({ page }) => {
     await page.setViewportSize({ width: 1200, height: 900 });
     await seed(page, { code: 'R4-01', firstSessionAgo: 15 * DAY });
     await page.goto('/study');
+    expect((await page.locator('.study-main').boundingBox()).width).toBe(560);
     const steps = page.locator('ol.study-steps > li');
-    await expect(steps).toHaveCount(2);
-    await expect(steps.locator('.study-step-num')).toHaveText(['A', 'B']);
-    // Each marker is centered on its heading's line.
-    for (const i of [0, 1]) {
+    await expect(steps).toHaveCount(3);
+    await expect(steps.locator('.study-step-num')).toHaveText(['1', '2', '3']);
+    const boxes = [];
+    for (const i of [0, 1, 2]) {
       const [m, h] = [await steps.nth(i).locator('.study-step-num').boundingBox(), await steps.nth(i).locator('h3').boundingBox()];
       expect(Math.abs((m.y + m.height / 2) - (h.y + h.height / 2))).toBeLessThanOrEqual(1);
+      boxes.push(await steps.nth(i).boundingBox());
     }
-    await expect(steps.locator('h3')).toHaveText(['Use Mezzo on your calls', 'Check in after your call']);
-    const [one, two] = [await steps.nth(0).boundingBox(), await steps.nth(1).boundingBox()];
-    expect(Math.abs(one.y - two.y)).toBeLessThanOrEqual(1);          // same top edge
-    expect(Math.abs(one.width - two.width)).toBeLessThanOrEqual(1);  // equal columns
-    expect(two.x).toBeGreaterThan(one.x + one.width);                // side by side
-    // Each button sits right under its own step's text (no shared rows),
-    // so step 1 has no gap; step 2 isn't much taller than step 1.
-    for (const [step, button] of [['#study-step-use', '#study-open-mezzo'], ['#study-step-check-in', '#study-check-in']]) {
-      const body = await page.locator(`${step} .study-item-body`).boundingBox();
-      const actions = await page.locator(`${step} .study-item-actions`).boundingBox();
-      expect(actions.y - (body.y + body.height)).toBeLessThanOrEqual(16); // the last paragraph's margin
-      const b = await page.locator(button).boundingBox();
-      expect(b.y - actions.y).toBeLessThanOrEqual(48); // only "Missed the card?" above step B's
-    }
-    expect(two.height).toBeLessThan(one.height * 2);  // the 200px picture keeps step 2 under twice step 1
+    // One column: each step starts below the one before, at the same left edge.
+    expect(boxes[1].y).toBeGreaterThan(boxes[0].y + boxes[0].height - 1);
+    expect(boxes[2].y).toBeGreaterThan(boxes[1].y + boxes[1].height - 1);
+    expect(Math.abs(boxes[0].x - boxes[2].x)).toBeLessThanOrEqual(1);
     // The number marker: a small slate circle with a white number.
     const num = await steps.nth(0).locator('.study-step-num').evaluate((el) => {
       const st = getComputedStyle(el);
@@ -956,11 +949,12 @@ test.describe('Study mode: the /study page', () => {
     expect(num.w).toBeLessThanOrEqual(28);
     expect(num.bg).toBe('rgb(68, 96, 122)');
     expect(num.color).toBe('rgb(255, 255, 255)');
-    // Wrap-up: above both columns, spanning them, with no number.
+    // From day 14 the heading is the study's own again; Wrap-up sits above
+    // Part 2, unnumbered.
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Thanks for joining the Mezzo study');
     const wrapUp = page.locator('#study-wrap-up-part');
     const w = await wrapUp.boundingBox();
-    expect(w.y + w.height).toBeLessThan(Math.min(one.y, two.y));
-    expect(w.width).toBeGreaterThanOrEqual(two.x + two.width - one.x - 1);
+    expect(w.y + w.height).toBeLessThan(boxes[0].y);
     await expect(wrapUp.locator('.study-step-num')).toHaveCount(0);
   });
 
@@ -975,13 +969,15 @@ test.describe('Study mode: the /study page', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
   });
 
-  test('Part 1 checkboxes: the tester ticks both, sees the thank-you, and they stay ticked for that code only; nothing is sent', async ({ page }) => {
+  test('Part 1 checkboxes: the tester ticks both, sees the thank-you, "What\'s next" stays, and they stay ticked for that code only; nothing is sent', async ({ page }) => {
     await seed(page, { code: 'R4-01' });
     const requests = [];
     page.on('request', (r) => requests.push(r.url()));
     await page.goto('/study');
-    const one = page.getByRole('checkbox', { name: 'I finished check-in 1' });
-    const two = page.getByRole('checkbox', { name: 'I finished check-in 2' });
+    const one = page.getByRole('checkbox', { name: 'Check-in 1', exact: true });
+    const two = page.getByRole('checkbox', { name: 'Check-in 2', exact: true });
+    const next = page.locator('#study-baseline .study-next');
+    await expect(next).toBeVisible();
     const done = page.locator('#study-baseline-done');
     const THANKS = 'You’re done with Part 1. Thank you! I’ll email you Mezzo soon.';
     await expect(one).not.toBeChecked();
@@ -993,6 +989,7 @@ test.describe('Study mode: the /study page', () => {
     await two.check();
     await expect(done).toHaveText(THANKS);
     await expect(done).toBeVisible();
+    await expect(next).toBeVisible(); // still there with both ticked
     // It stands out: the callout's pale slate and dark text, led by a
     // small slate check icon; text and icon both meet contrast.
     const look = await done.evaluate((el) => {
@@ -1016,9 +1013,11 @@ test.describe('Study mode: the /study page', () => {
     expect(ratio(toRgb(look.bg), look.color)).toBeGreaterThanOrEqual(4.5);
     expect(ratio(toRgb(look.bg), look.iconBg)).toBeGreaterThanOrEqual(3);
     expect(lum(toRgb(look.bg))).toBeGreaterThan(0.75); // a pale slate tint
-    // Below the checkboxes.
+    // Below the checkboxes, above "What's next".
     const checksBox = await page.locator('.study-checks').boundingBox();
-    expect((await done.boundingBox()).y).toBeGreaterThan(checksBox.y + checksBox.height - 1);
+    const doneBox = await done.boundingBox();
+    expect(doneBox.y).toBeGreaterThan(checksBox.y + checksBox.height - 1);
+    expect((await next.boundingBox()).y).toBeGreaterThan(doneBox.y + doneBox.height - 1);
     expect(await page.evaluate(() => localStorage.getItem('mezzoStudyBaselineChecks:R4-01'))).toBe('[true,true]');
 
     // Kept after a reload.
@@ -1048,16 +1047,37 @@ test.describe('Study mode: the /study page', () => {
   test('Part 2 removes Part 1 from the page: no baseline check-in, no checkboxes, nothing "Completed"', async ({ page }) => {
     await seed(page, { code: 'R4-01' });
     await page.goto('/study');
-    await page.getByRole('checkbox', { name: 'I finished check-in 1' }).check();
+    await page.getByRole('checkbox', { name: 'Check-in 1', exact: true }).check();
     await page.goto('/study?study=R4-01&start=1');
     await expect(page.locator('body')).toHaveAttribute('data-study-stage', 'mezzo');
-    await expect(page.locator('#study-baseline, #study-baseline-check-in, .study-checks')).toHaveCount(0);
+    await expect(page.locator('#study-baseline, #study-baseline-check-in, #study-baseline-done-1')).toHaveCount(0);
+    // Part 2's own boxes start unticked; Part 1's tick doesn't carry over.
+    await expect(page.getByRole('checkbox', { name: 'Check-in 1', exact: true })).not.toBeChecked();
     await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Part 2: With Mezzo']);
     await expect(page.locator('#study-code')).toHaveText('R4-01');
     await expect(page.locator('#study-bookmark')).toBeVisible();
     await expect(page.getByRole('link', { name: 'How study data is handled' })).toBeVisible();
     // The tester's ticks stay saved, just not shown.
     expect(await page.evaluate(() => localStorage.getItem('mezzoStudyBaselineChecks:R4-01'))).toBe('[true,false]');
+  });
+
+  test('Part 2 checkboxes: saved per tester code apart from Part 1\'s, never sent; "What\'s next" always shows', async ({ page }) => {
+    await seed(page, { code: 'R4-01', firstSessionAgo: DAY });
+    await page.goto('/study');
+    const mezzo = page.locator('#study-mezzo');
+    const one = mezzo.getByRole('checkbox', { name: 'Check-in 1', exact: true });
+    const two = mezzo.getByRole('checkbox', { name: 'Check-in 2', exact: true });
+    await one.check();
+    await two.check();
+    await expect(mezzo.locator('.study-next')).toHaveText('What’s next: around day 14, I’ll email you a short wrap-up form.');
+    await expect(mezzo.locator('.study-done')).toHaveCount(0);
+    expect(await page.evaluate(() => localStorage.getItem('mezzoStudyMezzoChecks:R4-01'))).toBe('[true,true]');
+    expect(await page.evaluate(() => localStorage.getItem('mezzoStudyBaselineChecks:R4-01'))).toBe(null);
+    await page.reload();
+    await expect(one).toBeChecked();
+    await expect(two).toBeChecked();
+    await two.uncheck();
+    expect(await page.evaluate(() => localStorage.getItem('mezzoStudyMezzoChecks:R4-01'))).toBe('[true,false]');
   });
 
   test('Part 1 on a phone: the button goes below the list, inside the box', async ({ page }) => {

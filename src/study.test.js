@@ -580,6 +580,17 @@ describe('study stages', () => {
     assert.equal(storage.getItem('mezzoStudyBaselineChecks:TEST-01'), null);
   });
 
+  it("Part 2's checkboxes: their own key per tester code, apart from Part 1's, removed by ?study=clear", () => {
+    const storage = memoryStorage();
+    applyStudyParam('?study=TEST-01', storage);
+    setBaselineCheck(1, true, storage, undefined, 'mezzoChecks');
+    assert.deepEqual(getBaselineChecks(storage, undefined, 'mezzoChecks'), [false, true]);
+    assert.deepEqual(getBaselineChecks(storage), [false, false]);
+    assert.equal(storage.getItem('mezzoStudyMezzoChecks:TEST-01'), '[false,true]');
+    clearStudy(storage);
+    assert.equal(storage.getItem('mezzoStudyMezzoChecks:TEST-01'), null);
+  });
+
   it('?study=clear removes the unlock too', () => {
     const storage = withCode();
     applyStartParam('?start=1', storage);

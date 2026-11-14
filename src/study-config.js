@@ -50,6 +50,8 @@ export const STUDY_CONFIG = {
     /** /study's Part 1 checkboxes ("I finished check-in 1/2"), as a JSON
      *  array of two booleans. The tester's own reminder: never sent. */
     baselineChecks: 'mezzoStudyBaselineChecks',
+    /** /study's Part 2 checkboxes, the same way. Never sent. */
+    mezzoChecks: 'mezzoStudyMezzoChecks',
     /** The existing anonymous analytics ID (src/analytics.js's ANON_ID_KEY). */
     browserId: 'mezzo_anonymous_id',
   },

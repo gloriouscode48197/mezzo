@@ -39,10 +39,10 @@ export function getTesterCode(storage = defaultStorage(), config = STUDY_CONFIG)
 // ── Data tied to the tester code ─────────────────────────────────────────
 
 /** The study data kept per tester code: the last session, the first-session
- *  date, the With Mezzo unlock and Part 1's two checkboxes. Each is stored under `${key}:${code}`,
+ *  date, the With Mezzo unlock and the Part 1 and Part 2 checkboxes. Each is stored under `${key}:${code}`,
  *  so a new code starts at "Your usual calls" and a code switched back to
  *  finds its own. The tester code itself and the browser ID are not. */
-export const CODE_BOUND_KEYS = Object.freeze(['lastSession', 'firstSession', 'mezzoStage', 'baselineChecks']);
+export const CODE_BOUND_KEYS = Object.freeze(['lastSession', 'firstSession', 'mezzoStage', 'baselineChecks', 'mezzoChecks']);
 
 /** The storage key for `name` under the saved tester code, or null
  *  without one. */
@@ -63,7 +63,7 @@ function storageKeysOf(storage) {
 }
 
 /** Removes the tester code and every code's study data (the last session,
- *  the first-session date, the With Mezzo unlock and Part 1's checkboxes), including copies
+ *  the first-session date, the With Mezzo unlock and both parts' checkboxes), including copies
  *  saved before the data was tied to the code.
  *  The anonymous browser ID belongs to analytics, so it stays. */
 export function clearStudy(storage = defaultStorage(), config = STUDY_CONFIG) {
@@ -78,13 +78,14 @@ export function clearStudy(storage = defaultStorage(), config = STUDY_CONFIG) {
 
 // ── Part 1's checkboxes ──────────────────────────────────────────────────
 
-/** /study's "I finished check-in 1" and "I finished check-in 2", ticked by
- *  the tester as a reminder for themselves. Kept per tester code; nothing
+/** /study's "Check-in 1" and "Check-in 2" boxes, ticked by the tester as
+ *  a reminder for themselves: Part 1's (`which` 'baselineChecks', the
+ *  default) or Part 2's ('mezzoChecks'). Kept per tester code; nothing
  *  reads them but /study, and they're never sent anywhere.
  *  @returns {[boolean, boolean]} */
-export function getBaselineChecks(storage = defaultStorage(), config = STUDY_CONFIG) {
+export function getBaselineChecks(storage = defaultStorage(), config = STUDY_CONFIG, which = 'baselineChecks') {
   try {
-    const key = codeBoundKey('baselineChecks', storage, config);
+    const key = codeBoundKey(which, storage, config);
     const value = key ? JSON.parse(storage?.getItem(key) ?? 'null') : null;
     return Array.isArray(value) ? [value[0] === true, value[1] === true] : [false, false];
   } catch {
@@ -94,11 +95,11 @@ export function getBaselineChecks(storage = defaultStorage(), config = STUDY_CON
 
 /** Ticks or unticks check-in `index` (0 or 1). Returns false without a
  *  tester code or storage. */
-export function setBaselineCheck(index, checked, storage = defaultStorage(), config = STUDY_CONFIG) {
+export function setBaselineCheck(index, checked, storage = defaultStorage(), config = STUDY_CONFIG, which = 'baselineChecks') {
   if (index !== 0 && index !== 1) return false;
-  const key = codeBoundKey('baselineChecks', storage, config);
+  const key = codeBoundKey(which, storage, config);
   if (!key) return false;
-  const checks = getBaselineChecks(storage, config);
+  const checks = getBaselineChecks(storage, config, which);
   checks[index] = checked === true;
   try { storage?.setItem(key, JSON.stringify(checks)); } catch { return false; }
   return true;
