@@ -101,39 +101,48 @@
       color: var(--color-text);
     }
     .study-phase + .study-phase { margin-top: var(--space-6); }
-    .study-phase .study-steps { margin-top: var(--space-5); }
-    .study-item + .study-item { margin-top: var(--space-5); }
-    /* With Mezzo's numbered steps. */
-    .study-steps { list-style: none; margin: 0; padding: 0; }
-    .study-item-head {
+    /* Part 2's two sections, A and B (2026-11-14): headings like Part 1's
+       "Your check-ins"; A's steps are a plain numbered list. */
+    .study-section { margin-top: var(--space-5); }
+    .study-section + .study-section { margin-top: var(--space-6); }
+    .study-section-head {
       display: flex;
-      align-items: center;
+      align-items: baseline;
       gap: var(--space-2);
       margin: 0 0 var(--space-2);
     }
-    .study-step-num {
-      flex: none;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 22px;
-      height: 22px;
-      border-radius: 50%;
-      background: var(--study-band);
-      color: #FFFFFF;
-      font-family: var(--font-mono);
-      font-size: 12px;
-      font-weight: var(--weight-medium);
-      line-height: 1;
-    }
-    .study-item h3 {
-      margin: 0;
+    .study-section h3 {
+      margin: 0 0 var(--space-2);
       font-family: var(--font-display);
       font-weight: var(--weight-medium);
       font-size: 16px;
       line-height: 1.4;
       color: var(--color-text);
     }
+    .study-section-head h3 { margin: 0; }
+    .study-main .study-once {
+      font-family: var(--font-body);
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--color-text-muted);
+    }
+    .study-substeps {
+      list-style: decimal;
+      margin: 0;
+      padding-left: 1.25em;
+      color: var(--color-text);
+    }
+    .study-substeps > li + li { margin-top: var(--space-4); }
+    .study-substeps > li::marker { font-family: var(--font-body); font-weight: var(--weight-medium); }
+    .study-substeps h4 {
+      margin: 0 0 var(--space-1);
+      font-family: var(--font-body);
+      font-weight: var(--weight-medium);
+      font-size: 15px;
+      line-height: 1.5;
+      color: var(--color-text);
+    }
+    .study-main .study-substeps p { margin: 0 0 var(--space-2); }
     /* "Your check-ins" (both parts, 2026-11-14): a small heading, a helper
        line, the two boxes, then "What's next". */
     .study-tracker { margin-top: var(--space-5); }
@@ -149,7 +158,7 @@
     .study-tracker .study-checks { margin-top: var(--space-3); }
     .study-main .study-next { margin: var(--space-4) 0 0; color: var(--color-text); }
     .study-next strong { font-weight: var(--weight-medium); }
-    /* Step 1 while the Chrome Web Store link isn't in the config. */
+    /* Install step while the Chrome Web Store link isn't in the config. */
     .study-page .btn-primary:disabled {
       background: #E1E5EA;
       color: var(--color-text-muted);
@@ -170,18 +179,17 @@
     }
     .study-phase .btn-primary,
     .study-phase .btn-outline { margin-top: var(--space-2); text-decoration: none; }
-    .study-item-body > :last-child { margin-bottom: 0; }
-    .study-item .study-box { margin-top: var(--space-3); }
+    .study-section .study-box { margin-top: var(--space-3); }
     .study-main .study-after-box { margin: var(--space-3) 0 0; color: var(--color-text-muted); }
     .study-main .study-list-intro { margin-bottom: var(--space-2); }
     .study-list {
-      list-style: disc; /* also inside the numbered steps */
+      list-style: disc;
       margin: 0 0 var(--space-3);
       padding-left: 1.25em;
       color: var(--color-text);
     }
     .study-list li + li { margin-top: var(--space-1); }
-    /* Step 3's picture: only the Companion's check-in card, with a little
+    /* Section B's picture: only the Companion's check-in card, with a little
        of the window's color around it (tests/capture-study-card.spec.js),
        at its own size, never wider than the column. */
     .study-card-shot {
@@ -355,49 +363,44 @@
       <section class="study-phase" id="study-mezzo" aria-labelledby="study-mezzo-heading">
         <h2 id="study-mezzo-heading">Part 2: With Mezzo</h2>
         <p class="type-body" id="study-mezzo-intro">Try Mezzo on your calls over the next week or two. Check in after at least 2 of them.</p>
-        <ol class="study-steps">
-          <li class="study-item" id="study-step-extension">
-            <div class="study-item-head">
-              <span class="study-step-num" aria-hidden="true">1</span>
-              <h3>Install the Chrome extension</h3>
-            </div>
-            <!-- A link once STUDY_CONFIG.extensionUrl is set; until then the
-                 script swaps in a disabled "Link coming soon" button. -->
-            <a class="btn-primary" id="study-get-extension" target="_blank" rel="noopener noreferrer">Get the Mezzo extension</a>
-          </li>
-          <li class="study-item" id="study-step-use">
-            <div class="study-item-head">
-              <span class="study-step-num" aria-hidden="true">2</span>
-              <h3>Use Mezzo on your calls</h3>
-            </div>
-            <div class="study-item-body">
-              <p class="type-body">There are a few ways to start Mezzo. With the extension, Mezzo offers to start when a call begins in your browser. You can also start it here anytime.</p>
-            </div>
-            <a class="btn-primary" id="study-open-mezzo" href="/index.html">Open Mezzo</a>
-          </li>
-          <li class="study-item" id="study-step-check-in">
-            <div class="study-item-head">
-              <span class="study-step-num" aria-hidden="true">3</span>
-              <h3>Check in after your call</h3>
-            </div>
-            <div class="study-item-body">
-              <p class="type-body">When you stop monitoring, look for this:</p>
-              <img class="study-card-shot" src="/study/checkin-card.png?v=2" width="312" height="140" alt="A card in the Mezzo Companion that asks “How did your call go?”, with Open check-in and Skip this one buttons.">
-            </div>
-            <div class="study-box">
-          <div class="study-box-text">
-            <p class="type-body study-list-intro" id="study-mezzo-count">Only give feedback on calls where:</p>
-            <ul class="type-body study-list" aria-labelledby="study-mezzo-count">
-              <li>you’re wearing headphones</li>
-              <li>people are nearby</li>
-              <li>you speak, even a little</li>
-            </ul>
+        <!-- Two sections (2026-11-14): A, set up once; B, every call. Plain
+             headings like Part 1's; A's two steps are a numbered list. -->
+        <div class="study-section" id="study-setup">
+          <div class="study-section-head">
+            <h3 id="study-setup-heading">A. Set up Mezzo</h3>
+            <span class="study-once">once</span>
           </div>
-          <a class="btn-primary" id="study-check-in" target="_blank" rel="noopener noreferrer">Check in after a call</a>
+          <ol class="study-substeps" aria-labelledby="study-setup-heading">
+            <li id="study-step-extension">
+              <h4>Install the Chrome extension</h4>
+              <!-- A link once STUDY_CONFIG.extensionUrl is set; until then the
+                   script swaps in a disabled "Link coming soon" button. -->
+              <a class="btn-primary" id="study-get-extension" target="_blank" rel="noopener noreferrer">Get the Mezzo extension</a>
+            </li>
+            <li id="study-step-open">
+              <h4>Choose how you’ll open Mezzo</h4>
+              <p class="type-body">Use whatever fits how you work: pin the extension to Chrome’s toolbar (click the puzzle icon, then the pin), bookmark Mezzo, or come back to this page. With the extension, Mezzo also offers to start when a call begins in your browser.</p>
+              <a class="btn-primary" id="study-open-mezzo" href="/index.html">Open Mezzo</a>
+            </li>
+          </ol>
         </div>
-            <p class="type-body study-after-box">If you close the window before checking in, you can check in here within 2 hours of your call.</p>
-          </li>
-        </ol>
+        <div class="study-section" id="study-use">
+          <h3 id="study-use-heading">B. Use Mezzo on your calls and check in</h3>
+          <p class="type-body">When you stop monitoring, look for this:</p>
+          <img class="study-card-shot" src="/study/checkin-card.png?v=2" width="312" height="140" alt="A card in the Mezzo Companion that asks “How did your call go?”, with Open check-in and Skip this one buttons.">
+          <div class="study-box">
+            <div class="study-box-text">
+              <p class="type-body study-list-intro" id="study-mezzo-count">Only give feedback on calls where:</p>
+              <ul class="type-body study-list" aria-labelledby="study-mezzo-count">
+                <li>you’re wearing headphones</li>
+                <li>people are nearby</li>
+                <li>you speak, even a little</li>
+              </ul>
+            </div>
+            <a class="btn-primary" id="study-check-in" target="_blank" rel="noopener noreferrer">Check in after a call</a>
+          </div>
+          <p class="type-body study-after-box">If you close the window before checking in, you can check in here within 2 hours of your call.</p>
+        </div>
         <!-- The tester's own tracker (Part 2): kept per tester code in
              this browser, never sent (study.js's getBaselineChecks()). -->
         <div class="study-tracker">
@@ -503,7 +506,7 @@
       $('study-bookmark').textContent = 'Bookmark this page. You’ll come back here after calls.';
       $('study-bookmark').hidden = false;
 
-      // Step 1: the Chrome Web Store link once it's in the config
+      // Install step: the Chrome Web Store link once it's in the config
       // (STUDY_CONFIG.extensionUrl); until then a disabled "Link coming
       // soon" button, so the step still shows.
       const getExtension = $('study-get-extension');

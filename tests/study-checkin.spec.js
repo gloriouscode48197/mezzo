@@ -690,23 +690,30 @@ test.describe('Study mode: the /study page', () => {
     await expect(page.getByText('Completed')).toHaveCount(0);
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Great, you’re ready for Part 2');
     await expect(page.locator('#study-mezzo-intro')).toHaveText('Try Mezzo on your calls over the next week or two. Check in after at least 2 of them.');
-    await expect(page.getByRole('heading', { level: 3 })).toHaveText(['Install the Chrome extension', 'Use Mezzo on your calls', 'Check in after your call', 'Your check-ins']);
-    await expect(page.locator('.study-step-num')).toHaveText(['1', '2', '3']);
+    // Two sections, A (set up once, two numbered steps) and B (every call),
+    // then the tracker. No step markers.
+    await expect(page.getByRole('heading', { level: 3 })).toHaveText(['A. Set up Mezzo', 'B. Use Mezzo on your calls and check in', 'Your check-ins']);
+    await expect(page.locator('#study-setup .study-once')).toHaveText('once');
+    await expect(page.getByRole('list', { name: 'A. Set up Mezzo' }).getByRole('heading', { level: 4 }))
+      .toHaveText(['Install the Chrome extension', 'Choose how you’ll open Mezzo']);
+    await expect(page.locator('.study-step-num, .study-steps')).toHaveCount(0);
     // Under the code, this stage's own bookmark line.
     await expect(page.locator('#study-bookmark')).toHaveText('Bookmark this page. You’ll come back here after calls.');
     expect(await page.locator('#study-bookmark').evaluate((el) => el.previousElementSibling.textContent)).toBe('Your study code: R4-01');
-    // Step 1: no Chrome Web Store link in the config yet, so a disabled
+    // Install step: no Chrome Web Store link in the config yet, so a disabled
     // "Link coming soon" button, and the step still shows.
     const soon = page.locator('#study-step-extension').getByRole('button', { name: 'Link coming soon' });
     await expect(soon).toBeVisible();
     await expect(soon).toBeDisabled();
     await expect(page.getByRole('link', { name: 'Get the Mezzo extension' })).toHaveCount(0);
-    // Step 2: the ways to start, then Open Mezzo.
-    await expect(page.locator('#study-step-use .study-item-body > p')).toHaveText('There are a few ways to start Mezzo. With the extension, Mezzo offers to start when a call begins in your browser. You can also start it here anytime.');
-    // Step 3: the card alone, Part 1's box with a filled check-in button,
-    // and the 2-hour line under it. The old lines are gone.
-    const step3 = page.locator('#study-step-check-in');
-    await expect(step3.locator('.study-item-body > p')).toHaveText('When you stop monitoring, look for this:');
+    // Open step: the ways to open Mezzo, then Open Mezzo.
+    const open = page.locator('#study-step-open');
+    await expect(open.locator('p')).toHaveText('Use whatever fits how you work: pin the extension to Chrome’s toolbar (click the puzzle icon, then the pin), bookmark Mezzo, or come back to this page. With the extension, Mezzo also offers to start when a call begins in your browser.');
+    await expect(open.getByRole('link', { name: 'Open Mezzo' })).toHaveClass(/btn-primary/);
+    // B: the card alone, Part 1's box with a filled check-in button, and
+    // the 2-hour line under it. The old lines are gone.
+    const step3 = page.locator('#study-use');
+    await expect(step3.locator(':scope > p').first()).toHaveText('When you stop monitoring, look for this:');
     const shot = step3.locator('img.study-card-shot');
     await expect(shot).toHaveAttribute('alt', 'A card in the Mezzo Companion that asks “How did your call go?”, with Open check-in and Skip this one buttons.');
     expect(await shot.evaluate((img) => img.complete && img.naturalWidth > 0)).toBe(true);
@@ -719,7 +726,8 @@ test.describe('Study mode: the /study page', () => {
     for (const gone of ['Please check in after at least 2 calls.', 'Missed the card?', 'Best within 2 hours of your call.']) {
       await expect(page.getByText(gone)).toHaveCount(0);
     }
-    await expect(page.locator('#study-step-use ul, .study-steps[style*="grid"]')).toHaveCount(0);
+    await expect(page.getByText('There are a few ways to start Mezzo.', { exact: false })).toHaveCount(0);
+    await expect(page.locator('#study-step-check-in, #study-step-use')).toHaveCount(0);
     // The tracker, as in Part 1, with Part 2's "What's next".
     const mezzo = page.locator('#study-mezzo');
     await expect(mezzo.getByRole('group', { name: 'Your check-ins' }).getByRole('checkbox')).toHaveCount(2);
@@ -913,40 +921,38 @@ test.describe('Study mode: the /study page', () => {
     await expect.poll(async () => (await nav.boundingBox()).y).toBeLessThan(-200);
   });
 
-  test('layout, wide screen: Part 2 is one 560px column like Part 1, steps 1 to 3 stacked, markers centered on their headings', async ({ page }) => {
+  test('layout, wide screen: Part 2 is one 560px column like Part 1, A above B at the same left edge, A\'s steps numbered 1 and 2, headings styled like Part 1\'s', async ({ page }) => {
     await page.setViewportSize({ width: 1200, height: 900 });
     await seed(page, { code: 'R4-01', firstSessionAgo: DAY });
     await page.goto('/study');
     expect((await page.locator('.study-main').boundingBox()).width).toBe(560);
-    const steps = page.locator('ol.study-steps > li');
-    await expect(steps).toHaveCount(3);
-    await expect(steps.locator('.study-step-num')).toHaveText(['1', '2', '3']);
-    const boxes = [];
-    for (const i of [0, 1, 2]) {
-      const [m, h] = [await steps.nth(i).locator('.study-step-num').boundingBox(), await steps.nth(i).locator('h3').boundingBox()];
-      expect(Math.abs((m.y + m.height / 2) - (h.y + h.height / 2))).toBeLessThanOrEqual(1);
-      boxes.push(await steps.nth(i).boundingBox());
-    }
-    // One column: each step starts below the one before, at the same left edge.
-    expect(boxes[1].y).toBeGreaterThan(boxes[0].y + boxes[0].height - 1);
-    expect(boxes[2].y).toBeGreaterThan(boxes[1].y + boxes[1].height - 1);
-    expect(Math.abs(boxes[0].x - boxes[2].x)).toBeLessThanOrEqual(1);
-    // The number marker: a small slate circle with a white number.
-    const num = await steps.nth(0).locator('.study-step-num').evaluate((el) => {
+    const [a, b] = [await page.locator('#study-setup').boundingBox(), await page.locator('#study-use').boundingBox()];
+    expect(b.y).toBeGreaterThan(a.y + a.height - 1);
+    expect(Math.abs(a.x - b.x)).toBeLessThanOrEqual(1);
+    // "once" sits on the heading's line, smaller and muted.
+    const [h, once] = [await page.locator('#study-setup-heading').boundingBox(), await page.locator('.study-once').boundingBox()];
+    expect(once.x).toBeGreaterThan(h.x + h.width - 1);
+    expect(Math.abs((once.y + once.height) - (h.y + h.height))).toBeLessThanOrEqual(4);
+    const style = (sel) => page.locator(sel).evaluate((el) => {
       const st = getComputedStyle(el);
-      return { w: el.getBoundingClientRect().width, bg: st.backgroundColor, color: st.color };
+      return { size: st.fontSize, weight: st.fontWeight, family: st.fontFamily, color: st.color };
     });
-    expect(num.w).toBeLessThanOrEqual(28);
-    expect(num.bg).toBe('rgb(68, 96, 122)');
-    expect(num.color).toBe('rgb(255, 255, 255)');
+    const [setup, use, tracker, onceStyle] = [await style('#study-setup-heading'), await style('#study-use-heading'), await style('#study-mezzo-tracker-heading'), await style('.study-once')];
+    expect(setup).toEqual(tracker);
+    expect(use).toEqual(tracker);
+    expect(parseFloat(onceStyle.size)).toBeLessThan(parseFloat(setup.size));
+    expect(onceStyle.color).not.toBe(setup.color);
+    // A's steps: an ordered list, numbered 1 and 2.
+    const list = page.locator('#study-setup ol.study-substeps');
+    expect(await list.evaluate((el) => getComputedStyle(el).listStyleType)).toBe('decimal');
+    await expect(list.locator('> li')).toHaveCount(2);
   });
 
-  test('layout, phone width: the steps stack, step 1 first, with no sideways scroll', async ({ page }) => {
+  test('layout, phone width: A and B stack, with no sideways scroll', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seed(page, { code: 'R4-01', firstSessionAgo: DAY });
     await page.goto('/study');
-    const steps = page.locator('ol.study-steps > li');
-    const [one, two] = [await steps.nth(0).boundingBox(), await steps.nth(1).boundingBox()];
+    const [one, two] = [await page.locator('#study-setup').boundingBox(), await page.locator('#study-use').boundingBox()];
     expect(two.y).toBeGreaterThan(one.y + one.height - 1);
     expect(Math.abs(one.x - two.x)).toBeLessThanOrEqual(1);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
@@ -1078,7 +1084,7 @@ test.describe('Study mode: the /study page', () => {
     await page.setViewportSize({ width: 1200, height: 900 });
     await seed(page, { code: 'R4-01' });
     await page.goto('/study');
-    await expect(page.locator('#study-baseline .study-step-num')).toHaveCount(0);
+    await expect(page.locator('#study-baseline .study-step-num, #study-baseline .study-section')).toHaveCount(0);
     expect((await page.locator('.study-main').boundingBox()).width).toBe(560);
   });
 
