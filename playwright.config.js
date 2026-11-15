@@ -41,6 +41,12 @@ export default defineConfig({
           args: [
             '--use-fake-device-for-media-stream',
             '--use-fake-ui-for-media-stream',
+            // Mixpanel never loads or sends during tests: its hosts don't
+            // resolve, so Home's snippet can't fetch the library and no
+            // event reaches the real project. Tests that need Mixpanel
+            // (tests/privacy-settings.spec.js) serve a saved copy of the
+            // library with page.route(), which answers before any lookup.
+            '--host-resolver-rules=MAP cdn.mxpnl.com ~NOTFOUND, MAP mixpanel.com ~NOTFOUND, MAP *.mixpanel.com ~NOTFOUND',
           ],
         },
       },

@@ -37,7 +37,14 @@ Checked against the code on branch `v4` on 2026-11-13, then the gaps were fixed 
   - Research participants: "Your study code lets me match your check-ins to your sign-up, so I can send your gift card. Anything I quote in my case study stays anonymous."
   - Your control: "If you took part in a study and want your answers deleted, reply to any study email." (No separate contact address: the study emails are the way to reach the researcher.)
 
+- **Tests no longer send to Mixpanel:** until now, every browser test that opened Home loaded the real library and sent events (App Opened, Calibration Completed, Monitoring Started, Monitoring Session, `$identify`) to the real project, from `http://localhost:8973`. `playwright.config.js` now makes Mixpanel's hosts unresolvable during tests; a test checks that the library never loads.
+- **History (checked 2026-11-15, every branch):** Session Replay was on (`record_sessions_percent: 100`) only in commit `67daea7` (2026-02-11 18:50), on `index.html`, `monitoring.html`, `privacy.html` and `try-it.html`, and set to 0 in `f2e46b3` (2026-02-12 02:44), about 8 hours later. `capture_text_content` was never set in Mezzo's own code (it appears only inside the saved Mixpanel library). Autocapture was on from `67daea7` until `1e78fb1` (2026-11-13).
+- **`mezzo-v1.vercel.app` is still live** (an old build, `sw.js` `mezzo-v5`) and uses the same Mixpanel project token with `autocapture: true` (Session Replay 0). It is the second Vercel project that deploys this repo. Deleting or pausing it in Vercel stops it.
+
 Still for you to check (not code):
+
+- Mixpanel events from tests: filter `$current_url` containing `localhost` to find and exclude them.
+- `mezzo-v1.vercel.app`: delete or pause that Vercel project.
 
 - ~~The contact email on the privacy page (`[email]` in Your control).~~ Closed: the line now points to the study emails, with no placeholder.
 

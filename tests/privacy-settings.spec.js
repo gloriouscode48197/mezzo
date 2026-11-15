@@ -119,3 +119,15 @@ test('a first referrer saved before the cleaning, with a study code, is cleaned 
   expect((await mixpanelProps(page)).stored).not.toContain('study=');
   expect(props.kept.$initial_referring_domain).toBe('localhost:8973');
 });
+
+test('during tests, Mixpanel never loads and nothing reaches it (playwright.config.js blocks its hosts)', async ({ page }) => {
+  const reached = [];
+  page.on('requestfinished', (r) => { if (/mxpnl\.com|mixpanel\.com/.test(r.url())) reached.push(r.url()); });
+  const failed = [];
+  page.on('requestfailed', (r) => { if (/mxpnl\.com|mixpanel\.com/.test(r.url())) failed.push(r.url()); });
+  await page.goto('/index.html');
+  await expect.poll(() => failed.length).toBeGreaterThan(0); // the library request fails
+  await page.waitForTimeout(500);
+  expect(reached).toEqual([]);
+  expect(await page.evaluate(() => Boolean(window.mixpanel && window.mixpanel.__loaded))).toBe(false);
+});
