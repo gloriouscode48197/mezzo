@@ -47,8 +47,8 @@ Not linked from anywhere in Mezzo. It has its own look so it's never mistaken fo
 | State | What it shows |
 | --- | --- |
 | No code | "This page is for study participants", how to get in, and links to Mezzo and Privacy |
-| Code, baseline | Thanks, the code, the bookmark line, and only "Part 1: Check in after your usual calls": the intro, the count-these box with **Check in** (baseline form), "Your progress" with two boxes, "What’s next". No link into the app. |
-| Code, With Mezzo | "Great, you’re ready for Part 2", the code, the bookmark line, and only "Part 2: Check in after a call with Mezzo": laid out like Part 1: the intro, Part 1's box with **Open Mezzo** (outlined) above **Check in** (filled), the same width, "Your progress", "What’s next". Part 1 is removed from the page, so no baseline check-ins after Mezzo. The same for the rest of the study, after day 14 too; there is no wrap-up section (it's emailed). |
+| Code, baseline | "Your Mezzo study", the code, the bookmark line, and only "Part 1: Check in after your usual calls": the intro, the count-these box with **Check in** (baseline form), "Your progress" with two boxes, "What’s next". No link into the app. |
+| Code, With Mezzo | "Your Mezzo study", the code, the bookmark line, and only "Part 2: Check in after a call with Mezzo": laid out like Part 1: the intro, Part 1's box with **Open Mezzo** (outlined) above **Check in** (filled), the same width, "Your progress", "What’s next". Part 1 is removed from the page, so no baseline check-ins after Mezzo. The same for the rest of the study, after day 14 too; there is no wrap-up section (it's emailed). |
 
 Every participant view ends with a footer: "Questions? Reply to any study email. · **How study data is handled**", the link going to the Privacy page's "Research participants" section.
 
@@ -160,7 +160,7 @@ Mezzo sends nothing itself. The values ride in the form link's query string, and
 
 **`/study`**
 - Header: "Mezzo study" · Privacy
-- Page heading: "Thanks for joining the Mezzo study"; in Part 2, "Great, you’re ready for Part 2" for the rest of the study
+- Page heading: "Your Mezzo study", the same on both stages (2026-11-15; was "Thanks for joining the Mezzo study" in Part 1 and "Great, you’re ready for Part 2" in Part 2)
 - "Your study code: {code}"
 - Under the code: "Bookmark this page. You’ll come back here after each call." (Part 1) or "Bookmark this page. You’ll come back here after calls." (Part 2)
 - Every stage shows only the tester's own stage, in one 560px column. The other sections are removed from the page: nothing collapsed, "Completed" or grayed out. The study code, the bookmark line and the footer are on every stage.
@@ -194,7 +194,7 @@ Mezzo sends nothing itself. The values ride in the form link's query string, and
 - **`/study` has its own look** (white page, slate-blue band and buttons, no cream, charcoal or chartreuse): it's a research page, never to be mistaken for the product.
 - **`/study` header scrolls away, no Home link:** it's a short page, and a Home link would lead baseline testers into the app.
 - **What counts and what's next, close to the action:** testers asked what counts and when they'd get Mezzo. The bordered box says what counts right by the button, and "What's next" under the tracker says when Mezzo comes, which prevents uncounted calls.
-- **"Part 1" and "Part 2" headings:** the numbers tell testers which stage they're in.
+- **"Part 1" and "Part 2" headings:** the numbers tell testers which stage they're in. The page heading, "Your Mezzo study", stays the same on both stages (2026-11-15), so the part heading is the one thing that changes.
 - **"Your progress" boxes, never sent (both parts):** (heading renamed from "Your check-ins", 2026-11-14) the forms don't report back to the page, so testers track their own two check-ins; the helper line says the answers already arrive on submit, so nobody waits for the boxes to send anything. The researcher counts real submissions in Tally. "What's next" stays visible whatever is ticked, so the next step is always clear, and there's no submit button because there's nothing to submit.
 - **Only the current stage on the page (2026-11-14):** an earlier version showed all three parts, with finished ones collapsed and upcoming ones grayed out. It made the page busier than the one thing testers need to do now. Sections for other stages aren't on the page at all, so Part 1 has no way into Mezzo.
 - **Wrap-up by email, not on `/study` (2026-11-14):** it's sent right after the 2nd Mezzo check-in instead of waiting for day 14, so the page no longer needs a wrap-up section, its date rule or a heading change. Part 2 stays as it is for the rest of the study, its check-in there for calls the tester hasn't checked in on yet.

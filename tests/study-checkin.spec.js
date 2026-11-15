@@ -559,7 +559,7 @@ test.describe('Study mode: the /study page', () => {
     await seed(page, { code: 'R4-01' });
     await page.goto('/study');
     await expect(page.locator('body')).toHaveAttribute('data-study-stage', 'baseline');
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Thanks for joining the Mezzo study');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Your Mezzo study');
     await expect(page.getByText('Your study code: R4-01')).toBeVisible();
     await expect(page.locator('#study-bookmark')).toBeVisible();
     await expect(page.locator('#study-bookmark')).toHaveText('Bookmark this page. You’ll come back here after each call.');
@@ -689,7 +689,7 @@ test.describe('Study mode: the /study page', () => {
     await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Part 2: Check in after a call with Mezzo']);
     await expect(page.locator('#study-baseline, #study-baseline-check-in')).toHaveCount(0);
     await expect(page.getByText('Completed')).toHaveCount(0);
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Great, you’re ready for Part 2');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Your Mezzo study');
     await expect(page.locator('#study-mezzo-intro')).toHaveText('Try Mezzo on your calls over the next week or two. Check in after at least 2 of them. When you stop monitoring, Mezzo asks how your call went. If you miss it, check in here within 2 hours of your call.');
     // Like Part 1: no sections, setup steps or picture (they're in the
     // study email now); only the tracker's heading.
@@ -783,7 +783,7 @@ test.describe('Study mode: the /study page', () => {
     await seed(page, { code: 'R4-01', firstSessionAgo: 15 * DAY });
     await page.goto('/study');
     await expect(page.locator('body')).toHaveAttribute('data-study-stage', 'mezzo');
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Great, you’re ready for Part 2');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Your Mezzo study');
     await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Part 2: Check in after a call with Mezzo']);
     await expect(page.locator('#study-wrap-up-part, #study-wrap-up, #study-baseline')).toHaveCount(0);
     await expect(link(page, 'Wrap up the study')).toHaveCount(0);
@@ -881,7 +881,7 @@ test.describe('Study mode: the /study page', () => {
       await expect(nav.locator('.study-nav-label')).toHaveText('Mezzo study');
       await expect(nav.locator('.type-nav-wordmark')).toHaveCount(0);
       // The same text everywhere else.
-      await expect(page.getByRole('heading', { level: 1 })).toHaveText('Great, you’re ready for Part 2');
+      await expect(page.getByRole('heading', { level: 1 })).toHaveText('Your Mezzo study');
     });
   }
 

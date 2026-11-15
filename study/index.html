@@ -271,7 +271,7 @@
     <!-- With a saved tester code. -->
     <section id="study-participant" hidden>
       <!-- Part 2's own heading is set by the script. -->
-      <h1 class="study-title" id="study-title">Thanks for joining the Mezzo study</h1>
+      <h1 class="study-title" id="study-title">Your Mezzo study</h1>
       <p class="type-body">Your study code: <span class="study-code" id="study-code"></span></p>
       <!-- Both stages; With Mezzo sets its own wording (script below). -->
       <p class="type-body" id="study-bookmark" hidden>Bookmark this page. You’ll come back here after each call.</p>
@@ -431,9 +431,6 @@
     }
 
     if (stage === 'mezzo') {
-      // The page's heading welcomes the tester to Part 2 for the rest of
-      // the study.
-      $('study-title').textContent = 'Great, you’re ready for Part 2';
       setUpTracker('study-mezzo', 'mezzoChecks');
 
       $('study-bookmark').textContent = 'Bookmark this page. You’ll come back here after calls.';
