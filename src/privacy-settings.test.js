@@ -37,6 +37,13 @@ describe('Mixpanel', () => {
     assert.match(index, /mp\.register\(\{ \$initial_referrer: window\.mezzoWithoutStudyParams\(initial\) \}\)/);
   });
 
+  it('Home: off the live site, every event carries $ignore (registered right after init)', () => {
+    const init = index.indexOf('mixpanel.init(');
+    const ignore = index.indexOf("if (window.location.hostname !== 'mezzo-one.vercel.app') {");
+    assert.ok(init > 0 && ignore > init);
+    assert.match(index.slice(ignore, ignore + 200), /mixpanel\.register\(\{ \$ignore: true \}\)/);
+  });
+
   it('only Home loads Mixpanel', () => {
     for (const page of ['privacy.html', 'study/index.html', 'try-it.html', 'monitoring.html']) {
       assert.doesNotMatch(read(page), /mxpnl|mixpanel\.init|window\.mixpanel/, page);

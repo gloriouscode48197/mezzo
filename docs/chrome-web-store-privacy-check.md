@@ -41,6 +41,8 @@ Checked against the code on branch `v4` on 2026-11-13, then the gaps were fixed 
 - **History (checked 2026-11-15, every branch):** Session Replay was on (`record_sessions_percent: 100`) only in commit `67daea7` (2026-02-11 18:50), on `index.html`, `monitoring.html`, `privacy.html` and `try-it.html`, and set to 0 in `f2e46b3` (2026-02-12 02:44), about 8 hours later. `capture_text_content` was never set in Mezzo's own code (it appears only inside the saved Mixpanel library). Autocapture was on from `67daea7` until `1e78fb1` (2026-11-13).
 - **`mezzo-v1.vercel.app` is still live** (an old build, `sw.js` `mezzo-v5`) and uses the same Mixpanel project token with `autocapture: true` (Session Replay 0). It is the second Vercel project that deploys this repo. Deleting or pausing it in Vercel stops it.
 
+- **`$ignore` off the live site:** right after `mixpanel.init`, Home registers the super property `$ignore: true` whenever `window.location.hostname` isn't `mezzo-one.vercel.app`, so every event from localhost, 127.0.0.1, Vercel previews or any other deployment carries it and Mixpanel drops it. The test block in `playwright.config.js` stays as well. Tests: on localhost `$ignore` is set and sent; on `mezzo-one.vercel.app` (served from the checkout, so nothing reaches Vercel) it isn't set and no event carries it. This only applies to deployments built from v4 on: the old `mezzo-v1.vercel.app` build doesn't have it.
+
 Still for you to check (not code):
 
 - Mixpanel events from tests: filter `$current_url` containing `localhost` to find and exclude them.

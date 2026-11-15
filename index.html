@@ -72,6 +72,13 @@
         } catch (e) { /* nothing to clean */ }
       },
     })
+
+    // Only the live site counts: anywhere else (localhost, 127.0.0.1,
+    // Vercel previews, other deployments) every event carries $ignore, so
+    // Mixpanel drops it (2026-11-15).
+    if (window.location.hostname !== 'mezzo-one.vercel.app') {
+      mixpanel.register({ $ignore: true })
+    }
   </script>
 </head>
 <body data-surface="dark">

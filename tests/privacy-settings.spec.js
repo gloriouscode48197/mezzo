@@ -131,3 +131,31 @@ test('during tests, Mixpanel never loads and nothing reaches it (playwright.conf
   expect(reached).toEqual([]);
   expect(await page.evaluate(() => Boolean(window.mixpanel && window.mixpanel.__loaded))).toBe(false);
 });
+
+test('off the live site (here, localhost), every Mixpanel event carries $ignore: true', async ({ page, context }) => {
+  const sent = await withRealMixpanel(context);
+  await page.goto('/index.html');
+  await mixpanelProps(page);
+  expect(await page.evaluate(() => window.mixpanel.get_property('$ignore'))).toBe(true);
+  await page.evaluate(() => window.mixpanel.track('Ignore test'));
+  await expect.poll(() => sent.some((s) => s.includes('Ignore test')), { timeout: 20000 }).toBe(true);
+  const event = sent.find((s) => s.includes('Ignore test') && s.includes('"$ignore"'));
+  expect(event, 'the sent event includes $ignore').toBeTruthy();
+});
+
+test('on mezzo-one.vercel.app, $ignore is not set and events go out without it', async ({ page, context }) => {
+  const sent = await withRealMixpanel(context);
+  // The live address, answered from this checkout: nothing reaches Vercel.
+  await context.route('https://mezzo-one.vercel.app/**', async (route) => {
+    const url = new URL(route.request().url());
+    const res = await route.fetch({ url: `http://localhost:8973${url.pathname}${url.search}` });
+    await route.fulfill({ response: res });
+  });
+  await page.goto('https://mezzo-one.vercel.app/index.html');
+  await mixpanelProps(page);
+  expect(await page.evaluate(() => window.location.hostname)).toBe('mezzo-one.vercel.app');
+  expect(await page.evaluate(() => window.mixpanel.get_property('$ignore'))).toBeUndefined();
+  await page.evaluate(() => window.mixpanel.track('Live test'));
+  await expect.poll(() => sent.some((s) => s.includes('Live test')), { timeout: 20000 }).toBe(true);
+  for (const s of sent) expect(s).not.toContain('$ignore');
+});
