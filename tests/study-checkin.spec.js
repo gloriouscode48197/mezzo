@@ -563,6 +563,7 @@ test.describe('Study mode: the /study page', () => {
     await expect(page.getByText('Your study code: R4-01')).toBeVisible();
     await expect(page.locator('#study-bookmark')).toBeVisible();
     await expect(page.locator('#study-bookmark')).toHaveText('Bookmark this page. You’ll come back here after each call.');
+    await expect(page.locator('#study-setup-callout')).toHaveCount(0);
     // Right under the study code.
     expect(await page.locator('#study-bookmark').evaluate((el) => el.previousElementSibling.textContent)).toBe('Your study code: R4-01');
     // Only Part 1: no other part, no callout, nothing grayed out.
@@ -639,7 +640,8 @@ test.describe('Study mode: the /study page', () => {
   test('?start=1 with a code unlocks With Mezzo before any session, remembers it, and leaves the address bar', async ({ page }) => {
     await page.goto('/study?study=R4-03&start=1');
     await expect(page.locator('body')).toHaveAttribute('data-study-stage', 'mezzo');
-    await expect(page.locator('#study-bookmark')).toHaveText('Bookmark this page. You’ll come back here after calls.');
+    await expect(page.locator('#study-bookmark')).toBeHidden();
+    await expect(page.locator('#study-setup-callout')).toHaveText('Before you start: install the Mezzo Chrome extension. The setup steps are in my “Part 2: set up Mezzo” email.');
     const url = new URL(page.url());
     expect(url.searchParams.has('study')).toBe(false);
     expect(url.searchParams.has('start')).toBe(false);
@@ -697,12 +699,20 @@ test.describe('Study mode: the /study page', () => {
     await expect(page.locator('#study-mezzo img, #study-get-extension, .study-section, .study-step-num, .study-steps')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Link coming soon' })).toHaveCount(0);
     await expect(page.getByRole('link', { name: 'Get the Mezzo extension' })).toHaveCount(0);
-    for (const gone of ['Set up Mezzo', 'Choose how you’ll open Mezzo', 'When you stop monitoring, look for this:', 'If you close the window before checking in']) {
+    for (const gone of ['A. Set up Mezzo', 'Choose how you’ll open Mezzo', 'When you stop monitoring, look for this:', 'If you close the window before checking in']) {
       await expect(page.getByText(gone, { exact: false })).toHaveCount(0);
     }
     // Under the code, this stage's own bookmark line.
-    await expect(page.locator('#study-bookmark')).toHaveText('Bookmark this page. You’ll come back here after calls.');
-    expect(await page.locator('#study-bookmark').evaluate((el) => el.previousElementSibling.textContent)).toBe('Your study code: R4-01');
+    await expect(page.locator('#study-bookmark')).toBeHidden();
+    await expect(page.locator('#study-setup-callout')).toHaveText('Before you start: install the Mezzo Chrome extension. The setup steps are in my “Part 2: set up Mezzo” email.');
+    // The callout sits right under the study code, in the bookmark line's
+    // place, in the page's pale slate tint.
+    expect(await page.locator('#study-setup-callout').evaluate((el) => {
+      let prev = el.previousElementSibling;
+      while (prev && prev.hidden) prev = prev.previousElementSibling;
+      return prev.textContent;
+    })).toBe('Your study code: R4-01');
+    expect(await page.locator('#study-setup-callout').evaluate((el) => getComputedStyle(el).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)');
     // Part 1's box: the same list; where Part 1 has its one button, Open
     // Mezzo (outlined) above Check in (filled).
     const box = page.locator('#study-mezzo > .study-box');
@@ -788,7 +798,8 @@ test.describe('Study mode: the /study page', () => {
     await expect(page.locator('#study-wrap-up-part, #study-wrap-up, #study-baseline')).toHaveCount(0);
     await expect(link(page, 'Wrap up the study')).toHaveCount(0);
     await expect(page.getByText('Part 3')).toHaveCount(0);
-    await expect(page.locator('#study-bookmark')).toHaveText('Bookmark this page. You’ll come back here after calls.');
+    await expect(page.locator('#study-bookmark')).toBeHidden();
+    await expect(page.locator('#study-setup-callout')).toHaveText('Before you start: install the Mezzo Chrome extension. The setup steps are in my “Part 2: set up Mezzo” email.');
     await expect(link(page, 'Check in')).toBeVisible();
     // The tester code stays saved.
     expect(await page.evaluate(() => localStorage.getItem('mezzoStudyTesterCode'))).toBe('R4-01');
@@ -1038,7 +1049,7 @@ test.describe('Study mode: the /study page', () => {
     await expect(page.getByRole('checkbox', { name: 'Check-in 1', exact: true })).not.toBeChecked();
     await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Part 2: Check in after a call with Mezzo']);
     await expect(page.locator('#study-code')).toHaveText('R4-01');
-    await expect(page.locator('#study-bookmark')).toBeVisible();
+    await expect(page.locator('#study-setup-callout')).toBeVisible();
     await expect(page.getByRole('link', { name: 'How study data is handled' })).toBeVisible();
     // The tester's ticks stay saved, just not shown.
     expect(await page.evaluate(() => localStorage.getItem('mezzoStudyBaselineChecks:R4-01'))).toBe('[true,false]');

@@ -48,7 +48,7 @@ Not linked from anywhere in Mezzo. It has its own look so it's never mistaken fo
 | --- | --- |
 | No code | "This page is for study participants", how to get in, and links to Mezzo and Privacy |
 | Code, baseline | "Your Mezzo study", the code, the bookmark line, and only "Part 1: Check in after your usual calls": the intro, the count-these box with **Check in** (baseline form), "Your progress" with two boxes, "What’s next". No link into the app. |
-| Code, With Mezzo | "Your Mezzo study", the code, the bookmark line, and only "Part 2: Check in after a call with Mezzo": laid out like Part 1: the intro, Part 1's box with **Open Mezzo** (outlined) above **Check in** (filled), the same width, "Your progress", "What’s next". Part 1 is removed from the page, so no baseline check-ins after Mezzo. The same for the rest of the study, after day 14 too; there is no wrap-up section (it's emailed). |
+| Code, With Mezzo | "Your Mezzo study", the code, the "Before you start" callout, and only "Part 2: Check in after a call with Mezzo": laid out like Part 1: the intro, Part 1's box with **Open Mezzo** (outlined) above **Check in** (filled), the same width, "Your progress", "What’s next". Part 1 is removed from the page, so no baseline check-ins after Mezzo. The same for the rest of the study, after day 14 too; there is no wrap-up section (it's emailed). |
 
 Every participant view ends with a footer: "Questions? Reply to any study email. · **How study data is handled**", the link going to the Privacy page's "Research participants" section.
 
@@ -162,8 +162,8 @@ Mezzo sends nothing itself. The values ride in the form link's query string, and
 - Header: "Mezzo study" · Privacy
 - Page heading: "Your Mezzo study", the same on both stages (2026-11-15; was "Thanks for joining the Mezzo study" in Part 1 and "Great, you’re ready for Part 2" in Part 2)
 - "Your study code: {code}"
-- Under the code: "Bookmark this page. You’ll come back here after each call." (Part 1) or "Bookmark this page. You’ll come back here after calls." (Part 2)
-- Every stage shows only the tester's own stage, in one 560px column. The other sections are removed from the page: nothing collapsed, "Completed" or grayed out. The study code, the bookmark line and the footer are on every stage.
+- Under the code: "Bookmark this page. You’ll come back here after each call." (Part 1); in Part 2, in its place, a pale slate-blue callout (the page's one callout, 10% of the header color): "**Before you start:** install the Mezzo Chrome extension. The setup steps are in my “Part 2: set up Mezzo” email."
+- Every stage shows only the tester's own stage, in one 560px column. The other sections are removed from the page: nothing collapsed, "Completed" or grayed out. The study code, the line under it (bookmark line or callout) and the footer are on every stage.
 - Baseline:
   - "Part 1: Check in after your usual calls"
   - "Take your calls as you normally would, without Mezzo. Check in after at least 2 of them. Come back here after each call. It takes about a minute."
@@ -200,6 +200,7 @@ Mezzo sends nothing itself. The values ride in the form link's query string, and
 - **Wrap-up by email, not on `/study` (2026-11-14):** it's sent right after the 2nd Mezzo check-in instead of waiting for day 14, so the page no longer needs a wrap-up section, its date rule or a heading change. Part 2 stays as it is for the rest of the study, its check-in there for calls the tester hasn't checked in on yet.
 - **Part 1's check-in removed once Part 2 unlocks:** a baseline check-in after someone has used Mezzo would no longer be a baseline.
 - **Part 2 in one column, like Part 1 (2026-11-14):** the side-by-side steps made Part 2 look like a different page. One column reads in order, and Part 2 reuses Part 1's box, button and tracker, so testers already know them.
+- **Setup callout in Part 2 instead of the bookmark line (2026-11-15):** the setup steps live in the "Part 2: set up Mezzo" email, so the page points there once, right under the code, and names the one step that matters before the first call: installing the extension.
 - **Part 1 worded like Part 2 (2026-11-14):** both headings say what to do ("Check in after…"), the intro says "without Mezzo" plainly, and both parts share one **Check in** button, the same size and style, so the two stages read as one pattern.
 - **Part 2 laid out like Part 1, setup in the email (2026-11-14):** the extension install, the ways to open Mezzo and the card picture moved into the study email, where testers read them once. The page keeps only what repeats after every call, in the same box and place as Part 1, so it's the page they already know. The intro says when the card appears and that `/study` is the fallback within 2 hours. Open Mezzo sits in the box above the check-in, outlined and the same width, so both actions are in one place and the filled check-in stays the main one. The heading, "Part 2: Check in after a call with Mezzo", names the task, so the button can be a short verb, **Check in** (2026-11-14). `extensionUrl` stays in the config, unused on the page; `study/checkin-card.png` and `tests/capture-study-card.spec.js` stay for the email.
 - **"within 2 hours of your call":** it says when the page's check-in still carries the call's data, as a plain rule.

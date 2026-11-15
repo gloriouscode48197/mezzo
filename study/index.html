@@ -116,6 +116,7 @@
     .study-tracker .study-checks { margin-top: var(--space-3); }
     .study-main .study-next { margin: var(--space-4) 0 0; color: var(--color-text); }
     .study-next strong { font-weight: var(--weight-medium); }
+    .study-callout strong { font-weight: var(--weight-medium); }
     /* The footer, on every stage: a thin divider, small muted text. */
     .study-footer {
       margin-top: var(--space-6);
@@ -139,8 +140,8 @@
       color: var(--color-text);
     }
     .study-list li + li { margin-top: var(--space-1); }
-    /* One callout on the page (2026-11-13): "Mezzo comes later" in Your
-       usual calls. A pale slate tint (10% of the header color on white,
+    /* One callout on the page (2026-11-15): Part 2's "Before you start",
+       under the study code, in place of the bookmark line. A pale slate tint (10% of the header color on white,
        about #ECEFF2) with the normal dark text, 13:1. The page is always
        light (color-scheme: light), so it reads the same in both system
        themes. */
@@ -275,6 +276,8 @@
       <p class="type-body">Your study code: <span class="study-code" id="study-code"></span></p>
       <!-- Both stages; With Mezzo sets its own wording (script below). -->
       <p class="type-body" id="study-bookmark" hidden>Bookmark this page. You’ll come back here after each call.</p>
+      <!-- Part 2 only, in the bookmark line's place. -->
+      <p class="type-body study-callout" id="study-setup-callout" hidden><strong>Before you start:</strong> install the Mezzo Chrome extension. The setup steps are in my “Part 2: set up Mezzo” email.</p>
 
       <!-- Only the tester's stage is shown; the script removes the other
            sections from the page. -->
@@ -400,7 +403,7 @@
     // removed, so nothing in them can be reached (no way into Mezzo during
     // Part 1, no baseline check-in once Mezzo is unlocked).
     if (stage !== 'baseline') $('study-baseline').remove();
-    if (stage !== 'mezzo') $('study-mezzo').remove();
+    if (stage !== 'mezzo') { $('study-mezzo').remove(); $('study-setup-callout').remove(); }
 
     // "Your progress": the tester's own reminder, two boxes saved per
     // tester code in this browser, never sent. "What's next" stays visible
@@ -433,8 +436,8 @@
     if (stage === 'mezzo') {
       setUpTracker('study-mezzo', 'mezzoChecks');
 
-      $('study-bookmark').textContent = 'Bookmark this page. You’ll come back here after calls.';
-      $('study-bookmark').hidden = false;
+      // In the bookmark line's place: the setup callout.
+      $('study-setup-callout').hidden = false;
 
       // Open Mezzo: through the extension when it's installed (its own
       // window, or the open Mezzo brought forward), otherwise a window of
