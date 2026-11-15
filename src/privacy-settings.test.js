@@ -29,6 +29,14 @@ describe('Mixpanel', () => {
     assert.match(index, /url\.searchParams\.delete\('study'\);\s*url\.searchParams\.delete\('start'\);/);
   });
 
+  it('Home: the referrer loses its study parameters too, before the Mixpanel snippet; a saved first referrer is cleaned on load', () => {
+    const clean = index.indexOf("Object.defineProperty(document, 'referrer'");
+    const snippet = index.indexOf('window.mixpanel=c');
+    assert.ok(clean > 0 && clean < snippet);
+    assert.match(index, /loaded: function \(mp\)/);
+    assert.match(index, /mp\.register\(\{ \$initial_referrer: window\.mezzoWithoutStudyParams\(initial\) \}\)/);
+  });
+
   it('only Home loads Mixpanel', () => {
     for (const page of ['privacy.html', 'study/index.html', 'try-it.html', 'monitoring.html']) {
       assert.doesNotMatch(read(page), /mxpnl|mixpanel\.init|window\.mixpanel/, page);

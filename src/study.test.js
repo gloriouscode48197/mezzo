@@ -684,6 +684,12 @@ describe('privacy page', () => {
     assert.match(study, /Tally receives these when the survey opens, and saves them as a response only if you submit it\./);
     assert.match(study, /how many times the glow appeared, and which Companion view you used and its window size\./);
     assert.match(study, /a submitted check-in can be matched with that browser’s usage events/);
+    assert.ok(study.includes('Your study code lets me match your check-ins to your sign-up, so I can send your gift card. Anything I quote in my case study stays anonymous.'));
+  });
+
+  it('Your control: how a study participant gets their answers deleted', () => {
+    const control = html.slice(html.indexOf('id="your-control"'));
+    assert.ok(control.includes('If you took part in a study and want your answers deleted, reply to any study email or contact me at'));
   });
 
   it('the extension, the outside services, and no Google Fonts', () => {

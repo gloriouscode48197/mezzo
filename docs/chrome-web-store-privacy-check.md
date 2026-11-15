@@ -28,7 +28,18 @@ Checked against the code on branch `v4` on 2026-11-13, then the gaps were fixed 
   - The version stays **1.0.6**: nothing at 1.0.6 has been published to the store, so no bump is required.
 - **Tests:** `src/privacy-settings.test.js`, `tests/privacy-settings.spec.js`, and updated extension and privacy-page tests.
 
+## Fixed since the check (2026-11-15)
+
+- **Referrers:** Mixpanel records the page that linked to Home as `$referrer` (each event) and `$initial_referrer` (saved, then sent with every event). A link from a page whose address still held `?study=` or `&start=` would have carried the code there. Home's first script now cleans `document.referrer` the same way it cleans the address, before the Mixpanel snippet, so both properties lose `study` and `start` (other parameters stay). Mixpanel's `loaded` callback also cleans a `$initial_referrer` saved before this fix.
+  - `/study` already removes its own `?study=` from the address when it loads, so going from `/study?study=CODE` to Home sent a clean referrer even before this fix. The leak was possible from other pages, such as a study link to `privacy.html`.
+  - Tests: `tests/privacy-settings.spec.js` runs Mixpanel's real library (a saved copy of 2.86.0 in `tests/support/`, with every request to Mixpanel answered locally) and checks every property it keeps or sends. It covers `/study?study=TEST-99` then Home, a referrer with `?study=` and `&start=`, and an old saved `$initial_referrer`. Without the fix, the last two fail.
+- **`privacy.html`:**
+  - Research participants: "Your study code lets me match your check-ins to your sign-up, so I can send your gift card. Anything I quote in my case study stays anonymous."
+  - Your control: "If you took part in a study and want your answers deleted, reply to any study email or contact me at [email]." **The address is still a placeholder (`[email]`) and must be filled in before production.**
+
 Still for you to check (not code):
+
+- The contact email on the privacy page (`[email]` in Your control).
 
 - Mixpanel for `study=` URLs already recorded.
 - ~~Whether the Tally forms ask for email or other personal details.~~ Answered: the sign-up screener (`tally.so/r/KpejzD`) asks for first name and email; the check-ins and wrap-up don't. `privacy.html` now says so.

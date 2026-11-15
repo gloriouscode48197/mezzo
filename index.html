@@ -13,9 +13,30 @@
   <link rel="icon" type="image/svg+xml" sizes="128x128" href="icons/icon-128.svg?v=2">
   <!-- Study links (?study=CODE, &start=1) never reach analytics: the
        parameters are kept for src/study.js (window.mezzoStudySearch) and
-       removed from the address bar before Mixpanel starts. -->
+       removed from the address bar before Mixpanel starts. The page that
+       linked here (document.referrer, which Mixpanel records as $referrer
+       and $initial_referrer) is cleaned the same way (2026-11-15). -->
   <script>
     (function () {
+      // A URL without its study and start parameters; anything that isn't
+      // a URL comes back as it was.
+      function withoutStudyParams(href) {
+        try {
+          var u = new URL(href);
+          if (!u.searchParams.has('study') && !u.searchParams.has('start')) return href;
+          u.searchParams.delete('study');
+          u.searchParams.delete('start');
+          return u.toString();
+        } catch (e) { return href; }
+      }
+      window.mezzoWithoutStudyParams = withoutStudyParams;
+      try {
+        var referrer = document.referrer;
+        var cleanReferrer = withoutStudyParams(referrer);
+        if (cleanReferrer !== referrer) {
+          Object.defineProperty(document, 'referrer', { configurable: true, get: function () { return cleanReferrer; } });
+        }
+      } catch (e) { /* leave the referrer as it is */ }
       try {
         var url = new URL(window.location.href);
         if (!url.searchParams.has('study') && !url.searchParams.has('start')) return;
@@ -40,6 +61,16 @@
       record_sessions_percent: 0,
       persistence: 'localStorage',
       ip: false,
+      // A first referrer saved before the cleaning above could still hold a
+      // study code: clean it in the saved properties too.
+      loaded: function (mp) {
+        try {
+          var initial = mp.get_property('$initial_referrer');
+          if (typeof initial === 'string' && window.mezzoWithoutStudyParams(initial) !== initial) {
+            mp.register({ $initial_referrer: window.mezzoWithoutStudyParams(initial) });
+          }
+        } catch (e) { /* nothing to clean */ }
+      },
     })
   </script>
 </head>
