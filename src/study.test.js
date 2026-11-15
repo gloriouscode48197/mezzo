@@ -689,7 +689,8 @@ describe('privacy page', () => {
 
   it('Your control: how a study participant gets their answers deleted', () => {
     const control = html.slice(html.indexOf('id="your-control"'));
-    assert.ok(control.includes('If you took part in a study and want your answers deleted, reply to any study email or contact me at'));
+    assert.ok(control.includes('If you took part in a study and want your answers deleted, reply to any study email.</p>'));
+    assert.doesNotMatch(html, /\[email\]/);
   });
 
   it('the extension, the outside services, and no Google Fonts', () => {
