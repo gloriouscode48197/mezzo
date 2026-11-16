@@ -134,7 +134,7 @@ test.describe('Study mode: the Companion check-in card', () => {
     const firstAt = Number(await page.evaluate(() => localStorage.getItem('mezzoStudyFirstSession:' + localStorage.getItem('mezzoStudyTesterCode'))));
     expect(firstAt).toBeGreaterThan(Date.now() - 60 * 1000);
     await expect(card(pipPage)).toContainText('How did your call go?');
-    await expect(card(pipPage)).toContainText('1-minute check-in');
+    await expect(card(pipPage)).toContainText('2-minute check-in');
     await expect(openLink(pipPage)).toHaveAttribute('target', '_blank');
     await expect(pipPage.getByRole('button', { name: 'Skip this one' })).toBeVisible();
     const params = await cardParams(pipPage);

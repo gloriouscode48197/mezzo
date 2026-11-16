@@ -3730,7 +3730,7 @@ export function createMezzoSession({
     studyCardTitle.textContent = 'How did your call go?';
     const studyCardSub = pipDoc.createElement('p');
     studyCardSub.className = 'pip-study-card-sub';
-    studyCardSub.textContent = '1-minute check-in';
+    studyCardSub.textContent = '2-minute check-in';
     const studyCardActions = pipDoc.createElement('div');
     studyCardActions.className = 'pip-study-card-actions';
     const studyCardOpen = pipDoc.createElement('a');

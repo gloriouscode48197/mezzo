@@ -132,7 +132,7 @@ Mezzo sends nothing itself. The values ride in the form link's query string, and
 
 **Ready card (Companion)**
 - "How did your call go?"
-- "1-minute check-in"
+- "2-minute check-in"
 - **Open check-in** · **Skip this one**
 
 **Page cards ("Companion closed", "Keep this page open", the page after Done or Close Companion)**
