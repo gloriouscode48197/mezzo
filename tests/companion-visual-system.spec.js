@@ -478,6 +478,15 @@ test.describe('Companion: selector surface and caret badge (2026-08-20)', () => 
     await readyScreen.locator('.pip-ready-selector-trigger').click();
     const panel = pipPage.locator('.pip-ready-selector-panel');
     await expect(panel).toBeVisible();
+    // Opening the panel moves focus to a row on its own; wait for that, so
+    // the Shift+Tab/Tab below starts from the same place every run (under
+    // a loaded full suite it could land late).
+    await expect.poll(() => pipPage.evaluate(() => Boolean(document.activeElement?.closest('.pip-ready-selector-panel')))).toBe(true);
+
+    // Every color below is polled, not read once: the row icons fade in and
+    // change color over ~0.15s (CSS transitions), so a single read right
+    // after hover or Tab could catch a value mid-transition.
+    const computed = (locator, prop) => () => locator.evaluate((el, p) => getComputedStyle(el)[p], prop);
 
     const nameColor = await panel.locator('.pip-ready-selector-row-name').first().evaluate((el) => getComputedStyle(el).color);
     // Warm off-white — genuinely light text, not a near-invisible dark
@@ -513,8 +522,9 @@ test.describe('Companion: selector surface and caret badge (2026-08-20)', () => 
     // .pip-ready-selector-row-action's own comment.
     const kitchenRow = panel.locator('.pip-ready-selector-row', { hasText: 'Kitchen' });
     await kitchenRow.hover();
-    const rowActionColor = await kitchenRow.locator('.pip-ready-selector-row-action').first().evaluate((el) => getComputedStyle(el).color);
-    expect(normalizeColor(rowActionColor)).toBe('rgba(176, 171, 158, 0.75)');
+    const rowAction = kitchenRow.locator('.pip-ready-selector-row-action').first();
+    await expect.poll(computed(rowAction, 'opacity')).toBe('1'); // faded in
+    await expect.poll(async () => normalizeColor(await computed(rowAction, 'color')())).toBe('rgba(176, 171, 158, 0.75)');
 
     // Real keyboard navigation, not .focus() — opening the panel already
     // auto-focuses a radio programmatically (openSelectorPanel()'s own
@@ -524,14 +534,12 @@ test.describe('Companion: selector surface and caret badge (2026-08-20)', () => 
     await pipPage.keyboard.press('Shift+Tab');
     await pipPage.keyboard.press('Tab');
     const focusedLabel = panel.locator('.pip-ready-selector-row-label').first();
-    const outline = await focusedLabel.evaluate((el) => getComputedStyle(el).outlineStyle);
-    expect(outline).toBe('solid');
+    await expect.poll(computed(focusedLabel, 'outlineStyle')).toBe('solid');
     // The row focus outline's own color — same #DC9C89 fix as the
     // checkmark/footer above (bare --hanko-fill only reached 2.91:1, under
     // the 3:1 focus-indicator minimum; #DC9C89 clears it at 5.51:1) — see
     // .pip-ready-selector-row-radio:focus-visible's own comment.
-    const outlineColor = await focusedLabel.evaluate((el) => getComputedStyle(el).outlineColor);
-    expect(outlineColor).toBe('rgb(206, 226, 196)');
+    await expect.poll(computed(focusedLabel, 'outlineColor')).toBe('rgb(206, 226, 196)');
   });
 });
 
