@@ -164,6 +164,8 @@
     }
     .study-box-text { flex: 1 1 auto; }
     .study-main .study-box .study-list { margin-bottom: 0; }
+    /* Part 2: how the check-in reaches the tester, under the list. */
+    .study-main .study-box .study-box-note { margin: var(--space-3) 0 0; color: var(--color-text-muted); }
     .study-phase .study-box .btn-primary { flex: none; margin-top: 0; }
     /* The box's buttons, in one grid column: Part 1's Check in alone,
        Part 2's Open Mezzo above Check in. At least 9rem wide, so Check in
@@ -319,7 +321,7 @@
            announced; the number marker itself is decorative. -->
       <section class="study-phase" id="study-mezzo" aria-labelledby="study-mezzo-heading">
         <h2 id="study-mezzo-heading">Part 2: Check in after a call with Mezzo</h2>
-        <p class="type-body" id="study-mezzo-intro">Try Mezzo on your calls over the next week or two. Check in after at least 2 of them. When you stop monitoring, Mezzo asks how your call went. If you miss it, check in here within 2 hours of your call.</p>
+        <p class="type-body" id="study-mezzo-intro">Try Mezzo on your calls over the next week or two. Check in after at least 2 of them.</p>
         <!-- Part 1's box, the same (2026-11-14): setup and the card picture
              are in the study email now. -->
         <div class="study-box">
@@ -330,6 +332,7 @@
               <li>people are nearby</li>
               <li>you speak, even a little</li>
             </ul>
+            <p class="type-body study-box-note" id="study-mezzo-box-note">When you stop monitoring, Mezzo asks how your call went. If you miss it, check in here within 2 hours of your call.</p>
           </div>
           <!-- Open Mezzo (outlined) above the check-in (filled), the same
                width, where Part 1 has its one button. -->

@@ -692,7 +692,7 @@ test.describe('Study mode: the /study page', () => {
     await expect(page.locator('#study-baseline, #study-baseline-check-in')).toHaveCount(0);
     await expect(page.getByText('Completed')).toHaveCount(0);
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Your Mezzo study');
-    await expect(page.locator('#study-mezzo-intro')).toHaveText('Try Mezzo on your calls over the next week or two. Check in after at least 2 of them. When you stop monitoring, Mezzo asks how your call went. If you miss it, check in here within 2 hours of your call.');
+    await expect(page.locator('#study-mezzo-intro')).toHaveText('Try Mezzo on your calls over the next week or two. Check in after at least 2 of them.');
     // Like Part 1: no sections, setup steps or picture (they're in the
     // study email now); only the tracker's heading.
     await expect(page.getByRole('heading', { level: 3 })).toHaveText(['Your progress']);
@@ -718,6 +718,9 @@ test.describe('Study mode: the /study page', () => {
     const box = page.locator('#study-mezzo > .study-box');
     await expect(box.getByRole('list', { name: 'Only give feedback on calls where:' }).getByRole('listitem'))
       .toHaveText(['you’re wearing headphones', 'people are nearby', 'you speak, even a little']);
+    // Under the list, inside the box: how the check-in reaches the tester.
+    await expect(box.locator('.study-box-text > p.study-box-note')).toHaveText('When you stop monitoring, Mezzo asks how your call went. If you miss it, check in here within 2 hours of your call.');
+    expect(await box.locator('.study-box-note').evaluate((el) => el.previousElementSibling.tagName)).toBe('UL');
     await expect(box.locator('.study-box-actions a')).toHaveText(['Open Mezzo', 'Check in']);
     await expect(box.locator('#study-open-mezzo')).toHaveClass(/btn-outline/);
     await expect(box.locator('#study-check-in')).toHaveClass(/btn-primary/);
