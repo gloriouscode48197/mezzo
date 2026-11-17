@@ -55,7 +55,7 @@
         <h2 class="type-privacy-h2" id="speaking-profiles">Speaking profiles</h2>
         <p class="type-body">Speaking profiles are stored only in your browser.</p>
         <ul class="type-body privacy-list">
-          <li>Mezzo saves only the profile name and a derived calibration value, so you can reuse it later without recalibrating</li>
+          <li>Mezzo saves only the profile name and a few calibration values (your usual speaking level and the room’s background noise), so you can reuse it later without recalibrating</li>
           <li>Your voice is never recorded or stored. Mezzo does not save audio recordings, microphone input, voice samples, or transcripts.</li>
           <li>Your profiles never leave your device. They are never uploaded to our servers, synced between devices, or shared with anyone.</li>
           <li>You don't need an account to use Mezzo or save profiles</li>
@@ -72,7 +72,7 @@
           <li>Monitoring ended, with how long it lasted and whether the glow appeared</li>
         </ul>
         <p class="type-body">Never audio, volume levels or what you say. Each event also carries the page address, the site you came from on your first visit, your browser, operating system and screen size, as Mixpanel sends by default. Mixpanel receives your IP address with each request, and Mezzo tells it not to use that address to estimate your location. Study codes are removed from the page address before Mixpanel starts.</p>
-        <p class="type-body">On your first visit, Mezzo creates a random, anonymous identifier and keeps it in your browser’s local storage. Mezzo sets no cookies. The identifier isn’t tied to your name or email, isn’t shared across devices, and isn’t shared with other websites, except in a study check-in (see <a href="#research-participants">Research participants</a>). We use it only to answer questions such as how often Mezzo is used and whether people come back.</p>
+        <p class="type-body">On your first visit, Mezzo creates a random, anonymous identifier and keeps it in your browser’s local storage. Mezzo sets no cookies. The identifier isn’t tied to your name or email unless you join a study (see <a href="#research-participants">Research participants</a>). It isn’t shared across devices, or with other websites except in a study check-in. We use it only to answer questions such as how often Mezzo is used and whether people come back.</p>
         <p class="type-body">Usage data never includes names, email addresses or account information.</p>
       </div>
 
@@ -87,6 +87,8 @@
       <div class="privacy-section reveal">
         <h2 class="type-privacy-h2" id="chrome-extension">Chrome extension</h2>
         <p class="type-body">The Mezzo extension checks Google Meet, Zoom and Microsoft Teams pages for a “leave call” button to tell when you’re in a call, then offers to open Mezzo. It doesn’t use your microphone, doesn’t read meeting content, and doesn’t store or send any data.</p>
+        <p class="type-body">On Mezzo’s own site, it also reads whether the Mezzo Companion is open and monitoring, to show that in its toolbar menu. It runs only on Google Meet, Zoom, Microsoft Teams and Mezzo’s own pages.</p>
+        <p class="type-body" id="limited-use">The Mezzo extension’s use of information complies with the <a href="https://developer.chrome.com/docs/webstore/program-policies/user-data-faq" target="_blank" rel="noopener noreferrer">Chrome Web Store User Data Policy</a>, including its Limited Use requirements. The extension collects no personal or sensitive data: it checks meeting pages only on your device and sends nothing to Mezzo or anyone else.</p>
       </div>
 
       <div class="privacy-section reveal">

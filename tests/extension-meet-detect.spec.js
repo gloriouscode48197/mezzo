@@ -63,6 +63,13 @@ test.describe('Extension: meeting detection on Google Meet', () => {
     await expect(page.locator('#mezzo-meeting-banner-host')).toHaveCount(1);
     await expect.poll(badgeText).not.toBe('');
 
+    // The banner's font comes from the extension through its per-session
+    // URL (use_dynamic_url) and loads.
+    await expect.poll(() => page.evaluate(() => [...document.fonts].filter((f) => f.family.replace(/"/g, '') === 'Mezzo Geist').map((f) => f.status).join())).toBe('loaded');
+    // Nothing logged carries the page's address.
+    expect(logs.filter((l) => l.startsWith('[Mezzo]'))).not.toEqual([]);
+    for (const l of logs.filter((x) => x.startsWith('[Mezzo]'))) expect(l).not.toMatch(/https?:|meet\.google\.com|abc-defg-hij/);
+
     // Leaving clears both.
     await page.evaluate(() => document.querySelector('[aria-label="Leave call"]').remove());
     await expect(page.locator('#mezzo-meeting-banner-host')).toHaveCount(0);

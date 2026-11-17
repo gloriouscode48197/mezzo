@@ -226,5 +226,25 @@ describe('extension: meeting banner', () => {
     assert.deepEqual(war[0].resources, ['popup/fonts/geist-latin.woff2']);
     assert.ok(war[0].matches.includes('https://meet.google.com/*'));
     assert.ok(!war[0].matches.some((m) => m.includes('<all_urls>') || m === '*://*/*'));
+    // A per-session URL, so meeting pages can't probe for the extension.
+    assert.equal(war[0].use_dynamic_url, true);
+  });
+
+  it('never logs the page address or a heartbeat (Chrome Web Store, 2026-11-16)', () => {
+    assert.doesNotMatch(src, /location\.href/);
+    assert.doesNotMatch(src, /console\.log\([^)]*location/);
+    assert.doesNotMatch(src, /setInterval/);
+    assert.doesNotMatch(src, /heartbeat/i);
+  });
+});
+
+describe('extension manifest', () => {
+  const manifest = JSON.parse(readFileSync(new URL('../extension/manifest.json', import.meta.url), 'utf8'));
+  it('is named "Mezzo: Meeting Volume Reminder" (no em dash), version 1.0.6, no API permissions', () => {
+    assert.equal(manifest.name, 'Mezzo: Meeting Volume Reminder');
+    assert.equal(manifest.version, '1.0.6');
+    assert.equal(manifest.permissions, undefined);
+    assert.deepEqual(manifest.host_permissions, ['https://mezzo-one.vercel.app/*']);
+    assert.ok(!JSON.stringify(manifest).includes('<all_urls>'));
   });
 });

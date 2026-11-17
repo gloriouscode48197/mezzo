@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Mezzo — Meeting Volume Reminder",
+  "name": "Mezzo: Meeting Volume Reminder",
   "version": "1.0.6",
   "description": "Detects when you join Google Meet, Zoom, or Microsoft Teams and offers to launch Mezzo to monitor your speaking volume.",
 
@@ -33,6 +33,7 @@
   "web_accessible_resources": [
     {
       "resources": ["popup/fonts/geist-latin.woff2"],
+      "use_dynamic_url": true,
       "matches": [
         "https://meet.google.com/*",
         "https://*.zoom.us/*",

@@ -673,7 +673,8 @@ describe('privacy page', () => {
     assert.match(usage, /Mezzo sets no cookies\./);
     assert.match(usage, /tells it not to use that address to estimate your location/);
     assert.match(usage, /Study codes are removed from the page address before Mixpanel starts\./);
-    assert.match(usage, /isn’t shared with other websites, except in a study check-in/);
+    assert.match(usage, /isn’t tied to your name or email unless you join a study/);
+    assert.match(usage, /It isn’t shared across devices, or with other websites except in a study check-in\./);
     assert.match(usage, /<a href="#research-participants">Research participants<\/a>/);
   });
 
@@ -691,6 +692,17 @@ describe('privacy page', () => {
     const control = html.slice(html.indexOf('id="your-control"'));
     assert.ok(control.includes('If you took part in a study and want your answers deleted, reply to any study email.</p>'));
     assert.doesNotMatch(html, /\[email\]/);
+  });
+
+  it('the extension: the page bridge, where it runs, and a Limited Use statement', () => {
+    const ext = section('chrome-extension', 'what-mezzo-does-not-do');
+    assert.ok(ext.includes('On Mezzo’s own site, it also reads whether the Mezzo Companion is open and monitoring, to show that in its toolbar menu. It runs only on Google Meet, Zoom, Microsoft Teams and Mezzo’s own pages.'));
+    assert.match(ext, /complies with the <a [^>]*>Chrome Web Store User Data Policy<\/a>, including its Limited Use requirements\./);
+    assert.match(ext, /The extension collects no personal or sensitive data: it checks meeting pages only on your device and sends nothing to Mezzo or anyone else\./);
+  });
+
+  it('speaking profiles: the name and a few calibration values', () => {
+    assert.ok(html.includes('Mezzo saves only the profile name and a few calibration values (your usual speaking level and the room’s background noise)'));
   });
 
   it('the extension, the outside services, and no Google Fonts', () => {

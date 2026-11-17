@@ -43,6 +43,24 @@ Checked against the code on branch `v4` on 2026-11-13, then the gaps were fixed 
 
 - **`$ignore` off the live site:** right after `mixpanel.init`, Home registers the super property `$ignore: true` whenever `window.location.hostname` isn't `mezzo-one.vercel.app`, so every event from localhost, 127.0.0.1, Vercel previews or any other deployment carries it and Mixpanel drops it. The test block in `playwright.config.js` stays as well. Tests: on localhost `$ignore` is set and sent; on `mezzo-one.vercel.app` (served from the checkout, so nothing reaches Vercel) it isn't set and no event carries it. This only applies to deployments built from v4 on: the old `mezzo-v1.vercel.app` build doesn't have it.
 
+## Fixed since the check (2026-11-16, store review)
+
+- **Extension name:** "Mezzo: Meeting Volume Reminder" (no em dash, per the copy rules).
+- **No page addresses in logs:** `meeting-detect.js` no longer logs the frame's address or hostname, and the 8-second heartbeat is gone. Its remaining console lines name only the platform and when a call starts or ends.
+- **Font:** the banner's Geist file is a web-accessible resource with `use_dynamic_url: true`, so meeting pages can't probe a fixed URL to tell whether Mezzo is installed. `tests/extension-meet-detect.spec.js` checks the banner font still loads.
+- **`privacy.html`:**
+  - Chrome extension: what it reads on Mezzo's own site (whether the Companion is open and monitoring), where it runs, and a Limited Use statement.
+  - Anonymous usage data: the identifier "isn't tied to your name or email unless you join a study".
+  - Speaking profiles: "the profile name and a few calibration values (your usual speaking level and the room's background noise)".
+- **Left as is, on purpose:** Zoom stays `https://*.zoom.us/*` until a real Zoom web call is tested with `/wc/`; `teams.cloud.microsoft` isn't added yet.
+
+**Store answers (drafts):**
+- **Single purpose:** "Mezzo notices when you’re in a Google Meet, Zoom or Microsoft Teams call in Chrome and offers to open the Mezzo web app, which shows how loud you’re speaking."
+- **Host access to the meeting sites:** "Checks these meeting pages for a leave-call button to tell when a call starts, then shows a banner offering to open Mezzo. Nothing on the page is read beyond that check, stored or sent."
+- **Host access to mezzo-one.vercel.app:** "Finds an open Mezzo tab to bring it forward instead of opening a second one, and shows in the toolbar menu whether Mezzo is monitoring."
+- **Remote code:** No.
+- **Data usage:** no data types checked (nothing leaves the device); all three certifications checked.
+
 Still for you to check (not code):
 
 - Mixpanel events from tests: filter `$current_url` containing `localhost` to find and exclude them.

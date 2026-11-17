@@ -22,12 +22,12 @@
  * Each platform's detectInCall() is isolated so one can be fixed without
  * touching the others.
  *
- * DEBUGGING: this script logs to the console of whichever page/frame it's
- * running in — prefixed "[Mezzo]" so it's easy to filter. Open DevTools on
- * the actual meeting tab (F12, or Cmd+Option+I on Mac) and check the
- * Console tab. Runs in every frame (manifest's all_frames: true), since
- * some platforms nest their in-call UI inside an iframe — expect to see
- * one "[Mezzo] loaded" line per frame.
+ * DEBUGGING: this script logs a few short lines to the console of whichever
+ * page/frame it's running in, prefixed "[Mezzo]" so it's easy to filter:
+ * the platform, and when a call starts or ends. It never logs the page's
+ * address or content (2026-11-16, for the Chrome Web Store). Runs in every
+ * frame (manifest's all_frames: true), since some platforms nest their
+ * in-call UI inside an iframe — expect one "[Mezzo] loaded" line per frame.
  */
 
 (() => {
@@ -59,11 +59,11 @@
   const platform = PLATFORMS.find((p) => p.hostTest(window.location.hostname));
 
   if (!platform) {
-    console.log(`[Mezzo] no platform match for host "${window.location.hostname}" — script exiting`);
+    console.log('[Mezzo] no supported meeting platform here; script exiting');
     return;
   }
 
-  console.log(`[Mezzo] loaded for ${platform.name} — frame url: ${window.location.href}`);
+  console.log(`[Mezzo] loaded for ${platform.name}`);
 
   // ===========================================================================
   // Banner
@@ -275,10 +275,4 @@
     childList: true,
     subtree: true,
   });
-
-  // Heartbeat so it's obvious the script is still alive and what it
-  // currently sees, without spamming the console on every DOM mutation.
-  setInterval(() => {
-    console.log(`[Mezzo] heartbeat — currently in call: ${platform.detectInCall()}`);
-  }, 8000);
 })();
