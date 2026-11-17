@@ -114,7 +114,7 @@
 
 import { AudioProcessor } from './audio.js?v=2';
 import { MezzoEngine, DEFAULT_ZONE_SETTINGS, isNoisyRoom } from './engine.js?v=5';
-import { MezzoRangeRing, edgeForBandExtent, edgeForExtent, ringExtent, bandExtent, largestClearCircle, scaledBand, DEFAULT_RING_SETTINGS } from './range-ring.js';
+import { MezzoRangeRing, edgeForBandExtent, edgeForExtent, ringExtent, largestClearCircle, scaledBand, DEFAULT_RING_SETTINGS } from './range-ring.js';
 import { MezzoLevelMeter } from './level-meter.js';
 import { createZoneAnnouncer, ZONE_LABELS } from './zone-announcer.js';
 import { createCalibrationController } from './calibration-controller.js';
@@ -2791,12 +2791,16 @@ export function createMezzoSession({
          charcoal; the old 35% resting opacity failed the 3:1 minimum for
          icons). Hover and focus get a soft cream background; focus keeps
          the sage ring.
-         - Compact: icon-only Stop (bottom left), Expand (top right).
-         - Expanded: a real Stop button, styled like the secondary buttons,
-           and a Compact view icon (top right).
-         - Mini: the ring only; Stop and Expand fade in, over a soft top and
-           bottom scrim, when the pointer enters or a control has focus
-           (see setUpMiniReveal()).
+         - Compact and Mini (2026-11-16): the ring only, centered at full
+           size. The pointer entering the window, or keyboard focus on a
+           control, fades in a dark overlay over the whole window with Stop
+           in the bottom-left corner and Expand in the bottom-right, each
+           --edge from its corner; labeled when the window is at least
+           CONTROL_LABEL_MIN_WIDTH wide (data-labels), icons only below
+           that (see setUpControlsReveal()).
+         - Expanded: a real Stop button, centered below the ring (2026-11-16),
+           styled like the secondary buttons, and a Compact view icon (top
+           right).
          The profile name sits in the top row, centered between the
          corners, in Expanded only (2026-11-11: hidden in Compact and Mini,
          where the ring takes the whole window, see ringEdge()). */
@@ -2899,8 +2903,8 @@ export function createMezzoSession({
       .pip-control-btn:active { background: rgba(243, 235, 222, 0.16); }
       .pip-control-btn:focus-visible { outline: 2px solid #CEE2C4; outline-offset: 2px; }
       .pip-control-btn-stop { bottom: var(--edge); left: var(--edge); }
-      .pip-control-btn-compact,
-      .pip-control-btn-expand { top: var(--edge); right: var(--edge); }
+      .pip-control-btn-compact { top: var(--edge); right: var(--edge); }
+      .pip-control-btn-expand { bottom: var(--edge); right: var(--edge); }
       .pip-control-icon-stop {
         width: 10px;
         height: 10px;
@@ -2915,13 +2919,23 @@ export function createMezzoSession({
       .pip-control-btn-compact { display: none; }
       .pip-screen-monitoring[data-size-band="expanded"] .pip-control-btn-compact { display: flex; }
       .pip-screen-monitoring[data-size-band="expanded"] .pip-control-btn-expand { display: none; }
-      /* Expanded: Stop is a real button, like "Keep temporarily". */
+      /* Expanded: Stop is a real button, like "Keep temporarily", centered
+         below the ring (2026-11-16). The glow may reach it, so it has a
+         solid backing in the window's own color and stays readable over
+         any ring state. */
       .pip-screen-monitoring[data-size-band="expanded"] .pip-control-btn-stop {
+        left: 50%;
+        translate: -50% 0;
         width: auto;
         height: auto;
         min-height: 40px;
         padding: 0 16px;
         border: 1px solid rgba(243, 235, 222, 0.3);
+        background: var(--color-bg);
+        /* Its own layer: without it, repainting the opaque button over the
+           animated glow every frame slowed the ring enough to show under
+           load (tests/monitoring-presentation.spec.js, live region). */
+        will-change: transform;
         color: #F3EBDE;
         font-family: var(--font-body);
         font-size: 14px;
@@ -2929,9 +2943,9 @@ export function createMezzoSession({
       }
       .pip-screen-monitoring[data-size-band="expanded"] .pip-control-btn-stop:hover {
         border-color: rgba(243, 235, 222, 0.6);
-        background: rgba(243, 235, 222, 0.06);
+        background: color-mix(in srgb, #F3EBDE 6%, var(--color-bg));
       }
-      .pip-screen-monitoring[data-size-band="expanded"] .pip-control-btn-stop:active { background: rgba(243, 235, 222, 0.12); }
+      .pip-screen-monitoring[data-size-band="expanded"] .pip-control-btn-stop:active { background: color-mix(in srgb, #F3EBDE 12%, var(--color-bg)); }
       /* Tooltip for the icon-only controls, beside the control, after
          about 500ms of hover (see setUpControlTooltips()). */
       .pip-control-tooltip {
@@ -2951,122 +2965,56 @@ export function createMezzoSession({
       .pip-control-tooltip[hidden] { display: none; }
       .pip-screen-monitoring[data-size-band="expanded"] .pip-control-icon-stop { width: 9px; height: 9px; }
       .pip-screen-monitoring[data-size-band="expanded"] .pip-control-label { display: inline; }
-      /* Mini: the ring only, until the pointer enters or a control has
-         focus. opacity, never display: the controls stay in the tab order. */
-      .pip-screen-monitoring[data-size-band="mini"] .pip-control-btn { opacity: 0; }
-      .pip-screen-monitoring[data-size-band="mini"].pip-controls-revealed .pip-control-btn { opacity: 1; }
-      .pip-screen-monitoring::before,
-      .pip-screen-monitoring::after {
-        content: '';
+      /* ── Compact and Mini controls (2026-11-16) ──
+         At rest, the ring only. The pointer entering the window or keyboard
+         focus on a control (setUpControlsReveal(): .pip-controls-revealed)
+         fades in a dark overlay over the whole window (60% black) with the
+         controls on top, so nothing ever sits directly on the ring. Stop in
+         the bottom-left corner, Expand in the bottom-right, each --edge from
+         its corner. opacity, never display: the controls stay in the tab
+         order. Outlined like the secondary buttons, cream on the overlay
+         (about 13:1 over the dimmed window). With data-labels (the window
+         at least CONTROL_LABEL_MIN_WIDTH wide) each shows its label beside
+         its icon; below that, icons only, named by aria-label. A quick fade
+         in and out; none with reduced motion. */
+      .pip-monitoring-overlay {
         position: absolute;
-        left: 0;
-        right: 0;
-        height: 48px;
+        inset: 0;
         z-index: 1;
+        background: rgba(0, 0, 0, 0.6);
         pointer-events: none;
         opacity: 0;
-        transition: opacity 0.15s ease;
+        transition: opacity 0.12s ease;
       }
-      .pip-screen-monitoring::before { top: 0; background: linear-gradient(rgba(36, 37, 40, 0.55), transparent); }
-      .pip-screen-monitoring::after { bottom: 0; background: linear-gradient(transparent, rgba(36, 37, 40, 0.55)); }
-      .pip-screen-monitoring[data-size-band="mini"].pip-controls-revealed::before,
-      .pip-screen-monitoring[data-size-band="mini"].pip-controls-revealed::after { opacity: 1; }
-      /* ── Compact and Mini toolbar (2026-11-11): Stop and Expand together
-         in one small, low-contrast panel (a faint cream outline over the
-         window's own color, never chartreuse), so they read as controls
-         without competing with the glow. Docked in the bottom-right corner,
-         flush with the edges (2026-11-13): data-toolbar (set by
-         ringLayout() from the window's shape) picks how. "side", when the
-         window is wider than tall: against the right edge, Stop above
-         Expand. "bottom", otherwise: against the bottom edge, Stop left of
-         Expand. Expand is always in the corner. Only the corner facing into
-         the window is rounded, and the sides touching the window have no
-         border. The ring is the largest circle that keeps its far-over
-         glow clear of it (ringLayout()). The panel is decorative; each
-         button keeps its own accessible name. In Mini it fades in with the
-         buttons, and the top and bottom scrims aren't needed. ── */
-      .pip-monitoring-toolbar {
-        display: none;
-        position: absolute;
-        z-index: 1;
-        box-sizing: border-box;
-        border: 1px solid rgba(243, 235, 222, 0.12);
-        background: var(--color-bg); /* the window's own color at rest (2026-11-13) */
-        pointer-events: none;
-        transition: opacity 0.15s ease;
+      .pip-screen-monitoring[data-size-band="expanded"] .pip-monitoring-overlay { display: none; }
+      .pip-screen-monitoring.pip-controls-revealed .pip-monitoring-overlay { opacity: 1; }
+      .pip-screen-monitoring:not([data-size-band="expanded"]) .pip-control-btn {
+        opacity: 0;
+        border: 1px solid rgba(243, 235, 222, 0.3);
+        color: #F3EBDE;
+        font-family: var(--font-body);
+        font-size: 13px;
+        font-weight: var(--weight-medium);
+        line-height: 16px;
+        white-space: nowrap;
+        transition: color 0.12s ease, background 0.12s ease, border-color 0.12s ease, opacity 0.12s ease;
       }
-      .pip-screen-monitoring[data-toolbar] .pip-monitoring-toolbar { display: block; }
-      .pip-screen-monitoring[data-toolbar]::before,
-      .pip-screen-monitoring[data-toolbar]::after { display: none; }
-      .pip-screen-monitoring[data-size-band="mini"] .pip-monitoring-toolbar { opacity: 0; }
-      .pip-screen-monitoring[data-size-band="mini"].pip-controls-revealed .pip-monitoring-toolbar { opacity: 1; }
-      /* Docked in the bottom-right corner (2026-11-13), flush with both
-         edges: "side" against the right edge, Stop above Expand; "bottom"
-         against the bottom edge, Stop left of Expand. Expand is always the
-         corner button. Only the corner facing into the window is rounded;
-         the sides touching the window's edges are square, with no border. */
-      .pip-screen-monitoring[data-toolbar="side"] .pip-monitoring-toolbar,
-      .pip-screen-monitoring[data-toolbar="bottom"] .pip-monitoring-toolbar {
-        right: 0; bottom: 0; left: auto; top: auto;
-        border-right: none;
-        border-bottom: none;
-        border-radius: 6px 0 0 0;
+      .pip-screen-monitoring:not([data-size-band="expanded"]).pip-controls-revealed .pip-control-btn { opacity: 1; }
+      .pip-screen-monitoring:not([data-size-band="expanded"]) .pip-control-btn:hover {
+        border-color: rgba(243, 235, 222, 0.6);
+        background: rgba(243, 235, 222, 0.10);
       }
-      .pip-screen-monitoring[data-toolbar="side"] .pip-monitoring-toolbar { width: 40px; height: 88px; }
-      .pip-screen-monitoring[data-toolbar="bottom"] .pip-monitoring-toolbar { width: 88px; height: 40px; }
-      /* 4px inside the panel, 16px between the two (the tap-target rule:
-         16px of clear space between adjacent hit areas). */
-      .pip-screen-monitoring[data-toolbar="side"] .pip-control-btn,
-      .pip-screen-monitoring[data-toolbar="bottom"] .pip-control-btn { top: auto; left: auto; }
-      .pip-screen-monitoring[data-toolbar="side"] .pip-control-btn-expand,
-      .pip-screen-monitoring[data-toolbar="bottom"] .pip-control-btn-expand { right: 4px; bottom: 4px; }
-      .pip-screen-monitoring[data-toolbar="side"] .pip-control-btn-stop { right: 4px; bottom: 52px; }
-      .pip-screen-monitoring[data-toolbar="bottom"] .pip-control-btn-stop { right: 52px; bottom: 4px; }
-      /* At rest (2026-11-13) only the glow should draw the eye: the panel
-         is filled with the window's own color (never lighter), so it
-         doesn't read as a block, with a faint outline so the controls stay
-         recognizable; the icons are a muted gray, #7E7A72, about 3.2:1
-         against it (the minimum for visible controls). The pointer over the
-         window, keyboard focus in it, or Mini's reveal brings the icons back
-         to #B0AB9E (about 5.3:1) and lightens the panel slightly (#353638)
-         with the usual outline; hovering a button still turns it cream.
-         Mini's floating toolbar stays solid either way, so it reads over
-         the glow. Never chartreuse; no size or position changes. */
-      .pip-screen-monitoring[data-toolbar] .pip-control-btn { color: #7E7A72; }
-      .pip-screen-monitoring[data-toolbar] .pip-monitoring-toolbar { border-color: rgba(243, 235, 222, 0.07); }
-      .pip-screen-monitoring[data-toolbar]:hover .pip-control-btn,
-      .pip-screen-monitoring[data-toolbar]:focus-within .pip-control-btn,
-      .pip-screen-monitoring[data-toolbar].pip-controls-revealed .pip-control-btn { color: #B0AB9E; }
-      .pip-screen-monitoring[data-toolbar]:hover .pip-monitoring-toolbar,
-      .pip-screen-monitoring[data-toolbar]:focus-within .pip-monitoring-toolbar,
-      .pip-screen-monitoring[data-toolbar].pip-controls-revealed .pip-monitoring-toolbar { border-color: rgba(243, 235, 222, 0.12); background: #353638; }
-      .pip-screen-monitoring[data-toolbar] .pip-control-btn:hover { color: #F3EBDE; }
-      .pip-monitoring-toolbar { transition: opacity 0.15s ease, border-color 0.12s ease, background-color 0.12s ease; }
-      @media (prefers-reduced-motion: reduce) {
-        .pip-monitoring-toolbar { transition: none; }
+      .pip-screen-monitoring:not([data-size-band="expanded"]) .pip-control-btn:active { background: rgba(243, 235, 222, 0.16); }
+      .pip-screen-monitoring[data-labels]:not([data-size-band="expanded"]) .pip-control-btn {
+        width: auto;
+        padding: 0 12px;
       }
-      /* Mini (2026-11-12), when docking would overlap the ring's far-over
-         glow (ringLayout()): floated over the ring, centered in the window
-         (the ring's center), on a solid backing in the window's color with
-         the faint outline and rounded corners on every side; Stop and
-         Expand side by side. Only shown on hover or focus (above). */
-      .pip-screen-monitoring[data-toolbar="center"] .pip-monitoring-toolbar {
-        left: calc(50% - 44px); top: calc(50% - 20px); right: auto; bottom: auto;
-        width: 88px; height: 40px;
-        background: var(--color-bg);
-        border-radius: 6px;
-      }
-      .pip-screen-monitoring[data-toolbar="center"] .pip-control-btn {
-        top: calc(50% - 16px); right: auto; bottom: auto;
-      }
-      .pip-screen-monitoring[data-toolbar="center"] .pip-control-btn-stop { left: calc(50% - 40px); }
-      .pip-screen-monitoring[data-toolbar="center"] .pip-control-btn-expand { left: calc(50% + 8px); }
+      .pip-screen-monitoring[data-labels]:not([data-size-band="expanded"]) .pip-control-label { display: inline; }
       @media (prefers-reduced-motion: reduce) {
         .pip-control-btn,
+        .pip-screen-monitoring:not([data-size-band="expanded"]) .pip-control-btn,
         .pip-screen-monitoring[data-size-band="expanded"] .pip-control-btn-stop,
-        .pip-screen-monitoring::before,
-        .pip-screen-monitoring::after,
-        .pip-monitoring-toolbar { transition: none; }
+        .pip-monitoring-overlay { transition: none; }
       }
 
       /* ════════════════════════════════════════════════════════════════
@@ -4446,16 +4394,17 @@ export function createMezzoSession({
     const circleWrapper = pipDoc.createElement('div');
     circleWrapper.className = 'pip-circle-wrapper';
     monitoringScreen.appendChild(circleWrapper);
-    // The Compact and Mini toolbar's panel, behind Stop and Expand
-    // (decorative; the buttons keep their own names).
-    const toolbarPanel = pipDoc.createElement('div');
-    toolbarPanel.className = 'pip-monitoring-toolbar';
-    toolbarPanel.setAttribute('aria-hidden', 'true');
-    monitoringScreen.appendChild(toolbarPanel);
+    // Compact and Mini (2026-11-16): the dark overlay the controls appear
+    // on, over the whole window (decorative).
+    const controlsOverlay = pipDoc.createElement('div');
+    controlsOverlay.className = 'pip-monitoring-overlay';
+    controlsOverlay.setAttribute('aria-hidden', 'true');
+    monitoringScreen.appendChild(controlsOverlay);
     pipCircleWrapperEl = circleWrapper;
 
-    // Stop: bottom left. Icon-only in Mini and Compact, a labeled button
-    // in Expanded (the label is hidden by CSS below Expanded).
+    // Stop: bottom left in Mini and Compact, labeled when the window is wide
+    // enough (data-labels); a labeled button centered below the ring in
+    // Expanded.
     const controls = pipDoc.createElement('div');
     controls.className = 'pip-monitoring-controls';
 
@@ -4476,8 +4425,8 @@ export function createMezzoSession({
 
     monitoringScreen.appendChild(controls);
 
-    // Expand: top right, below the Expanded size band. Restores the
-    // Expanded size without stopping monitoring.
+    // Expand: bottom right, below the Expanded size band, labeled like
+    // Stop. Restores the Expanded size without stopping monitoring.
     const expandBtn = pipDoc.createElement('button');
     expandBtn.type = 'button';
     expandBtn.className = 'pip-control-btn pip-control-btn-expand';
@@ -4485,13 +4434,14 @@ export function createMezzoSession({
     expandBtn.innerHTML =
       '<svg class="pip-control-icon-expand" viewBox="0 0 12 12" fill="none" aria-hidden="true">' +
       '<path d="M7.5 1.5H10.5V4.5M4.5 10.5H1.5V7.5M10.5 1.5L6.5 5.5M1.5 10.5L5.5 6.5" ' +
-      'stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      'stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
+      '<span class="pip-control-label">Expand</span>';
     expandBtn.addEventListener('click', enterExpandedLayout);
     monitoringScreen.appendChild(expandBtn);
 
     layout.appendChild(monitoringScreen);
     monitoringScreenEl = monitoringScreen;
-    setUpMiniReveal(monitoringScreen);
+    setUpControlsReveal(monitoringScreen);
     setUpControlTooltips(monitoringScreen);
 
     pipDoc.body.appendChild(layout);
@@ -4635,8 +4585,12 @@ function setUpControlTooltips(screen) {
   screen.appendChild(tip);
   let timer = null;
   const hide = () => { clearTimeout(timer); timer = null; tip.hidden = true; };
-  const iconOnly = (btn) =>
-    !(btn.classList.contains('pip-control-btn-stop') && screen.dataset.sizeBand === 'expanded');
+  // A control showing its label needs no tooltip: Expanded's Stop, and
+  // Compact and Mini when the window is wide enough for labels.
+  const iconOnly = (btn) => {
+    if (screen.dataset.sizeBand === 'expanded') return !btn.classList.contains('pip-control-btn-stop');
+    return !('labels' in screen.dataset);
+  };
   const show = (btn) => {
     tip.textContent = btn.getAttribute('aria-label');
     tip.hidden = false;
@@ -4652,27 +4606,17 @@ function setUpControlTooltips(screen) {
       { x: besideX, y: by + (b.height - h) / 2 },
       { x: alignX, y: onTop ? by + b.height + 6 : by - 6 - h },
     ];
-    // Docked toolbar: into the window, away from the edge it's docked to,
-    // never over the other button.
-    const docked = screen.dataset.toolbar;
-    if (docked === 'side') candidates.unshift({ x: bx - 6 - w, y: by + (b.height - h) / 2 });
-    if (docked === 'bottom') {
-      candidates.unshift(
-        { x: bx + (b.width - w) / 2, y: by - 6 - h },
-        { x: onLeft ? bx : bx + b.width - w, y: by - 6 - h },
-      );
-    }
     const layout = ringLayout();
     const inWindow = ({ x, y }) => x >= 0 && y >= 0 && x + w <= s.width && y + h <= s.height;
-    let clearOfRing;
+    // Expanded: never over the ring. Compact and Mini: the controls (and
+    // their tooltips) only show on the dark overlay, so anywhere inside
+    // the window is fine (2026-11-16).
+    let clearOfRing = () => true;
     if (layout.band === 'expanded') {
       const { extent, top, bottom } = layout;
       const ring = { left: (s.width - extent) / 2, top: (top + bottom - extent) / 2 };
       ring.right = ring.left + extent; ring.bottom = ring.top + extent;
       clearOfRing = ({ x, y }) => x + w <= ring.left || x >= ring.right || y + h <= ring.top || y >= ring.bottom;
-    } else {
-      const radius = bandExtent(ringEdge(), ringBand()) / 2;
-      clearOfRing = ({ x, y }) => distanceToRect(layout.cx, layout.cy, { left: x, top: y, right: x + w, bottom: y + h }) >= radius;
     }
     const fits = (spot) => inWindow(spot) && clearOfRing(spot);
     const spot = candidates.find(fits);
@@ -4691,12 +4635,16 @@ function setUpControlTooltips(screen) {
   }
 }
 
-// Mini (short side under 160) shows the ring only. The pointer entering
-// the window, or keyboard focus on a control, fades Stop and Expand in;
-// they hide again 2s after the pointer has left and focus has moved out.
-// Harmless at the other sizes: the class only has an effect in Mini.
-const MINI_HIDE_DELAY_MS = 2000;
-function setUpMiniReveal(screen) {
+// Compact and Mini (2026-11-16) show the ring only. The pointer entering
+// the window, or keyboard focus on a control, fades in the dark overlay with
+// Stop and Expand; they hide again CONTROLS_HIDE_DELAY_MS after the pointer
+// has left, unless focus is still on a control. A touch leaves the pointer
+// "gone" right after the tap, so after a touch they stay a little longer,
+// long enough to tap one. Harmless in Expanded: the class has no effect
+// there.
+const CONTROLS_HIDE_DELAY_MS = 500;
+const CONTROLS_TOUCH_HIDE_DELAY_MS = 3000;
+function setUpControlsReveal(screen) {
   let hovered = false;
   let hideTimer = null;
   const show = () => {
@@ -4704,15 +4652,18 @@ function setUpMiniReveal(screen) {
     hideTimer = null;
     screen.classList.add('pip-controls-revealed');
   };
-  const scheduleHide = () => {
+  const scheduleHide = (delay = CONTROLS_HIDE_DELAY_MS) => {
     clearTimeout(hideTimer);
     hideTimer = setTimeout(() => {
       if (hovered || screen.contains(screen.ownerDocument.activeElement)) return;
       screen.classList.remove('pip-controls-revealed');
-    }, MINI_HIDE_DELAY_MS);
+    }, delay);
   };
   screen.addEventListener('pointerenter', () => { hovered = true; show(); });
-  screen.addEventListener('pointerleave', () => { hovered = false; scheduleHide(); });
+  screen.addEventListener('pointerleave', (e) => {
+    hovered = false;
+    scheduleHide(e.pointerType === 'touch' ? CONTROLS_TOUCH_HIDE_DELAY_MS : CONTROLS_HIDE_DELAY_MS);
+  });
   screen.addEventListener('focusin', show);
   screen.addEventListener('focusout', (e) => {
     if (!screen.contains(e.relatedTarget)) scheduleHide();
@@ -4740,17 +4691,18 @@ function ringBand() {
 // gap (the glow isn't counted, so it may reach into the gap and under the
 // name), but the glow stays inside the window's width, where the window's
 // side would otherwise cut it off visibly (382 wide).
-// Compact and Mini (2026-11-11; toolbar docked to an edge 2026-11-12): the
-// ring is the largest thing in the window, sized by its far-over extent (the
-// circle, the widest band and the glow's visible reach, ringExtent()): the
-// largest circle in the window that keeps clear of the edge-docked toolbar
-// (largestClearCircle()), so it's never clipped and never reaches the
-// toolbar, at any window size; the edge is at most RING_MAX_FRACTION of the
-// short side.
+// Compact and Mini (2026-11-16): the ring is centered in the window and
+// sized by its far-over extent (the circle, the widest band and the glow's
+// visible reach, ringExtent()) to the window's short side, so it's never
+// clipped; the edge is at most RING_MAX_FRACTION of the short side. The
+// controls only appear over a dark overlay, so the ring never makes room
+// for them.
 const RING_MAX_FRACTION = 0.8;
 const RING_GLOW_MARGIN_PX = 2;
-// Space kept between the ring's far-over glow and the Compact/Mini toolbar.
-const TOOLBAR_GAP_PX = 4;
+// Compact and Mini: labels beside the icons from this window width up;
+// icons only below it, so the labels never wrap or crowd (Stop and Expand
+// with labels, 8px from the corners, keep at least 16px apart at 200).
+const CONTROL_LABEL_MIN_WIDTH = 200;
 function ringEdge() {
   const layout = ringLayout(); // sets the size band first
   const band = ringBand();
@@ -4762,25 +4714,6 @@ function ringEdge() {
   return Math.min(edgeForExtent(2 * radius, band), RING_MAX_FRACTION * short);
 }
 
-// The docked toolbar panel's size (the CSS above): 40×88 against the
-// right edge, 88×40 against the bottom edge, in the bottom-right corner.
-const TOOLBAR_THICKNESS_PX = 40;
-const TOOLBAR_LENGTH_PX = 88;
-/** The docked toolbar panel's rectangle, which holds both buttons. */
-function dockedToolbarRect(docked, width, height) {
-  if (docked === 'side') {
-    return { left: width - TOOLBAR_THICKNESS_PX, right: width, top: height - TOOLBAR_LENGTH_PX, bottom: height };
-  }
-  return { left: width - TOOLBAR_LENGTH_PX, right: width, top: height - TOOLBAR_THICKNESS_PX, bottom: height };
-}
-
-/** Distance from a point to the nearest point of a rectangle (0 inside). */
-function distanceToRect(x, y, r) {
-  const dx = Math.max(r.left - x, 0, x - r.right);
-  const dy = Math.max(r.top - y, 0, y - r.bottom);
-  return Math.hypot(dx, dy);
-}
-
 function ringLayout() {
     const width = pipWindow?.innerWidth || 0;
     const height = pipWindow?.innerHeight || 0;
@@ -4790,37 +4723,15 @@ function ringLayout() {
     if (monitoringScreenEl) monitoringScreenEl.dataset.sizeBand = band;
     let top = 0;
     let bottom = height;
-    // Compact and Mini: Stop and Expand share a toolbar docked in the
-    // bottom-right corner, against the right edge (wider than tall) or the
-    // bottom edge (otherwise); the ring is the largest circle that fits in the
-    // window and keeps clear of it (TOOLBAR_GAP_PX around its panel and
-    // buttons), so its far-over glow never reaches the toolbar or the
-    // window's edges (see ringEdge()).
+    // Compact and Mini (2026-11-16): the ring is centered in the whole
+    // window; the controls appear over a dark overlay in the bottom corners,
+    // labeled when the window is wide enough (see ringEdge()).
     if (band !== 'expanded') {
-      const docked = width > height ? 'side' : 'bottom';
-      let toolbar = docked;
-      const pad = (r) => ({ left: r.left - TOOLBAR_GAP_PX, top: r.top - TOOLBAR_GAP_PX, right: r.right + TOOLBAR_GAP_PX, bottom: r.bottom + TOOLBAR_GAP_PX });
-      // Mini (2026-11-12): the toolbar only fades in on hover or focus, so
-      // the ring takes the whole window and the toolbar sits over its edge
-      // when it appears; the ring never resizes for it.
-      const obstacles = [];
-      for (const el of band === 'mini' ? [] : monitoringScreenEl?.querySelectorAll('.pip-monitoring-toolbar, .pip-control-btn') ?? []) {
-        if (el.offsetParent === null) continue;
-        const r = el.getBoundingClientRect();
-        if (r.width && r.height) obstacles.push(pad(r));
+      const { cx, cy, radius } = largestClearCircle(width, height, []);
+      if (monitoringScreenEl) {
+        if (width >= CONTROL_LABEL_MIN_WIDTH) monitoringScreenEl.dataset.labels = '';
+        else delete monitoringScreenEl.dataset.labels;
       }
-      const { cx, cy, radius } = largestClearCircle(width, height, obstacles);
-      // Mini (2026-11-12): dock the toolbar like Compact when its whole
-      // panel (the buttons' tap targets are inside it) stays clear of the
-      // ring's far-over glow; otherwise float it over the ring's center.
-      // Decided from the window size alone (the far-over glow, not the
-      // current one), so it never changes with volume.
-      if (band === 'mini') {
-        const edge = Math.min(edgeForExtent(2 * Math.max(0, radius - RING_GLOW_MARGIN_PX), ringBand()), RING_MAX_FRACTION * short);
-        const glowRadius = ringExtent(edge, ringBand()) / 2;
-        if (distanceToRect(cx, cy, dockedToolbarRect(docked, width, height)) < glowRadius) toolbar = 'center';
-      }
-      if (monitoringScreenEl) monitoringScreenEl.dataset.toolbar = toolbar;
       if (pipCircleWrapperEl) {
         const box = Math.max(0, 2 * radius);
         pipCircleWrapperEl.style.left = `${cx - radius}px`;
@@ -4829,9 +4740,9 @@ function ringLayout() {
         pipCircleWrapperEl.style.top = `${cy - radius}px`;
         pipCircleWrapperEl.style.height = `${box}px`;
       }
-      return { band, gap, top: 0, bottom: height, cx, cy, width, height, toolbar, clearRadius: radius, extent: Math.max(0, 2 * radius - 2 * gap) };
+      return { band, gap, top: 0, bottom: height, cx, cy, width, height, clearRadius: radius, extent: Math.max(0, 2 * radius - 2 * gap) };
     }
-    if (monitoringScreenEl) delete monitoringScreenEl.dataset.toolbar;
+    if (monitoringScreenEl) delete monitoringScreenEl.dataset.labels;
     if (pipCircleWrapperEl) {
       pipCircleWrapperEl.style.left = '';
       pipCircleWrapperEl.style.right = '';
