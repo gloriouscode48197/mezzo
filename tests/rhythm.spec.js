@@ -234,19 +234,41 @@ test.describe('Rhythm', () => {
       const listenSlot = await box(cal.locator('.pip-calibrating-slot'));
       // Under the "Recalibrating {name}" bar the whole layout is 44px lower.
       expect(Math.round(listenEyebrow.top)).toBe(flow === 'recalibration' ? 44 + 32 : 32);
-      const creating = pip.locator('.pip-screen-creating');
-      await expect(creating).toBeVisible({ timeout: 15000 });
-      const heading = creating.locator('.pip-calibrating-heading');
-      await expect(heading).toHaveText(flow === 'recalibration' ? 'Saving your calibration…' : 'Creating your speaking profile…');
-      const eyebrowLine = await box(creating.locator('.pip-calibrating-subheading'));
-      expect(eyebrowLine.top).toBe(listenEyebrow.top);
-      expect(Math.round(eyebrowLine.height)).toBe(Math.round(listenEyebrow.height));
-      expect(gap(eyebrowLine, await box(heading))).toBe(8);
+      // Processing shows only for a moment and moves on by itself, so the
+      // Companion window measures it on the first frame it's showing; the
+      // test then checks that record (reading it afterwards, one part at a
+      // time, could find it already hidden under a loaded suite).
+      await pip.evaluate(() => {
+        window.__creatingSnap = null;
+        const r = (el) => { const b = el.getBoundingClientRect(); return { top: b.top, bottom: b.bottom, left: b.left, right: b.right, width: b.width, height: b.height }; };
+        const look = () => {
+          const screen = document.querySelector('.pip-screen-creating');
+          const heading = screen?.querySelector('.pip-calibrating-heading');
+          if (screen && heading && screen.getClientRects().length && heading.getBoundingClientRect().height > 0) {
+            window.__creatingSnap = {
+              text: heading.textContent,
+              eyebrow: r(screen.querySelector('.pip-calibrating-subheading')),
+              heading: r(heading),
+              slot: r(screen.querySelector('.pip-calibrating-slot')),
+              buttons: screen.querySelectorAll('button').length,
+            };
+            return;
+          }
+          requestAnimationFrame(look);
+        };
+        requestAnimationFrame(look);
+      });
+      await expect.poll(() => pip.evaluate(() => Boolean(window.__creatingSnap)), { timeout: 15000 }).toBe(true);
+      const snap = await pip.evaluate(() => window.__creatingSnap);
+      expect(snap.text).toBe(flow === 'recalibration' ? 'Saving your calibration…' : 'Creating your speaking profile…');
+      expect(snap.eyebrow.top).toBe(listenEyebrow.top);
+      expect(Math.round(snap.eyebrow.height)).toBe(Math.round(listenEyebrow.height));
+      expect(gap(snap.eyebrow, snap.heading)).toBe(8);
       // The heading sits where listening's does, and the slot (the spinner
       // here, the countdown there) lines up too.
-      expect((await box(heading)).top).toBe(listenHeading.top);
-      expect(await box(creating.locator('.pip-calibrating-slot'))).toEqual(listenSlot);
-      await expect(creating.locator('button')).toHaveCount(0);
+      expect(snap.heading.top).toBe(listenHeading.top);
+      expect(snap.slot).toEqual(listenSlot);
+      expect(snap.buttons).toBe(0);
     });
   }
 
