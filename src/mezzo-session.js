@@ -2943,8 +2943,8 @@ export function createMezzoSession({
         background: color-mix(in srgb, #F3EBDE 6%, var(--color-bg));
       }
       .pip-screen-monitoring[data-size-band="expanded"] .pip-control-btn-stop:active { background: color-mix(in srgb, #F3EBDE 12%, var(--color-bg)); }
-      /* Tooltip for the icon-only controls, beside the control, after
-         about 500ms of hover (see setUpControlTooltips()). */
+      /* Tooltip for Expanded's icon-only control, beside it, after about
+         500ms of hover (see setUpControlTooltips()). None in Compact/Mini. */
       .pip-control-tooltip {
         position: absolute;
         z-index: 3;
@@ -2965,7 +2965,8 @@ export function createMezzoSession({
       /* ── Compact and Mini controls (2026-11-17) ──
          Expand is always visible in the bottom-right corner, --edge from it:
          an icon in a 32×32 target, muted like the profile label (#B0AB9E),
-         above the overlay so it stays clickable, with its tooltip.
+         above the overlay so it stays clickable; no tooltip, its
+         aria-label names it.
          Stop appears only on hover anywhere in the window or keyboard focus
          (setUpControlsReveal(): .pip-controls-revealed): a dark overlay over
          the whole window (60% black) and one Stop button centered over the
@@ -2976,7 +2977,7 @@ export function createMezzoSession({
          centered it wouldn't. While hidden it takes no pointer events, so
          a tap can't hit it unseen; on touch the first tap shows it and the
          second stops. opacity, never display: Stop stays in the tab order.
-         A quick fade in and out; none with reduced motion. */
+         A 0.1s fade in and out; none with reduced motion. */
       .pip-monitoring-overlay {
         position: absolute;
         inset: 0;
@@ -2984,7 +2985,7 @@ export function createMezzoSession({
         background: rgba(0, 0, 0, 0.6);
         pointer-events: none;
         opacity: 0;
-        transition: opacity 0.12s ease;
+        transition: opacity 0.1s ease;
       }
       .pip-screen-monitoring[data-size-band="expanded"] .pip-monitoring-overlay { display: none; }
       .pip-screen-monitoring.pip-controls-revealed .pip-monitoring-overlay { opacity: 1; }
@@ -3004,7 +3005,7 @@ export function createMezzoSession({
         white-space: nowrap;
         opacity: 0;
         pointer-events: none;
-        transition: color 0.12s ease, background 0.12s ease, border-color 0.12s ease, opacity 0.12s ease;
+        transition: color 0.12s ease, background 0.12s ease, border-color 0.12s ease, opacity 0.1s ease;
       }
       .pip-screen-monitoring:not([data-size-band="expanded"]) .pip-control-btn-stop .pip-control-label { display: inline; }
       .pip-screen-monitoring:not([data-size-band="expanded"])[data-stop="icon"] .pip-control-btn-stop {
@@ -4583,15 +4584,14 @@ export function createMezzoSession({
    * gap, centered in the area, so the space above and below it is equal.
    * Positions the ring's container as a side effect.
    */
-  // Icon-only controls get a short tooltip naming the action, after about
-// 500ms of hover: beside the control (to the inside of its corner), in the
-// control's own row, so it never sits over the ring. If even that would
-// touch the ring (Compact and Mini, where the ring has the whole window:
-// the ring there is a circle, its edge plus its widest band), it tries
-// above or below the control instead, and otherwise stays hidden: the
-// aria-label already names the control. Hidden on pointer leave and on
-// press; never shown for keyboard focus. Expanded's Stop has a visible
-// label, so it gets none.
+// Expanded's icon-only control (Compact view) gets a short tooltip naming
+// the action, after about 500ms of hover: beside the control (to the inside
+// of its corner), in the control's own row, so it never sits over the ring;
+// otherwise above or below it, and otherwise none: the aria-label already
+// names the control. Hidden on pointer leave and on press; never shown for
+// keyboard focus. Expanded's Stop has a visible label, so it gets none.
+// Compact and Mini show no tooltips at all (2026-11-17): Expand is named
+// for screen readers only.
 const TOOLTIP_DELAY_MS = 500;
 function setUpControlTooltips(screen) {
   const doc = screen.ownerDocument;
@@ -4600,14 +4600,11 @@ function setUpControlTooltips(screen) {
   tip.setAttribute('aria-hidden', 'true');
   tip.hidden = true;
   screen.appendChild(tip);
+  const win = doc.defaultView;
   let timer = null;
-  const hide = () => { clearTimeout(timer); timer = null; tip.hidden = true; };
-  // A control showing its label needs no tooltip: Stop, unless it's the
-  // icon-only square in a very small window (data-stop="icon").
-  const iconOnly = (btn) => {
-    if (!btn.classList.contains('pip-control-btn-stop')) return true;
-    return screen.dataset.sizeBand !== 'expanded' && screen.dataset.stop === 'icon';
-  };
+  const hide = () => { win.clearTimeout(timer); timer = null; tip.hidden = true; };
+  const wantsTooltip = (btn) => screen.dataset.sizeBand === 'expanded'
+    && !btn.classList.contains('pip-control-btn-stop');
   const show = (btn) => {
     tip.textContent = btn.getAttribute('aria-label');
     tip.hidden = false;
@@ -4623,20 +4620,13 @@ function setUpControlTooltips(screen) {
       { x: besideX, y: by + (b.height - h) / 2 },
       { x: alignX, y: onTop ? by + b.height + 6 : by - 6 - h },
     ];
-    const layout = ringLayout();
     const inWindow = ({ x, y }) => x >= 0 && y >= 0 && x + w <= s.width && y + h <= s.height;
-    // Expanded: never over the ring. Compact and Mini: the controls (and
-    // their tooltips) only show on the dark overlay, so anywhere inside
-    // the window is fine (2026-11-16).
-    let clearOfRing = () => true;
-    if (layout.band === 'expanded') {
-      const { extent, top, bottom } = layout;
-      const ring = { left: (s.width - extent) / 2, top: (top + bottom - extent) / 2 };
-      ring.right = ring.left + extent; ring.bottom = ring.top + extent;
-      clearOfRing = ({ x, y }) => x + w <= ring.left || x >= ring.right || y + h <= ring.top || y >= ring.bottom;
-    }
-    // Never over the other control (Compact and Mini: Stop shows while
-    // Expand is hovered).
+    // Never over the ring.
+    const { extent, top, bottom } = ringLayout();
+    const ring = { left: (s.width - extent) / 2, top: (top + bottom - extent) / 2 };
+    ring.right = ring.left + extent; ring.bottom = ring.top + extent;
+    const clearOfRing = ({ x, y }) => x + w <= ring.left || x >= ring.right || y + h <= ring.top || y >= ring.bottom;
+    // Never over another control.
     const others = [...screen.querySelectorAll('.pip-control-btn')]
       .filter((el) => el !== btn && getComputedStyle(el).display !== 'none' && getComputedStyle(el).opacity !== '0')
       .map((el) => { const r = el.getBoundingClientRect(); return { left: r.left - s.left, top: r.top - s.top, right: r.right - s.left, bottom: r.bottom - s.top }; });
@@ -4650,8 +4640,8 @@ function setUpControlTooltips(screen) {
   for (const btn of screen.querySelectorAll('.pip-control-btn')) {
     btn.addEventListener('pointerenter', () => {
       hide();
-      if (!iconOnly(btn)) return;
-      timer = setTimeout(() => show(btn), TOOLTIP_DELAY_MS);
+      if (!wantsTooltip(btn)) return;
+      timer = win.setTimeout(() => show(btn), TOOLTIP_DELAY_MS);
     });
     btn.addEventListener('pointerleave', hide);
     btn.addEventListener('pointerdown', hide);
@@ -4660,27 +4650,48 @@ function setUpControlTooltips(screen) {
 
 // Compact and Mini (2026-11-17) show the ring and the Expand icon. The
 // pointer entering the window, or keyboard focus on a control, fades in the
-// dark overlay with Stop; they hide again CONTROLS_HIDE_DELAY_MS after the
-// pointer has left, unless focus is still on a control. A touch leaves the
-// pointer "gone" right after the tap, so after a touch they stay a little
-// longer, long enough for the second tap. Harmless in Expanded: the class
-// has no effect there.
-const CONTROLS_HIDE_DELAY_MS = 500;
+// dark overlay with Stop. The pointer leaving the window hides them at once
+// (only the ~120ms fade), unless keyboard focus is on a control. A touch
+// leaves the pointer "gone" right after the tap, so after a touch they
+// stay CONTROLS_TOUCH_HIDE_DELAY_MS, long enough for the second tap.
+// Harmless in Expanded: the class has no effect there.
+//
+// No delay on mouse leave, and no timer from this page's realm: this code
+// runs in the main page's window, whose timers Chrome slows to about once
+// a second while that tab is in the background (the usual case during a
+// call), which turned a 500ms delay into up to 1.5s (2026-11-17). The touch
+// delay uses the Companion window's own timer, which isn't slowed.
+// Leaving the window is caught twice (pointerleave on the screen, and a
+// mouseout from the document with nowhere to go), so a missed one can't
+// leave the controls up.
 const CONTROLS_TOUCH_HIDE_DELAY_MS = 3000;
 function setUpControlsReveal(screen) {
+  const doc = screen.ownerDocument;
+  const win = doc.defaultView;
   let hovered = false;
   let hideTimer = null;
+  const keyboardFocusInside = () => {
+    const el = doc.activeElement;
+    return !!el && el !== doc.body && screen.contains(el) && el.matches(':focus-visible');
+  };
+  const clearHideTimer = () => { win.clearTimeout(hideTimer); hideTimer = null; };
   const show = () => {
-    clearTimeout(hideTimer);
-    hideTimer = null;
+    clearHideTimer();
     screen.classList.add('pip-controls-revealed');
   };
-  const scheduleHide = (delay = CONTROLS_HIDE_DELAY_MS) => {
-    clearTimeout(hideTimer);
-    hideTimer = setTimeout(() => {
-      if (hovered || screen.contains(screen.ownerDocument.activeElement)) return;
-      screen.classList.remove('pip-controls-revealed');
-    }, delay);
+  const hide = () => {
+    clearHideTimer();
+    if (hovered || keyboardFocusInside()) return;
+    screen.classList.remove('pip-controls-revealed');
+  };
+  const pointerGone = (touch) => {
+    hovered = false;
+    if (touch) {
+      clearHideTimer();
+      hideTimer = win.setTimeout(hide, CONTROLS_TOUCH_HIDE_DELAY_MS);
+    } else {
+      hide();
+    }
   };
   // On touch, the tap that reveals Stop never presses it: only a second
   // tap stops.
@@ -4695,14 +4706,14 @@ function setUpControlsReveal(screen) {
     revealingTap = false;
     if (e.target.closest?.('.pip-control-btn-stop')) { e.stopPropagation(); e.preventDefault(); }
   }, true);
-  screen.addEventListener('pointerup', () => { setTimeout(() => { revealingTap = false; }, 0); });
-  screen.addEventListener('pointerleave', (e) => {
-    hovered = false;
-    scheduleHide(e.pointerType === 'touch' ? CONTROLS_TOUCH_HIDE_DELAY_MS : CONTROLS_HIDE_DELAY_MS);
+  screen.addEventListener('pointerup', () => { win.setTimeout(() => { revealingTap = false; }, 0); });
+  screen.addEventListener('pointerleave', (e) => pointerGone(e.pointerType === 'touch'));
+  doc.addEventListener('mouseout', (e) => {
+    if (!e.relatedTarget && screen.isConnected) pointerGone(false);
   });
   screen.addEventListener('focusin', show);
   screen.addEventListener('focusout', (e) => {
-    if (!screen.contains(e.relatedTarget)) scheduleHide();
+    if (!screen.contains(e.relatedTarget) && !hovered) hide();
   });
 }
 

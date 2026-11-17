@@ -726,23 +726,75 @@ test.describe('Monitoring presentation: controls by size band', () => {
     await expect(pipPage.locator('.pip-screen-ready')).toBeVisible();
   });
 
-  test('hide: about half a second after the pointer leaves, with a quick fade; Expand stays', async ({ page, context }) => {
+  test('hide: at once when the pointer leaves the window, with a 0.1s fade; Expand stays', async ({ page, context }) => {
     const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 280, height: 84 }, layout: 'compact' });
     const stop = monitoringScreen.locator('.pip-control-btn-stop');
     const overlay = monitoringScreen.locator('.pip-monitoring-overlay');
-    expect(await overlay.evaluate((el) => getComputedStyle(el).transitionDuration)).toBe('0.12s');
-    expect(await stop.evaluate((el) => getComputedStyle(el).transitionDuration)).toContain('0.12s');
+    expect(await overlay.evaluate((el) => getComputedStyle(el).transitionDuration)).toBe('0.1s');
+    expect(await stop.evaluate((el) => getComputedStyle(el).transitionDuration)).toContain('0.1s');
     await pipPage.mouse.move(140, 20);
     await expect(overlay).toHaveCSS('opacity', '1');
+    // The class goes in the same task as the leave: no timer.
+    const revealedAfterLeave = await monitoringScreen.evaluate((screen) => {
+      screen.dispatchEvent(new PointerEvent('pointerleave', { pointerType: 'mouse' }));
+      return screen.classList.contains('pip-controls-revealed');
+    });
+    expect(revealedAfterLeave).toBe(false);
     await pipPage.mouse.move(-10, -10);
-    const left = Date.now();
-    await pipPage.waitForTimeout(250);
-    await expect(stop).toHaveCSS('opacity', '1'); // still there just after leaving
-    await expect(monitoringScreen).not.toHaveClass(/pip-controls-revealed/, { timeout: 1500 });
-    expect(Date.now() - left).toBeLessThan(1200);
-    await expect(overlay).toHaveCSS('opacity', '0');
-    await expect(stop).toHaveCSS('opacity', '0');
+    await expect(overlay).toHaveCSS('opacity', '0', { timeout: 400 });
+    await expect(stop).toHaveCSS('opacity', '0', { timeout: 400 });
     await expect(monitoringScreen.locator('.pip-control-btn-expand')).toHaveCSS('opacity', '1');
+  });
+
+  test('a missed pointerleave still hides: the mouse leaving the document hides at once', async ({ page, context }) => {
+    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 240, height: 186 }, layout: 'compact' });
+    await pipPage.mouse.move(120, 40);
+    await expect(monitoringScreen).toHaveClass(/pip-controls-revealed/);
+    // Only the document's mouseout with nowhere to go, as when the pointer
+    // leaves the window and no pointerleave reaches the screen.
+    const revealed = await monitoringScreen.evaluate((screen) => {
+      screen.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, relatedTarget: null }));
+      return screen.classList.contains('pip-controls-revealed');
+    });
+    expect(revealed).toBe(false);
+  });
+
+  test('the hide never waits on the main page: it doesn\'t use the main page\'s timers', async ({ page, context }) => {
+    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 240, height: 186 }, layout: 'compact' });
+    await pipPage.mouse.move(120, 40);
+    await expect(monitoringScreen).toHaveClass(/pip-controls-revealed/);
+    // Freeze the main page's timers, as Chrome slows them for a tab in the
+    // background; leaving must still hide right away.
+    await page.evaluate(() => { window.__realSetTimeout = window.setTimeout; window.setTimeout = () => 0; });
+    try {
+      await pipPage.mouse.move(-10, -10);
+      await expect(monitoringScreen).not.toHaveClass(/pip-controls-revealed/, { timeout: 300 });
+    } finally {
+      await page.evaluate(() => { window.setTimeout = window.__realSetTimeout; });
+    }
+  });
+
+  test('a mouse click leaves no focus that holds the controls: leaving after clicking a control still hides', async ({ page, context }) => {
+    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 240, height: 186 }, layout: 'compact' });
+    await pipPage.mouse.move(120, 40);
+    const stop = monitoringScreen.locator('.pip-control-btn-stop');
+    await expect(stop).toHaveCSS('opacity', '1');
+    // Focus Stop the way a mouse press does (no focus ring), without stopping.
+    await stop.evaluate((el) => el.focus({ focusVisible: false }));
+    expect(await stop.evaluate((el) => el === document.activeElement && !el.matches(':focus-visible'))).toBe(true);
+    await pipPage.mouse.move(-10, -10);
+    await expect(monitoringScreen).not.toHaveClass(/pip-controls-revealed/, { timeout: 300 });
+  });
+
+  test('touch: after a tap the controls stay about 3 seconds', async ({ page, context }) => {
+    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 240, height: 186 }, layout: 'compact' });
+    await monitoringScreen.evaluate((screen) => {
+      screen.dispatchEvent(new PointerEvent('pointerenter', { pointerType: 'touch' }));
+      screen.dispatchEvent(new PointerEvent('pointerleave', { pointerType: 'touch' }));
+    });
+    await pipPage.waitForTimeout(1500);
+    await expect(monitoringScreen).toHaveClass(/pip-controls-revealed/);
+    await expect(monitoringScreen).not.toHaveClass(/pip-controls-revealed/, { timeout: 3000 });
   });
 
   test('keyboard focus on Stop reveals the overlay and Stop; they stay while focus is on it', async ({ page, context }) => {
@@ -904,16 +956,7 @@ test.describe('Monitoring presentation: tooltips', () => {
     const b = await btn.boundingBox();
     const boxes = await layoutBoxes(pipPage);
     const tr = { left: t.x, right: t.x + t.width, top: t.y, bottom: t.y + t.height };
-    if (boxes.band === 'expanded') {
-      expect(overlaps(tr, boxes.ringMax), 'tooltip clear of the ring at its largest').toBe(false);
-    } else {
-      // Compact and Mini: shown only on the dark overlay, so anywhere inside
-      // the window.
-      expect(tr.left).toBeGreaterThanOrEqual(0);
-      expect(tr.top).toBeGreaterThanOrEqual(0);
-      expect(tr.right).toBeLessThanOrEqual(boxes.width);
-      expect(tr.bottom).toBeLessThanOrEqual(boxes.height);
-    }
+    expect(overlaps(tr, boxes.ringMax), 'tooltip clear of the ring at its largest').toBe(false);
     expect(overlaps(tr, { left: b.x, right: b.x + b.width, top: b.y, bottom: b.y + b.height }), 'tooltip beside the control, not over it').toBe(false);
     await expect(tip).toHaveCSS('background-color', 'rgb(74, 75, 79)');
     await expect(tip).toHaveCSS('font-size', '12px');
@@ -959,38 +1002,22 @@ test.describe('Monitoring presentation: tooltips', () => {
     await expect(tip).toBeHidden();
   });
 
-  for (const size of [{ width: 240, height: 186 }, { width: 140, height: 140 }, { width: 280, height: 84 }]) {
-    test(`${size.width}×${size.height}: Expand's tooltip after about 500ms, inside the window, clear of Stop; the labeled Stop gets none`, async ({ page, context }) => {
+  // Compact and Mini show no tooltips (2026-11-17): no custom tooltip and
+  // no title attribute on any control; the accessible names stay.
+  for (const size of [{ width: 240, height: 186 }, { width: 280, height: 84 }, { width: 140, height: 140 }, { width: 240, height: 66 }, { width: 160, height: 56 }]) {
+    test(`${size.width}×${size.height}: no tooltip on Expand or Stop; their accessible names stay`, async ({ page, context }) => {
       const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size, layout: 'compact' });
       const tip = monitoringScreen.locator('.pip-control-tooltip');
-      const expandBtn = monitoringScreen.locator('.pip-control-btn-expand');
-      await hoverCenter(pipPage, expandBtn);
-      await expect(tip).toBeVisible({ timeout: 1500 });
-      await expect(tip).toHaveText('Expand');
-      await expectTooltipClear(pipPage, tip, expandBtn);
-      const t = await tip.boundingBox(); const st = await monitoringScreen.locator('.pip-control-btn-stop').boundingBox();
-      expect(overlaps({ left: t.x, right: t.x + t.width, top: t.y, bottom: t.y + t.height }, { left: st.x, right: st.x + st.width, top: st.y, bottom: st.y + st.height }), 'tooltip clear of Stop').toBe(false);
-      await hoverCenter(pipPage, monitoringScreen.locator('.pip-control-btn-stop'));
-      await pipPage.waitForTimeout(800);
-      await expect(tip).toBeHidden();
-    });
-  }
-
-  // Where there's no room for a tooltip inside the window and clear of Stop
-  // (Chrome's smallest, 240×66: Stop takes 44 of 66px; the icon-only Stop,
-  // only in windows narrower than Chrome allows), none shows: the
-  // accessible name still names the control.
-  for (const [size, sel, name] of [[{ width: 240, height: 66 }, '.pip-control-btn-expand', 'Expand'], [{ width: 160, height: 56 }, '.pip-control-btn-stop', 'Stop monitoring']]) {
-    test(`${size.width}×${size.height}: no room for ${name}'s tooltip, so none covers Stop or leaves the window; its accessible name stays`, async ({ page, context }) => {
-      const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size, layout: 'compact' });
       await pipPage.mouse.move(4, 4);
-      const btn = monitoringScreen.locator(sel);
-      await expect(monitoringScreen.locator('.pip-control-btn-stop')).toHaveCSS('opacity', '1');
-      await hoverCenter(pipPage, btn);
-      await pipPage.waitForTimeout(900);
-      const tip = monitoringScreen.locator('.pip-control-tooltip');
-      if (await tip.isVisible()) await expectTooltipClear(pipPage, tip, btn);
-      await expect(btn).toHaveAttribute('aria-label', name);
+      for (const [sel, name] of [['.pip-control-btn-expand', 'Expand'], ['.pip-control-btn-stop', 'Stop monitoring']]) {
+        const btn = monitoringScreen.locator(sel);
+        await expect(btn).toHaveAttribute('aria-label', name);
+        expect(await btn.getAttribute('title')).toBeNull();
+        await hoverCenter(pipPage, btn);
+        await pipPage.waitForTimeout(900);
+        await expect(tip).toBeHidden();
+      }
+      expect(await monitoringScreen.evaluate((el) => el.querySelectorAll('[title]').length)).toBe(0);
     });
   }
 });
