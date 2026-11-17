@@ -610,7 +610,7 @@ test.describe('Monitoring presentation: controls by size band', () => {
     expect(st.expand.opacity).toBe('1');
     expect(st.expand.color).toBe(ICON); // the profile label's color
     expect(st.expand.labelShown).toBe(false);
-    expect(st.expand.name).toBe('Expand');
+    expect(st.expand.name).toBe('Expanded view');
     // Stop stays in the tab order while hidden.
     expect(await monitoringScreen.locator('.pip-control-btn-stop').evaluate((el) => el.tabIndex)).toBe(0);
   });
@@ -890,7 +890,7 @@ async function tabTo(pipPage, locator) {
 
 test.describe('Monitoring presentation: hover, pressed and focus', () => {
   const iconControls = [
-    { band: 'compact', sel: '.pip-control-btn-expand', label: 'Expand' },
+    { band: 'compact', sel: '.pip-control-btn-expand', label: 'Expanded view' },
     { band: 'expanded', sel: '.pip-control-btn-compact', label: 'Compact view' },
   ];
   for (const c of iconControls) {
@@ -950,6 +950,101 @@ test.describe('Monitoring presentation: hover, pressed and focus', () => {
   });
 });
 
+// Keyboard and screen reader (2026-11-17): focus goes to the Monitoring
+// screen itself when monitoring starts (not Stop, which would keep Compact's
+// overlay over the glow); Tab order; Enter and Space on every control; focus
+// is kept when a control hides itself; "Monitoring started" and
+// "Monitoring stopped" are announced politely.
+test.describe('Monitoring presentation: keyboard and screen reader', () => {
+  const focused = (pipPage) => pipPage.evaluate(() => {
+    const el = document.activeElement;
+    if (!el || el === document.body) return 'body';
+    return el.getAttribute('aria-label') || el.className;
+  });
+  const sessionLive = (pipPage) => pipPage.locator('.pip-session-live');
+
+  test('when monitoring starts, focus is on the Monitoring screen, named for screen readers, with the controls hidden; "Monitoring started" is announced', async ({ page, context }) => {
+    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 240, height: 186 }, layout: 'compact' });
+    await expect(monitoringScreen).toBeFocused();
+    await expect(monitoringScreen).toHaveAttribute('role', 'region');
+    await expect(monitoringScreen).toHaveAttribute('aria-label', 'Monitoring');
+    await expect(monitoringScreen).toHaveAttribute('tabindex', '-1');
+    await expect(monitoringScreen).not.toHaveClass(/pip-controls-revealed/);
+    await expect(monitoringScreen.locator('.pip-control-btn-stop')).toHaveCSS('opacity', '0');
+    await expect(monitoringScreen).toHaveCSS('outline-style', 'none');
+    await expect(sessionLive(pipPage)).toHaveAttribute('aria-live', 'polite');
+    await expect(sessionLive(pipPage)).toHaveText('Monitoring started');
+    // The next Tab reaches Stop, and shows it.
+    await pipPage.keyboard.press('Tab');
+    await expect(monitoringScreen.locator('.pip-control-btn-stop')).toBeFocused();
+    await expect(monitoringScreen).toHaveClass(/pip-controls-revealed/);
+  });
+
+  for (const [size, layout, order] of [
+    [{ width: 382, height: 512 }, 'expanded', ['Compact view', 'Stop monitoring']],
+    [{ width: 240, height: 186 }, 'compact', ['Stop monitoring', 'Expanded view']],
+    [{ width: 240, height: 66 }, 'compact', ['Stop monitoring', 'Expanded view']],
+  ]) {
+    test(`${size.width}×${size.height}: Tab order from the Monitoring screen is ${order.join(', then ')}, each with the sage focus ring`, async ({ page, context }) => {
+      const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size, layout });
+      await monitoringScreen.focus();
+      for (const name of order) {
+        await pipPage.keyboard.press('Tab');
+        expect(await focused(pipPage)).toBe(name);
+        const btn = monitoringScreen.locator(`[aria-label="${name}"]`);
+        await expect(btn).toHaveCSS('outline-color', SAGE);
+        await expect(btn).toHaveCSS('opacity', '1');
+      }
+    });
+
+    for (const key of ['Enter', 'Space']) {
+      test(`${size.width}×${size.height}: ${key} on Stop stops; focus moves to Start monitoring and "Monitoring stopped" is announced`, async ({ page, context }) => {
+        const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size, layout });
+        await tabTo(pipPage, monitoringScreen.locator('.pip-control-btn-stop'));
+        await pipPage.keyboard.press(key);
+        await expect(pipPage.locator('.pip-screen-ready')).toBeVisible();
+        await expect(pipPage.locator('.pip-ready-start-btn')).toBeFocused();
+        await expect(sessionLive(pipPage)).toHaveText('Monitoring stopped');
+      });
+
+      const [from, to, toSize, toLayout] = layout === 'expanded'
+        ? ['Compact view', 'Expanded view', { width: 240, height: 186 }, 'compact']
+        : ['Expanded view', 'Compact view', { width: 382, height: 512 }, 'expanded'];
+      test(`${size.width}×${size.height}: ${key} on ${from} switches the view, and focus moves to ${to} once it appears`, async ({ page, context }) => {
+        const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size, layout });
+        await tabTo(pipPage, monitoringScreen.locator(`[aria-label="${from}"]`));
+        await pipPage.keyboard.press(key);
+        await expect(pipPage.locator('body')).toHaveAttribute('data-layout', toLayout);
+        // Playwright doesn't honor the Companion's resizeTo(): stand in.
+        await pipPage.setViewportSize(toSize);
+        const target = monitoringScreen.locator(`[aria-label="${to}"]`);
+        await expect(target).toBeFocused();
+        expect(await target.evaluate((el) => el.matches(':focus-visible'))).toBe(true);
+        await expect(monitoringScreen).toBeVisible(); // still monitoring
+      });
+    }
+  }
+
+  test('a mouse click on Expanded view doesn\'t move focus to Compact view', async ({ page, context }) => {
+    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 240, height: 186 }, layout: 'compact' });
+    await monitoringScreen.locator('.pip-control-btn-expand').click();
+    await pipPage.setViewportSize(SIZES.expanded);
+    await pipPage.waitForTimeout(200);
+    await expect(monitoringScreen.locator('.pip-control-btn-compact')).not.toBeFocused();
+  });
+
+  test('a session announces "Monitoring started" again after Stop and Start monitoring', async ({ page, context }) => {
+    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 240, height: 186 }, layout: 'compact' });
+    await tabTo(pipPage, monitoringScreen.locator('.pip-control-btn-stop'));
+    await pipPage.keyboard.press('Enter');
+    await expect(sessionLive(pipPage)).toHaveText('Monitoring stopped');
+    await pipPage.keyboard.press('Enter'); // Start monitoring has focus
+    await expect(monitoringScreen).toBeVisible();
+    await expect(monitoringScreen).toBeFocused();
+    await expect(sessionLive(pipPage)).toHaveText('Monitoring started');
+  });
+});
+
 test.describe('Monitoring presentation: no tooltips', () => {
   test('Expanded: no tooltip on the Compact view icon or Stop on hover or keyboard focus; no title; accessible names stay', async ({ page, context }) => {
     const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: SIZES.expanded });
@@ -975,7 +1070,7 @@ test.describe('Monitoring presentation: no tooltips', () => {
       const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size, layout: 'compact' });
       const tip = pipPage.locator('.pip-control-tooltip, .pip-tooltip, [role="tooltip"]');
       await pipPage.mouse.move(4, 4);
-      for (const [sel, name] of [['.pip-control-btn-expand', 'Expand'], ['.pip-control-btn-stop', 'Stop monitoring']]) {
+      for (const [sel, name] of [['.pip-control-btn-expand', 'Expanded view'], ['.pip-control-btn-stop', 'Stop monitoring']]) {
         const btn = monitoringScreen.locator(sel);
         await expect(btn).toHaveAttribute('aria-label', name);
         expect(await btn.getAttribute('title')).toBeNull();

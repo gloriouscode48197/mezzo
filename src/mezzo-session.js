@@ -858,6 +858,15 @@ export function createMezzoSession({
   // Visually hidden live region (PRD §6): the four status labels are
   // screen-reader-only now, announced through zoneAnnouncer.
   let pipZoneLiveEl = null;
+  // "Monitoring started" / "Monitoring stopped" (2026-11-17): a polite,
+  // visually hidden live region outside every screen, so it still speaks
+  // after Monitoring hides (announceSession()).
+  let pipSessionLiveEl = null;
+  // Expanded view / Compact view pressed from the keyboard: the control to
+  // focus once the window has changed size band (ringLayout()), since the
+  // pressed one hides itself. null after a mouse press.
+  let pendingViewFocusSelector = null;
+  let lastSizeBand = null;
   const zoneAnnouncer = createZoneAnnouncer({
     announce: (text) => { if (pipZoneLiveEl) pipZoneLiveEl.textContent = text; },
   });
@@ -1218,6 +1227,10 @@ export function createMezzoSession({
     // set, whether temporary or saved) means this is never genuinely the
     // zero-saved-profiles Welcome case.
     showReadyScreen();
+    // Stop has gone with the Monitoring screen: put focus on Start
+    // monitoring so it isn't lost (2026-11-17), and say what happened.
+    readyStartBtn?.focus();
+    announceSession('Monitoring stopped');
   }
 
   /**
@@ -2907,6 +2920,9 @@ export function createMezzoSession({
          a tap can't hit it unseen; on touch the first tap shows it and the
          second stops. opacity, never display: Stop stays in the tab order.
          A 0.1s fade in and out; none with reduced motion. */
+      /* The screen takes focus when monitoring starts (tabindex -1); it isn't
+         a control, so no focus ring around the window. */
+      .pip-screen-monitoring:focus { outline: none; }
       .pip-monitoring-overlay {
         position: absolute;
         inset: 0;
@@ -4260,6 +4276,12 @@ export function createMezzoSession({
     toast.appendChild(toastCard);
     layout.appendChild(toast);
     toastEl = toast;
+    const sessionLive = pipDoc.createElement('p');
+    sessionLive.className = 'pip-sr-only pip-session-live';
+    sessionLive.setAttribute('role', 'status');
+    sessionLive.setAttribute('aria-live', 'polite');
+    layout.appendChild(sessionLive);
+    pipSessionLiveEl = sessionLive;
     toastCardEl = toastCard;
     toastTextEl = toastText;
     // A toast that's showing keeps clear of the profile name and controls
@@ -4277,6 +4299,11 @@ export function createMezzoSession({
     //    see the [data-layout] CSS above for what each hides/shows) ──
     const monitoringScreen = pipDoc.createElement('div');
     monitoringScreen.className = 'pip-screen pip-screen-monitoring hidden';
+    // Focus lands here when monitoring starts (enterPipMonitoringMode()),
+    // without showing Compact's overlay and Stop; the next Tab reaches Stop.
+    monitoringScreen.tabIndex = -1;
+    monitoringScreen.setAttribute('role', 'region');
+    monitoringScreen.setAttribute('aria-label', 'Monitoring');
 
     // Compact view: top right, shown only in the Expanded size band (see
     // the CSS). Inward arrows, the mirror of Expand's outward ones.
@@ -4288,7 +4315,12 @@ export function createMezzoSession({
       '<svg class="pip-control-icon-compact" viewBox="0 0 12 12" fill="none" aria-hidden="true">' +
       '<path d="M10.5 4.5H7.5V1.5M1.5 7.5H4.5V10.5M7.5 4.5L11 1M4.5 7.5L1 11" ' +
       'stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-    compactBtn.addEventListener('click', enterCompactLayout);
+    compactBtn.addEventListener('click', (event) => {
+      // event.detail is 0 for Enter or Space: keep the keyboard user's
+      // place on the control that appears instead.
+      pendingViewFocusSelector = event.detail === 0 ? '.pip-control-btn-expand' : null;
+      enterCompactLayout();
+    });
     monitoringScreen.appendChild(compactBtn);
 
     const monitoringHeader = pipDoc.createElement('div');
@@ -4361,12 +4393,15 @@ export function createMezzoSession({
     const expandBtn = pipDoc.createElement('button');
     expandBtn.type = 'button';
     expandBtn.className = 'pip-control-btn pip-control-btn-expand';
-    expandBtn.setAttribute('aria-label', 'Expand');
+    expandBtn.setAttribute('aria-label', 'Expanded view');
     expandBtn.innerHTML =
       '<svg class="pip-control-icon-expand" viewBox="0 0 12 12" fill="none" aria-hidden="true">' +
       '<path d="M7.5 1.5H10.5V4.5M4.5 10.5H1.5V7.5M10.5 1.5L6.5 5.5M1.5 10.5L5.5 6.5" ' +
       'stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-    expandBtn.addEventListener('click', enterExpandedLayout);
+    expandBtn.addEventListener('click', (event) => {
+      pendingViewFocusSelector = event.detail === 0 ? '.pip-control-btn-compact' : null;
+      enterExpandedLayout();
+    });
     monitoringScreen.appendChild(expandBtn);
 
     layout.appendChild(monitoringScreen);
@@ -4475,6 +4510,10 @@ export function createMezzoSession({
     // top-level screen, not just whichever one happened to be visible
     // before Start monitoring was clicked.
     showOnlyScreen(monitoringScreenEl);
+    // Focus the screen itself (2026-11-17), not Stop: in Compact a focused
+    // Stop would keep the overlay over the glow. Focus on Start monitoring
+    // would otherwise be lost with the Ready screen.
+    monitoringScreenEl?.focus({ preventScroll: true });
   }
 
   /**
@@ -4519,7 +4558,9 @@ function setUpControlsReveal(screen) {
   let hideTimer = null;
   const keyboardFocusInside = () => {
     const el = doc.activeElement;
-    return !!el && el !== doc.body && screen.contains(el) && el.matches(':focus-visible');
+    // The screen itself takes focus when monitoring starts; that alone
+    // never holds the controls up, only a focused control does.
+    return !!el && el !== doc.body && el !== screen && screen.contains(el) && el.matches(':focus-visible');
   };
   const clearHideTimer = () => { win.clearTimeout(hideTimer); hideTimer = null; };
   const show = () => {
@@ -4558,7 +4599,7 @@ function setUpControlsReveal(screen) {
   doc.addEventListener('mouseout', (e) => {
     if (!e.relatedTarget && screen.isConnected) pointerGone(false);
   });
-  screen.addEventListener('focusin', show);
+  screen.addEventListener('focusin', (e) => { if (e.target !== screen) show(); });
   screen.addEventListener('focusout', (e) => {
     if (!screen.contains(e.relatedTarget) && !hovered) hide();
   });
@@ -4641,6 +4682,17 @@ function ringEdge() {
   return Math.min(edgeForExtent(2 * radius, band), RING_MAX_FRACTION * short);
 }
 
+// After Expanded view or Compact view was pressed from the keyboard, focus
+// the control that took its place, once the new size band shows it. If the
+// window didn't change band, the pressed control is still there, focused.
+function focusPendingViewControl() {
+  const selector = pendingViewFocusSelector;
+  pendingViewFocusSelector = null;
+  if (!selector || !monitoringScreenEl || monitoringScreenEl.classList.contains('hidden')) return;
+  const target = monitoringScreenEl.querySelector(selector);
+  if (target && getComputedStyle(target).display !== 'none') target.focus();
+}
+
 function ringLayout() {
     const width = pipWindow?.innerWidth || 0;
     const height = pipWindow?.innerHeight || 0;
@@ -4648,6 +4700,10 @@ function ringLayout() {
     const band = short < 160 ? 'mini' : short < 300 ? 'compact' : 'expanded';
     const gap = band === 'mini' ? 8 : band === 'compact' ? 12 : 16;
     if (monitoringScreenEl) monitoringScreenEl.dataset.sizeBand = band;
+    if (band !== lastSizeBand) {
+      lastSizeBand = band;
+      focusPendingViewControl();
+    }
     let top = 0;
     let bottom = height;
     // Compact and Mini (2026-11-17): the ring is centered in the whole
@@ -4728,7 +4784,17 @@ function ringLayout() {
     applyLayoutMode(LAYOUT_MODES.COMPACT);
     enterPipMonitoringMode();
     sessionState.set(SESSION_STATES.MONITORING_ACTIVE);
+    announceSession('Monitoring started');
     return true;
+  }
+
+  /** Speaks a short, polite status (pipSessionLiveEl). Cleared first, so
+   *  the same words twice in a row are still spoken. */
+  function announceSession(text) {
+    const el = pipSessionLiveEl;
+    if (!el || !pipWindow) return;
+    el.textContent = '';
+    pipWindow.setTimeout(() => { if (pipSessionLiveEl === el) el.textContent = text; }, 100);
   }
 
   // ===========================================================================
@@ -4743,6 +4809,7 @@ function ringLayout() {
    *  transition passes through, so that cleanup can't be missed by a
    *  handler that forgets to do it. */
   function showOnlyScreen(screenEl) {
+    if (screenEl !== monitoringScreenEl) pendingViewFocusSelector = null;
     [
       welcomeScreenEl, prepScreenEls[1], prepScreenEls[2], c0ScreenEl, readyScreenEl, calibratingScreenEl, creatingScreenEl,
       failedScreenEl, m1ScreenEl, resultScreenEl, m2ScreenEl, m3ScreenEl, deleteScreenEl, monitoringScreenEl,
@@ -6691,6 +6758,9 @@ function ringLayout() {
     pendingDeleteProfileId = null;
     monitoringScreenEl = null;
     pipZoneLiveEl = null;
+    pipSessionLiveEl = null;
+    pendingViewFocusSelector = null;
+    lastSizeBand = null;
     monitoringProfileNameEl = null;
     pipCircleWrapperEl = null;
     calibratingScreenEl = null;
