@@ -2791,13 +2791,11 @@ export function createMezzoSession({
          charcoal; the old 35% resting opacity failed the 3:1 minimum for
          icons). Hover and focus get a soft cream background; focus keeps
          the sage ring.
-         - Compact and Mini (2026-11-16): the ring only, centered at full
-           size. The pointer entering the window, or keyboard focus on a
-           control, fades in a dark overlay over the whole window with Stop
-           in the bottom-left corner and Expand in the bottom-right, each
-           --edge from its corner; labeled when the window is at least
-           CONTROL_LABEL_MIN_WIDTH wide (data-labels), icons only below
-           that (see setUpControlsReveal()).
+         - Compact and Mini (2026-11-17): the ring, centered at full size,
+           and a muted Expand icon in the bottom-right corner. Hover or
+           keyboard focus fades in a dark overlay with one Stop button
+           centered over the ring (see the Compact and Mini controls block
+           and setUpControlsReveal()).
          - Expanded: a real Stop button, centered below the ring (2026-11-16),
            styled like the secondary buttons, and a Compact view icon (top
            right).
@@ -2920,15 +2918,14 @@ export function createMezzoSession({
       .pip-screen-monitoring[data-size-band="expanded"] .pip-control-btn-compact { display: flex; }
       .pip-screen-monitoring[data-size-band="expanded"] .pip-control-btn-expand { display: none; }
       /* Expanded: Stop is a real button, like "Keep temporarily", centered
-         below the ring (2026-11-16). The glow may reach it, so it has a
+         below the ring (2026-11-16), 160×44 (2026-11-17). The glow may reach it, so it has a
          solid backing in the window's own color and stays readable over
          any ring state. */
       .pip-screen-monitoring[data-size-band="expanded"] .pip-control-btn-stop {
         left: 50%;
         translate: -50% 0;
-        width: auto;
-        height: auto;
-        min-height: 40px;
+        width: 160px;
+        height: 44px;
         padding: 0 16px;
         border: 1px solid rgba(243, 235, 222, 0.3);
         background: var(--color-bg);
@@ -2965,18 +2962,21 @@ export function createMezzoSession({
       .pip-control-tooltip[hidden] { display: none; }
       .pip-screen-monitoring[data-size-band="expanded"] .pip-control-icon-stop { width: 9px; height: 9px; }
       .pip-screen-monitoring[data-size-band="expanded"] .pip-control-label { display: inline; }
-      /* ── Compact and Mini controls (2026-11-16) ──
-         At rest, the ring only. The pointer entering the window or keyboard
-         focus on a control (setUpControlsReveal(): .pip-controls-revealed)
-         fades in a dark overlay over the whole window (60% black) with the
-         controls on top, so nothing ever sits directly on the ring. Stop in
-         the bottom-left corner, Expand in the bottom-right, each --edge from
-         its corner. opacity, never display: the controls stay in the tab
-         order. Outlined like the secondary buttons, cream on the overlay
-         (about 13:1 over the dimmed window). With data-labels (the window
-         at least CONTROL_LABEL_MIN_WIDTH wide) each shows its label beside
-         its icon; below that, icons only, named by aria-label. A quick fade
-         in and out; none with reduced motion. */
+      /* ── Compact and Mini controls (2026-11-17) ──
+         Expand is always visible in the bottom-right corner, --edge from it:
+         an icon in a 32×32 target, muted like the profile label (#B0AB9E),
+         above the overlay so it stays clickable, with its tooltip.
+         Stop appears only on hover anywhere in the window or keyboard focus
+         (setUpControlsReveal(): .pip-controls-revealed): a dark overlay over
+         the whole window (60% black) and one Stop button centered over the
+         ring, 44px tall, labeled, on a solid backing. ringLayout() places
+         it (inline left/top) and picks its form (data-stop): "labeled", or
+         an icon-only 40px square when the labeled one wouldn't keep 8px
+         from Expand's target; the square moves left of center if even
+         centered it wouldn't. While hidden it takes no pointer events, so
+         a tap can't hit it unseen; on touch the first tap shows it and the
+         second stops. opacity, never display: Stop stays in the tab order.
+         A quick fade in and out; none with reduced motion. */
       .pip-monitoring-overlay {
         position: absolute;
         inset: 0;
@@ -2988,31 +2988,43 @@ export function createMezzoSession({
       }
       .pip-screen-monitoring[data-size-band="expanded"] .pip-monitoring-overlay { display: none; }
       .pip-screen-monitoring.pip-controls-revealed .pip-monitoring-overlay { opacity: 1; }
-      .pip-screen-monitoring:not([data-size-band="expanded"]) .pip-control-btn {
-        opacity: 0;
+      .pip-screen-monitoring:not([data-size-band="expanded"]) .pip-control-btn-expand { z-index: 3; }
+      .pip-screen-monitoring:not([data-size-band="expanded"]) .pip-control-btn-stop {
+        bottom: auto;
+        width: auto;
+        height: 44px;
+        padding: 0 16px;
         border: 1px solid rgba(243, 235, 222, 0.3);
+        background: var(--color-bg);
         color: #F3EBDE;
         font-family: var(--font-body);
-        font-size: 13px;
+        font-size: 14px;
         font-weight: var(--weight-medium);
         line-height: 16px;
         white-space: nowrap;
+        opacity: 0;
+        pointer-events: none;
         transition: color 0.12s ease, background 0.12s ease, border-color 0.12s ease, opacity 0.12s ease;
       }
-      .pip-screen-monitoring:not([data-size-band="expanded"]).pip-controls-revealed .pip-control-btn { opacity: 1; }
-      .pip-screen-monitoring:not([data-size-band="expanded"]) .pip-control-btn:hover {
+      .pip-screen-monitoring:not([data-size-band="expanded"]) .pip-control-btn-stop .pip-control-label { display: inline; }
+      .pip-screen-monitoring:not([data-size-band="expanded"])[data-stop="icon"] .pip-control-btn-stop {
+        width: 40px;
+        height: 40px;
+        padding: 0;
+      }
+      .pip-screen-monitoring:not([data-size-band="expanded"])[data-stop="icon"] .pip-control-btn-stop .pip-control-label { display: none; }
+      .pip-screen-monitoring:not([data-size-band="expanded"]).pip-controls-revealed .pip-control-btn-stop {
+        opacity: 1;
+        pointer-events: auto;
+      }
+      .pip-screen-monitoring:not([data-size-band="expanded"]) .pip-control-btn-stop:hover {
         border-color: rgba(243, 235, 222, 0.6);
-        background: rgba(243, 235, 222, 0.10);
+        background: color-mix(in srgb, #F3EBDE 6%, var(--color-bg));
       }
-      .pip-screen-monitoring:not([data-size-band="expanded"]) .pip-control-btn:active { background: rgba(243, 235, 222, 0.16); }
-      .pip-screen-monitoring[data-labels]:not([data-size-band="expanded"]) .pip-control-btn {
-        width: auto;
-        padding: 0 12px;
-      }
-      .pip-screen-monitoring[data-labels]:not([data-size-band="expanded"]) .pip-control-label { display: inline; }
+      .pip-screen-monitoring:not([data-size-band="expanded"]) .pip-control-btn-stop:active { background: color-mix(in srgb, #F3EBDE 12%, var(--color-bg)); }
       @media (prefers-reduced-motion: reduce) {
         .pip-control-btn,
-        .pip-screen-monitoring:not([data-size-band="expanded"]) .pip-control-btn,
+        .pip-screen-monitoring:not([data-size-band="expanded"]) .pip-control-btn-stop,
         .pip-screen-monitoring[data-size-band="expanded"] .pip-control-btn-stop,
         .pip-monitoring-overlay { transition: none; }
       }
@@ -4322,8 +4334,13 @@ export function createMezzoSession({
     toastTextEl = toastText;
     // A toast that's showing keeps clear of the profile name and controls
     // when the window is resized (placeToast()).
+    // A frame later, so the size band and the controls (ringLayout(), on
+    // the same resize) are already in place: shrinking into Compact hides
+    // the name, and the toast moves back up, clear of the centered Stop.
     pipDoc.defaultView?.addEventListener('resize', () => {
-      if (toastEl?.classList.contains('pip-toast-visible')) placeToast();
+      pipDoc.defaultView.requestAnimationFrame(() => {
+        if (toastEl?.classList.contains('pip-toast-visible')) placeToast();
+      });
     });
 
     // ── Row-action tooltip (2026-08-20) — a single shared element, same
@@ -4402,9 +4419,9 @@ export function createMezzoSession({
     monitoringScreen.appendChild(controlsOverlay);
     pipCircleWrapperEl = circleWrapper;
 
-    // Stop: bottom left in Mini and Compact, labeled when the window is wide
-    // enough (data-labels); a labeled button centered below the ring in
-    // Expanded.
+    // Stop: in Mini and Compact, one button centered over the ring that
+    // appears on hover or focus (ringLayout() places it); in Expanded, a
+    // labeled button centered below the ring.
     const controls = pipDoc.createElement('div');
     controls.className = 'pip-monitoring-controls';
 
@@ -4425,8 +4442,9 @@ export function createMezzoSession({
 
     monitoringScreen.appendChild(controls);
 
-    // Expand: bottom right, below the Expanded size band, labeled like
-    // Stop. Restores the Expanded size without stopping monitoring.
+    // Expand: below the Expanded size band, always visible in the
+    // bottom-right corner, icon only. Restores the Expanded size without
+    // stopping monitoring.
     const expandBtn = pipDoc.createElement('button');
     expandBtn.type = 'button';
     expandBtn.className = 'pip-control-btn pip-control-btn-expand';
@@ -4434,8 +4452,7 @@ export function createMezzoSession({
     expandBtn.innerHTML =
       '<svg class="pip-control-icon-expand" viewBox="0 0 12 12" fill="none" aria-hidden="true">' +
       '<path d="M7.5 1.5H10.5V4.5M4.5 10.5H1.5V7.5M10.5 1.5L6.5 5.5M1.5 10.5L5.5 6.5" ' +
-      'stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
-      '<span class="pip-control-label">Expand</span>';
+      'stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
     expandBtn.addEventListener('click', enterExpandedLayout);
     monitoringScreen.appendChild(expandBtn);
 
@@ -4585,11 +4602,11 @@ function setUpControlTooltips(screen) {
   screen.appendChild(tip);
   let timer = null;
   const hide = () => { clearTimeout(timer); timer = null; tip.hidden = true; };
-  // A control showing its label needs no tooltip: Expanded's Stop, and
-  // Compact and Mini when the window is wide enough for labels.
+  // A control showing its label needs no tooltip: Stop, unless it's the
+  // icon-only square in a very small window (data-stop="icon").
   const iconOnly = (btn) => {
-    if (screen.dataset.sizeBand === 'expanded') return !btn.classList.contains('pip-control-btn-stop');
-    return !('labels' in screen.dataset);
+    if (!btn.classList.contains('pip-control-btn-stop')) return true;
+    return screen.dataset.sizeBand !== 'expanded' && screen.dataset.stop === 'icon';
   };
   const show = (btn) => {
     tip.textContent = btn.getAttribute('aria-label');
@@ -4618,7 +4635,13 @@ function setUpControlTooltips(screen) {
       ring.right = ring.left + extent; ring.bottom = ring.top + extent;
       clearOfRing = ({ x, y }) => x + w <= ring.left || x >= ring.right || y + h <= ring.top || y >= ring.bottom;
     }
-    const fits = (spot) => inWindow(spot) && clearOfRing(spot);
+    // Never over the other control (Compact and Mini: Stop shows while
+    // Expand is hovered).
+    const others = [...screen.querySelectorAll('.pip-control-btn')]
+      .filter((el) => el !== btn && getComputedStyle(el).display !== 'none' && getComputedStyle(el).opacity !== '0')
+      .map((el) => { const r = el.getBoundingClientRect(); return { left: r.left - s.left, top: r.top - s.top, right: r.right - s.left, bottom: r.bottom - s.top }; });
+    const clearOfOthers = ({ x, y }) => others.every((o) => x + w <= o.left || x >= o.right || y + h <= o.top || y >= o.bottom);
+    const fits = (spot) => inWindow(spot) && clearOfRing(spot) && clearOfOthers(spot);
     const spot = candidates.find(fits);
     if (!spot) { tip.hidden = true; return; }
     tip.style.left = `${Math.round(spot.x)}px`;
@@ -4635,13 +4658,13 @@ function setUpControlTooltips(screen) {
   }
 }
 
-// Compact and Mini (2026-11-16) show the ring only. The pointer entering
-// the window, or keyboard focus on a control, fades in the dark overlay with
-// Stop and Expand; they hide again CONTROLS_HIDE_DELAY_MS after the pointer
-// has left, unless focus is still on a control. A touch leaves the pointer
-// "gone" right after the tap, so after a touch they stay a little longer,
-// long enough to tap one. Harmless in Expanded: the class has no effect
-// there.
+// Compact and Mini (2026-11-17) show the ring and the Expand icon. The
+// pointer entering the window, or keyboard focus on a control, fades in the
+// dark overlay with Stop; they hide again CONTROLS_HIDE_DELAY_MS after the
+// pointer has left, unless focus is still on a control. A touch leaves the
+// pointer "gone" right after the tap, so after a touch they stay a little
+// longer, long enough for the second tap. Harmless in Expanded: the class
+// has no effect there.
 const CONTROLS_HIDE_DELAY_MS = 500;
 const CONTROLS_TOUCH_HIDE_DELAY_MS = 3000;
 function setUpControlsReveal(screen) {
@@ -4659,7 +4682,20 @@ function setUpControlsReveal(screen) {
       screen.classList.remove('pip-controls-revealed');
     }, delay);
   };
-  screen.addEventListener('pointerenter', () => { hovered = true; show(); });
+  // On touch, the tap that reveals Stop never presses it: only a second
+  // tap stops.
+  let revealingTap = false;
+  screen.addEventListener('pointerenter', (e) => {
+    if (e.pointerType === 'touch' && !screen.classList.contains('pip-controls-revealed')) revealingTap = true;
+    hovered = true;
+    show();
+  });
+  screen.addEventListener('click', (e) => {
+    if (!revealingTap) return;
+    revealingTap = false;
+    if (e.target.closest?.('.pip-control-btn-stop')) { e.stopPropagation(); e.preventDefault(); }
+  }, true);
+  screen.addEventListener('pointerup', () => { setTimeout(() => { revealingTap = false; }, 0); });
   screen.addEventListener('pointerleave', (e) => {
     hovered = false;
     scheduleHide(e.pointerType === 'touch' ? CONTROLS_TOUCH_HIDE_DELAY_MS : CONTROLS_HIDE_DELAY_MS);
@@ -4699,10 +4735,43 @@ function ringBand() {
 // for them.
 const RING_MAX_FRACTION = 0.8;
 const RING_GLOW_MARGIN_PX = 2;
-// Compact and Mini: labels beside the icons from this window width up;
-// icons only below it, so the labels never wrap or crowd (Stop and Expand
-// with labels, 8px from the corners, keep at least 16px apart at 200).
-const CONTROL_LABEL_MIN_WIDTH = 200;
+// Compact and Mini (2026-11-17): Expand's tap target in the corner, the
+// space kept between it and Stop, and Stop's icon-only square for windows
+// too small for the labeled button.
+const EXPAND_TARGET_PX = 32;
+const STOP_EXPAND_GAP_PX = 8;
+const STOP_ICON_PX = 40;
+const STOP_HEIGHT_PX = 44;
+let stopLabeledWidthPx = 0;
+/** Whether two rects keep `gap` px apart on some side. */
+function keepsApart(a, b, gap) {
+  return a.right + gap <= b.left || b.right + gap <= a.left || a.bottom + gap <= b.top || b.bottom + gap <= a.top;
+}
+/** Compact and Mini: Stop centered over the ring, labeled if it keeps
+ *  STOP_EXPAND_GAP_PX from Expand's target; otherwise the 40px square,
+ *  centered, or moved left of center until it clears Expand (never past
+ *  the window's left edge). Sets data-stop and Stop's position. */
+function placeStop(width, height, gap) {
+  const stop = monitoringScreenEl?.querySelector('.pip-control-btn-stop');
+  if (!stop) return;
+  if (!stopLabeledWidthPx && monitoringScreenEl.dataset.stop !== 'icon') stopLabeledWidthPx = stop.offsetWidth;
+  const labeledWidth = stopLabeledWidthPx || 84;
+  const expand = { left: width - gap - EXPAND_TARGET_PX, top: height - gap - EXPAND_TARGET_PX, right: width - gap, bottom: height - gap };
+  const centered = (w, h) => ({ left: (width - w) / 2, top: (height - h) / 2, right: (width + w) / 2, bottom: (height + h) / 2 });
+  let mode = 'labeled';
+  let rect = centered(labeledWidth, STOP_HEIGHT_PX);
+  if (!keepsApart(rect, expand, STOP_EXPAND_GAP_PX)) {
+    mode = 'icon';
+    rect = centered(STOP_ICON_PX, STOP_ICON_PX);
+    if (!keepsApart(rect, expand, STOP_EXPAND_GAP_PX)) {
+      const left = Math.max(0, expand.left - STOP_EXPAND_GAP_PX - STOP_ICON_PX);
+      rect = { ...rect, left, right: left + STOP_ICON_PX };
+    }
+  }
+  monitoringScreenEl.dataset.stop = mode;
+  stop.style.left = `${Math.round(rect.left)}px`;
+  stop.style.top = `${Math.round(rect.top)}px`;
+}
 function ringEdge() {
   const layout = ringLayout(); // sets the size band first
   const band = ringBand();
@@ -4723,15 +4792,12 @@ function ringLayout() {
     if (monitoringScreenEl) monitoringScreenEl.dataset.sizeBand = band;
     let top = 0;
     let bottom = height;
-    // Compact and Mini (2026-11-16): the ring is centered in the whole
-    // window; the controls appear over a dark overlay in the bottom corners,
-    // labeled when the window is wide enough (see ringEdge()).
+    // Compact and Mini (2026-11-17): the ring is centered in the whole
+    // window; Expand sits in the bottom-right corner, and Stop appears
+    // centered over the ring on hover or focus (placeStop()).
     if (band !== 'expanded') {
       const { cx, cy, radius } = largestClearCircle(width, height, []);
-      if (monitoringScreenEl) {
-        if (width >= CONTROL_LABEL_MIN_WIDTH) monitoringScreenEl.dataset.labels = '';
-        else delete monitoringScreenEl.dataset.labels;
-      }
+      placeStop(width, height, gap);
       if (pipCircleWrapperEl) {
         const box = Math.max(0, 2 * radius);
         pipCircleWrapperEl.style.left = `${cx - radius}px`;
@@ -4742,7 +4808,11 @@ function ringLayout() {
       }
       return { band, gap, top: 0, bottom: height, cx, cy, width, height, clearRadius: radius, extent: Math.max(0, 2 * radius - 2 * gap) };
     }
-    if (monitoringScreenEl) delete monitoringScreenEl.dataset.labels;
+    if (monitoringScreenEl) {
+      delete monitoringScreenEl.dataset.stop;
+      const stop = monitoringScreenEl.querySelector('.pip-control-btn-stop');
+      if (stop) { stop.style.left = ''; stop.style.top = ''; }
+    }
     if (pipCircleWrapperEl) {
       pipCircleWrapperEl.style.left = '';
       pipCircleWrapperEl.style.right = '';

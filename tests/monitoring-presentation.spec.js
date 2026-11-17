@@ -583,85 +583,156 @@ test.describe('Monitoring presentation: controls by size band', () => {
     const box = (el) => { const r = el.getBoundingClientRect(); return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height }; };
     const btn = (sel) => {
       const el = screen.querySelector(sel);
+      const cs = getComputedStyle(el);
       const label = el.querySelector('.pip-control-label');
-      return { ...box(el), opacity: getComputedStyle(el).opacity, name: el.getAttribute('aria-label'), labelShown: !!label && getComputedStyle(label).display !== 'none', labelText: label?.textContent };
+      return { ...box(el), opacity: cs.opacity, pointerEvents: cs.pointerEvents, z: Number(cs.zIndex), color: cs.color, bg: cs.backgroundColor, name: el.getAttribute('aria-label'), labelShown: !!label && getComputedStyle(label).display !== 'none' };
     };
     return {
       revealed: screen.classList.contains('pip-controls-revealed'),
+      stopForm: screen.dataset.stop,
       overlay: { ...box(overlay), opacity: getComputedStyle(overlay).opacity, bg: getComputedStyle(overlay).backgroundColor, z: Number(getComputedStyle(overlay).zIndex) },
       stop: btn('.pip-control-btn-stop'),
       expand: btn('.pip-control-btn-expand'),
-      buttonZ: Number(getComputedStyle(screen.querySelector('.pip-control-btn-stop')).zIndex),
       ring: box(screen.querySelector('.mezzo-ring')),
-      width: innerWidth,
-      height: innerHeight,
     };
   });
+  /** Whether two rects keep `gap` px apart on some side. */
+  const apart = (a, b, gap) => a.right + gap <= b.left + 0.5 || b.right + gap <= a.left + 0.5 || a.bottom + gap <= b.top + 0.5 || b.bottom + gap <= a.top + 0.5;
 
-  test('Compact (220×220): no name (Expanded still shows it); the ring only at rest, no toolbar panel', async ({ page, context }) => {
+  test('Compact (220×220) at rest: no name, the ring and a muted Expand icon in the corner; Stop hidden and not clickable', async ({ page, context }) => {
     const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: SIZES.compact, layout: 'compact' });
     await expect(monitoringScreen.locator('.pip-profile-info')).toBeHidden();
-    await expect(monitoringScreen.locator('.pip-monitoring-toolbar')).toHaveCount(0);
-    // The pointer left the window as monitoring started; wait out the hide.
     await expect(monitoringScreen).not.toHaveClass(/pip-controls-revealed/);
     await pipPage.waitForTimeout(200); // the fade
     const st = await controlsState(pipPage);
-    expect(st.revealed).toBe(false);
-    expect([st.overlay.opacity, st.stop.opacity, st.expand.opacity]).toEqual(['0', '0', '0']);
-    // Still in the tab order while hidden.
-    for (const sel of ['.pip-control-btn-stop', '.pip-control-btn-expand']) {
-      expect(await monitoringScreen.locator(sel).evaluate((el) => el.tabIndex)).toBe(0);
-    }
+    expect([st.overlay.opacity, st.stop.opacity]).toEqual(['0', '0']);
+    expect(st.stop.pointerEvents).toBe('none');
+    expect(st.expand.opacity).toBe('1');
+    expect(st.expand.color).toBe(ICON); // the profile label's color
+    expect(st.expand.labelShown).toBe(false);
+    expect(st.expand.name).toBe('Expand');
+    // Stop stays in the tab order while hidden.
+    expect(await monitoringScreen.locator('.pip-control-btn-stop').evaluate((el) => el.tabIndex)).toBe(0);
   });
 
-  // Every Compact and Mini size a person can reach, wide and narrow.
-  for (const size of [
-    { width: 240, height: 186 }, SIZES.compact, { width: 186, height: 240 }, { width: 299, height: 299 }, { width: 170, height: 170 },
-    SIZES.mini, { width: 200, height: 120 }, { width: 199, height: 120 }, { width: 140, height: 140 }, { width: 150, height: 300 },
-  ]) {
-    test(`${size.width}×${size.height}: on hover a 60% black overlay covers the window, Stop bottom left and Expand bottom right the same distance from their corners, ${size.width >= 200 ? 'with labels' : 'icons only'}; the ring doesn't move or shrink`, async ({ page, context }) => {
+  // Compact's usual size, a short wide strip, a small square, and the
+  // smallest Chrome allows (240×66 content, measured in Chrome 156).
+  for (const size of [{ width: 240, height: 186 }, { width: 280, height: 84 }, { width: 140, height: 140 }, { width: 240, height: 66 }, SIZES.compact, { width: 186, height: 240 }]) {
+    test(`${size.width}×${size.height}: Expand in the bottom-right corner; on hover a 60% black overlay and one labeled 44px Stop centered over the ring, 8px or more from Expand; the ring doesn't move or shrink`, async ({ page, context }) => {
       const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size, layout: 'compact' });
       const edge = Math.min(size.width, size.height) < 160 ? 8 : 12;
       const before = await controlsState(pipPage);
-      await pipPage.mouse.move(size.width / 2, size.height / 2);
-      await expect.poll(async () => (await controlsState(pipPage)).overlay.opacity).toBe('1');
+      // Expand: always there, 32×32 target, --edge from the corner.
+      expect(Math.round(before.expand.width)).toBeGreaterThanOrEqual(32);
+      expect(Math.round(before.expand.height)).toBeGreaterThanOrEqual(32);
+      expect(Math.round(size.width - before.expand.right)).toBe(edge);
+      expect(Math.round(size.height - before.expand.bottom)).toBe(edge);
+      expect(before.expand.opacity).toBe('1');
+
+      // Hover anywhere (here, the top left).
+      await pipPage.mouse.move(4, 4);
       await expect.poll(async () => (await controlsState(pipPage)).stop.opacity).toBe('1');
+      await expect.poll(async () => (await controlsState(pipPage)).overlay.opacity).toBe('1');
       const st = await controlsState(pipPage);
-      // The overlay covers the whole window, under the controls.
       expect(st.overlay.bg).toBe(OVERLAY);
       expect([st.overlay.left, st.overlay.top, st.overlay.width, st.overlay.height]).toEqual([0, 0, size.width, size.height]);
-      expect(st.buttonZ).toBeGreaterThan(st.overlay.z);
-      // Corners: the same distance from each.
-      expect(Math.round(st.stop.left)).toBe(edge);
-      expect(Math.round(size.height - st.stop.bottom)).toBe(edge);
-      expect(Math.round(size.width - st.expand.right)).toBe(edge);
-      expect(Math.round(size.height - st.expand.bottom)).toBe(edge);
-      // Labels from 200px wide; icons only below. Either way: one line,
-      // at least 24px tall, at least 16px apart, named for screen readers.
-      const labels = size.width >= 200;
-      expect(st.stop.labelShown).toBe(labels);
-      expect(st.expand.labelShown).toBe(labels);
-      if (labels) { expect(st.stop.labelText).toBe('Stop'); expect(st.expand.labelText).toBe('Expand'); }
-      for (const b of [st.stop, st.expand]) {
-        expect(Math.round(b.height)).toBe(32);
-        if (!labels) expect(Math.round(b.width)).toBe(32);
-      }
-      expect(st.expand.left - st.stop.right).toBeGreaterThanOrEqual(16);
-      expect(st.stop.name).toBe('Stop monitoring');
-      expect(st.expand.name).toBe('Expand');
-      // The ring stays centered and the same size.
+      // Stop: labeled, 44px tall, solid, centered over the ring, above the overlay.
+      expect(st.stopForm).toBe('labeled');
+      expect(st.stop.labelShown).toBe(true);
+      expect(Math.round(st.stop.height)).toBe(44);
+      expect(st.stop.bg).toBe(BG);
+      expect(st.stop.pointerEvents).toBe('auto');
+      expect(st.stop.z).toBeGreaterThan(st.overlay.z);
+      expect(st.expand.z).toBeGreaterThan(st.overlay.z);
+      const ringCx = st.ring.left + st.ring.width / 2;
+      const ringCy = st.ring.top + st.ring.height / 2;
+      expect(Math.abs((st.stop.left + st.stop.right) / 2 - ringCx)).toBeLessThanOrEqual(1);
+      expect(Math.abs((st.stop.top + st.stop.bottom) / 2 - ringCy)).toBeLessThanOrEqual(1);
+      // Never overlapping: at least 8px from Expand's tap area.
+      expect(apart(st.stop, st.expand, 8)).toBe(true);
+      // Inside the window.
+      expect(st.stop.left).toBeGreaterThanOrEqual(0);
+      expect(st.stop.top).toBeGreaterThanOrEqual(0);
+      expect(st.stop.bottom).toBeLessThanOrEqual(size.height);
+      // The ring stays put and the same size.
       expect(st.ring).toEqual(before.ring);
       await assertNoOverflow(pipPage);
     });
   }
 
-  test('hide: about half a second after the pointer leaves, with a quick fade', async ({ page, context }) => {
-    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: SIZES.mini, layout: 'compact' });
+  // Smaller than Chrome allows, to check the fallbacks: the 40px icon-only
+  // square, centered, then moved left of center; never smaller than 32px.
+  for (const [size, form, centered] of [[{ width: 160, height: 56 }, 'icon', true], [{ width: 100, height: 56 }, 'icon', false]]) {
+    test(`${size.width}×${size.height}: Stop falls back to the 40px icon-only square${centered ? ', centered' : ', moved left of center'}, 8px or more from Expand, named for screen readers`, async ({ page, context }) => {
+      const { pipPage } = await reachMonitoring(page, context, { size, layout: 'compact' });
+      await pipPage.mouse.move(4, 4);
+      await expect.poll(async () => (await controlsState(pipPage)).stop.opacity).toBe('1');
+      const st = await controlsState(pipPage);
+      expect(st.stopForm).toBe(form);
+      expect(st.stop.labelShown).toBe(false);
+      expect([Math.round(st.stop.width), Math.round(st.stop.height)]).toEqual([40, 40]);
+      expect(st.stop.name).toBe('Stop monitoring');
+      expect(apart(st.stop, st.expand, 8)).toBe(true);
+      const cx = (st.stop.left + st.stop.right) / 2;
+      if (centered) expect(Math.abs(cx - size.width / 2)).toBeLessThanOrEqual(1);
+      else expect(cx).toBeLessThan(size.width / 2);
+      expect(Math.round(st.expand.width)).toBeGreaterThanOrEqual(32);
+    });
+  }
+
+  test('hovering the Expand icon keeps the overlay and Stop showing (no flicker on the way to the corner)', async ({ page, context }) => {
+    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 240, height: 186 }, layout: 'compact' });
+    await pipPage.mouse.move(120, 40);
+    await expect(monitoringScreen).toHaveClass(/pip-controls-revealed/);
+    const ex = await monitoringScreen.locator('.pip-control-btn-expand').boundingBox();
+    await pipPage.mouse.move(ex.x + ex.width / 2, ex.y + ex.height / 2, { steps: 8 });
+    await pipPage.waitForTimeout(800);
+    await expect(monitoringScreen).toHaveClass(/pip-controls-revealed/);
+    await expect(monitoringScreen.locator('.pip-control-btn-stop')).toHaveCSS('opacity', '1');
+    await expect(monitoringScreen.locator('.pip-monitoring-overlay')).toHaveCSS('opacity', '1');
+  });
+
+  test('clicking the ring itself does nothing; only the Stop button stops', async ({ page, context }) => {
+    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 240, height: 186 }, layout: 'compact' });
+    // On the ring, away from the button (its top edge).
+    const ring = await monitoringScreen.locator('.mezzo-ring').boundingBox();
+    await pipPage.mouse.click(ring.x + ring.width / 2, ring.y + 6);
+    await pipPage.waitForTimeout(300);
+    await expect(monitoringScreen).toBeVisible();
+    await monitoringScreen.locator('.pip-control-btn-stop').click();
+    await expect(pipPage.locator('.pip-screen-ready')).toBeVisible();
+  });
+
+  test('touch: the first tap shows Stop, the second tap stops', async ({ page, context }) => {
+    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 240, height: 186 }, layout: 'compact' });
+    await expect(monitoringScreen).not.toHaveClass(/pip-controls-revealed/);
+    // A tap at the center, where Stop appears: pointer events as a touch.
+    const tap = () => monitoringScreen.evaluate((screen) => {
+      const x = innerWidth / 2; const y = innerHeight / 2;
+      const opts = { bubbles: true, pointerType: 'touch', clientX: x, clientY: y, isPrimary: true };
+      screen.dispatchEvent(new PointerEvent('pointerenter', { ...opts, bubbles: false }));
+      const target = document.elementFromPoint(x, y);
+      target.dispatchEvent(new PointerEvent('pointerdown', opts));
+      target.dispatchEvent(new PointerEvent('pointerup', opts));
+      target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: x, clientY: y }));
+      screen.dispatchEvent(new PointerEvent('pointerleave', { ...opts, bubbles: false }));
+      return target.closest('.pip-control-btn-stop') ? 'stop' : target.className;
+    });
+    await tap();
+    await expect(monitoringScreen).toHaveClass(/pip-controls-revealed/);
+    await expect(monitoringScreen).toBeVisible(); // the first tap didn't stop
+    await pipPage.waitForTimeout(100);
+    expect(await tap()).toBe('stop');
+    await expect(pipPage.locator('.pip-screen-ready')).toBeVisible();
+  });
+
+  test('hide: about half a second after the pointer leaves, with a quick fade; Expand stays', async ({ page, context }) => {
+    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 280, height: 84 }, layout: 'compact' });
     const stop = monitoringScreen.locator('.pip-control-btn-stop');
     const overlay = monitoringScreen.locator('.pip-monitoring-overlay');
     expect(await overlay.evaluate((el) => getComputedStyle(el).transitionDuration)).toBe('0.12s');
     expect(await stop.evaluate((el) => getComputedStyle(el).transitionDuration)).toContain('0.12s');
-    await pipPage.mouse.move(140, 55);
+    await pipPage.mouse.move(140, 20);
     await expect(overlay).toHaveCSS('opacity', '1');
     await pipPage.mouse.move(-10, -10);
     const left = Date.now();
@@ -671,23 +742,23 @@ test.describe('Monitoring presentation: controls by size band', () => {
     expect(Date.now() - left).toBeLessThan(1200);
     await expect(overlay).toHaveCSS('opacity', '0');
     await expect(stop).toHaveCSS('opacity', '0');
+    await expect(monitoringScreen.locator('.pip-control-btn-expand')).toHaveCSS('opacity', '1');
   });
 
-  test('keyboard focus reveals the overlay and controls; they stay while focus is on a control', async ({ page, context }) => {
+  test('keyboard focus on Stop reveals the overlay and Stop; they stay while focus is on it', async ({ page, context }) => {
     const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: SIZES.compact, layout: 'compact' });
     const stop = monitoringScreen.locator('.pip-control-btn-stop');
     await expect(stop).toHaveCSS('opacity', '0');
     for (let i = 0; i < 6 && !(await stop.evaluate((el) => el === document.activeElement)); i++) await pipPage.keyboard.press('Tab');
     await expect(stop).toBeFocused();
     await expect(stop).toHaveCSS('opacity', '1');
-    await expect(monitoringScreen.locator('.pip-control-btn-expand')).toHaveCSS('opacity', '1');
     await expect(monitoringScreen.locator('.pip-monitoring-overlay')).toHaveCSS('opacity', '1');
     await pipPage.waitForTimeout(1500);
     await expect(stop).toHaveCSS('opacity', '1');
     await expect(stop).toHaveCSS('outline-color', SAGE);
   });
 
-  test('reduced motion: the overlay and controls show and hide without a fade', async ({ page, context }) => {
+  test('reduced motion: the overlay and Stop show and hide without a fade', async ({ page, context }) => {
     const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: SIZES.mini, layout: 'compact' });
     await pipPage.emulateMedia({ reducedMotion: 'reduce' });
     const durations = await monitoringScreen.evaluate((el) => [
@@ -698,23 +769,20 @@ test.describe('Monitoring presentation: controls by size band', () => {
     for (const d of durations) expect(d.split(',').every((x) => parseFloat(x) === 0)).toBe(true);
   });
 
-  test('contrast: revealed controls are cream on the overlay, well over 4.5:1; outlined so they read as buttons', async ({ page, context }) => {
+  test('contrast: Stop is cream on its solid backing; Expand\'s muted icon is at least 3:1 at rest and on the overlay', async ({ page, context }) => {
     const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: SIZES.compact, layout: 'compact' });
-    await pipPage.mouse.move(110, 110);
-    for (const sel of ['.pip-control-btn-stop', '.pip-control-btn-expand']) {
-      const btn = monitoringScreen.locator(sel);
-      await expect(btn).toHaveCSS('opacity', '1');
-      await expect(btn).toHaveCSS('color', CREAM);
-      await expect(btn).toHaveCSS('border-top-width', '1px');
-    }
-    // The window's color under 60% black: about rgb(18, 18, 20).
+    expect(contrast(ICON, BG)).toBeGreaterThanOrEqual(3);
     const dimmed = `rgb(${Math.round(45 * 0.4)}, ${Math.round(46 * 0.4)}, ${Math.round(49 * 0.4)})`;
-    expect(contrast(CREAM, dimmed)).toBeGreaterThanOrEqual(4.5);
-    // Even over the ring's brightest pixels, dimmed the same way.
-    expect(contrast(CREAM, 'rgb(89, 89, 40)')).toBeGreaterThanOrEqual(4.5); // chartreuse at 40%
+    expect(contrast(ICON, dimmed)).toBeGreaterThanOrEqual(3);
+    await pipPage.mouse.move(110, 20);
+    const stop = monitoringScreen.locator('.pip-control-btn-stop');
+    await expect(stop).toHaveCSS('opacity', '1');
+    await expect(stop).toHaveCSS('color', CREAM);
+    await expect(stop).toHaveCSS('background-color', BG);
+    expect(contrast(CREAM, BG)).toBeGreaterThanOrEqual(4.5);
   });
 
-  test('Expanded (382×512): name, a labeled Stop centered below the ring, Compact view top right; 16px from the edges; no overlay', async ({ page, context }) => {
+  test('Expanded (382×512): name, a labeled 160×44 Stop centered below the ring, Compact view top right; 16px from the edges; no overlay', async ({ page, context }) => {
     const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: SIZES.expanded });
     await expect(monitoringScreen).toHaveAttribute('data-size-band', 'expanded');
     await expect(monitoringScreen.locator('.pip-profile-info')).toBeVisible();
@@ -722,22 +790,20 @@ test.describe('Monitoring presentation: controls by size band', () => {
     const stop = await monitoringScreen.locator('.pip-control-btn-stop').boundingBox();
     const compactBtn = await monitoringScreen.locator('.pip-control-btn-compact').boundingBox();
     const ring = await monitoringScreen.locator('.mezzo-ring').boundingBox();
+    expect([Math.round(stop.width), Math.round(stop.height)]).toEqual([160, 44]);
     expect(Math.abs(stop.x + stop.width / 2 - 382 / 2)).toBeLessThanOrEqual(1);
     expect(Math.round(512 - (stop.y + stop.height))).toBe(16);
     expect(stop.y).toBeGreaterThan(ring.y + ring.height);
     await expect(monitoringScreen.locator('.pip-control-btn-stop .pip-control-label')).toHaveText('Stop');
     await expect(monitoringScreen.locator('.pip-control-btn-stop')).toHaveCSS('opacity', '1');
+    await expect(monitoringScreen.locator('.pip-control-btn-stop')).toHaveCSS('background-color', BG);
     expect(Math.round(382 - (compactBtn.x + compactBtn.width))).toBe(16);
     expect(Math.round(compactBtn.y)).toBe(16);
     await expect(monitoringScreen.locator('.pip-control-btn-expand')).toBeHidden();
     // The space above and below the ring stays balanced.
     const name = await monitoringScreen.locator('.pip-profile-info').boundingBox();
-    const rr = await readRing(pipPage);
     const cy = ring.y + ring.height / 2;
-    const above = cy - (name.y + name.height);
-    const below = stop.y - cy;
-    expect(Math.abs(above - below)).toBeLessThanOrEqual(1);
-    expect(rr.edgePx).toBeGreaterThan(0);
+    expect(Math.abs((cy - (name.y + name.height)) - (stop.y - cy))).toBeLessThanOrEqual(1);
   });
 
   test('Expand and Compact view switch the layout mode without stopping monitoring', async ({ page, context }) => {
@@ -772,7 +838,6 @@ async function tabTo(pipPage, locator) {
 
 test.describe('Monitoring presentation: hover, pressed and focus', () => {
   const iconControls = [
-    { band: 'compact', sel: '.pip-control-btn-stop', label: 'Stop monitoring' },
     { band: 'compact', sel: '.pip-control-btn-expand', label: 'Expand' },
     { band: 'expanded', sel: '.pip-control-btn-compact', label: 'Compact view' },
   ];
@@ -792,9 +857,7 @@ test.describe('Monitoring presentation: hover, pressed and focus', () => {
       // Release away from the button, so the press doesn't click it.
       await pipPage.mouse.move(-10, -10);
       await pipPage.mouse.up();
-      // At rest: Compact and Mini controls are cream (on the overlay when
-      // shown); Expanded's icon is #B0AB9E.
-      await expect(btn).toHaveCSS('color', c.band === 'expanded' ? ICON : CREAM);
+      await expect(btn).toHaveCSS('color', ICON);
       await expect(btn).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
 
       await tabTo(pipPage, btn);
@@ -805,8 +868,9 @@ test.describe('Monitoring presentation: hover, pressed and focus', () => {
     });
   }
 
-  test('Expanded Stop: hover strengthens the border with a faint fill; pressed deepens it; keyboard focus gets the sage ring', async ({ page, context }) => {
-    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: SIZES.expanded });
+  for (const band of ['expanded', 'compact']) test(`${band} Stop: hover strengthens the border with a faint fill; pressed deepens it; keyboard focus gets the sage ring`, async ({ page, context }) => {
+    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: SIZES[band], layout: band });
+    if (band === 'compact') await pipPage.mouse.move(4, 4);
     const stop = monitoringScreen.locator('.pip-control-btn-stop');
     await expect(stop).toHaveCSS('background-color', BG); // solid, so the glow never shows through
     await hoverCenter(pipPage, stop);
@@ -895,31 +959,40 @@ test.describe('Monitoring presentation: tooltips', () => {
     await expect(tip).toBeHidden();
   });
 
-  for (const size of [SIZES.compact, { width: 240, height: 186 }, SIZES.mini]) {
-    test(`${size.width}×${size.height}: Stop and Expand show their labels, so no tooltips`, async ({ page, context }) => {
+  for (const size of [{ width: 240, height: 186 }, { width: 140, height: 140 }, { width: 280, height: 84 }]) {
+    test(`${size.width}×${size.height}: Expand's tooltip after about 500ms, inside the window, clear of Stop; the labeled Stop gets none`, async ({ page, context }) => {
       const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size, layout: 'compact' });
       const tip = monitoringScreen.locator('.pip-control-tooltip');
-      for (const sel of ['.pip-control-btn-stop', '.pip-control-btn-expand']) {
-        await hoverCenter(pipPage, monitoringScreen.locator(sel));
-        await pipPage.waitForTimeout(800);
-        await expect(tip).toBeHidden();
-      }
+      const expandBtn = monitoringScreen.locator('.pip-control-btn-expand');
+      await hoverCenter(pipPage, expandBtn);
+      await expect(tip).toBeVisible({ timeout: 1500 });
+      await expect(tip).toHaveText('Expand');
+      await expectTooltipClear(pipPage, tip, expandBtn);
+      const t = await tip.boundingBox(); const st = await monitoringScreen.locator('.pip-control-btn-stop').boundingBox();
+      expect(overlaps({ left: t.x, right: t.x + t.width, top: t.y, bottom: t.y + t.height }, { left: st.x, right: st.x + st.width, top: st.y, bottom: st.y + st.height }), 'tooltip clear of Stop').toBe(false);
+      await hoverCenter(pipPage, monitoringScreen.locator('.pip-control-btn-stop'));
+      await pipPage.waitForTimeout(800);
+      await expect(tip).toBeHidden();
     });
   }
 
-  test('Mini 140×140 (icons only): a tooltip names each control after about 500ms, inside the window and beside the control', async ({ page, context }) => {
-    const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 140, height: 140 }, layout: 'compact' });
-    const tip = monitoringScreen.locator('.pip-control-tooltip');
-    for (const [sel, label] of [['.pip-control-btn-stop', 'Stop monitoring'], ['.pip-control-btn-expand', 'Expand']]) {
+  // Where there's no room for a tooltip inside the window and clear of Stop
+  // (Chrome's smallest, 240×66: Stop takes 44 of 66px; the icon-only Stop,
+  // only in windows narrower than Chrome allows), none shows: the
+  // accessible name still names the control.
+  for (const [size, sel, name] of [[{ width: 240, height: 66 }, '.pip-control-btn-expand', 'Expand'], [{ width: 160, height: 56 }, '.pip-control-btn-stop', 'Stop monitoring']]) {
+    test(`${size.width}×${size.height}: no room for ${name}'s tooltip, so none covers Stop or leaves the window; its accessible name stays`, async ({ page, context }) => {
+      const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size, layout: 'compact' });
+      await pipPage.mouse.move(4, 4);
       const btn = monitoringScreen.locator(sel);
+      await expect(monitoringScreen.locator('.pip-control-btn-stop')).toHaveCSS('opacity', '1');
       await hoverCenter(pipPage, btn);
-      await expect(tip).toBeVisible({ timeout: 1500 });
-      await expect(tip).toHaveText(label);
-      await expectTooltipClear(pipPage, tip, btn);
-      await pipPage.mouse.move(70, 70);
-      await expect(tip).toBeHidden();
-    }
-  });
+      await pipPage.waitForTimeout(900);
+      const tip = monitoringScreen.locator('.pip-control-tooltip');
+      if (await tip.isVisible()) await expectTooltipClear(pipPage, tip, btn);
+      await expect(btn).toHaveAttribute('aria-label', name);
+    });
+  }
 });
 
 test.describe('Monitoring presentation: visualization stability', () => {
@@ -958,7 +1031,8 @@ test.describe('Monitoring presentation: the Compact default (2026-10-22)', () =>
     const liveTracks = () => page.evaluate(() => window.__streams.flatMap((st) => st.getTracks()).filter((t) => t.readyState === 'live').length);
     const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: { width: 220, height: 220 }, layout: 'compact' });
     expect(await liveTracks()).toBe(1);
-    await monitoringScreen.locator('.pip-control-btn-stop').click({ force: true });
+    await monitoringScreen.hover(); // Stop appears on hover
+    await monitoringScreen.locator('.pip-control-btn-stop').click();
     const ready = pipPage.locator('.pip-screen-ready');
     await expect(ready).toBeVisible();
     await expect(ready.locator('.pip-ready-selector-trigger-name')).toHaveText('Kitchen');

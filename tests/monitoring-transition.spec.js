@@ -83,7 +83,8 @@ test.describe('Companion: calibration -> Ready -> Monitoring -> Ready', () => {
     // Stop -> straight back to Ready (no forced save prompt) — the
     // Temporary profile stays selected, and the heading is now "Ready when
     // you are" since monitoring has now actually started once.
-    await pipPage.getByRole('button', { name: 'Stop monitoring' }).click({ force: true }); // a hover-revealed icon in Compact
+    await pipPage.locator('.pip-screen-monitoring').hover(); // Stop appears on hover (2026-11-17)
+    await pipPage.getByRole('button', { name: 'Stop monitoring' }).click();
     await expect(monitoringScreen).toBeHidden();
     await expect(readyScreen).toBeVisible();
     await expect(readyScreen.locator('.pip-ready-heading')).toHaveText('Ready when you are');
@@ -134,7 +135,8 @@ test.describe('Companion: calibration -> Ready -> Monitoring -> Ready', () => {
     await expect.poll(() => ring.evaluate((el) => el.style.getPropertyValue('--voice-size')), { timeout: 5000 }).not.toBe('');
 
     // Stop -> straight back to Ready with the same saved profile selected.
-    await pipPage.getByRole('button', { name: 'Stop monitoring' }).click({ force: true }); // a hover-revealed icon in Compact
+    await pipPage.locator('.pip-screen-monitoring').hover(); // Stop appears on hover (2026-11-17)
+    await pipPage.getByRole('button', { name: 'Stop monitoring' }).click();
     await expect(monitoringScreen).toBeHidden();
     await expect(readyScreen).toBeVisible();
     await expect(readyScreen.locator('.pip-ready-selector-trigger-name')).toHaveText('Kitchen');

@@ -297,6 +297,7 @@ test.describe('Main page: running (Companion open)', () => {
     await expect(page.locator('#running-live')).toHaveText('Monitoring is active.');
     await expect(h1).toHaveText('Keep this page open while you use Mezzo');
 
+    await pipPage.locator('.pip-screen-monitoring').hover(); // Stop appears on hover (2026-11-17)
     await pipPage.locator('.pip-control-btn-stop').click();
     await expect(pipPage.locator('.pip-screen-ready')).toBeVisible({ timeout: 5000 });
     await expect(label).toHaveText('Monitoring is not active');
@@ -551,7 +552,8 @@ test.describe('Main page: status for the browser extension (2026-10-25)', () => 
     await expect.poll(() => page.evaluate(() => window.__mezzoReports.length)).toBe(before + 1);
     expect(await last()).toEqual({ companionOpen: true, monitoring: true });
 
-    await pip.getByRole('button', { name: 'Stop monitoring' }).click({ force: true });
+    await pip.locator('.pip-screen-monitoring').hover(); // Stop appears on hover (2026-11-17)
+    await pip.getByRole('button', { name: 'Stop monitoring' }).click();
     await expect.poll(last).toEqual({ companionOpen: true, monitoring: false });
 
     await page.locator('#btn-close-companion').click();

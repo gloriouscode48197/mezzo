@@ -598,6 +598,7 @@ test.describe('Companion: resizeCompanionToContent() delta-adjusted correction (
     // Stop returns to Ready, whose content is already 382×512: no resize.
     const before = calls.length;
     await pipPage.setViewportSize({ width: 382, height: 512 });
+    await monitoringScreen.hover(); // Stop appears on hover (2026-11-17)
     await monitoringScreen.locator('.pip-control-btn-stop').click();
     await expect(readyScreen).toBeVisible();
     expect(await page.evaluate(() => window.__resizeToCalls.length)).toBe(before);

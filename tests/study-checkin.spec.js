@@ -70,6 +70,7 @@ async function startMonitoring(pipPage) {
 }
 
 async function stopMonitoring(pipPage) {
+  await pipPage.locator('.pip-screen-monitoring').hover(); // Stop appears on hover (2026-11-17)
   await pipPage.getByRole('button', { name: 'Stop monitoring' }).click();
   await expect(pipPage.locator('.pip-screen-ready')).toBeVisible();
 }
