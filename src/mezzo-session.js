@@ -408,14 +408,6 @@ const DECISION_PROCESSING_MS = 1000;
 // (2026-10-26): the 150ms fade in, then about 2s fully shown.
 const TOAST_VISIBLE_MS = 2150;
 
-// Custom row-action tooltip (2026-08-20) hover delay — the approved
-// ~200-300ms range, replacing reliance on the browser's own native
-// title-attribute tooltip (which on Chrome takes noticeably longer, and
-// duplicates this one if left in place — see buildSelectorRow()'s own
-// comment). Keyboard focus shows the tooltip immediately, unaffected by
-// this delay — see showTooltipFor()'s own callers.
-const TOOLTIP_HOVER_DELAY_MS = 250;
-
 // Expanded selector panel positioning (2026-08-20 manual-review fix) — the
 // panel used to always extend downward from the trigger at a flat
 // `top: calc(100% + 8px)`, which could push it past the Companion's own
@@ -858,19 +850,6 @@ export function createMezzoSession({
   let toastCardEl = null;
   let toastTextEl = null;
   let toastHideTimer = null;
-
-  // Custom row-action tooltip (2026-08-20) — a single shared element (same
-  // "one instance, one sibling of every .pip-screen" pattern the toast
-  // above already uses), reused for both the Recalibrate and Delete/
-  // Discard row icons; only one can ever be visible at once by
-  // construction, since there is only ever one DOM node. tooltipTargetEl
-  // tracks which button (if any) currently owns it, so a mouseleave/blur
-  // firing for a button that isn't the current owner (e.g. a stale event
-  // from a row already replaced by a re-render) can't hide a tooltip some
-  // other, newer interaction just showed.
-  let tooltipEl = null;
-  let tooltipShowTimer = null;
-  let tooltipTargetEl = null;
 
   let pendingDeleteProfileId = null;
 
@@ -2714,40 +2693,6 @@ export function createMezzoSession({
       }
       .pip-toast-icon { flex-shrink: 0; width: 12px; height: 12px; color: #CEE2C4; }
 
-      /* ── Row-action tooltip (2026-08-20) — the compact, dark-surface
-         treatment for the selector panel's own Recalibrate/Delete icon
-         buttons, replacing the slow native title-attribute tooltip.
-         position:fixed, not absolute: escapes the selector panel's own
-         overflow-y:auto/overflow-x:hidden clipping entirely (no ancestor
-         between this element and the viewport sets transform/filter/
-         will-change, which would otherwise contain a fixed-position
-         descendant — confirmed by inspection of every ancestor rule in
-         this file), and is positioned in JS (see positionTooltip()) from
-         the target button's own getBoundingClientRect(), clamped to stay
-         within the real Companion viewport on every side. Same raised
-         surface as the toast, so small transient chrome reads as one
-         family. pointer-events:none (like
-         the toast) — it must never block clicks or pointer movement, and
-         has no interactive content of its own to receive them anyway.
-         Shown/hidden via the shared .hidden utility class (display:none),
-         not opacity — a display:none tooltip is unambiguously absent from
-         layout/hit-testing with no transition to race against a fast
-         mouseleave/blur. */
-      .pip-tooltip {
-        position: fixed;
-        z-index: 50;
-        background: var(--color-bg-raised);
-        color: color-mix(in srgb, var(--color-text-soft) 92%, transparent);
-        font-family: var(--font-body);
-        font-size: 11px;
-        font-weight: var(--weight-medium);
-        padding: 5px 9px;
-        border-radius: 6px;
-        box-shadow: 0 8px 20px color-mix(in srgb, var(--color-shadow) 45%, transparent);
-        pointer-events: none;
-        white-space: nowrap;
-      }
-
       /* ── Monitoring screen (2026-08-18 redesign, superseding the layout
          comment history below) — the visualization fills the middle and
          stays the visual hero; status + profile sit above it, centered on
@@ -2896,7 +2841,8 @@ export function createMezzoSession({
       }
       /* Interaction states: hover brightens the icon to cream over a soft
          cream square, pressed deepens it, keyboard focus gets the sage
-         ring (no tooltip on focus: the aria-label covers it). */
+         ring. No tooltips anywhere in the Companion (2026-11-17): each
+         control's aria-label names it. */
       .pip-control-btn:hover { color: #F3EBDE; background: rgba(243, 235, 222, 0.10); }
       .pip-control-btn:active { background: rgba(243, 235, 222, 0.16); }
       .pip-control-btn:focus-visible { outline: 2px solid #CEE2C4; outline-offset: 2px; }
@@ -2943,23 +2889,6 @@ export function createMezzoSession({
         background: color-mix(in srgb, #F3EBDE 6%, var(--color-bg));
       }
       .pip-screen-monitoring[data-size-band="expanded"] .pip-control-btn-stop:active { background: color-mix(in srgb, #F3EBDE 12%, var(--color-bg)); }
-      /* Tooltip for Expanded's icon-only control, beside it, after about
-         500ms of hover (see setUpControlTooltips()). None in Compact/Mini. */
-      .pip-control-tooltip {
-        position: absolute;
-        z-index: 3;
-        padding: 4px 8px;
-        background: #4A4B4F;
-        border: 1px solid rgba(243, 235, 222, 0.18);
-        border-radius: 3px;
-        color: #F3EBDE;
-        font-family: var(--font-body);
-        font-size: 12px;
-        line-height: 16px;
-        white-space: nowrap;
-        pointer-events: none;
-      }
-      .pip-control-tooltip[hidden] { display: none; }
       .pip-screen-monitoring[data-size-band="expanded"] .pip-control-icon-stop { width: 9px; height: 9px; }
       .pip-screen-monitoring[data-size-band="expanded"] .pip-control-label { display: inline; }
       /* ── Compact and Mini controls (2026-11-17) ──
@@ -4344,23 +4273,6 @@ export function createMezzoSession({
       });
     });
 
-    // ── Row-action tooltip (2026-08-20) — a single shared element, same
-    //    sibling-of-every-screen pattern as the toast just above (see
-    //    showTooltipFor()/hideTooltip()). role="tooltip", not aria-live:
-    //    it's connected to its owning button via aria-describedby (set per
-    //    button in buildSelectorRow()), the standard accessible pattern for
-    //    a tooltip — not an independent announcement. position:fixed (see
-    //    its own CSS) means this never needs to live inside the selector
-    //    panel's own scrolling container to stay near a row's button; a
-    //    sibling of every .pip-screen keeps it un-clipped by the panel's
-    //    overflow-y/overflow-x regardless of scroll position. ──
-    const tooltip = pipDoc.createElement('div');
-    tooltip.className = 'pip-tooltip hidden';
-    tooltip.id = 'pip-row-tooltip';
-    tooltip.setAttribute('role', 'tooltip');
-    layout.appendChild(tooltip);
-    tooltipEl = tooltip;
-
     // ── Monitoring screen (Expanded + Compact share this one DOM tree —
     //    see the [data-layout] CSS above for what each hides/shows) ──
     const monitoringScreen = pipDoc.createElement('div');
@@ -4460,7 +4372,6 @@ export function createMezzoSession({
     layout.appendChild(monitoringScreen);
     monitoringScreenEl = monitoringScreen;
     setUpControlsReveal(monitoringScreen);
-    setUpControlTooltips(monitoringScreen);
 
     pipDoc.body.appendChild(layout);
 
@@ -4584,70 +4495,6 @@ export function createMezzoSession({
    * gap, centered in the area, so the space above and below it is equal.
    * Positions the ring's container as a side effect.
    */
-// Expanded's icon-only control (Compact view) gets a short tooltip naming
-// the action, after about 500ms of hover: beside the control (to the inside
-// of its corner), in the control's own row, so it never sits over the ring;
-// otherwise above or below it, and otherwise none: the aria-label already
-// names the control. Hidden on pointer leave and on press; never shown for
-// keyboard focus. Expanded's Stop has a visible label, so it gets none.
-// Compact and Mini show no tooltips at all (2026-11-17): Expand is named
-// for screen readers only.
-const TOOLTIP_DELAY_MS = 500;
-function setUpControlTooltips(screen) {
-  const doc = screen.ownerDocument;
-  const tip = doc.createElement('div');
-  tip.className = 'pip-control-tooltip';
-  tip.setAttribute('aria-hidden', 'true');
-  tip.hidden = true;
-  screen.appendChild(tip);
-  const win = doc.defaultView;
-  let timer = null;
-  const hide = () => { win.clearTimeout(timer); timer = null; tip.hidden = true; };
-  const wantsTooltip = (btn) => screen.dataset.sizeBand === 'expanded'
-    && !btn.classList.contains('pip-control-btn-stop');
-  const show = (btn) => {
-    tip.textContent = btn.getAttribute('aria-label');
-    tip.hidden = false;
-    const s = screen.getBoundingClientRect();
-    const b = btn.getBoundingClientRect();
-    const w = tip.offsetWidth; const h = tip.offsetHeight;
-    const bx = b.left - s.left; const by = b.top - s.top;
-    const onLeft = bx + b.width / 2 < s.width / 2;
-    const onTop = by + b.height / 2 < s.height / 2;
-    const besideX = onLeft ? bx + b.width + 6 : bx - 6 - w;
-    const alignX = onLeft ? bx : bx + b.width - w;
-    const candidates = [
-      { x: besideX, y: by + (b.height - h) / 2 },
-      { x: alignX, y: onTop ? by + b.height + 6 : by - 6 - h },
-    ];
-    const inWindow = ({ x, y }) => x >= 0 && y >= 0 && x + w <= s.width && y + h <= s.height;
-    // Never over the ring.
-    const { extent, top, bottom } = ringLayout();
-    const ring = { left: (s.width - extent) / 2, top: (top + bottom - extent) / 2 };
-    ring.right = ring.left + extent; ring.bottom = ring.top + extent;
-    const clearOfRing = ({ x, y }) => x + w <= ring.left || x >= ring.right || y + h <= ring.top || y >= ring.bottom;
-    // Never over another control.
-    const others = [...screen.querySelectorAll('.pip-control-btn')]
-      .filter((el) => el !== btn && getComputedStyle(el).display !== 'none' && getComputedStyle(el).opacity !== '0')
-      .map((el) => { const r = el.getBoundingClientRect(); return { left: r.left - s.left, top: r.top - s.top, right: r.right - s.left, bottom: r.bottom - s.top }; });
-    const clearOfOthers = ({ x, y }) => others.every((o) => x + w <= o.left || x >= o.right || y + h <= o.top || y >= o.bottom);
-    const fits = (spot) => inWindow(spot) && clearOfRing(spot) && clearOfOthers(spot);
-    const spot = candidates.find(fits);
-    if (!spot) { tip.hidden = true; return; }
-    tip.style.left = `${Math.round(spot.x)}px`;
-    tip.style.top = `${Math.round(spot.y)}px`;
-  };
-  for (const btn of screen.querySelectorAll('.pip-control-btn')) {
-    btn.addEventListener('pointerenter', () => {
-      hide();
-      if (!wantsTooltip(btn)) return;
-      timer = win.setTimeout(() => show(btn), TOOLTIP_DELAY_MS);
-    });
-    btn.addEventListener('pointerleave', hide);
-    btn.addEventListener('pointerdown', hide);
-  }
-}
-
 // Compact and Mini (2026-11-17) show the ring and the Expand icon. The
 // pointer entering the window, or keyboard focus on a control, fades in the
 // dark overlay with Stop. The pointer leaving the window hides them at once
@@ -4896,11 +4743,6 @@ function ringLayout() {
    *  transition passes through, so that cleanup can't be missed by a
    *  handler that forgets to do it. */
   function showOnlyScreen(screenEl) {
-    // Row-action tooltip (2026-08-20): every screen transition dismisses
-    // it — the one chokepoint every transition already passes through, so
-    // this covers every origin (Recalibrate, Delete, a naming/limit
-    // decision resolving, Stop, and so on) without a per-caller hook.
-    hideTooltip();
     [
       welcomeScreenEl, prepScreenEls[1], prepScreenEls[2], c0ScreenEl, readyScreenEl, calibratingScreenEl, creatingScreenEl,
       failedScreenEl, m1ScreenEl, resultScreenEl, m2ScreenEl, m3ScreenEl, deleteScreenEl, monitoringScreenEl,
@@ -5289,10 +5131,8 @@ function ringLayout() {
     // paint, strictly after the synchronous click handler that scheduled
     // it returns, but not necessarily after that caller's own next action.
     // When this rAF lost that race, it silently stole focus back to a
-    // radio, firing blur on whatever had just been focused — which, for a
-    // row-action icon, drove hideTooltip() via its own (otherwise entirely
-    // correct) blur handler and hid a tooltip that had only just legitimately
-    // appeared. Reproduced directly (instrumented focus/blur logging, no
+    // radio, pulling focus off whatever had just been focused (a row-action
+    // icon, for example). Reproduced directly (instrumented focus/blur logging, no
     // artificial delay): 4 of 5 raw attempts. Guard: only move focus if it's
     // still where opening the panel left it (the trigger, or nothing inside
     // the panel yet) — if it has already moved to something inside the
@@ -5329,12 +5169,6 @@ function ringLayout() {
     readySelectorTriggerEl?.setAttribute('aria-expanded', 'false');
     pipDocument?.removeEventListener('click', handleSelectorOutsideClick, true);
     pipDocument?.removeEventListener('keydown', handleSelectorKeydown, true);
-    // Row-action tooltip (2026-08-20): the panel closing (Escape, an
-    // outside click, or a row selection — every path already funnels
-    // through this one function) always removes the row buttons it was
-    // pointing at from view, so dismiss it here rather than leaving it to
-    // whichever dismissal trigger happens to fire next.
-    hideTooltip();
   }
 
   function handleSelectorOutsideClick(event) {
@@ -5514,7 +5348,6 @@ function ringLayout() {
     const rowName = pipDocument.createElement('span');
     rowName.className = 'pip-ready-selector-row-name';
     rowName.textContent = label;
-    rowName.title = label;
 
     // Decorative only — aria-hidden, since the radio itself already
     // announces its own checked state to assistive tech; this glyph would
@@ -5531,57 +5364,14 @@ function ringLayout() {
 
     row.appendChild(rowLabel);
 
-    // Custom tooltip wiring (2026-08-20), shared by both row-action icons
-    // below — replaces the recalibrate icon's old native title attribute
-    // outright (a native tooltip left in place alongside this one would
-    // show twice, at two different delays — see .pip-tooltip's own CSS
-    // comment) rather than adding a second tooltip mechanism next to it.
-    // aria-describedby, not aria-labelledby: connects the visible tooltip
-    // as an accessible DESCRIPTION without touching the button's own
-    // aria-label, which stays the full "Recalibrate {name}"/"Delete
-    // {name}" accessible name passed in above. Hover shows after
-    // TOOLTIP_HOVER_DELAY_MS (cleared on mouseleave before it fires, so a
-    // quick pass-over never shows it); keyboard focus shows it
-    // immediately, matching how a sighted keyboard user expects to see
-    // what a focused control does without waiting. hideTooltip() itself
-    // guards against a stale target (see its own comment), so a leave/blur
-    // firing for a row no longer current is always safe.
-    function attachRowTooltip(btn, text) {
-      // No aria-describedby set here — see showTooltipFor()/hideTooltip()'s
-      // own comments. Setting it unconditionally at attach time would leave
-      // every row-action button permanently referencing the shared
-      // tooltip, active or not; the relationship must exist only while
-      // this specific button's own tooltip is genuinely showing.
-      btn.addEventListener('mouseenter', () => {
-        if (tooltipShowTimer) clearTimeout(tooltipShowTimer);
-        tooltipShowTimer = setTimeout(() => {
-          tooltipShowTimer = null;
-          showTooltipFor(btn, text);
-        }, TOOLTIP_HOVER_DELAY_MS);
-      });
-      btn.addEventListener('mouseleave', () => {
-        if (tooltipShowTimer) { clearTimeout(tooltipShowTimer); tooltipShowTimer = null; }
-        if (tooltipTargetEl === btn) hideTooltip();
-      });
-      btn.addEventListener('focus', () => {
-        if (tooltipShowTimer) { clearTimeout(tooltipShowTimer); tooltipShowTimer = null; }
-        showTooltipFor(btn, text);
-      });
-      btn.addEventListener('blur', () => {
-        if (tooltipTargetEl === btn) hideTooltip();
-      });
-    }
-
     const recalibrateBtn = pipDocument.createElement('button');
     recalibrateBtn.type = 'button';
     recalibrateBtn.className = 'pip-ready-selector-row-action';
     recalibrateBtn.setAttribute('aria-label', recalibrateLabel);
     recalibrateBtn.innerHTML = RECALIBRATE_ICON_SVG;
-    attachRowTooltip(recalibrateBtn, 'Recalibrate');
     recalibrateBtn.addEventListener('click', (event) => {
       event.stopPropagation();
       event.preventDefault();
-      hideTooltip();
       onRecalibrate();
     });
     row.appendChild(recalibrateBtn);
@@ -5591,16 +5381,9 @@ function ringLayout() {
     actionBtn.className = 'pip-ready-selector-row-action';
     actionBtn.setAttribute('aria-label', actionLabel);
     actionBtn.innerHTML = TRASH_ICON_SVG;
-    // The visible tooltip must describe the action that will actually
-    // occur, same as the accessible name already does: Discard for the
-    // Temporary row (its own aria-label already says "Discard temporary
-    // profile", never a Delete confirmation screen — see onAction above),
-    // Delete for every saved row.
-    attachRowTooltip(actionBtn, isTemporaryProfile(profile) ? 'Discard' : 'Delete');
     actionBtn.addEventListener('click', (event) => {
       event.stopPropagation();
       event.preventDefault();
-      hideTooltip();
       onAction(actionBtn);
     });
     row.appendChild(actionBtn);
@@ -6806,91 +6589,6 @@ function ringLayout() {
     toastEl.style.top = `${top}px`;
   }
 
-  /** Positions the shared tooltip against a specific target button, using
-   *  the Companion window's own real, live viewport (pipWindow.innerWidth/
-   *  innerHeight, not an assumed 382×512 — correct at whatever size the
-   *  window actually is). Prefers directly above the button (rows are
-   *  short and the icon pair sits near the row's own right edge, so above
-   *  is the common, uncluttered direction); flips to below only if there
-   *  genuinely isn't room above, and clamps horizontally so the tooltip
-   *  itself never extends past either viewport edge — both real
-   *  possibilities for a button near the panel's own top edge or the
-   *  window's left/right edges. Called only while the tooltip is already
-   *  unhidden (see showTooltipFor()) — offsetWidth/offsetHeight read 0 on
-   *  a display:none element, which would silently miscompute this. */
-  function positionTooltip(targetEl) {
-    if (!tooltipEl || !pipWindow) return;
-    const margin = 6;
-    const rect = targetEl.getBoundingClientRect();
-    const tooltipWidth = tooltipEl.offsetWidth;
-    const tooltipHeight = tooltipEl.offsetHeight;
-    const viewportWidth = pipWindow.innerWidth;
-    const viewportHeight = pipWindow.innerHeight;
-
-    let left = rect.left + rect.width / 2 - tooltipWidth / 2;
-    left = Math.max(margin, Math.min(left, viewportWidth - tooltipWidth - margin));
-
-    let top = rect.top - tooltipHeight - margin;
-    if (top < margin) top = Math.min(rect.bottom + margin, viewportHeight - tooltipHeight - margin);
-
-    tooltipEl.style.left = `${left}px`;
-    tooltipEl.style.top = `${top}px`;
-  }
-
-  /** Shows the shared tooltip for a specific button with specific text —
-   *  see .pip-tooltip's own CSS comment and buildSelectorRow()'s own
-   *  wiring for when this is actually called (hover, after
-   *  TOOLTIP_HOVER_DELAY_MS; keyboard focus, immediately). Text is set
-   *  before un-hiding so positionTooltip()'s own offsetWidth/offsetHeight
-   *  read the size the tooltip will actually render at, not a stale one
-   *  left over from whichever button last used it.
-   *
-   *  aria-describedby is attached HERE, to targetEl specifically — not at
-   *  buildSelectorRow()'s attach-time — so only the button whose tooltip
-   *  is genuinely showing right now ever references it; every other row
-   *  action stays undescribed. The `tooltipTargetEl && !== targetEl` guard
-   *  is defense-in-depth for switching directly between two triggers
-   *  without an intervening hideTooltip() call (there normally is one —
-   *  mouseleave/blur on the old trigger fires before mouseenter/focus on
-   *  the new one — but this makes the invariant "at most one button is
-   *  ever described by this element" hold unconditionally, not just on
-   *  the common event ordering). */
-  function showTooltipFor(targetEl, text) {
-    if (!tooltipEl) return;
-    if (tooltipTargetEl && tooltipTargetEl !== targetEl) {
-      tooltipTargetEl.removeAttribute('aria-describedby');
-    }
-    tooltipTargetEl = targetEl;
-    tooltipEl.textContent = text;
-    tooltipEl.classList.remove('hidden');
-    targetEl.setAttribute('aria-describedby', 'pip-row-tooltip');
-    positionTooltip(targetEl);
-  }
-
-  /** Hides the shared tooltip unconditionally — safe to call whether or
-   *  not it's currently showing, and whether or not a hover-delay timer is
-   *  still pending (cleared here too, so a mouseleave shortly after
-   *  mouseenter can't still show it moments later). Called from every
-   *  dismissal trigger the spec requires: pointer leave/blur/Escape (see
-   *  buildSelectorRow()'s own listeners and handleSelectorKeydown()),
-   *  panel close (closeSelectorPanel(), which covers Escape, an outside
-   *  click, and row selection all at once), row-action clicks themselves
-   *  (before whatever they trigger next), and every screen transition
-   *  (showOnlyScreen(), the one chokepoint every transition already
-   *  passes through — see its own doc comment).
-   *
-   *  Removes aria-describedby from whichever button currently holds it
-   *  (the only one that ever can, per showTooltipFor()'s own invariant)
-   *  before forgetting it — leaving the relationship in place on a hidden
-   *  tooltip would let its now-stale text keep surfacing as that button's
-   *  accessible description even though nothing is visibly shown. */
-  function hideTooltip() {
-    if (tooltipShowTimer) { clearTimeout(tooltipShowTimer); tooltipShowTimer = null; }
-    if (tooltipTargetEl) tooltipTargetEl.removeAttribute('aria-describedby');
-    tooltipTargetEl = null;
-    tooltipEl?.classList.add('hidden');
-  }
-
   function handlePipClose() {
     const wasActive = isMonitoringActive; // capture before teardownMonitoringEngine clears it
     const wasStarting = monitoringStarting; // Start monitoring pressed, mic not here yet
@@ -6990,9 +6688,6 @@ function ringLayout() {
     toastEl = null;
     toastCardEl = null;
     toastTextEl = null;
-    if (tooltipShowTimer) { clearTimeout(tooltipShowTimer); tooltipShowTimer = null; }
-    tooltipEl = null;
-    tooltipTargetEl = null;
     pendingDeleteProfileId = null;
     monitoringScreenEl = null;
     pipZoneLiveEl = null;

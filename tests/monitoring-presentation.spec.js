@@ -950,56 +950,22 @@ test.describe('Monitoring presentation: hover, pressed and focus', () => {
   });
 });
 
-test.describe('Monitoring presentation: tooltips', () => {
-  async function expectTooltipClear(pipPage, tip, btn) {
-    const t = await tip.boundingBox();
-    const b = await btn.boundingBox();
-    const boxes = await layoutBoxes(pipPage);
-    const tr = { left: t.x, right: t.x + t.width, top: t.y, bottom: t.y + t.height };
-    expect(overlaps(tr, boxes.ringMax), 'tooltip clear of the ring at its largest').toBe(false);
-    expect(overlaps(tr, { left: b.x, right: b.x + b.width, top: b.y, bottom: b.y + b.height }), 'tooltip beside the control, not over it').toBe(false);
-    await expect(tip).toHaveCSS('background-color', 'rgb(74, 75, 79)');
-    await expect(tip).toHaveCSS('font-size', '12px');
-    await expect(tip).toHaveCSS('border-radius', '3px');
-  }
-
-  for (const c of [
-    { band: 'expanded', sel: '.pip-control-btn-compact', label: 'Compact view' },
-  ]) {
-    test(`${c.label} (${c.band}): a tooltip after about 500ms of hover, beside the control and clear of the ring; gone on leave`, async ({ page, context }) => {
-      const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: SIZES[c.band], layout: c.band === 'expanded' ? 'expanded' : 'compact' });
-      const btn = monitoringScreen.locator(c.sel);
-      const tip = monitoringScreen.locator('.pip-control-tooltip');
-      await hoverCenter(pipPage, btn);
-      await pipPage.waitForTimeout(250);
-      await expect(tip).toBeHidden();
-      await expect(tip).toBeVisible({ timeout: 1000 });
-      await expect(tip).toHaveText(c.label);
-      await expectTooltipClear(pipPage, tip, btn);
-      await pipPage.mouse.move(-10, -10);
-      await expect(tip).toBeHidden();
-    });
-  }
-
-  test('the tooltip hides when the control is pressed, and never shows for keyboard focus or on the labeled Stop', async ({ page, context }) => {
+test.describe('Monitoring presentation: no tooltips', () => {
+  test('Expanded: no tooltip on the Compact view icon or Stop on hover or keyboard focus; no title; accessible names stay', async ({ page, context }) => {
     const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size: SIZES.expanded });
-    const tip = monitoringScreen.locator('.pip-control-tooltip');
-    const compactBtn = monitoringScreen.locator('.pip-control-btn-compact');
-    await hoverCenter(pipPage, compactBtn);
-    await expect(tip).toBeVisible({ timeout: 1000 });
-    await pipPage.mouse.down();
-    await expect(tip).toBeHidden();
-    await pipPage.mouse.move(-10, -10);
-    await pipPage.mouse.up();
-
-    await hoverCenter(pipPage, monitoringScreen.locator('.pip-control-btn-stop'));
-    await pipPage.waitForTimeout(800);
-    await expect(tip).toBeHidden();
-    await pipPage.mouse.move(-10, -10);
-
-    await tabTo(pipPage, compactBtn);
-    await pipPage.waitForTimeout(800);
-    await expect(tip).toBeHidden();
+    const tip = pipPage.locator('.pip-control-tooltip, .pip-tooltip, [role="tooltip"]');
+    for (const [sel, name] of [['.pip-control-btn-compact', 'Compact view'], ['.pip-control-btn-stop', 'Stop monitoring']]) {
+      const btn = monitoringScreen.locator(sel);
+      await expect(btn).toHaveAttribute('aria-label', name);
+      expect(await btn.getAttribute('title')).toBeNull();
+      await hoverCenter(pipPage, btn);
+      await pipPage.waitForTimeout(900);
+      await expect(tip).toHaveCount(0);
+    }
+    await tabTo(pipPage, monitoringScreen.locator('.pip-control-btn-compact'));
+    await pipPage.waitForTimeout(600);
+    await expect(tip).toHaveCount(0);
+    expect(await pipPage.evaluate(() => document.querySelectorAll('[title]').length)).toBe(0);
   });
 
   // Compact and Mini show no tooltips (2026-11-17): no custom tooltip and
@@ -1007,7 +973,7 @@ test.describe('Monitoring presentation: tooltips', () => {
   for (const size of [{ width: 240, height: 186 }, { width: 280, height: 84 }, { width: 140, height: 140 }, { width: 240, height: 66 }, { width: 160, height: 56 }]) {
     test(`${size.width}×${size.height}: no tooltip on Expand or Stop; their accessible names stay`, async ({ page, context }) => {
       const { pipPage, monitoringScreen } = await reachMonitoring(page, context, { size, layout: 'compact' });
-      const tip = monitoringScreen.locator('.pip-control-tooltip');
+      const tip = pipPage.locator('.pip-control-tooltip, .pip-tooltip, [role="tooltip"]');
       await pipPage.mouse.move(4, 4);
       for (const [sel, name] of [['.pip-control-btn-expand', 'Expand'], ['.pip-control-btn-stop', 'Stop monitoring']]) {
         const btn = monitoringScreen.locator(sel);
@@ -1015,7 +981,7 @@ test.describe('Monitoring presentation: tooltips', () => {
         expect(await btn.getAttribute('title')).toBeNull();
         await hoverCenter(pipPage, btn);
         await pipPage.waitForTimeout(900);
-        await expect(tip).toBeHidden();
+        await expect(tip).toHaveCount(0);
       }
       expect(await monitoringScreen.evaluate((el) => el.querySelectorAll('[title]').length)).toBe(0);
     });

@@ -272,13 +272,10 @@ test.describe('Companion: selector row Recalibrate icon (2026-08-17)', () => {
     const kitchenRow = panel.locator('.pip-ready-selector-row', { hasText: 'Kitchen' });
     const recalibrateBtn = kitchenRow.getByRole('button', { name: 'Recalibrate Kitchen', exact: true });
     await expect(recalibrateBtn).toBeVisible();
-    // Native title attribute retired (2026-08-20) in favor of the custom
-    // .pip-tooltip — see tests/companion-visual-system.spec.js's own
-    // tooltip coverage for the replacement behavior (hover delay, keyboard
-    // focus, dismissal triggers, and the full aria-describedby lifecycle —
-    // attached only while this specific button's tooltip is genuinely
-    // showing, never left in place at rest).
-    await expect(recalibrateBtn).not.toHaveAttribute('title', 'Recalibrate');
+    // No tooltip of any kind (2026-11-17): no title attribute, and no
+    // custom tooltip (see tests/companion-visual-system.spec.js's
+    // "no tooltips"); the aria-label names it.
+    await expect(recalibrateBtn).not.toHaveAttribute('title', /.*/);
     await expect(recalibrateBtn).not.toHaveAttribute('aria-describedby');
     // Decorative SVG hidden from assistive technology — the button's own
     // aria-label is the sole accessible name, not the icon's own content.
