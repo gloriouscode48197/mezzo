@@ -4,3 +4,7 @@ test-results/
 playwright-report/
 blob-report/
 playwright/.cache/
+
+# Store builds (extension zip, store assets)
+dist/
+*.zip
