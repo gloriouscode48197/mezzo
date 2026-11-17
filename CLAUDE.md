@@ -33,6 +33,14 @@ These instructions affect your behavior every session and therefore belong here 
 * Challenge assumptions that weaken clarity, privacy, trust, or the current milestone.
 * Do not turn every discussion into an implementation task.
 
+## Round 4 study: Companion freeze and pushes (from 2026-11-17)
+
+Round 4 is live: real testers use production, and production follows `v4`.
+
+* **The Companion is frozen as of `2166f3f`** until the user says the study is over. No visual or behavior changes to the Companion: its screens, copy, sizes, controls, ring, glow, timing or flows. This overrides any backlog item or earlier plan that would change it.
+* **Bug fixes only, and ask first.** Describe the bug and the proposed fix and wait for the user's approval before changing Companion code.
+* **Pushes:** push to `v4` only fixes the user has approved, and only after both `npm test` and `npm run test:pip` pass in full. Read the results before pushing.
+
 ---
 
 # Product Purpose
