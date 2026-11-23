@@ -47,6 +47,19 @@ async function seed(page, { code = null, lastSession = null, firstSessionAgo = n
   }, { profiles: PROFILE, code, lastSession, firstSessionAgo });
 }
 
+/** Turns Part 1 (the baseline stage) back on for this page: the config is
+ *  served with includeBaseline: true. Part 1 is off in the study since
+ *  2026-11-23, but its code stays, so its tests run with it on. `edit`
+ *  changes the served config further. */
+async function withBaseline(page, edit = (body) => body) {
+  await page.route('**/src/study-config.js', async (route) => {
+    const res = await route.fetch();
+    const body = (await res.text()).replace('includeBaseline: false', 'includeBaseline: true');
+    if (body.includes('includeBaseline: false')) throw new Error('includeBaseline not replaced');
+    await route.fulfill({ response: res, body: edit(body) });
+  });
+}
+
 /** Shortens the minimum speaking time in the live config (there is no
  *  minimum session length). */
 async function setMinSpeech(page, speechMs = 300) {
@@ -556,7 +569,51 @@ test.describe('Study mode: the /study page', () => {
     await expect(link(page, 'Wrap up the study')).toBeHidden();
   });
 
-  test('baseline stage (a code, no session yet): "Part 1: Check in after your usual calls", the copy, the box with the list and button, no way into Mezzo', async ({ page }) => {
+  test('Part 1 off (the study now): a tester code alone opens straight into "Try Mezzo on your calls"; the check-in and "Your progress" work with no session yet', async ({ page }) => {
+    await seed(page, { code: 'R4-01' });
+    const requests = [];
+    page.on('request', (r) => requests.push(r.url()));
+    await page.goto('/study');
+    await expect(page.locator('body')).toHaveAttribute('data-study-stage', 'mezzo');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Your Mezzo study');
+    await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Try Mezzo on your calls']);
+    await expect(page.locator('#study-mezzo-intro')).toHaveText('Try Mezzo on your calls over the next week or two. Check in after at least 2 of them.');
+    await expect(page.locator('#study-baseline, #study-baseline-check-in, #study-bookmark:visible')).toHaveCount(0);
+    await expect(page.getByText(/Part 1|usual calls|without Mezzo/)).toHaveCount(0);
+    await expect(link(page, 'Open Mezzo')).toBeVisible();
+    // No ?start=1 needed, and nothing stored for the stage until a session.
+    expect(await page.evaluate(() => localStorage.getItem('mezzoStudyMezzoStage:R4-01'))).toBe(null);
+    expect(await page.evaluate(() => localStorage.getItem('mezzoStudyFirstSession:R4-01'))).toBe(null);
+
+    // The check-in: the code, browser ID and source (no session yet).
+    const url = new URL(await link(page, 'Check in').getAttribute('href'));
+    expect(url.origin + url.pathname).toBe('https://tally.so/r/gber54');
+    expect(Object.keys(Object.fromEntries(url.searchParams)).sort()).toEqual(['mezzo_browser_id', 'mezzo_source', 'mezzo_tester']);
+    expect(url.searchParams.get('mezzo_tester')).toBe('R4-01');
+    expect(url.searchParams.get('mezzo_source')).toBe('study_page');
+
+    // "Your progress": ticks are kept for this code, never sent.
+    const one = page.getByRole('checkbox', { name: 'Check-in 1', exact: true });
+    const two = page.getByRole('checkbox', { name: 'Check-in 2', exact: true });
+    await one.check();
+    await expect(page.locator('#study-mezzo .study-next')).toHaveText('What’s next: after your 2nd check-in, I’ll email you a short wrap-up form.');
+    await page.reload();
+    await expect(one).toBeChecked();
+    await expect(two).not.toBeChecked();
+    expect(await page.evaluate(() => localStorage.getItem('mezzoStudyMezzoChecks:R4-01'))).toBe('[true,false]');
+    for (const u of requests) expect(u).not.toMatch(/check-in-?[12]|mezzo.?checks/i);
+  });
+
+  test('Part 1 off: a new code from a personal link (?study=CODE, no ?start=1) lands in "Try Mezzo on your calls"', async ({ page }) => {
+    await page.goto('/study?study=R4-07');
+    await expect(page.locator('body')).toHaveAttribute('data-study-stage', 'mezzo');
+    await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Try Mezzo on your calls']);
+    await expect(page.locator('#study-code')).toHaveText('R4-07');
+    expect(new URL(page.url()).searchParams.has('study')).toBe(false);
+  });
+
+  test('Part 1 on: baseline stage (a code, no session yet): "Part 1: Check in after your usual calls", the copy, the box with the list and button, no way into Mezzo', async ({ page }) => {
+    await withBaseline(page);
     await seed(page, { code: 'R4-01' });
     await page.goto('/study');
     await expect(page.locator('body')).toHaveAttribute('data-study-stage', 'baseline');
@@ -624,13 +681,9 @@ test.describe('Study mode: the /study page', () => {
     expect(await footer.evaluate((el) => el === el.parentElement.lastElementChild)).toBe(true);
   });
 
-  test('baseline stage with a placeholder form ID: the text, no broken button', async ({ page }) => {
-    // Serves the config with the placeholder back in place of the real ID.
-    await page.route('**/src/study-config.js', async (route) => {
-      const res = await route.fetch();
-      const body = (await res.text()).replace('tally.so/r/zEN6jg', 'tally.so/r/[BASELINE ID]');
-      await route.fulfill({ response: res, body });
-    });
+  test('Part 1 on: baseline stage with a placeholder form ID: the text, no broken button', async ({ page }) => {
+    // Part 1 on, with the placeholder back in place of the real ID.
+    await withBaseline(page, (body) => body.replace('tally.so/r/zEN6jg', 'tally.so/r/[BASELINE ID]'));
     await seed(page, { code: 'R4-01' });
     await page.goto('/study');
     await expect(page.locator('body')).toHaveAttribute('data-study-stage', 'baseline');
@@ -653,7 +706,7 @@ test.describe('Study mode: the /study page', () => {
     await page.goto('/study');
     await expect(page.locator('body')).toHaveAttribute('data-study-stage', 'mezzo');
     // Only Part 2.
-    await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Part 2: Check in after a call with Mezzo']);
+    await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Try Mezzo on your calls']);
     await expect(page.locator('#study-baseline')).toHaveCount(0);
   });
 
@@ -663,7 +716,8 @@ test.describe('Study mode: the /study page', () => {
     expect(await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('mezzoStudy')))).toEqual([]);
   });
 
-  test('the stage belongs to the tester code: a new code starts at Part 1; the first code keeps its stage; ?study=clear resets every code', async ({ page }) => {
+  test('Part 1 on: the stage belongs to the tester code: a new code starts at Part 1; the first code keeps its stage; ?study=clear resets every code', async ({ page }) => {
+    await withBaseline(page);
     const stage = () => page.locator('body').getAttribute('data-study-stage');
     await page.goto('/study?study=TEST-01&start=1');
     expect(await stage()).toBe('mezzo');
@@ -689,7 +743,7 @@ test.describe('Study mode: the /study page', () => {
     await expect(page.locator('body')).toHaveAttribute('data-study-stage', 'mezzo');
     await expect(page.getByText('Your study code: R4-01')).toBeVisible();
     // Only Part 2: no Part 1, no wrap-up (it's emailed), nothing grayed out.
-    await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Part 2: Check in after a call with Mezzo']);
+    await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Try Mezzo on your calls']);
     await expect(page.locator('#study-baseline, #study-baseline-check-in')).toHaveCount(0);
     await expect(page.getByText('Completed')).toHaveCount(0);
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Your Mezzo study');
@@ -772,13 +826,8 @@ test.describe('Study mode: the /study page', () => {
     });
   }
 
-  test('With Mezzo stage: the extension link stays off the page even once extensionUrl is in the config', async ({ page }) => {
-    const STORE = 'https://chromewebstore.google.com/detail/mezzo/abcdefghijklmnop';
-    await page.route('**/src/study-config.js', async (route) => {
-      const res = await route.fetch();
-      const body = (await res.text()).replace("extensionUrl: ''", `extensionUrl: '${STORE}'`);
-      await route.fulfill({ response: res, body });
-    });
+  test('With Mezzo stage: the extension link stays off the page, though extensionUrl is set (the install steps are in the email)', async ({ page }) => {
+    const STORE = 'https://chromewebstore.google.com/detail/mezzo-meeting-volume-remi/hnjokbmcagbbbcgipkgfjnkmlkmnohhl';
     await seed(page, { code: 'R4-01', firstSessionAgo: DAY });
     await page.goto('/study');
     await expect(link(page, 'Check in')).toBeVisible();
@@ -798,7 +847,7 @@ test.describe('Study mode: the /study page', () => {
     await page.goto('/study');
     await expect(page.locator('body')).toHaveAttribute('data-study-stage', 'mezzo');
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Your Mezzo study');
-    await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Part 2: Check in after a call with Mezzo']);
+    await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Try Mezzo on your calls']);
     await expect(page.locator('#study-wrap-up-part, #study-wrap-up, #study-baseline')).toHaveCount(0);
     await expect(link(page, 'Wrap up the study')).toHaveCount(0);
     await expect(page.getByText('Part 3')).toHaveCount(0);
@@ -915,7 +964,8 @@ test.describe('Study mode: the /study page', () => {
     await expect.poll(async () => (await nav.boundingBox()).y).toBeLessThan(-200);
   });
 
-  test('layout, wide screen: Part 2 matches Part 1: one 560px column, the box at the same place and width; Open Mezzo above the check-in, beside the list, the same width and height', async ({ page }) => {
+  test('Part 1 on: layout, wide screen: Part 2 matches Part 1: one 560px column, the box at the same place and width; Open Mezzo above the check-in, beside the list, the same width and height', async ({ page }) => {
+    await withBaseline(page);
     await page.setViewportSize({ width: 1200, height: 900 });
     await seed(page, { code: 'R4-01' });
     await page.goto('/study');
@@ -967,7 +1017,8 @@ test.describe('Study mode: the /study page', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
   });
 
-  test('Part 1 checkboxes: the tester ticks both, sees the thank-you, "What\'s next" stays, and they stay ticked for that code only; nothing is sent', async ({ page }) => {
+  test('Part 1 on: Part 1 checkboxes: the tester ticks both, sees the thank-you, "What\'s next" stays, and they stay ticked for that code only; nothing is sent', async ({ page }) => {
+    await withBaseline(page);
     await seed(page, { code: 'R4-01' });
     const requests = [];
     page.on('request', (r) => requests.push(r.url()));
@@ -1042,7 +1093,8 @@ test.describe('Study mode: the /study page', () => {
     expect(requests.filter((u) => !u.startsWith('http://localhost') && !u.startsWith('http://127.0.0.1') && !/fonts\.(googleapis|gstatic)\.com/.test(u))).toEqual([]);
   });
 
-  test('Part 2 removes Part 1 from the page: no baseline check-in, no checkboxes, nothing "Completed"', async ({ page }) => {
+  test('Part 1 on: Part 2 removes Part 1 from the page: no baseline check-in, no checkboxes, nothing "Completed"', async ({ page }) => {
+    await withBaseline(page);
     await seed(page, { code: 'R4-01' });
     await page.goto('/study');
     await page.getByRole('checkbox', { name: 'Check-in 1', exact: true }).check();
@@ -1051,7 +1103,7 @@ test.describe('Study mode: the /study page', () => {
     await expect(page.locator('#study-baseline, #study-baseline-check-in, #study-baseline-done-1')).toHaveCount(0);
     // Part 2's own boxes start unticked; Part 1's tick doesn't carry over.
     await expect(page.getByRole('checkbox', { name: 'Check-in 1', exact: true })).not.toBeChecked();
-    await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Part 2: Check in after a call with Mezzo']);
+    await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Try Mezzo on your calls']);
     await expect(page.locator('#study-code')).toHaveText('R4-01');
     await expect(page.locator('#study-setup-callout')).toBeVisible();
     await expect(page.getByRole('link', { name: 'How study data is handled' })).toBeVisible();
@@ -1078,7 +1130,8 @@ test.describe('Study mode: the /study page', () => {
     expect(await page.evaluate(() => localStorage.getItem('mezzoStudyMezzoChecks:R4-01'))).toBe('[true,false]');
   });
 
-  test('Part 1 on a phone: the button goes below the list, inside the box', async ({ page }) => {
+  test('Part 1 on: Part 1 on a phone: the button goes below the list, inside the box', async ({ page }) => {
+    await withBaseline(page);
     await page.setViewportSize({ width: 375, height: 800 });
     await seed(page, { code: 'R4-01' });
     await page.goto('/study');
@@ -1089,7 +1142,8 @@ test.describe('Study mode: the /study page', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
   });
 
-  test('layout: Part 1 stays one 560px column with no step numbers', async ({ page }) => {
+  test('Part 1 on: layout: Part 1 stays one 560px column with no step numbers', async ({ page }) => {
+    await withBaseline(page);
     await page.setViewportSize({ width: 1200, height: 900 });
     await seed(page, { code: 'R4-01' });
     await page.goto('/study');

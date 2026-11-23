@@ -348,10 +348,13 @@ export function getMezzoStageStartAt(storage = defaultStorage(), config = STUDY_
  * Which /study stage applies:
  * 'none' without a tester code; 'baseline' with a code before the With
  * Mezzo stage began; 'mezzo' once it has (getMezzoStageStartAt(): the
- * ?start=1 unlock or the first monitoring session).
+ * ?start=1 unlock or the first monitoring session). With
+ * `config.includeBaseline` off (2026-11-23), every tester code is 'mezzo'
+ * from the start.
  */
-export function studyStage({ testerCode, mezzoStageStartAt }) {
+export function studyStage({ testerCode, mezzoStageStartAt }, config = STUDY_CONFIG) {
   if (!testerCode) return 'none';
+  if (!config.includeBaseline) return 'mezzo';
   return mezzoStageStartAt === null || mezzoStageStartAt === undefined ? 'baseline' : 'mezzo';
 }
 

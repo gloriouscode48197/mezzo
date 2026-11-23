@@ -465,10 +465,22 @@ describe('keeping every view in step', () => {
 });
 
 describe('study stages', () => {
-  it('no code: none; a code before the With Mezzo stage: baseline; after it began: mezzo', () => {
+  it('with Part 1 on: no code: none; a code before the With Mezzo stage: baseline; after it began: mezzo', () => {
+    const withBaseline = { ...STUDY_CONFIG, includeBaseline: true };
+    assert.equal(studyStage({ testerCode: null, mezzoStageStartAt: null }, withBaseline), 'none');
+    assert.equal(studyStage({ testerCode: 'R4-01', mezzoStageStartAt: null }, withBaseline), 'baseline');
+    assert.equal(studyStage({ testerCode: 'R4-01', mezzoStageStartAt: Date.now() }, withBaseline), 'mezzo');
+  });
+
+  it('Part 1 is off by default (2026-11-23): any tester code is in the With Mezzo stage from the start', () => {
+    assert.equal(STUDY_CONFIG.includeBaseline, false);
     assert.equal(studyStage({ testerCode: null, mezzoStageStartAt: null }), 'none');
-    assert.equal(studyStage({ testerCode: 'R4-01', mezzoStageStartAt: null }), 'baseline');
+    assert.equal(studyStage({ testerCode: 'R4-01', mezzoStageStartAt: null }), 'mezzo');
     assert.equal(studyStage({ testerCode: 'R4-01', mezzoStageStartAt: Date.now() }), 'mezzo');
+  });
+
+  it('extensionUrl is the Chrome Web Store listing', () => {
+    assert.equal(STUDY_CONFIG.extensionUrl, 'https://chromewebstore.google.com/detail/mezzo-meeting-volume-remi/hnjokbmcagbbbcgipkgfjnkmlkmnohhl');
   });
 
   it('?start=1 with a code unlocks the With Mezzo stage once, before any session', () => {
@@ -501,18 +513,19 @@ describe('study stages', () => {
     assert.equal(getMezzoStageStartAt(later), 9000);
   });
 
-  it('the stage, first-session date and last session belong to the tester code: a new code starts at the baseline, and an earlier code finds its own again', () => {
+  it('the stage, first-session date and last session belong to the tester code: a new code starts at the baseline (Part 1 on), and an earlier code finds its own again', () => {
+    const withBaseline = { ...STUDY_CONFIG, includeBaseline: true };
     const storage = withCode('TEST-01');
     applyStartParam('?start=1', storage, STUDY_CONFIG, 3000);
     saveLastSession(session({ startedAt: 8000 }), storage);
-    assert.equal(studyStage({ testerCode: getTesterCode(storage), mezzoStageStartAt: getMezzoStageStartAt(storage) }), 'mezzo');
+    assert.equal(studyStage({ testerCode: getTesterCode(storage), mezzoStageStartAt: getMezzoStageStartAt(storage) }, withBaseline), 'mezzo');
     assert.equal(storage.getItem(`${KEYS.mezzoStage}:TEST-01`), '3000');
 
     applyStudyParam('?study=TEST-02', storage);
     assert.equal(getMezzoStageStartAt(storage), null);
     assert.equal(getFirstSessionAt(storage), null);
     assert.equal(getLastSession(storage), null);
-    assert.equal(studyStage({ testerCode: getTesterCode(storage), mezzoStageStartAt: getMezzoStageStartAt(storage) }), 'baseline');
+    assert.equal(studyStage({ testerCode: getTesterCode(storage), mezzoStageStartAt: getMezzoStageStartAt(storage) }, withBaseline), 'baseline');
 
     // TEST-02's first session is its own, and doesn't touch TEST-01's.
     saveLastSession(session({ startedAt: 20000, glows: 7 }), storage);

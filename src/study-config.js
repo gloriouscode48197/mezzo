@@ -6,15 +6,21 @@
  * Nothing in the app writes to it.
  */
 export const STUDY_CONFIG = {
+  /** Part 1, the baseline stage (check-ins after usual calls, before
+   *  Mezzo). Off since 2026-11-23: the study is the With Mezzo part only,
+   *  and /study shows it to any tester code (studyStage()). true brings
+   *  Part 1 back, code and copy unchanged. */
+  includeBaseline: false,
   /** Opened after a call, from the Companion card or the /study page. */
   checkInFormUrl: 'https://tally.so/r/gber54',
   /** Baseline stage: check-ins after calls before the tester has Mezzo.
    *  Tester code only. A placeholder URL here hides the button
    *  (isFormUrlReady()). */
   baselineFormUrl: 'https://tally.so/r/zEN6jg',
-  /** The extension's Chrome Web Store page, for /study's "Get the
-   *  extension" link. Empty hides the link (isFormUrlReady()). */
-  extensionUrl: '',
+  /** The extension's Chrome Web Store page. Not linked from /study (the
+   *  install steps are in the study email); kept here as the one place
+   *  the link lives. */
+  extensionUrl: 'https://chromewebstore.google.com/detail/mezzo-meeting-volume-remi/hnjokbmcagbbbcgipkgfjnkmlkmnohhl',
 
   /** The check-in is offered for this long after a session ends. */
   checkInWindowMs: 2 * 60 * 60 * 1000,

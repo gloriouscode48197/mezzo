@@ -320,7 +320,7 @@
            steps, then the tracker. An ordered list, so the order is
            announced; the number marker itself is decorative. -->
       <section class="study-phase" id="study-mezzo" aria-labelledby="study-mezzo-heading">
-        <h2 id="study-mezzo-heading">Part 2: Check in after a call with Mezzo</h2>
+        <h2 id="study-mezzo-heading">Try Mezzo on your calls</h2>
         <p class="type-body" id="study-mezzo-intro">Try Mezzo on your calls over the next week or two. Check in after at least 2 of them.</p>
         <!-- Part 1's box, the same (2026-11-14): setup and the card picture
              are in the study email now. -->
@@ -389,7 +389,9 @@
     applyStudyFromLocation(window, undefined, undefined, { start: true });
     const testerCode = getTesterCode();
     const mezzoStageStartAt = getMezzoStageStartAt();
-    const stage = studyStage({ testerCode, mezzoStageStartAt });
+    // With STUDY_CONFIG.includeBaseline off, a tester code goes straight to
+    // With Mezzo (Part 1's markup stays below, removed from the page).
+    const stage = studyStage({ testerCode, mezzoStageStartAt }, STUDY_CONFIG);
     const $ = (id) => document.getElementById(id);
 
     // The stage, for tests and for checking by hand.
