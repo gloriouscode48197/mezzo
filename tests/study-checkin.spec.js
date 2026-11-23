@@ -695,7 +695,7 @@ test.describe('Study mode: the /study page', () => {
     await page.goto('/study?study=R4-03&start=1');
     await expect(page.locator('body')).toHaveAttribute('data-study-stage', 'mezzo');
     await expect(page.locator('#study-bookmark')).toBeHidden();
-    await expect(page.locator('#study-setup-callout')).toHaveText('Before you start: install the Mezzo Chrome extension. The setup steps are in my “Part 2: set up Mezzo” email.');
+    await expect(page.locator('#study-setup-callout')).toHaveText('Before you start: install the Mezzo Chrome extension. The setup steps are in my “Set up Mezzo” email.');
     const url = new URL(page.url());
     expect(url.searchParams.has('study')).toBe(false);
     expect(url.searchParams.has('start')).toBe(false);
@@ -759,7 +759,7 @@ test.describe('Study mode: the /study page', () => {
     }
     // Under the code, this stage's own bookmark line.
     await expect(page.locator('#study-bookmark')).toBeHidden();
-    await expect(page.locator('#study-setup-callout')).toHaveText('Before you start: install the Mezzo Chrome extension. The setup steps are in my “Part 2: set up Mezzo” email.');
+    await expect(page.locator('#study-setup-callout')).toHaveText('Before you start: install the Mezzo Chrome extension. The setup steps are in my “Set up Mezzo” email.');
     // The callout sits right under the study code, in the bookmark line's
     // place, in the page's pale slate tint.
     expect(await page.locator('#study-setup-callout').evaluate((el) => {
@@ -852,7 +852,7 @@ test.describe('Study mode: the /study page', () => {
     await expect(link(page, 'Wrap up the study')).toHaveCount(0);
     await expect(page.getByText('Part 3')).toHaveCount(0);
     await expect(page.locator('#study-bookmark')).toBeHidden();
-    await expect(page.locator('#study-setup-callout')).toHaveText('Before you start: install the Mezzo Chrome extension. The setup steps are in my “Part 2: set up Mezzo” email.');
+    await expect(page.locator('#study-setup-callout')).toHaveText('Before you start: install the Mezzo Chrome extension. The setup steps are in my “Set up Mezzo” email.');
     await expect(link(page, 'Check in')).toBeVisible();
     // The tester code stays saved.
     expect(await page.evaluate(() => localStorage.getItem('mezzoStudyTesterCode'))).toBe('R4-01');
