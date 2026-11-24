@@ -36,8 +36,6 @@ Mezzo nudges you instead of sounding an alarm. Nothing flashes or beeps, and the
 
 You can pop the circle out into a small floating window (picture-in-picture) that stays on top of other apps, such as a video call. Mezzo runs either in the page or in the pop-out, never both at once. Closing the pop-out stops monitoring.
 
-The pop-out uses the Document Picture-in-Picture API, which currently works only in Chromium browsers such as Chrome and Edge.
-
 ## Browser extension
 
 The `extension/` folder holds an optional Chrome extension. When you join a Google Meet, Zoom or Microsoft Teams call, it shows a small banner offering to open Mezzo with one click. It only notices that a meeting page is open. It doesn't read, record or send anything from the meeting.
@@ -49,6 +47,10 @@ To install it from this repo:
 3. Click **Load unpacked** and choose the `extension/` folder.
 
 The extension opens the live app at `https://mezzo-one.vercel.app`. To point it at a local copy, change `MEZZO_BASE_URL` in `extension/background.js` and `extension/popup/popup.js`.
+
+## Browser support
+
+Mezzo works in current versions of Chrome, Edge, Firefox and Safari. The pop-out window needs desktop Chrome or Edge, and the meeting extension needs Chrome.
 
 ## Privacy
 
@@ -82,19 +84,24 @@ node --test src/engine.test.js
 
 ## Project layout
 
-| Path | What's there |
-| --- | --- |
-| `index.html`, `landing.*` | Home page |
-| `try-it.*` | Microphone permission, profile choice and calibration |
-| `monitoring.*` | Live monitoring page and the pop-out window |
-| `privacy.*` | Privacy policy |
-| `src/audio.js` | Reads volume from the microphone |
-| `src/engine.js` | Sorts volume into zones relative to your baseline (the thresholds are constants at the top) |
-| `src/voice-circle.js` | Draws and animates the circle |
-| `src/analytics.js` | Anonymous usage events |
-| `src/theme.js` | Theme setting: light, dark or match your system |
-| `design-tokens/` | Colors, fonts, spacing and component styles |
-| `assets/` | Hand-drawn circle and ring artwork, plus icons |
-| `design/screenshots/` | Design reference screenshots |
-| `extension/` | Chrome meeting-detection extension |
-| `sw.js`, `manifest.webmanifest` | Offline support and the files that let Mezzo be installed like an app |
+```
+mezzo/
+├── index.html             Landing page
+├── try-it.html            Microphone access, profile selection and calibration
+├── monitoring.html        Live monitoring and picture-in-picture view
+├── privacy.html           Privacy policy
+├── src/
+│   ├── audio.js           Microphone input and volume sampling
+│   ├── engine.js          Volume classification against the calibrated baseline
+│   ├── voice-circle.js    Circle rendering and animation
+│   ├── analytics.js       Anonymous usage events
+│   └── theme.js           Theme preference
+├── design-tokens/         Colors, typography, spacing and component styles
+├── assets/                Circle artwork and icons
+├── design/screenshots/    Design references
+├── extension/             Chrome extension for meeting detection
+├── sw.js                  Service worker for offline use
+└── manifest.webmanifest   Web app manifest
+```
+
+Each page has a matching stylesheet and script (for example, `landing.css` and `landing.js` for `index.html`). Volume thresholds are defined at the top of `src/engine.js`.
