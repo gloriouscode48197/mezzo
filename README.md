@@ -1,42 +1,107 @@
-# Voice Compass
+# Mezzo
 
-A behavioral calibration tool that helps you learn appropriate speaking volume in shared spaces.
+Mezzo helps you notice when you're talking louder than you mean to. It shows a small visual cue that only you can see, so you can lower your voice before anyone else notices.
 
-## About
+It runs in your web browser. It measures how loud you are and never listens to what you say.
 
-Voice Compass uses the Horizon Band metaphor to help you understand and maintain comfortable speaking volumes. Rather than showing numbers or precise measurements, it provides gentle, contextual feedback that builds intuition over time.
+**Live app:** https://mezzo-one.vercel.app
 
-**Design principles:**
-- Favor trust over precision
-- Favor less UI over more UI
-- Tool builds intuition, then gets out of the way
-- Gentle, contextual, optional feedback
+## Who it's for
 
-## Installation
+Anyone who gets loud without realizing it, for example:
 
-1. Clone or download this repository
-2. Open Chrome and navigate to `chrome://extensions`
-3. Enable "Developer mode" (toggle in top right)
-4. Click "Load unpacked" and select the `voice-compass` folder
-5. Click the Voice Compass icon in your browser toolbar
+- in open-office huddles
+- on calls from a shared desk
+- in cafés, lobbies and other shared spaces
 
-## Usage
+## How it works
 
-1. **Select a context** - Choose the environment you're in (Focused Office, Open Office, Home, On Call)
-2. **Calibrate** - Follow the three-step calibration:
-   - Stay quiet for 5 seconds (noise floor measurement)
-   - Speak at your normal comfortable volume
-   - Speak at a "nearby-audible" level
-3. **Monitor** - Start monitoring and the Horizon Band will show where your voice sits
+1. **Allow the microphone.** Mezzo only reads volume levels from it.
+2. **Choose a profile.**
+   - **Recommended:** uses a typical conversational speaking level.
+   - **Custom:** talk at your normal volume for a few seconds so Mezzo learns your own baseline. You can save it under a name and reuse it later.
+3. **Start monitoring.** A hand-drawn circle reacts to your voice:
 
-As you maintain appropriate volume, your confidence score increases and the UI becomes less prominent. Quick self-corrections are rewarded. The tool learns with you.
+   | You are… | The circle… |
+   | --- | --- |
+   | Quiet | Shows only the plain center circle |
+   | Speaking at a comfortable level | Gains one or two soft gray rings |
+   | Louder than your comfortable range | Turns orange and its rings begin to drift slightly |
+   | Still too loud after a second | Drifts more noticeably |
+   | Back in range | Fades to gray and settles |
+
+Mezzo nudges you instead of sounding an alarm. Nothing flashes or beeps, and the background never changes.
+
+### Pop-out window
+
+You can pop the circle out into a small floating window (picture-in-picture) that stays on top of other apps, such as a video call. Mezzo runs either in the page or in the pop-out, never both at once. Closing the pop-out stops monitoring.
+
+## Browser extension
+
+The `extension/` folder holds an optional Chrome extension. When you join a Google Meet, Zoom or Microsoft Teams call, it shows a small banner offering to open Mezzo with one click. It only notices that a meeting page is open. It doesn't read, record or send anything from the meeting.
+
+To install it from this repo:
+
+1. Open `chrome://extensions` in Chrome.
+2. Turn on **Developer mode** (top right).
+3. Click **Load unpacked** and choose the `extension/` folder.
+
+The extension opens the live app at `https://mezzo-one.vercel.app`. To point it at a local copy, change `MEZZO_BASE_URL` in `extension/background.js` and `extension/popup/popup.js`.
+
+## Browser support
+
+Mezzo works in current versions of Chrome, Edge, Firefox and Safari. The pop-out window needs desktop Chrome or Edge, and the meeting extension needs Chrome.
 
 ## Privacy
 
-**Nothing is recorded or stored.**
+- **Audio never leaves your device.** Mezzo processes volume levels in your browser and doesn't record, store, transcribe or send any audio.
+- **Saved profiles stay in your browser.** A custom profile is saved only when you click **Save Profile**. It's stored in your browser's local storage and goes nowhere else.
+- **Anonymous usage stats.** Mezzo sends four kinds of events to [Mixpanel](https://mixpanel.com): app opened, calibration completed, monitoring started, and a summary of each monitoring session (how long it lasted, whether you used the pop-out, and whether you went over your range). Each browser gets a random ID that isn't linked to you. No names, emails, audio or volume readings are sent.
 
-- Audio is processed entirely in your browser
-- No audio data leaves your device
-- No recordings are saved
-- Only calibration settings are stored locally
-- Microphone is only accessed during calibration or active monitoring
+The full policy is on the in-app privacy page (`privacy.html`).
+
+## Running it locally
+
+Mezzo is plain HTML, CSS and JavaScript with no build step and no dependencies to install. Browsers only allow microphone access over `https://` or on `localhost`, so serve the folder with a local server rather than opening the files directly:
+
+```sh
+python3 -m http.server 8000
+```
+
+Then open http://localhost:8000.
+
+To keep your own visits out of the usage stats, open any page once with `?debug=true` (for example, `http://localhost:8000/?debug=true`). That browser is excluded from then on.
+
+## Tests
+
+The volume engine has unit tests that use Node's built-in test runner (Node 18 or newer):
+
+```sh
+node --test src/engine.test.js
+```
+
+`src/engine.browser-test.html` runs the same engine checks in a browser.
+
+## Project layout
+
+```
+mezzo/
+├── index.html             Landing page
+├── try-it.html            Microphone access, profile selection and calibration
+├── monitoring.html        Live monitoring and picture-in-picture view
+├── privacy.html           Privacy policy
+├── src/
+│   ├── audio.js           Microphone input and volume sampling
+│   ├── engine.js          Volume classification against the calibrated baseline
+│   ├── voice-circle.js    Circle rendering and animation
+│   ├── analytics.js       Anonymous usage events
+│   └── theme.js           Theme preference
+├── design-tokens/         Colors, typography, spacing and component styles
+├── assets/                Circle artwork and icons
+├── design/screenshots/    Design references
+├── extension/             Chrome extension for meeting detection
+├── sw.js                  Service worker for offline use
+└── manifest.webmanifest   Web app manifest
+```
+
+Pages have matching stylesheets and scripts (for example, `landing.css` and `landing.js` for `index.html`). Volume thresholds are defined at the top of `src/engine.js`.
