@@ -104,4 +104,4 @@ mezzo/
 └── manifest.webmanifest   Web app manifest
 ```
 
-Each page has a matching stylesheet and script (for example, `landing.css` and `landing.js` for `index.html`). Volume thresholds are defined at the top of `src/engine.js`.
+Pages have matching stylesheets and scripts (for example, `landing.css` and `landing.js` for `index.html`). Volume thresholds are defined at the top of `src/engine.js`.
